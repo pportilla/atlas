@@ -63,6 +63,85 @@ std::optional<Powers> positive_grading(const Basis& map, size_t n) {
 bool has_source(const Powers& e, size_t n) {
     return std::any_of(e.begin(), e.begin() + n, [](const auto& x) { return x != 0; });
 }
+
+// A homogeneous output c*x_i+h with h independent of x_i can be used as
+// a source coordinate. The inverse substitution preserves weights and the
+// maximal-ideal filtration, hence both the tangent quotient and contact order.
+std::optional<Basis> expose_monomial_coordinate(const Basis& map, size_t n) {
+    if (std::any_of(map.begin(),map.end(),[](const auto& f) { return f.size() == 1; }))
+        return std::nullopt;
+    for (const auto& f : map) {
+        if (f.size() < 2) continue;
+        for (const auto& [linear,c] : f) {
+            if (total_degree(linear) != 1) continue;
+            const size_t i = std::find(linear.begin(),linear.end(),1)-linear.begin();
+            auto depends_on_i = [&](const auto& t) { return t.first != linear && t.first[i] != 0; };
+            if (std::any_of(f.begin(),f.end(),depends_on_i)) continue;
+
+            // Bound the expansion before forming any powers of x_i-h/c.
+            size_t work = 0;
+            for (const auto& g : map) for (const auto& [e,a] : g) {
+                mpz_class count;
+                const auto k = e[i].get_ui();  // degree was checked by the caller
+                mpz_bin_uiui(count.get_mpz_t(),k+f.size()-1,k);
+                if (count > 3000-work || mpz_sizeinbase(a.get_num_mpz_t(),2) > 512 ||
+                    mpz_sizeinbase(a.get_den_mpz_t(),2) > 512) return std::nullopt;
+                work += count.get_ui();
+            }
+            Polynomial image = f;
+            for (auto& [e,a] : image) {
+                if (e == linear) a = 1;
+                else a = -a/c;
+            }
+            std::map<mpz_class,Polynomial> powers;
+            Basis changed;
+            for (const auto& g : map) {
+                // substitute eliminates its input axis. A placeholder for the
+                // new coordinate leaves the other axes in their original slots.
+                Polynomial lifted;
+                for (const auto& [e,a] : g) {
+                    Powers term = e;
+                    term.insert(term.begin()+i+1,0);
+                    lifted.emplace(std::move(term),a);
+                }
+                changed.push_back(primary::substitute(lifted,i,image,n,powers));
+            }
+            return changed;
+        }
+    }
+    return std::nullopt;
+}
+
+// A large diagonal source scaling can inflate the minors of every weight
+// matrix. Undo the scaling indicated by a linear output c*x_i only when it
+// reduces the total coefficient size. Weight and contact order are preserved.
+std::optional<Basis> reduce_coordinate_scaling(const Basis& map) {
+    auto bits = [](const mpq_class& a) {
+        return mpz_sizeinbase(a.get_num_mpz_t(),2)+mpz_sizeinbase(a.get_den_mpz_t(),2);
+    };
+    for (const auto& f : map) {
+        if (f.size() != 1) continue;
+        const auto& [linear,c] = *f.begin();
+        if (total_degree(linear) != 1 || bits(c) < 16 || bits(c) > 512) continue;
+        const size_t i = std::find(linear.begin(),linear.end(),1)-linear.begin();
+        std::vector<mpq_class> powers{1};
+        Basis changed = map;
+        size_t before = 0, after = 0;
+        for (auto& g : changed) for (auto& [e,a] : g) {
+            const size_t k = e[i].get_ui();  // bounded total degree
+            if (bits(a) > 4096) return std::nullopt;
+            before += bits(a);
+            while (powers.size() <= k) {
+                mpq_class next = powers.back()/c;
+                powers.push_back(std::move(next));
+            }
+            a *= powers[k];
+            after += bits(a);
+        }
+        if (after < before) return changed;
+    }
+    return std::nullopt;
+}
 }
 
 std::optional<Json::Value> ae_graded(const Basis& map, const std::vector<std::string>& names,
@@ -86,8 +165,13 @@ std::optional<Json::Value> ae_graded(const Basis& map, const std::vector<std::st
     }
     const auto weights = positive_grading(map,n);
     if (!weights) return std::nullopt;
-    if (contact_order && ((width > 8 && nonlinear > 1) || width > max_graph_width))
+    if (contact_order && ((width > 8 && nonlinear > 1) || width > max_graph_width)) {
+        auto changed = expose_monomial_coordinate(map,n);
+        if (!changed) changed = reduce_coordinate_scaling(map);
+        if (changed)
+            if (auto ranks = ae_weighted_ranks(*changed,*weights,*contact_order)) return ranks;
         if (auto ranks = ae_weighted_ranks(map,*weights,*contact_order)) return ranks;
+    }
     if (width > max_graph_width) return std::nullopt;
 
     // Square-zero markers z_j encode vectors as sum(v_j*z_j).

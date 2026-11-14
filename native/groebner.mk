@@ -39,7 +39,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp modular_re
   atlas_incidence.cpp torus_sections.cpp monomial_resolution.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \
   quotient_ring.cpp quotient_packed.cpp quotient_inverse.cpp quotient_finite_inverse.cpp ideal_powers.cpp ideal_power_principal.cpp ideal_powers_packed.cpp ideal_powers_dense.cpp ideal_powers_echelon.cpp ideal_powers_content.cpp ideal_powers_monomial.cpp localization.cpp localization_membership.cpp localization_special.cpp normalization.cpp normalization_content.cpp normalization_special.cpp primary_decomposition.cpp primary_special.cpp polynomial_factors.cpp resolution_tangents.cpp \
-  ae_codimension.cpp ae_special.cpp ae_graded.cpp ae_graded_surface.cpp ae_weighted_ranks.cpp ae_surface_coordinates.cpp \
+  ae_codimension.cpp ae_special.cpp ae_graded.cpp ae_graded_surface.cpp ae_weighted_ranks.cpp ae_weighted_quotient.cpp ae_surface_coordinates.cpp \
   resolution_candidate.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
@@ -57,10 +57,14 @@ $(GROEBNER_LIB): $(KERNEL_OBJECTS)
 
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank
+test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient
 	./build/test_groebner_verify
 	./build/test_local_dimension_graph
 	./build/test_small_prime_rank
+	./build/test_ae_weighted_quotient
+
+build/test_ae_weighted_quotient: test_ae_weighted_quotient.cpp ae_weighted_ranks.hpp ae_graded.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp)
 
 build/test_small_prime_rank: test_small_prime_rank.cpp small_prime_rank.hpp
 	@mkdir -p build

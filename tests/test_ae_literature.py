@@ -11,8 +11,12 @@ from tests.test_local_algebra_singular import calculate
 # Sharland, equations (6)–(7) and Table 1, in the original coordinates.
 # https://arxiv.org/pdf/1202.4992#page=6
 SHARLAND = [
-    ("Ahat2", ["x", "y^2+x*z+x^2*y", "y*z", "z^2+y^3"], 18),
-    ("Bhat3", ["x", "y^2+x*z", "z^2-x*y", "y^3+y^2*z+y*z^2-z^3"], 33),
+    ("Ahat2", ["x", "y^2+x*z+x^2*y", "y*z", "z^2+y^3"], 18, 2, 10),
+    ("Bhat3", ["x", "y^2+x*z", "z^2-x*y", "y^3+y^2*z+y*z^2-z^3"], 33, 3, 7),
+    ("Ahat3", ["x", "y^3+x*z+x^4*y", "y*z", "z^2+y^5"], 186, 3, 32),
+    # Equation (7) allows either sign of alpha for ell=2.
+    *[(f"Bhat5 ({sign})", ["x", "y^2+x*z", f"z^2{sign}x*y", "y^5+y^4*z+y*z^4-z^5"], 252, 3, 17)
+      for sign in ("+", "-")],
 ]
 
 
@@ -88,7 +92,7 @@ class PublishedAeCodimensions(unittest.TestCase):
         self.check_germs(("x", "y", "z"), [("P2", ["x", "y", "z^3+x*z", "z^5+y*z"], 2)])
 
     def test_sharland_original_maps(self):
-        for (name, components, expected), (k, last_weight) in zip(SHARLAND, [(2, 10), (3, 7)]):
+        for name, components, expected, k, last_weight in SHARLAND:
             with self.subTest(germ=name):
                 result = calculate("ae-codimension", variables=("x", "y", "z"), components=components)
                 self.assertEqual((result["finite"], result["value"]), (True, expected))
@@ -98,7 +102,7 @@ class PublishedAeCodimensions(unittest.TestCase):
     def test_sharland_with_nonlinear_target_change(self):
         # Adding the square of the first target coordinate to the fourth
         # preserves the normal space and breaks homogeneity in these coordinates.
-        for name, components, expected in SHARLAND:
+        for name, components, expected, _, _ in SHARLAND[:2]:
             with self.subTest(germ=name):
                 sheared = [*components[:-1], components[-1] + "+x^2"]
                 result = calculate("ae-codimension", variables=("x", "y", "z"), components=sheared)

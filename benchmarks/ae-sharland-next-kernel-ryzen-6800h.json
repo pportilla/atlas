@@ -1,0 +1,758 @@
+{
+  "cpu": "AMD Ryzen 7 6800H",
+  "coefficient_field": "QQ",
+  "flint": "3.6.0",
+  "cpp_build": "g++ -O3 -std=c++17",
+  "maps_source": "https://arxiv.org/pdf/1202.4992#page=6",
+  "before_revision": "3c5ca16bad2f60e965a4c896e64a98c8b494d060",
+  "before_library_sha256": "4eba3997425fab0b1fba8561e5f4f90bd03cbe54d1d151d54eb29342541c99a6",
+  "after_library_sha256": "0711f6a7a84cd798aeb537ad809e6081b6a0e6f813e895e20ac7f165fb4ef186",
+  "after_harness_sha256": "06c781b3830dd86ff249ef056b4d47aa7b1f3c20cdd5e409380c21c83d565442",
+  "conditions": {
+    "mode": "Complete CPU kernel ae_codimension(map,names), one fresh process per trial. The solve-once timer starts after parsing all components and stops before output serialization.",
+    "primary": "3 baseline and 15 optimized trials per presentation. Each presentation uses the same pinned logical CPU for both builds. The baseline trials on different physical cores overlap. The optimized trials run one at a time with presentation order reversed on alternate rounds.",
+    "limits": "2 GiB virtual address space per process, 120 seconds elapsed per process. Timeout samples record time to termination and have no returned kernel dimension.",
+    "profile": "Five instrumented fresh processes per presentation, per variant, on logical CPU 1. Stock traces stop on fallback, before graph elimination. The cap-only control exposes costs through the first certified zero tail. Values are independent medians, in nanoseconds. Setup includes shape enumeration and matrix allocation. Fill includes pullback expansion, indexing, and all matrix writes. Cleanup counts clearing the paired FLINT matrices. Total includes the complete weighted path and untimed bookkeeping.",
+    "paired_control": "Cap-only = same source as the baseline, except its 180000 single-matrix allowance becomes 20000000, 1200000 cumulative dense cells becomes 100000000, and 80000 polynomial products becomes 8000000. This diagnostic isolates arithmetic improvement from allowing the baseline to finish. Seven trials per build and presentation on logical CPU 11, reversing build order and presentation order on alternate rounds. All six presentation/build pairs returned the checked certificate.",
+    "reproduce": "Build native/groebner.mk target build/bench_ae_codimension. Pipe one line x,y,z and the four component expressions on separate lines into native/build/bench_ae_codimension 1 solve-once. Set ulimit -v 2097152, pin to the listed CPU with taskset -c, and use timeout 120.",
+    "clock_control": "Other processes were active on the benchmark host. For a second set of trials the same native harness records elapsed wall and thread CPU time around the same solve loop (CLOCK_THREAD_CPUTIME_ID). All timing controls use logical CPU 8 and reverse the order of maps and builds on alternate rounds. The three large maps are each sampled in nine fresh processes per build, including cap-only baseline for this control. The smaller maps use the original baseline, seven samples per build, with two warm-up calls followed by 15 measured solves per sample."
+  },
+  "cases": {
+    "Ahat3": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^3+x*z+x^4*y",
+        "y*z",
+        "z^2+y^5"
+      ],
+      "expected": 186,
+      "pinned_logical_cpu": 3,
+      "before": [
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 119.75,
+          "peak_rss_KiB": 254824,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 119.44,
+          "peak_rss_KiB": 254812,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.02,
+          "user_cpu_s": 119.32,
+          "peak_rss_KiB": 254916,
+          "exit_code": 124,
+          "outcome": "timeout"
+        }
+      ],
+      "profile": {
+        "stock": {
+          "median_stage_ns": {
+            "setup": 491650,
+            "fill": 11060742,
+            "modular": 4509759,
+            "exact": 7202972,
+            "cleanup": 1992308,
+            "total": 25748499
+          },
+          "matrices_completed": 42,
+          "exact_ranks": 23,
+          "last_requested_weight": 32,
+          "last_requested_shape": [
+            421,
+            354
+          ],
+          "dimension_accumulated_before_fallback": 186,
+          "graph_variables": 11,
+          "reason_for_fallback": "The 149034-cell piece exceeds the remaining total allowance of 91153.",
+          "graph_trace": "After switching to graph elimination, a 44-second diagnostic trace shows an abandoned modular run above 3000 basis elements and 3.4 million trace instructions. A later attempt passed 3.8 million instructions at graph degree 36."
+        },
+        "cap": {
+          "median_stage_ns": {
+            "setup": 525419,
+            "fill": 12575274,
+            "modular": 5326858,
+            "exact": 7068545,
+            "cleanup": 2265609,
+            "total": 28173015
+          },
+          "matrices_completed": 43,
+          "exact_ranks": 23,
+          "last_requested_weight": 32,
+          "last_requested_shape": [
+            421,
+            354
+          ]
+        }
+      },
+      "after": {
+        "result": {
+          "contact_order": 3,
+          "finite": true,
+          "last_weight": 32,
+          "method": "weighted_tangent_ranks",
+          "value": "186"
+        },
+        "samples_ns": [
+          2040499,
+          2170976,
+          2045348,
+          5216746,
+          5180798,
+          2064956,
+          2114910,
+          2718852,
+          2098659,
+          3326972,
+          3327203,
+          2065817,
+          2058323,
+          3605760,
+          3418085
+        ],
+        "median_ms": 2.170976
+      },
+      "paired_control": {
+        "samples_ns": {
+          "caps_only": [
+            80292740,
+            64961264,
+            64045632,
+            66194125,
+            61457096,
+            65689982,
+            72355208
+          ],
+          "optimized": [
+            6770395,
+            5292791,
+            2015703,
+            6076803,
+            5204103,
+            2155907,
+            5363194
+          ]
+        },
+        "median_ms": {
+          "caps_only": 65.689982,
+          "optimized": 5.292791
+        }
+      },
+      "thread_cpu_control": {
+        "caps_only": {
+          "thread_cpu_ns_per_solve": [
+            36246664.0,
+            36267993.0,
+            36356860.0,
+            29026184.0,
+            29817718.0,
+            28306434.0,
+            29873132.0,
+            32970810.0,
+            30441258.0
+          ],
+          "wall_ns_per_solve": [
+            75696457.0,
+            72249117.0,
+            72346291.0,
+            29029825.0,
+            29821512.0,
+            28310104.0,
+            29876576.0,
+            35972316.0,
+            30444651.0
+          ],
+          "thread_cpu_ms_median": 30.441258,
+          "wall_ms_median": 30.444651
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            2136325.0,
+            2112782.0,
+            1978119.0,
+            2090409.0,
+            2008977.0,
+            1950958.0,
+            2042901.0,
+            2208000.0,
+            2834665.0
+          ],
+          "wall_ns_per_solve": [
+            5128620.0,
+            5116828.0,
+            1980436.0,
+            2093018.0,
+            2011424.0,
+            1953945.0,
+            2045138.0,
+            2210310.0,
+            2838108.0
+          ],
+          "thread_cpu_ms_median": 2.090409,
+          "wall_ms_median": 2.093018
+        }
+      }
+    },
+    "Bhat5_alpha_plus_one": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2+x*y",
+        "y^5+y^4*z+y*z^4-z^5"
+      ],
+      "expected": 252,
+      "pinned_logical_cpu": 5,
+      "before": [
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 119.88,
+          "peak_rss_KiB": 111504,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 117.21,
+          "peak_rss_KiB": 111896,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 116.31,
+          "peak_rss_KiB": 112372,
+          "exit_code": 124,
+          "outcome": "timeout"
+        }
+      ],
+      "profile": {
+        "stock": {
+          "median_stage_ns": {
+            "setup": 278828,
+            "fill": 5393571,
+            "modular": 2253962,
+            "exact": 66981715,
+            "cleanup": 1089811,
+            "total": 76402813
+          },
+          "matrices_completed": 16,
+          "exact_ranks": 11,
+          "last_requested_weight": 11,
+          "last_requested_shape": [
+            483,
+            454
+          ],
+          "dimension_accumulated_before_fallback": 244,
+          "graph_variables": 11,
+          "reason_for_fallback": "The 219282-cell piece exceeds the per-piece allowance of 180000.",
+          "graph_trace": "During a 44-second diagnostic trace, the graph solver restarted and then spent more than 31 seconds on the homogeneous computation guided by its Hilbert series."
+        },
+        "cap": {
+          "median_stage_ns": {
+            "setup": 814670,
+            "fill": 44107584,
+            "modular": 33133316,
+            "exact": 117521542,
+            "cleanup": 9045191,
+            "total": 205965790
+          },
+          "matrices_completed": 23,
+          "exact_ranks": 13,
+          "last_requested_weight": 17,
+          "last_requested_shape": [
+            1059,
+            886
+          ]
+        }
+      },
+      "after": {
+        "result": {
+          "contact_order": 3,
+          "finite": true,
+          "last_weight": 17,
+          "method": "weighted_tangent_ranks",
+          "value": "252"
+        },
+        "samples_ns": [
+          33279553,
+          56944501,
+          56909164,
+          32532761,
+          32492113,
+          55271958,
+          57817982,
+          39829912,
+          57509690,
+          55661194,
+          54794625,
+          52605094,
+          38483085,
+          31854968,
+          31604995
+        ],
+        "median_ms": 52.605094
+      },
+      "paired_control": {
+        "samples_ns": {
+          "caps_only": [
+            557193257,
+            452325238,
+            458833898,
+            470291748,
+            458674666,
+            452283368,
+            522149879
+          ],
+          "optimized": [
+            111997775,
+            73751499,
+            69924791,
+            67034364,
+            63509427,
+            74143610,
+            78553681
+          ]
+        },
+        "median_ms": {
+          "caps_only": 458.833898,
+          "optimized": 73.751499
+        }
+      },
+      "thread_cpu_control": {
+        "caps_only": {
+          "thread_cpu_ns_per_solve": [
+            243828504.0,
+            241630829.0,
+            267853148.0,
+            210951364.0,
+            254941014.0,
+            274023794.0,
+            230775094.0,
+            216444984.0,
+            239784726.0
+          ],
+          "wall_ns_per_solve": [
+            489670590.0,
+            492957737.0,
+            535807229.0,
+            210957671.0,
+            254954514.0,
+            285981526.0,
+            245783588.0,
+            216451140.0,
+            239803027.0
+          ],
+          "thread_cpu_ms_median": 241.630829,
+          "wall_ms_median": 254.954514
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            35225972.0,
+            33851983.0,
+            33985093.0,
+            31375490.0,
+            49973871.0,
+            31964604.0,
+            30452098.0,
+            39115221.0,
+            31579472.0
+          ],
+          "wall_ns_per_solve": [
+            71874298.0,
+            66849053.0,
+            33994886.0,
+            31378577.0,
+            49977875.0,
+            31967501.0,
+            30455261.0,
+            39118516.0,
+            31582834.0
+          ],
+          "thread_cpu_ms_median": 33.851983,
+          "wall_ms_median": 33.994886
+        }
+      }
+    },
+    "Bhat5_alpha_minus_one": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2-x*y",
+        "y^5+y^4*z+y*z^4-z^5"
+      ],
+      "expected": 252,
+      "pinned_logical_cpu": 7,
+      "before": [
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 119.47,
+          "peak_rss_KiB": 100756,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.01,
+          "user_cpu_s": 118.76,
+          "peak_rss_KiB": 98060,
+          "exit_code": 124,
+          "outcome": "timeout"
+        },
+        {
+          "wall_s": 120.02,
+          "user_cpu_s": 118.7,
+          "peak_rss_KiB": 97676,
+          "exit_code": 124,
+          "outcome": "timeout"
+        }
+      ],
+      "profile": {
+        "stock": {
+          "median_stage_ns": {
+            "setup": 288057,
+            "fill": 5353728,
+            "modular": 2236541,
+            "exact": 62970591,
+            "cleanup": 1055306,
+            "total": 72335120
+          },
+          "matrices_completed": 16,
+          "exact_ranks": 11,
+          "last_requested_weight": 11,
+          "last_requested_shape": [
+            483,
+            454
+          ],
+          "dimension_accumulated_before_fallback": 244,
+          "graph_variables": 11,
+          "reason_for_fallback": "The 219282-cell piece exceeds the per-piece allowance of 180000."
+        },
+        "cap": {
+          "median_stage_ns": {
+            "setup": 860728,
+            "fill": 44825166,
+            "modular": 34285007,
+            "exact": 113156837,
+            "cleanup": 9213356,
+            "total": 203168289
+          },
+          "matrices_completed": 23,
+          "exact_ranks": 13,
+          "last_requested_weight": 17,
+          "last_requested_shape": [
+            1059,
+            886
+          ]
+        }
+      },
+      "after": {
+        "result": {
+          "contact_order": 3,
+          "finite": true,
+          "last_weight": 17,
+          "method": "weighted_tangent_ranks",
+          "value": "252"
+        },
+        "samples_ns": [
+          59324642,
+          50978988,
+          62567095,
+          44274948,
+          32898703,
+          30283115,
+          46755049,
+          47254393,
+          33746315,
+          28311687,
+          38830792,
+          30760819,
+          29218111,
+          29266803,
+          32099561
+        ],
+        "median_ms": 33.746315
+      },
+      "paired_control": {
+        "samples_ns": {
+          "caps_only": [
+            456661909,
+            447637201,
+            449347616,
+            456368714,
+            452078591,
+            450913106,
+            445666303
+          ],
+          "optimized": [
+            69126902,
+            64398379,
+            59469837,
+            61746222,
+            65371609,
+            57832190,
+            64762908
+          ]
+        },
+        "median_ms": {
+          "caps_only": 450.913106,
+          "optimized": 64.398379
+        }
+      },
+      "thread_cpu_control": {
+        "caps_only": {
+          "thread_cpu_ns_per_solve": [
+            241252852.0,
+            237188201.0,
+            222596568.0,
+            284762849.0,
+            250833482.0,
+            251276664.0,
+            207346164.0,
+            229227371.0,
+            234138209.0
+          ],
+          "wall_ns_per_solve": [
+            485027387.0,
+            530857307.0,
+            222602795.0,
+            302784416.0,
+            250841675.0,
+            251283660.0,
+            207352853.0,
+            229240360.0,
+            234152239.0
+          ],
+          "thread_cpu_ms_median": 237.188201,
+          "wall_ms_median": 250.841675
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            40568446.0,
+            40924683.0,
+            33781791.0,
+            37740523.0,
+            48476674.0,
+            49455429.0,
+            36084129.0,
+            45816575.0,
+            30387756.0
+          ],
+          "wall_ns_per_solve": [
+            79995147.0,
+            84734942.0,
+            33784979.0,
+            37744137.0,
+            48480653.0,
+            49459735.0,
+            51117680.0,
+            45964785.0,
+            57391887.0
+          ],
+          "thread_cpu_ms_median": 40.568446,
+          "wall_ms_median": 49.459735
+        }
+      }
+    }
+  },
+  "controls": {
+    "Ahat2": {
+      "components": [
+        "x",
+        "y^2+x*z+x^2*y",
+        "y*z",
+        "z^2+y^3"
+      ],
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "expected": 18,
+      "measurements": {
+        "baseline": {
+          "thread_cpu_ns_per_solve": [
+            686652.13,
+            1021633.53,
+            666470.33,
+            1080128.6,
+            1063348.47,
+            1015885.47,
+            669620.2
+          ],
+          "wall_ns_per_solve": [
+            686899.8,
+            1021923.47,
+            666718.27,
+            1080415.47,
+            1063634.33,
+            1016135.2,
+            669809.47
+          ],
+          "thread_cpu_ms_median": 1.0158854666666666,
+          "wall_ms_median": 1.0161352
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            425784.33,
+            590955.33,
+            310063.4,
+            580960.67,
+            590598.67,
+            320109.53,
+            451558.67
+          ],
+          "wall_ns_per_solve": [
+            425996.4,
+            591296.4,
+            310264.13,
+            581223.93,
+            590844.87,
+            320282.4,
+            451773.07
+          ],
+          "thread_cpu_ms_median": 0.45155866666666666,
+          "wall_ms_median": 0.45177306666666667
+        }
+      }
+    },
+    "Bhat3": {
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2-x*y",
+        "y^3+y^2*z+y*z^2-z^3"
+      ],
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "expected": 33,
+      "measurements": {
+        "baseline": {
+          "thread_cpu_ns_per_solve": [
+            2944232.47,
+            3714278.93,
+            2763209.67,
+            2698133.0,
+            3708835.4,
+            2853772.13,
+            3308973.0
+          ],
+          "wall_ns_per_solve": [
+            2944453.6,
+            3714603.53,
+            2763463.93,
+            2698386.2,
+            3709120.47,
+            2854514.2,
+            3309230.13
+          ],
+          "thread_cpu_ms_median": 2.9442324666666666,
+          "wall_ms_median": 2.9444536
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            1388512.8,
+            1442210.8,
+            1401801.0,
+            1424849.6,
+            1589555.73,
+            1479566.8,
+            1478247.67
+          ],
+          "wall_ns_per_solve": [
+            1388749.27,
+            1442468.8,
+            2801128.53,
+            1425085.93,
+            1589820.2,
+            1479814.13,
+            1478614.53
+          ],
+          "thread_cpu_ms_median": 1.4422108,
+          "wall_ms_median": 1.4786145333333334
+        }
+      }
+    },
+    "P2": {
+      "components": [
+        "x",
+        "y",
+        "z^3+x*z",
+        "z^5+y*z"
+      ],
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "expected": 2,
+      "measurements": {
+        "baseline": {
+          "thread_cpu_ns_per_solve": [
+            207553.13,
+            211532.6,
+            216043.07,
+            335477.0,
+            240902.4,
+            243916.0,
+            355455.8
+          ],
+          "wall_ns_per_solve": [
+            207754.27,
+            211713.8,
+            416318.07,
+            335785.07,
+            241071.93,
+            244146.47,
+            355697.4
+          ],
+          "thread_cpu_ms_median": 0.2409024,
+          "wall_ms_median": 0.24414646666666667
+        },
+        "optimized": {
+          "thread_cpu_ns_per_solve": [
+            196159.8,
+            187015.27,
+            183867.4,
+            312554.67,
+            226305.67,
+            233109.07,
+            322887.47
+          ],
+          "wall_ns_per_solve": [
+            196368.73,
+            187182.67,
+            185992.47,
+            312833.0,
+            226495.0,
+            233331.27,
+            323113.8
+          ],
+          "thread_cpu_ms_median": 0.22630566666666665,
+          "wall_ms_median": 0.226495
+        }
+      }
+    }
+  }
+}

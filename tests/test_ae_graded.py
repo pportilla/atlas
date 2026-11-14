@@ -83,6 +83,16 @@ class AeGradedTests(unittest.TestCase):
                            components=["x", "y^2", "z^2", "(y+z)^4"])
         self.assertEqual((result["finite"], result["value"]), (False, None))
 
+    def test_graded_quotient_after_changes_of_source_coordinates(self):
+        # Both changes are invertible over QQ. The shear removes every
+        # monomial output; the rational scaling vanishes modulo 65521.
+        for u in ("(x+y)", "(65521/18446744073709551617*x)"):
+            with self.subTest(u=u):
+                result = calculate("ae-codimension", variables=("x", "y", "z"), components=[
+                    u, f"y^2+{u}*z", f"z^2+{u}*y", "y^5+y^4*z+y*z^4-z^5",
+                ])
+                self.assertEqual((result["finite"], result["value"]), (True, 252))
+
     def test_surface_to_three_space(self):
         # In R^3/df the odd terms remaining in the third component are
         # represented by y,x*y,...,x^(k-2)*y for this S-family.

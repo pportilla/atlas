@@ -213,6 +213,33 @@ Clearing denominators by an invertible target scaling makes the rows integral.
 Maximal rank modulo one prime proves maximal rational rank. Every other rank
 is computed exactly over the integers.
 
+Euler's identity $\sum_i w_i x_i\partial_i f=(d_j f_j)_j$ removes redundant
+rows. Fix a target position $s$. For each target monomial $f^b$ of weight
+$q$, the row $f^b f_s e_s$ is a linear combination of source Jacobian rows
+and rows in the other target positions, since $d_s$ is nonzero.
+
+When one target component is a nonzero multiple of a monomial $g=x^a$, let
+$h$ be its weight. Multiplication by $g$ embeds the ambient space at weight
+$q-h$ into the space at weight $q$, and carries tangent relations to tangent
+relations. Each column retains its component and its monomial with all
+powers of $g$ divided out. At fixed weight this labels columns uniquely.
+The new columns are exactly the monomials not divisible by $g$. The only
+new relations needed are derivatives with multipliers not divisible by $g$
+and target rows omitting the selected target variable. Euler's identity
+still removes rows in a different target position.
+
+For each residue modulo $h$, the kernel keeps a basis for the annihilator
+of the preceding tangent space. Inherited vector fields are evaluated on
+this basis. The new monomials contribute independent coordinates. Computing
+the right nullspace of the new relations on these two sets of coordinates
+therefore gives the exact dual of the current normal space. A full-column-rank
+modular image certifies a zero piece directly. In every other case the kernel
+computes an integral nullspace spanning the rational kernel and carries it
+forward in the original monomial coordinates. A homogeneous component
+$c x_i+H$ with $H$ independent of $x_i$ can supply a monomial after the
+bounded source substitution $x_i\mapsto x_i-H/c$. This automorphism preserves
+the grading and the contact certificate. [Native quotient calculation](ae_weighted_quotient.cpp)
+
 Let $k$ be the contact order proved by the filtered jets. Since
 $\mathfrak m^kM\subset(f)M$, the monomial vectors of ordinary degree less
 than $k$ span $M/(f)M$. Their weights are at most
