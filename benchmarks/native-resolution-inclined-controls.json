@@ -4,11 +4,11 @@
   "comparison": "fresh normal default CPU resolve --json; separately with --monodromy (both zetas). Singular default resolve(I,\"L\",\"A\") with chart count. Warmup discarded for every command. Timings include process creation and stdout capture.",
   "frozen_kernels": {
     "before": "153230a967c4aad6a848b174dde5c750368cdbe6285a32bf255563a8d32b2e2f",
-    "after": "e434ce685ea8f782f88d1c1cfbaad78e0a8c2e895a04cefbadb33bc7688af6a7"
+    "after": "6b1a946343e6b3c49db6f8e885b8c3b3aedd71b5b5ce52c3e21130086347286c"
   },
   "source_hashes": {
     "before": "4e2900a37174fc9d588b4c22bf7ef8375af54b759acfd9df40f21d4fc48ea6bb",
-    "after": "f6a141f6b556fd7ae22a552fca353a05d1b09437605d47e0013c2523cea504e8"
+    "after": "54f8a89998abab3f3866dcee8b34d640165dc86a08ef52e46d1e40b5293a933b"
   },
   "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
   "cases": {
@@ -34,150 +34,137 @@
       },
       "median_ms_wall_cpu": {
         "before_plain": [
-          70.491,
-          67.988
+          164.555,
+          159.858
         ],
         "after_plain": [
-          69.347,
-          66.902
+          155.249,
+          150.396
         ],
         "before_zetas": [
-          89.736,
-          87.284
+          205.002,
+          199.024
         ],
         "after_zetas": [
-          71.3,
-          68.877
+          162.9,
+          150.956
         ],
         "singular": [
-          68.488,
-          67.001
+          113.074,
+          109.027
         ]
       },
       "samples_ms_wall_cpu": {
         "before_plain": [
           [
-            71.653,
-            69.228
+            164.555,
+            159.858
           ],
           [
-            70.491,
-            67.988
+            164.553,
+            159.363
           ],
           [
-            70.925,
-            68.449
+            159.446,
+            156.237
           ],
           [
-            69.278,
-            66.837
+            168.746,
+            164.517
           ],
           [
-            69.099,
-            66.663
+            171.256,
+            165.999
           ]
         ],
         "after_plain": [
           [
-            68.944,
-            66.492
+            167.292,
+            162.493
           ],
           [
-            70.589,
-            68.149
+            155.249,
+            150.396
           ],
           [
-            69.347,
-            66.902
+            167.198,
+            163.824
           ],
           [
-            69.564,
-            67.06
+            146.928,
+            142.705
           ],
           [
-            68.696,
-            66.262
+            153.769,
+            149.527
           ]
         ],
         "before_zetas": [
           [
-            89.903,
-            87.493
+            203.621,
+            199.59
           ],
           [
-            89.736,
-            87.284
+            220.284,
+            199.024
           ],
           [
-            89.73,
-            87.241
+            223.733,
+            220.004
           ],
           [
-            89.133,
-            86.659
+            205.002,
+            197.239
           ],
           [
-            91.673,
-            89.225
+            195.871,
+            185.482
           ]
         ],
         "after_zetas": [
           [
-            70.63,
-            68.19
+            163.502,
+            158.547
           ],
           [
-            73.713,
-            71.305
+            135.228,
+            131.709
           ],
           [
-            71.3,
-            68.877
+            251.463,
+            124.109
           ],
           [
-            71.49,
-            68.978
+            162.9,
+            158.622
           ],
           [
-            69.056,
-            66.616
+            154.369,
+            150.956
           ]
         ],
         "singular": [
           [
-            69.319,
-            67.852
+            113.074,
+            110.548
           ],
           [
-            68.466,
-            66.952
+            108.62,
+            106.244
           ],
           [
-            69.326,
-            67.778
+            146.378,
+            89.546
           ],
           [
-            68.488,
-            67.001
+            118.736,
+            116.434
           ],
           [
-            67.504,
-            66.084
+            110.967,
+            109.027
           ]
         ]
-      },
-      "singular_atlas_checks": [
-        "GRAPH 0 1",
-        "OPEN 0 1 1",
-        "OPEN 0 2 1",
-        "GRAPH 1 1",
-        "OPEN 1 1 1",
-        "OPEN 1 2 1"
-      ],
-      "singular_radical_oracle": {
-        "agrees": true,
-        "dimension": 1,
-        "program": "\nLIB \"primdec.lib\";ring source=0,(x,y,z),dp;\npoly f=(x/2+2*y/3-z/5)^2-z*(3*x/4-y/5)^2;ideal jac=f,jacob(f);ideal centre=std(radical(jac));\nideal pencil=std(ideal(x/2+2*y/3-z/5,3*x/4-y/5));int match=(size(reduce(centre,pencil))==0 && size(reduce(pencil,centre))==0);\nprint(\"REDUCED \"+string(match)+\" \"+string(dim(centre)));quit;\n"
       }
     },
     "permuted": {
@@ -202,152 +189,138 @@
       },
       "median_ms_wall_cpu": {
         "before_plain": [
-          72.46,
-          69.99
+          156.558,
+          151.216
         ],
         "after_plain": [
-          71.405,
-          68.953
+          150.788,
+          146.966
         ],
         "before_zetas": [
-          91.366,
-          88.914
+          195.1,
+          190.352
         ],
         "after_zetas": [
-          73.039,
-          70.582
+          155.545,
+          150.85
         ],
         "singular": [
-          68.537,
-          66.93
+          116.136,
+          113.594
         ]
       },
       "samples_ms_wall_cpu": {
         "before_plain": [
           [
-            73.37,
-            70.919
+            146.778,
+            142.26
           ],
           [
-            72.46,
-            69.99
+            144.978,
+            141.235
           ],
           [
-            73.047,
-            70.574
+            156.558,
+            151.216
           ],
           [
-            71.648,
-            69.186
+            163.577,
+            159.698
           ],
           [
-            72.337,
-            69.887
+            158.281,
+            154.323
           ]
         ],
         "after_plain": [
           [
-            70.065,
-            67.614
+            148.292,
+            142.6
           ],
           [
-            72.999,
-            70.549
+            139.608,
+            136.331
           ],
           [
-            71.987,
-            69.506
+            153.262,
+            147.504
           ],
           [
-            71.405,
-            68.953
+            150.788,
+            146.966
           ],
           [
-            70.126,
-            67.67
+            152.74,
+            148.596
           ]
         ],
         "before_zetas": [
           [
-            90.822,
-            88.368
+            195.1,
+            190.352
           ],
           [
-            91.539,
-            89.086
+            182.298,
+            178.741
           ],
           [
-            92.444,
-            89.922
+            190.188,
+            185.571
           ],
           [
-            91.366,
-            88.914
+            199.138,
+            194.807
           ],
           [
-            90.762,
-            88.278
+            214.187,
+            209.726
           ]
         ],
         "after_zetas": [
           [
-            73.048,
-            70.582
+            155.545,
+            150.85
           ],
           [
-            73.018,
-            70.558
+            138.762,
+            135.285
           ],
           [
-            73.376,
-            70.818
+            139.54,
+            135.955
           ],
           [
-            73.039,
-            70.586
+            156.448,
+            151.414
           ],
           [
-            72.051,
-            69.551
+            156.287,
+            150.988
           ]
         ],
         "singular": [
           [
-            69.184,
-            67.711
+            101.998,
+            98.535
           ],
           [
-            68.348,
-            66.867
+            101.721,
+            99.71
           ],
           [
-            69.001,
-            67.522
+            116.147,
+            113.594
           ],
           [
-            68.537,
-            66.93
+            116.159,
+            113.919
           ],
           [
-            67.715,
-            66.255
+            116.136,
+            113.89
           ]
         ]
-      },
-      "singular_atlas_checks": [
-        "GRAPH 0 1",
-        "OPEN 0 1 1",
-        "OPEN 0 2 1",
-        "GRAPH 1 1",
-        "OPEN 1 1 1",
-        "OPEN 1 2 1"
-      ],
-      "singular_radical_oracle": {
-        "agrees": true,
-        "dimension": 1,
-        "program": "\nLIB \"primdec.lib\";ring source=0,(y,z,x),dp;\npoly f=(x+y+z)^2-x*(y-z)^2;ideal jac=f,jacob(f);ideal centre=std(radical(jac));\nideal pencil=std(ideal(x+y+z,y-z));int match=(size(reduce(centre,pencil))==0 && size(reduce(pencil,centre))==0);\nprint(\"REDUCED \"+string(match)+\" \"+string(dim(centre)));quit;\n"
       }
     }
-  },
-  "runtime_import_guard": "Passed fresh CLI, stripped dual/zeta replay, marked and rational generic direct verification, with imports of tests.* and SymPy forbidden."
+  }
 }
