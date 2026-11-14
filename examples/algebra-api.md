@@ -116,6 +116,35 @@ For HTTP, send the operation `factor` with a single `polynomial` operand. The sh
 
 Each factor has leading coefficient 1 in the selected monomial order. The unit carries the sign and scale needed to recover the input. A nonzero constant returns itself as the unit and an empty factor list. Zero has no irreducible factorization and returns an input error.
 
+### Polynomial resultants
+
+The equations `t^2-x` and `t^3-y` parametrize a cusp. Eliminating `t` gives `-x^3+y^2` in `QQ[x,y]`. With the same two inputs, eliminating `x` gives `t^3-y` in `QQ[t,y]`.
+
+```sh
+./atlas algebra resultant --vars t,x,y --poly 't^2-x' --other-poly 't^3-y' --eliminate t
+```
+
+At the prompt or in a script, pass the elimination coordinate as the third argument. The returned polynomial owns its surviving coordinates, in declaration order.
+
+```python
+t, x, y = coordinates("t", "x", "y", coeffs=QQ)
+R = resultant(t^2-x, t^3-y, t)
+u, v = R.coordinates
+print(R.polynomial == v^2-u^3)
+```
+
+In the browser’s Algebra view, choose **Polynomial resultant**, enter both polynomials in order, and select the variable to eliminate. Save the result to reuse it in its smaller ring. The equivalent HTTP request is shown below.
+
+```json
+{
+  "operation": "resultant",
+  "ring": {"variables": ["t", "x", "y"]},
+  "operands": {"polynomial": "t^2-x", "other_polynomial": "t^3-y", "variables": ["t"]}
+}
+```
+
+Atlas returns the signed Sylvester resultant. For example, `resultant(t-x, t-y, t)` gives `x-y`. A zero input gives zero. Two nonzero inputs independent of the selected variable give one. If only one input is independent of that variable, the resultant is that input raised to the degree of the other. Eliminating the only coordinate returns a constant polynomial over `QQ`.
+
 ### Polynomial GCD
 
 `gcd` takes two polynomial strings in the same ring. For example, this request returns `"polynomial": "x+y"` in $\mathbf Q[x,y]$.
@@ -201,6 +230,34 @@ At the prompt or in an Atlas script, pass `point=` in the declared variable orde
 For HTTP requests, supply `operands.point` as an ordered array of exact integers or rational strings. An explicit point returns `scope: "point"` and the reduced coordinates as strings. An omitted point preserves the existing `scope: "origin"` response. The global `quotient-basis` command accepts the ideal alone.
 
 In the browser's **Algebra** view, select the operation, declare all variables, and enter the generators or equation. For a local calculation, enter the rational point in the displayed coordinate order or leave it blank for the origin. The result can be reproduced by the equivalent shell command or exported script. Select **GPU** or pass `--compute gpu` to request eligible device work. The execution record identifies the stages that ran and any CPU fallback.
+
+<a id="hilbert-samuel-functions"></a>
+
+### Hilbert–Samuel functions and multiplicities
+
+Let $A=(\mathbb Q[x_1,\ldots,x_r]/I)_{\mathfrak m_p}$ at the rational point $p$, and let $\mathfrak m$ be its maximal ideal. Atlas returns the cumulative Hilbert–Samuel function $H(n)=\dim_{\mathbb Q}(A/\mathfrak m^{n+1})$ and the graded value $h(n)=\dim_{\mathbb Q}(\mathfrak m^n/\mathfrak m^{n+1})$. Their relation is $h(n)=H(n)-H(n-1)$ with $H(-1)=0$. For local dimension $d$, the Hilbert–Samuel multiplicity is $d!$ times the leading coefficient of the eventual polynomial for $H(n)$. When $d=0$, the function eventually equals the length of the local algebra. A point outside the support gives dimension $-1$, multiplicity 0 and all values 0.
+
+```sh
+./atlas algebra hilbert-samuel-function --vars x,y --gen 'y^2-(x-1/2)^3' --point '1/2,0' --degrees 0,1,2,5
+./atlas algebra hilbert-samuel-multiplicity --vars x,y --gen 'y^2-(x-1/2)^3' --point '3/2,1'
+```
+
+| Point on the cusp equation | $H(0),H(1),H(2),H(5)$ | $h(0),h(1),h(2),h(5)$ | Multiplicity |
+| --- | --- | --- | ---: |
+| $(1/2,0)$ | 1, 3, 5, 11 | 1, 2, 2, 2 | 2 |
+| $(3/2,1)$ | 1, 2, 3, 6 | 1, 1, 1, 1 | 1 |
+
+In the browser's **Algebra** view, select **Hilbert–Samuel function** or **Hilbert–Samuel multiplicity**, enter the ideal generators and the point, and choose **Compute**. Leaving the point blank selects the origin. Function degrees default to 0 through 5. Enter comma-separated nonnegative integers to request specific degrees in any order. To reproduce the result, copy the shell command or download the script.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal(y^2-(x-1/2)^3)
+H = hilbert_samuel_function(I, point=(1/2,0), degrees=[5,0,1])
+print(H.values, H.graded_values)  # [11, 1, 3] and [2, 1, 2]
+print(hilbert_samuel_multiplicity(I, point=(3/2,1)).value)  # 1
+```
+
+Both functions also accept a saved local standard basis and use its recorded point. The HTTP operations take `operands.ideal` and optional `operands.point`. The function additionally accepts `operands.degrees`, an array of nonnegative integers or exact decimal strings. Its result contains `degrees`, `values`, `graded_values`, `dimension` and `multiplicity`. An explicit empty list returns the dimension and multiplicity with empty value lists. The multiplicity operation returns `dimension` and the integer `value`. Choose **GPU** or pass `--compute gpu` for eligible Gröbner steps. [Computation and Singular checks](../native/KERNEL.md#hilbert-samuel-computation)
 
 ### Local standard bases and normal forms at a rational point
 

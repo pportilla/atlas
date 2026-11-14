@@ -9,6 +9,7 @@ from .polynomial import integer_text
 
 _DESCRIPTIONS = {
     "gcd": "compute the monic greatest common divisor of two polynomials",
+    "resultant": "compute the resultant of two polynomials in one variable over QQ",
     "factor": "factor a polynomial over QQ into monic irreducible factors",
     "ideal": "declare an ideal from ordered generators",
     "groebner": "compute a reduced Gröbner basis",
@@ -78,8 +79,10 @@ def register_parser(subparsers):
             parser.add_argument("--other-gen", dest="other_ideal", action="append", default=[],
                                 metavar="POLY", help="second ideal generator (repeatable; omit for zero)")
         if "variables" in keys:
-            parser.add_argument("--eliminate", dest="variables", type=_comma_list, metavar="x[,y,...]",
-                                required=True, help="variables to eliminate, separated by commas")
+            single = name == "resultant"
+            parser.add_argument("--eliminate", dest="variables", type=_comma_list,
+                                metavar="VAR" if single else "x[,y,...]", required=True,
+                                help="variable to eliminate" if single else "variables to eliminate, separated by commas")
         if name in POINT_OPERATIONS:
             parser.add_argument("--point", type=_comma_list, metavar="q1,q2,...",
                                 help="rational coordinates in --vars order (default: origin)")
@@ -118,7 +121,7 @@ def _show(record):
             product.append(term)
         print("Factorization:", " * ".join(product))
     elif result["type"] == "polynomial":
-        label = "GCD" if record["operation"] == "gcd" else "Remainder"
+        label = {"gcd": "GCD", "resultant": "Resultant"}.get(record["operation"], "Remainder")
         print(f"{label}:", result["polynomial"])
     elif result["type"] == "boolean":
         print("Member:", "yes" if result["value"] else "no")

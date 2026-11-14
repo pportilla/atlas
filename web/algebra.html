@@ -48,6 +48,7 @@
                 <option value="dimension">Krull dimension</option>
                 <option value="gcd">Polynomial GCD</option>
                 <option value="factor">Polynomial factorization</option>
+                <option value="resultant">Polynomial resultant</option>
                 <option value="quotient-basis">Quotient basis (global)</option>
                 <optgroup label="Local algebra at a rational point">
                   <option value="local-quotient-basis">Local quotient basis</option>
@@ -137,6 +138,10 @@
             <fieldset id="elimination-field" hidden>
               <legend>Variables to eliminate</legend>
               <div class="variable-choices" id="eliminate"></div>
+            </fieldset>
+            <fieldset id="resultant-field" hidden disabled>
+              <legend id="resultant-variable-label">Variable to eliminate</legend>
+              <select id="resultant-variable" name="resultant-variable" aria-labelledby="resultant-variable-label" required></select>
             </fieldset>
             <details class="operand-help"><summary>Input syntax</summary><p class="helper"><span id="zero-ideal-help">Use <code>0</code> for the zero ideal.</span>
               <span id="gcd-help" hidden>A nonzero GCD has leading coefficient 1 in the selected order.</span>

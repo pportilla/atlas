@@ -164,8 +164,10 @@ class AlgebraSession {
         expression = ideal("ideal");
       } else {
         let args;
-        if (operation === "gcd") {
-          args = [poly("polynomial"), poly("other_polynomial"), "order=" + quote(ring.order)];
+        if (operation === "gcd" || operation === "resultant") {
+          args = [poly("polynomial"), poly("other_polynomial")];
+          if (operation === "resultant") args.push(quote(operands.variables[0]));
+          args.push("order=" + quote(ring.order));
         } else if (operation === "factor" || AlgebraSession.hypersurfaceOperations.has(operation)) {
           args = [poly("polynomial"), "order=" + quote(ring.order)];
         } else {
@@ -176,7 +178,12 @@ class AlgebraSession {
           else if (operation === "eliminate") args.push(...operands.variables.map(v => quote(v)));
         }
         if (operands.point !== undefined) args.push("point=" + quote(operands.point));
-        if (operands.degrees !== undefined) args.push("degrees=[" + operands.degrees.join(", ") + "]");
+        if (operands.degrees !== undefined) {
+          // Python can limit decimal integer literals to 640 digits. Atlas also
+          // accepts degrees as exact decimal strings when replaying a script.
+          const degrees = operands.degrees.map(digits => digits.length > 640 ? quote(digits) : digits);
+          args.push("degrees=[" + degrees.join(", ") + "]");
+        }
         args.push("compute=" + quote(form.compute));
         expression = operation.replaceAll("-", "_") + "(" + args.join(", ") + ")";
       }
@@ -196,7 +203,7 @@ AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate dimension gcd factor algebra_request help quit exit " +
+  "quotient saturation saturate dimension gcd factor resultant algebra_request help quit exit " +
   "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form " +
   "hilbert_samuel_function hilbert_samuel_multiplicity"
 ).split(" "));

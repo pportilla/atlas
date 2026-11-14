@@ -43,6 +43,12 @@ class AlgebraReplayTests(unittest.TestCase):
     def test_elimination_uses_named_coordinates(self):
         self.check_replay(["y", "x"], "eliminate", dict(ideal=["x+y", "y-1"], variables=["y"]))
 
+    def test_resultant_replays_reserved_coordinate_and_constant_operands(self):
+        self.check_replay(["resultant", "x"], "resultant",
+                          dict(polynomial="resultant-x", other_polynomial="resultant+1", variables=["resultant"]),
+                          fallback=True)
+        self.check_replay(["x"], "resultant", dict(polynomial="-2/3", other_polynomial="4", variables=["x"]))
+
     def test_gcd_preserves_constant_ambient_ring_and_reserved_names(self):
         self.check_replay(["x", "y"], "gcd", {"polynomial": "-1/2", "other_polynomial": "0"})
         self.check_replay(["gcd"], "gcd", {"polynomial": "gcd^2", "other_polynomial": "-gcd"},

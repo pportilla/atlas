@@ -25,6 +25,7 @@ POINT_OPERATIONS = (LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.key
                     | HILBERT_SAMUEL_OPERANDS.keys())
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
+    "resultant": ("polynomial", "other_polynomial", "variables"),
     "factor": ("polynomial",),
     "ideal": ("ideal",),
     "groebner": ("ideal",),
@@ -121,7 +122,10 @@ def _request(data):
             raise InputError(f"{key} must be a polynomial string.")
     if "variables" in operands:
         removed = _names(operands["variables"])
-        if not removed or any(v not in names for v in removed):
+        if operation == "resultant":
+            if len(removed) != 1 or removed[0] not in names:
+                raise InputError("Choose exactly one declared variable to eliminate for the resultant.")
+        elif not removed or any(v not in names for v in removed):
             raise InputError("Choose one or more declared variables to eliminate.")
 
     return {"operation": operation, "ring": {"field": "QQ", "variables": names, "order": order},
@@ -165,7 +169,7 @@ def dispatch(data, *, known_basis=False):
             if known_basis:
                 basis = handler.basis_from_reduced(operands["ideal"], variables, order=ring["order"])
                 result_operands = dict(operands, ideal=basis)
-        elif operation in ("gcd", "factor"):
+        elif operation in ("gcd", "factor", "resultant"):
             from . import algebra_polynomial as handler
         elif operation == "quotient-basis" or operation in LOCAL_QUOTIENT_OPERANDS:
             from . import local_algebra as handler

@@ -1,5 +1,6 @@
 """Standard bases and certified local remainders at rational points."""
 from fractions import Fraction
+from math import comb
 import shutil
 import unittest
 from unittest.mock import patch
@@ -193,6 +194,50 @@ class LocalStandardKernel(unittest.TestCase):
         result = self.calculate("local-normal-form", ["x^18446744073709551617"], "x", names=("x",))
         self.assertEqual(result["reduction"], "standard")
         self.assertEqual(result["remainder"], "x")
+
+    def test_finite_query_jet_uses_the_mixed_standard_basis(self):
+        # In u=x-1, v=y+1, v²=-u³ and v³=0 imply u³v=u⁶=0.
+        n = 10**21
+        ideal = ["(x-1)^3+(y+1)^2", "(y+1)^3"]
+        query = f"x^{n}*y^2"
+        expected = "+".join(
+            [f"{comb(n, i)}*(x-1)^{i}" for i in range(6)] +
+            [f"(-{2*comb(n, i)})*(x-1)^{i}*(y+1)" for i in range(3)] +
+            [f"(-{comb(n, i)})*(x-1)^{i+3}" for i in range(3)])
+        for order in ("lex", "grevlex"):
+            options = dict(order=order, point=["1", "-1"])
+            result = self.calculate("local-normal-form", ideal, query, **options)
+            self.assertEqual((result["unit"], result["reduction"]), ("1", "standard"))
+            self.assertEqual(native(result["remainder"], ("x", "y")), native(expected, ("x", "y")))
+            rows = self.calculate("local-standard-basis", ideal, **options)["generators"]
+            self.assertEqual(self.calculate("local-normal-form", rows, query,
+                                            known_basis=True, **options), result)
+
+    def test_finite_query_jet_at_reciprocal_and_zero_coordinates(self):
+        n = 2**65 + 1
+        u, v = "(x+2)", "(y-1/2)"
+        result = self.calculate("local-normal-form", [f"{u}^2", f"{v}^2"], f"(x*y)^{n}",
+                                point=["-2", "1/2"])
+        # (-2+u)^n*(1/2+v)^n = -(1-n*u/2)*(1+2*n*v) modulo (u²,v²).
+        expected = f"-(1-{n}*{u}/2)*(1+{2*n}*{v})"
+        self.assertEqual(native(result["remainder"], ("x", "y")), native(expected, ("x", "y")))
+        self.assertEqual((result["unit"], result["reduction"]), ("1", "standard"))
+        result = self.calculate("local-normal-form", ["(x-2)^2", "y"], f"x^{n}*y^2+1",
+                                point=["2", "0"])
+        self.assertEqual(result["remainder"], "1")
+
+    def test_query_centering_uses_ordinary_translation_when_cheaper_or_unbounded(self):
+        cases = [
+            (["(x-1)^2", "y"], "x^3", "3*x-2"),
+            (["(x-1)^2", "y^18446744073709551617"], "x^3", "3*x-2"),
+            (["(y-1)^2", "(y-1)*(x-1)"], "x^130", "x^130"),
+        ]
+        for ideal, query, expected in cases:
+            point = ["1", "1"] if query == "x^130" else ["1", "0"]
+            with self.subTest(ideal=ideal), patch.object(local_standard, "_taylor_jet",
+                                                        side_effect=AssertionError("unexpected jet")):
+                result = self.calculate("local-normal-form", ideal, query, point=point)
+                self.assertEqual(result["remainder"], expected)
 
     def test_trivial_rational_point_results_do_not_translate_wide_powers(self):
         power = "x^18446744073709551617"

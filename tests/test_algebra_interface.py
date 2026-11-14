@@ -116,6 +116,36 @@ class AlgebraInterfaceTests(unittest.TestCase):
                 self.assertEqual(error["status"], "error")
                 self.assertTrue(error["error"]["message"])
 
+    def test_resultant_changes_with_the_selected_variable_and_replays(self):
+        # Eliminating the parameter t gives the equation of the parametrized cusp.
+        ring = {**RING, "variables": ["t", "x", "y"]}
+        for variable, remaining, answer in (("t", ["x", "y"], "-x^3+y^2"),
+                                            ("x", ["t", "y"], "t^3-y")):
+            with self.subTest(variable=variable):
+                operands = {"polynomial": "t^2-x", "other_polynomial": "t^3-y", "variables": [variable]}
+                status, record = self.post(dict(operation="resultant", ring=ring, operands=operands))
+                self.assertEqual(status, 200, record)
+                result = record["result"]
+                self.assertEqual(result, {"type": "polynomial", "ring": {**ring, "variables": remaining},
+                                          "polynomial": answer})
+                args = shlex.split(record["replay"]["command"])[1:]
+                self.assertEqual(args[args.index("--eliminate") + 1], variable)
+                for run in (self.shell(*args), run_script(record["replay"]["script"])):
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    self.assertEqual(json.loads(run.stdout)["result"], result)
+                args.remove("--json")
+                code, output, error = run_prompt(shlex.join(args) + "\nquit\n")
+                self.assertEqual((code, error), (0, ""))
+                self.assertIn("Resultant: " + answer, output)
+
+    def test_resultant_requires_one_declared_variable(self):
+        operands = {"polynomial": "x", "other_polynomial": "x+y"}
+        for selection in ({}, {"variables": []}, {"variables": ["x", "y"]}, {"variables": ["z"]}):
+            with self.subTest(selection=selection):
+                status, record = self.post(dict(operation="resultant", ring=RING, operands=operands | selection))
+                self.assertEqual((status, record["error"]["code"]), (400, "invalid_request"))
+                self.assertNotIn("result", record)
+
     def test_factorization_through_shell_prompt_script_and_http(self):
         operand = {"polynomial": "-3/5*(2*x-y)^2*(x^2+1)"}
         status, record = self.post(dict(operation="factor", ring=RING, operands=operand))

@@ -12,6 +12,8 @@ Use the **Algebra** view or `./atlas algebra` for global quotient bases and for 
 
 Local standard bases and normal forms also accept any rational point. For example, `./atlas algebra local-normal-form --vars x,y --point '1/2,-2' --gen 'x-1/2' --gen 'y+2' --poly 'x+y'` returns $-3/2$. [Point coordinates, saved bases and local units](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
 
+The **Hilbert–Samuel function** and **Hilbert–Samuel multiplicity** operations apply to any ideal at a rational point. For the cusp $y^2=(x-1/2)^3$, the local lengths in degrees 0, 1 and 2 are 1, 3 and 5 at $(1/2,0)$ and 1, 2 and 3 at the smooth point $(3/2,1)$. The multiplicities are 2 and 1 respectively. [CLI and browser examples](examples/algebra-api.md#hilbert-samuel-functions)
+
 ## Build and run
 
 Install a C++17 compiler, Make, pkg-config, Python 3.10 or later and the development libraries for GMP (including gmpxx), FLINT, JsonCpp and libnormaliz. The project was tested on Linux with FLINT 3.6, SymPy 1.14 and Python 3.14. The optional OpenCL plugins need OpenCL headers, a loader and a compatible device driver. The Triton path uses a GPU-enabled PyTorch installation and a matching Triton compiler in the Python environment that runs Atlas.

@@ -2,9 +2,11 @@
 
 import json
 import math
+import os
 import shlex
 import subprocess
 
+from engine.polynomial import integer_from_decimal
 from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
 
 
@@ -13,22 +15,23 @@ class HilbertSamuelBrowserTests(AlgebraBrowserCase):
         page = self.page
         page.locator("#result-name").fill(name)
         page.locator("#compute").select_option(compute)
-        with page.expect_response(self.url + "/api/algebra", timeout=65000) as pending:
+        endpoint = "/api/algebra/exhaustive" if page.locator("#exhaustive").is_checked() else "/api/algebra"
+        with page.expect_response(self.url + endpoint, timeout=65000) as pending:
             page.locator("#run").click()
         response = pending.value
-        record = json.loads(response.body())
+        record = json.loads(response.body(), parse_int=integer_from_decimal)
         self.assertEqual(record["status"], "ok", record)
         expect(page.locator("#result")).to_be_visible()
         self.assertEqual(record["execution"]["requested"], compute)
-        return json.loads(response.request.post_data), record
+        return json.loads(response.request.post_data, parse_int=integer_from_decimal), record
 
-    def replay(self, script=None, command=None):
+    def replay(self, script=None, command=None, env=None):
         run = subprocess.run(command or ["./atlas", "run", "-"], cwd=ROOT, input=script,
-                             capture_output=True, text=True, timeout=65)
+                             capture_output=True, text=True, timeout=65, env=env)
         self.assertEqual(run.returncode, 0, run.stderr)
         if command:
-            return [json.loads(run.stdout)["result"]]
-        return [json.loads(line)["result"] for line in run.stdout.splitlines()]
+            return [json.loads(run.stdout, parse_int=integer_from_decimal)["result"]]
+        return [json.loads(line, parse_int=integer_from_decimal)["result"] for line in run.stdout.splitlines()]
 
     def test_regular_plane_preserves_degree_order_duplicates_and_large_values(self):
         page = self.page
@@ -56,6 +59,29 @@ class HilbertSamuelBrowserTests(AlgebraBrowserCase):
         script = self.download("#download-session")
         self.assertIn(f"degrees=[{n}, 0, 2, 2]", script)
         self.assertEqual(self.replay(script), [result])
+
+    def test_exhaustive_session_replays_a_4501_digit_degree_under_a_digit_limit(self):
+        page = self.page
+        page.locator("#operation").select_option("ideal")
+        self.rows("#generators", "#add-generator", ["y"])
+        self.submit("Line")
+        page.locator("#operation").select_option("hilbert-samuel-function")
+        page.locator("#ideal-source").select_option("Line")
+        digits = "9" * 4501
+        length = "1" + "0" * len(digits)
+        page.locator("#degrees").fill("2, " + digits)
+        page.locator("#exhaustive").check()
+        request, record = self.submit("H")
+        n = 10**4501 - 1
+        result = record["result"]
+        self.assertEqual(request["operands"]["degrees"], [2, n])
+        self.assertEqual((result["degrees"], result["values"], result["graded_values"]), ([2, n], [3, n+1], [1, 1]))
+        expect(page.locator("#result-value tbody tr").nth(1).get_by_role("cell")).to_have_text([digits, length, "1"])
+        self.assertEqual(json.loads(self.download("#export"), parse_int=integer_from_decimal)["result"], result)
+        page.locator("#session-replay summary").click()
+        script = self.download("#download-session")
+        self.assertIn("hilbert_samuel_function(Line,", script)
+        self.assertEqual(self.replay(script, env={**os.environ, "PYTHONINTMAXSTRDIGITS": "640"}), [result])
 
     def test_saved_local_basis_defaults_empty_degrees_and_multiplicity(self):
         page = self.page

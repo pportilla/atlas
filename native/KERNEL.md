@@ -136,6 +136,20 @@ Before expanding a translation, Atlas can strip a common power of a coordinate t
 
 For the translate of $u^4+v^5+u^2v^3$ to $(1/2,-2/3)$, the quotient by the derivative ideal has dimension 12 and imposing the equation lowers the dimension to 11. On a Radeon 680M, each of the four point-local operations replayed two primes using OpenCL and certified its basis on the CPU. [Device regression](../tests/test_local_algebra_device.py) · [Independent Singular checks](../tests/test_point_invariants_singular.py)
 
+<a id="hilbert-samuel-computation"></a>
+
+### Hilbert–Samuel functions and multiplicities of local quotients
+
+In coordinates centered at $p$, the associated graded algebra of $A$ is the polynomial ring modulo the lowest-degree initial forms of the localized ideal. Passing to their leading monomials preserves every graded dimension. Thus the number of surviving monomials of degree $n$ is $h(n)=\dim(\mathfrak m^n/\mathfrak m^{n+1})$. Counting those of degree at most $n$ gives $H(n)=\dim(A/\mathfrak m^{n+1})$. The local standard-basis computation above supplies these leading monomials, including those arising from cancellation. [Local initial monomials](../engine/local_algebra.py)
+
+Atlas partitions the surviving exponents into disjoint boxes. A box with lower corner $a$, finite side lengths $L_i$, and $s$ infinite sides contributes $t^{|a|}\prod_i(1+t+\cdots+t^{L_i-1})/(1-t)^s$ to the graded Hilbert series. Its largest pole order is $s$ and its coefficient there is $\prod_i L_i$. Consequently the largest $s$ across all boxes is the local dimension. Summing these products over the boxes with that dimension gives the multiplicity. Disjoint groups of variables give tensor factors whose dimensions add and whose multiplicities multiply. The function query extracts coefficients from the graded series and the same series divided by $1-t$ for cumulative lengths. The computation uses integer arithmetic, including for degrees above machine-word size. [Hilbert–Samuel computation](../engine/hilbert_samuel.py)
+
+For a sparse principal ideal, only the order of the generator at $p$ enters its Hilbert series. If translation would expand a large power, Atlas groups terms by their exponents on the zero coordinates of $p$. On the remaining coordinates, each operator $x_i\partial_i$ multiplies a monomial by its exponent in $x_i$. Their products up to degree $k$ span the same derivative evaluations at $p$ as ordinary partial derivatives up to order $k$, because these coordinates are units there. Keeping independent evaluation rows on the finite support gives the first nonvanishing order without expanding the translated polynomial. [Sparse point order](../engine/point_order.py)
+
+The device path reuses modular Gröbner replay and exact rational certification for eligible ideals. Box counting and coefficient extraction run on the host. On a Radeon 680M, each operation replayed two primes on OpenCL for a translated complete intersection of length 9. [Device regression](../tests/test_hilbert_samuel_device.py)
+
+The Singular tests translate the original ideal $J$ into a local ring, compare dimension and multiplicity with `dim(std(J))` and `mult(std(J))`, and obtain each cumulative length independently with `vdim(std(J+maxideal(n+1)))`. [Singular comparison tests](../tests/test_hilbert_samuel_singular.py) · [Singular reference manual](https://www.singular.uni-kl.de/index.php/singular.pdf)
+
 ### Local standard bases and normal forms at rational points
 
 For $p\in\mathbb Q^n$, translate $x=p+X$ and compute in $\mathbb Q[X]_{(X)}$. The homogeneous construction above gives basis *polynomials* by setting $h=1$ in each homogeneous Gröbner basis row. Their leading monomials generate the local initial ideal, and the rows generate the localized ideal. If an input generator evaluates to a nonzero value at $p$, it is a unit and the local standard basis is $[1]$. After the computation, substitute $X=x-p$ to express basis rows, the remainder and its unit in the caller's coordinates. [Point-local standard basis](../engine/local_standard.py)

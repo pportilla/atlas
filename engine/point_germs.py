@@ -1,6 +1,7 @@
 """Sparse generators of a rational ideal in coordinates centered at a point."""
 
-from math import lcm, prod
+from itertools import combinations
+from math import gcd, lcm, prod
 
 from . import native_polynomial as np
 from .local_mora import _divides
@@ -13,8 +14,76 @@ def _translate(variables, shifts, polynomials):
     return tuple(f.xreplace(mapping) for f in polynomials)
 
 
+def _strip_power(n, factor):
+    """Return the cofactor and multiplicity, using powers of two for large valuations."""
+    blocks = []
+    power, step = factor, 1
+    valuation = 0
+    while n % power == 0:
+        blocks.append((power, step))
+        n //= power
+        valuation += step
+        if power > n:
+            break
+        power *= power
+        step *= 2
+    for power, step in reversed(blocks):
+        if n % power == 0:
+            n //= power
+            valuation += step
+    return n, valuation
+
+
+def _coprime_magnitudes(numbers):
+    """Split overlapping factors while preserving a factorization of each input."""
+    factors = set(numbers) - {1}
+    while True:
+        ordered = sorted(factors)
+        for a, b in combinations(ordered, 2):
+            common = gcd(a, b)
+            if common > 1:
+                break
+        else:
+            return ordered
+        factors.difference_update((a, b))
+        factors.add(common)
+        for n in (a, b):
+            rest, _ = _strip_power(n, common)
+            if rest > 1:
+                factors.add(rest)
+
+
+def _refined_nonzero(bases, terms):
+    """Evaluate after combining multiplicatively dependent rational point coordinates."""
+    factors = _coprime_magnitudes(n for base in bases for n in (base.numerator, base.denominator))
+    # A factor may be composite. The refinement still gives unique exponent
+    # vectors, since the factors are pairwise coprime and generate all bases.
+    columns = []
+    for factor in factors:
+        column = []
+        for base in bases:
+            _, above = _strip_power(base.numerator, factor)
+            _, below = _strip_power(base.denominator, factor)
+            column.append(above - below)
+        columns.append(column)
+
+    grouped = {}
+    for exponents, c in terms:
+        key = tuple(sum(v * e for v, e in zip(column, exponents)) for column in columns)
+        grouped[key] = grouped.get(key, 0) + c
+    distinct = [(e, c) for e, c in grouped.items() if c]
+    if len(distinct) < 2:
+        return bool(distinct)
+    if all(c > 0 for _, c in distinct) or all(c < 0 for _, c in distinct):
+        return True
+    # Cancel powers common to the remaining terms before exact evaluation.
+    lower = tuple(map(min, zip(*(e for e, _ in distinct))))
+    return bool(sum(c * prod(b**(k-m) for b, k, m in zip(factors, e, lower) if k != m)
+                    for e, c in distinct))
+
+
 def nonzero_terms_at_point(shifts, terms):
-    """Decide exact rational vanishing without expanding equal or reciprocal powers."""
+    """Decide exact rational vanishing, combining dependent powers before expansion."""
     if not any(shifts):
         return bool(terms.get((0,) * len(shifts)))
     active = [(e, c) for e, c in terms.items() if c and all(not k or a for k, a in zip(e, shifts))]
@@ -61,6 +130,7 @@ def nonzero_terms_at_point(shifts, terms):
                         prod(pow(v, k, prime) for v, k in zip(residues, e) if k) for e, c in active)
             if value % prime:
                 return True
+        return _refined_nonzero(indices, active)
     return bool(sum(c * prod(base**k for base, k in zip(indices, e) if k) for e, c in active))
 
 

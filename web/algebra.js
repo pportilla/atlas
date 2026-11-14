@@ -6,6 +6,7 @@ const operation = byId("operation");
 const polynomial = byId("polynomial");
 const polynomialLabels = {
   gcd: "First polynomial",
+  resultant: "First polynomial",
   factor: "Polynomial to factor",
   "normal-form": "Polynomial to reduce",
   "local-normal-form": "Polynomial to reduce",
@@ -15,7 +16,8 @@ const polynomialLabels = {
   "milnor-number": "Hypersurface polynomial f with f(p) = 0",
   "tjurina-number": "Hypersurface polynomial f with f(p) = 0",
 };
-const polynomialInputs = { gcd: "(x+y)*(x+1)", factor: "-3/2*(x-y)^2*(x+y)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
+const polynomialInputs = { gcd: "(x+y)*(x+1)", resultant: "x^2-y", factor: "-3/2*(x-y)^2*(x+y)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
+const secondPolynomialInputs = { gcd: byId("other-polynomial").value, resultant: "x-1" };
 const quotientDescriptions = {
   "quotient-basis": "Find a monomial basis of the quotient by I over ℚ, including points away from the origin.",
   "local-quotient-basis": "Find a basis of the quotient by I in coordinates centered at the chosen point p.",
@@ -77,9 +79,13 @@ function variables() {
 
 function updateEliminationChoices() {
   const group = byId("eliminate");
+  const selector = byId("resultant-variable");
+  const selected = selector.value;
+  selector.replaceChildren();
   const previous = new Map(Array.from(group.querySelectorAll("input"), (input) => [input.value, input.checked]));
   group.replaceChildren();
   for (const name of new Set(variables().filter(Boolean))) {
+    selector.add(new Option(name, name, false, name === selected));
     const label = document.createElement("label");
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -89,11 +95,13 @@ function updateEliminationChoices() {
     group.append(label);
   }
   if (!group.children.length) group.textContent = "Enter variables above to choose which to eliminate.";
+  if (!selector.options.length) selector.add(new Option("Enter an ordered variable", ""));
 }
 
 function updateOperation() {
   const polynomialInput = (op) => AlgebraSession.hypersurfaceOperations.has(op) ? "hypersurface" : op;
   if (activeOperation in polynomialLabels) polynomialInputs[polynomialInput(activeOperation)] = polynomial.value;
+  if (activeOperation in secondPolynomialInputs) secondPolynomialInputs[activeOperation] = byId("other-polynomial").value;
   activeOperation = operation.value;
   const needsPolynomial = activeOperation in polynomialLabels;
   showOperandGroup("polynomial-field", needsPolynomial);
@@ -102,11 +110,12 @@ function updateOperation() {
     polynomial.value = polynomialInputs[polynomialInput(activeOperation)];
   }
   byId("saturation-help").hidden = activeOperation !== "saturation";
-  const needsTwoPolynomials = activeOperation === "gcd";
+  const needsTwoPolynomials = activeOperation in secondPolynomialInputs;
   const needsFirstIdeal = !needsTwoPolynomials && activeOperation !== "factor" && !AlgebraSession.hypersurfaceOperations.has(activeOperation);
   showOperandGroup("first-ideal", needsFirstIdeal);
   showOperandGroup("other-polynomial-field", needsTwoPolynomials);
-  byId("gcd-help").hidden = !needsTwoPolynomials;
+  if (needsTwoPolynomials) byId("other-polynomial").value = secondPolynomialInputs[activeOperation];
+  byId("gcd-help").hidden = activeOperation !== "gcd";
   byId("zero-ideal-help").hidden = !needsFirstIdeal;
   const description = byId("quotient-description");
   description.textContent = quotientDescriptions[activeOperation] || "";
@@ -123,6 +132,7 @@ function updateOperation() {
       ? "Computes I : J, the ideal quotient." : "Computes I ∩ J, the intersection.";
   }
   showOperandGroup("elimination-field", activeOperation === "eliminate");
+  showOperandGroup("resultant-field", activeOperation === "resultant");
   byId("result-name").required = activeOperation === "ideal";
   byId("result-name").placeholder = activeOperation === "ideal" ? "Ideal name" : "Optional name";
   updateSources();
@@ -198,6 +208,8 @@ function readRequest() {
   }
   if (operation.value === "eliminate") {
     operands.variables = Array.from(byId("eliminate").querySelectorAll("input:checked"), (input) => input.value);
+  } else if (operation.value === "resultant") {
+    operands.variables = [byId("resultant-variable").value];
   }
   if (AlgebraSession.pointOperations.has(operation.value)) {
     const point = byId("local-point").value.trim();
@@ -252,6 +264,7 @@ for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-so
 form.addEventListener("input", markChanges);
 form.addEventListener("change", markChanges);
 const resultTitles = {
+  resultant: "Polynomial resultant",
   factor: "Polynomial factorization",
   gcd: "Monic polynomial GCD",
   ideal: "Ideal",
@@ -370,6 +383,9 @@ function showProblem(request) {
   if (operation === "eliminate") {
     const survivors = ring.variables.filter(v => !operands.variables.includes(v));
     title.replaceChildren(mathSpan("i", "", "I"), " ∩ ℚ", survivors.length ? "[" + survivors.join(", ") + "]" : "");
+  } else if (operation === "resultant") {
+    title.replaceChildren("Res", mathSpan("sub", "", operands.variables[0] || "□"),
+      "(", mathSpan("i", "", "f"), ", ", mathSpan("i", "", "g"), ")");
   } else title.innerHTML = problemNotation[operation]; // Static notation; operands use text nodes.
   rows.replaceChildren();
   if ("polynomial" in operands || sources.polynomial) operand("f", "polynomial");

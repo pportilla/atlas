@@ -38,6 +38,10 @@ HELP = """Define coordinates and keep the results of calculations:
   D.factors[0].polynomial                # x+y
   D.factors[0].multiplicity              # 2
 
+  q = resultant(y^2-x, y-2, y)
+  x1, = q.coordinates                    # x in the surviving ring QQ[x]
+  q == 4-x1                              # True
+
   I = ideal(x^2*(x-1), y)
   quotient_basis(I).dimension            # 3, including the point (1, 0)
   local_quotient_basis(I).dimension      # 2 at the origin

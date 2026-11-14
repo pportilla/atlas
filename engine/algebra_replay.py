@@ -85,6 +85,8 @@ def _script(request, prepared):
     args = ["I"]
     if "ideal" not in prepared:
         args = [str(prepared[key]) for key in ("polynomial", "other_polynomial") if key in prepared]
+        if op == "resultant":
+            args.extend(prepared["variables"])
         args.extend([f"variables=[{variables}]", f"order={request['ring']['order']!r}"])
     elif op in ("normal-form", "membership", "local-normal-form"):
         args.insert(0, str(prepared["polynomial"]))

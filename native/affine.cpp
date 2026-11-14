@@ -688,24 +688,24 @@ std::string factorization(const Polynomial& f, bool geometric) {
     return result;
 }
 
-// On D(a), substitution v=-b/a is represented by
-// sum_j c_j (-b)^j a^(degree-j). Only the occupied powers are visited.
-Polynomial restrict_linear(const Polynomial& f, slong v, const Polynomial& a, const Polynomial& b) {
-    const auto& ring = f.ring;
-    if (fmpq_mpoly_is_zero(a.p, ring.ctx)) throw std::invalid_argument("The linear coefficient is zero.");
-    struct Univariate {
-        fmpq_mpoly_univar_t p;
-        const Variables& ring;
-        explicit Univariate(const Variables& r) : ring(r) { fmpq_mpoly_univar_init(p, r.ctx); }
-        ~Univariate() { fmpq_mpoly_univar_clear(p, ring.ctx); }
-    } terms(ring);
-    fmpq_mpoly_to_univar(terms.p, f.p, v, ring.ctx);
-    Polynomial value(ring), negative(ring), factor(ring), term(ring), q(ring);
-    fmpq_mpoly_neg(negative.p, b.p, ring.ctx);
-    if (!terms.p->length || fmpz_is_zero(terms.p->exps)) {
-        fmpq_mpoly_set(value.p, f.p, ring.ctx);
-        return value;
+struct Univariate {
+    fmpq_mpoly_univar_t p;
+    const Variables& ring;
+    Univariate(const Polynomial& f, slong v) : ring(f.ring) {
+        fmpq_mpoly_univar_init(p, ring.ctx);
+        fmpq_mpoly_to_univar(p, f.p, v, ring.ctx);
     }
+    Univariate(const Univariate&) = delete;
+    ~Univariate() { fmpq_mpoly_univar_clear(p, ring.ctx); }
+};
+
+// Res_v(a*v+b,f) = sum_j c_j (-b)^j a^(degree-j).
+// Only the occupied powers of v are visited.
+Polynomial linear_resultant(const Univariate& terms, const Polynomial& a, const Polynomial& b) {
+    const auto& ring = terms.ring;
+    if (fmpq_mpoly_is_zero(a.p, ring.ctx)) throw std::invalid_argument("The linear coefficient is zero.");
+    Polynomial value(ring), negative(ring), factor(ring), term(ring);
+    fmpq_mpoly_neg(negative.p, b.p, ring.ctx);
     Z gap;
     for (slong j = 0; j < terms.p->length; ++j) {
         fmpz_sub(&gap.v, terms.p->exps, terms.p->exps+j);
@@ -716,10 +716,19 @@ Polynomial restrict_linear(const Polynomial& f, slong v, const Polynomial& a, co
         fmpq_mpoly_mul(term.p, term.p, terms.p->coeffs+j, ring.ctx);
         fmpq_mpoly_add(value.p, value.p, term.p, ring.ctx);
     }
+    return value;
+}
+
+Polynomial restrict_linear(const Polynomial& f, slong v, const Polynomial& a, const Polynomial& b) {
+    const auto& ring = f.ring;
+    Univariate terms(f, v);
+    auto value = linear_resultant(terms, a, b);
+    if (!terms.p->length || fmpz_is_zero(terms.p->exps)) return value;
     if (fmpq_mpoly_is_zero(value.p, ring.ctx) || fmpq_mpoly_is_fmpq(a.p, ring.ctx)) return value;
     // Remove the full a-adic order. Repeated squares avoid one division
     // per unit of multiplicity on sparse, large-degree restrictions.
     std::vector<Polynomial> powers;
+    Polynomial factor(ring), q(ring);
     fmpq_mpoly_set(factor.p, a.p, ring.ctx);
     while (fmpq_mpoly_divides(q.p, value.p, factor.p, ring.ctx)) {
         fmpq_mpoly_swap(q.p, value.p, ring.ctx);
@@ -729,6 +738,47 @@ Polynomial restrict_linear(const Polynomial& f, slong v, const Polynomial& a, co
     }
     for (auto it = powers.rbegin(); it != powers.rend(); ++it)
         if (fmpq_mpoly_divides(q.p, value.p, it->p, ring.ctx)) fmpq_mpoly_swap(q.p, value.p, ring.ctx);
+    return value;
+}
+
+Polynomial resultant(const Polynomial& f, const Polynomial& g, slong v) {
+    const auto& ring = f.ring;
+    Polynomial value(ring);
+    if (fmpq_mpoly_is_zero(f.p, ring.ctx) || fmpq_mpoly_is_zero(g.p, ring.ctx)) return value;
+    Univariate left(f, v), right(g, v);
+    // Both inputs vanish at v=0.
+    if (!fmpz_is_zero(left.p->exps + left.p->length - 1) &&
+        !fmpz_is_zero(right.p->exps + right.p->length - 1)) return value;
+    if (left.p->length == 1 || right.p->length == 1 ||
+        fmpz_is_one(left.p->exps) || fmpz_is_one(right.p->exps)) {
+        const bool swap = left.p->length != 1 &&
+                          (right.p->length == 1 || !fmpz_is_one(left.p->exps));
+        const auto& a = swap ? right : left;
+        const auto& h = swap ? left : right;
+        if (a.p->length == 1) {
+            // Res_v(c*v^m,h) = c^deg(h) * h(0)^m.
+            if (!fmpq_mpoly_pow_fmpz(value.p, a.p->coeffs, h.p->exps, ring.ctx))
+                throw Limit("The resultant coefficient power could not be represented.");
+            if (!fmpz_is_zero(a.p->exps)) {
+                Polynomial constant_power(ring);
+                if (!fmpq_mpoly_pow_fmpz(constant_power.p, h.p->coeffs + h.p->length - 1,
+                                         a.p->exps, ring.ctx))
+                    throw Limit("The resultant constant-term power could not be represented.");
+                fmpq_mpoly_mul(value.p, value.p, constant_power.p, ring.ctx);
+            }
+        } else {
+            Polynomial leading(ring), constant(ring);
+            fmpq_mpoly_univar_get_term_coeff(leading.p, a.p, 0, ring.ctx);
+            fmpq_mpoly_univar_get_term_coeff(constant.p, a.p, 1, ring.ctx);
+            auto evaluated = linear_resultant(h, leading, constant);
+            fmpq_mpoly_swap(value.p, evaluated.p, ring.ctx);
+        }
+        if (swap && fmpz_is_odd(a.p->exps) && fmpz_is_odd(h.p->exps))
+            fmpq_mpoly_neg(value.p, value.p, ring.ctx);
+        return value;
+    }
+    if (!fmpq_mpoly_resultant(value.p, f.p, g.p, v, ring.ctx))
+        throw Limit("FLINT could not compute the polynomial resultant.");
     return value;
 }
 
@@ -913,6 +963,14 @@ std::string affine(std::istream& in) {
         operation == "lattice_dimension" || operation == "lattice_pivots")
         return lattice(in, operation);
     Variables chart(line(in));
+    if (operation == "resultant") {
+        const slong v = std::stol(line(in));
+        if (v < 0 || v >= chart.n) throw std::invalid_argument("Invalid resultant variable.");
+        const auto f = read(in, chart), g = read(in, chart);
+        std::string result;
+        emit(result, resultant(f, g, v));
+        return result;
+    }
     if (operation == "factor" || operation == "geometric_factors")
         return factorization(read(in, chart), operation == "geometric_factors");
     if (operation == "decode" || operation == "parse_input") {

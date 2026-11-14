@@ -535,9 +535,23 @@ def membership(polynomial, ideal, *, compute="auto"):
     return _calculate("membership", ideal, compute, polynomial=polynomial)
 
 
-def _calculate_polynomials(operation, order, variables, compute, *, point=None, **operands):
-    space, values, order = _polynomial_inputs(operands.values(), order, variables, _scalar_space)
+def _elimination_name(variable, space):
+    if isinstance(variable, Polynomial):
+        coordinate = _polynomial(variable, space)._value
+        if not coordinate.is_Symbol:
+            raise ValueError("Elimination requires a coordinate variable.")
+        variable = coordinate.name
+    if not isinstance(variable, str) or variable not in space.names:
+        raise ValueError("Choose a declared coordinate variable to eliminate.")
+    return variable
+
+
+def _calculate_polynomials(operation, order, variables, compute, *, point=None, eliminate_variable=None, **operands):
+    default_space = eliminate_variable._space if isinstance(eliminate_variable, Polynomial) else _scalar_space
+    space, values, order = _polynomial_inputs(operands.values(), order, variables, default_space)
     inputs = {key: str(f) for key, f in zip(operands, values)}
+    if operation == "resultant":
+        inputs["variables"] = [_elimination_name(eliminate_variable, space)]
     if point is not None:
         inputs["point"] = _local_point(point, len(space.names))
     request = {"operation": operation, "ring": {"field": "QQ", "variables": list(space.names), "order": order},
@@ -548,6 +562,12 @@ def _calculate_polynomials(operation, order, variables, compute, *, point=None, 
 def gcd(left, right, *, order=None, variables=None, compute="auto"):
     """Monic polynomial GCD in the common coordinate space, or QQ for scalars."""
     return _calculate_polynomials("gcd", order, variables, compute, polynomial=left, other_polynomial=right)
+
+
+def resultant(left, right, variable, *, order=None, variables=None, compute="auto"):
+    """Resultant with respect to one coordinate, in the ring of the surviving coordinates."""
+    return _calculate_polynomials("resultant", order, variables, compute, polynomial=left, other_polynomial=right,
+                                  eliminate_variable=variable)
 
 
 def factor(polynomial, *, order=None, variables=None, compute="auto"):
@@ -569,14 +589,7 @@ def tjurina_number(polynomial, *, point=None, order=None, variables=None, comput
 
 def eliminate(ideal, *variables, compute="auto"):
     _require_ideal(ideal)
-    names = []
-    for variable in _unpack(variables):
-        if isinstance(variable, Polynomial):
-            coordinate = _polynomial(variable, ideal._space)._value
-            if not coordinate.is_Symbol:
-                raise ValueError("Elimination requires coordinate variables.")
-            variable = coordinate.name
-        names.append(variable)
+    names = [_elimination_name(v, ideal._space) for v in _unpack(variables)]
     return _calculate("eliminate", ideal, compute, variables=names)
 
 
@@ -622,6 +635,7 @@ def hilbert_samuel_multiplicity(ideal, *, point=None, compute="auto"):
 
 def algebra_bindings():
     return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
+            "resultant": resultant,
             "normal_form": normal_form, "membership": membership,
             "local_standard_basis": local_standard_basis, "local_normal_form": local_normal_form,
             "eliminate": eliminate, "intersection": intersection, "quotient": quotient,
