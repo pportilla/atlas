@@ -1,59 +1,61 @@
-# Resolution Atlas
+# Atlas
 
-Atlas resolves hypersurface germs at the origin from a polynomial with rational
-coefficients. It returns affine charts, their maps to the original coordinates,
-strict transforms, and a labelled dual complex that distinguishes geometric
-components over the algebraic closure. It can also compute the local monodromy
-and topological zeta functions.
+Atlas is a computer algebra system for exact computation in commutative algebra
+and algebraic geometry, with a focus on resolution of singularities. It works
+with multivariate polynomials, ideals, and quotient rings over the rationals.
+The C++ kernel performs the mathematics. Python provides the interactive
+console, scripting environment, and HTTP interface.
 
-## Build and run
+## Capabilities
 
-Install Python 3.10 or later, a C++17 compiler, Make, pkg-config, and the
-development libraries for GMP (including gmpxx), FLINT (tested with 3.6.0),
-JsonCpp, and libnormaliz.
-Build from the repository root and resolve the plane cusp in a terminal.
+- **Polynomial and ideal arithmetic.** Factor polynomials, compute GCDs and
+  resultants, and use Gröbner bases for normal forms, ideal membership, and
+  elimination. Atlas also computes radicals, primary decompositions, and
+  ordinary and symbolic powers of ideals.
+- **Local algebra and geometry.** Compute in quotient rings and localizations,
+  normalize affine algebras, and study singular points through local dimension,
+  tangent cones, multiplicities, and Milnor and Tjurina numbers.
+- **Resolution of singularities.** Compute embedded and intrinsic resolutions
+  of hypersurface germs at the origin. Inspect the chart maps and strict
+  transforms, recover the labelled dual complex of the exceptional divisor,
+  and compute the local monodromy and topological zeta functions.
+
+## Installation
+
+Build Atlas from source on Linux with Python 3.10 or later, a C++17 compiler,
+GNU Make, pkg-config, and the development libraries for GMP (including gmpxx),
+FLINT, JsonCpp, and Normaliz. The CPU runtime uses the Python standard library.
+
+On Debian or Ubuntu, install the build dependencies and check the FLINT version.
 
 ```sh
+sudo apt update
+sudo apt install git build-essential pkg-config python3 libgmp-dev libmpfr-dev \
+    libflint-dev libjsoncpp-dev libnormaliz-dev
+pkg-config --modversion flint
+```
+
+Atlas requires FLINT 3.6 or later. If your distribution ships an older release,
+install FLINT 3.6.0, the version tested here, and check the version again.
+[FLINT releases](https://flintlib.org/downloads.html) · [FLINT installation guide](https://flintlib.org/doc/guide/getting-started/building.html)
+
+```sh
+git clone https://github.com/pportilla/atlas.git
+cd atlas
 make -j4
-./atlas resolve 'y^2-x^3' --vars x,y --mode embedded --monodromy
+./atlas --help
 ```
 
-The cusp takes three point blowups. Its exceptional curves have multiplicities
-2, 3, and 6. The last curve meets each of the first two. Embedded mode resolves
-the total divisor, including multiplicities. Use `--mode intrinsic` for a
-reduced germ to compute the exceptional divisor on its smooth strict transform.
+## Using Atlas
 
-Save the full chart record and both zetas as JSON, then reconstruct the complex
-from the saved charts.
+Run `./atlas` from the checkout to open the console. `./atlas run FILE`
+executes an Atlas script, and `./atlas algebra --help` lists the algebra
+commands. For the browser interface and HTTP API, start `./atlas serve` and
+connect to `http://127.0.0.1:8765`.
 
-```sh
-./atlas resolve 'y^2-x^3' --vars x,y --monodromy --json > cusp.json
-./atlas dual-complex cusp.json
-```
+## Documentation
 
-## Work with a result
-
-Start `./atlas` for the interactive prompt. Type `help functions` for the
-operation list or `help factor` for a worked example. To see how to inspect
-one divisor across charts, run `./atlas run examples/cusp.atlas`.
-
-| Task | Guide |
-| --- | --- |
-| Inspect a chart or save a session | [Prompt and scripts](docs/sessions.md) |
-| Read a resolution, its cell attachments, or its zetas | [Resolution records](docs/resolution-records.md) |
-| Understand how Atlas chooses and verifies a blowup | [Resolution pipeline](docs/resolution-pipeline.md) |
-| Compute with polynomials, ideals, and quotient rings | [Algebra examples](examples/algebra-api.md) |
-| Run a local server or select a compute device | [HTTP and compute options](docs/http-and-compute.md) |
-| Compare algorithms and timings | [Benchmarks](benchmarks/README.md) · [Atlas and Singular](README-singular-comparison.md) |
-
-## Development
-
-Exact arithmetic and geometric verification live in the C++ kernel. Python
-coordinates the search, moves records between workers, and serves the CLI and
-HTTP interfaces. [Kernel algorithms and proofs](native/KERNEL.md) ·
-[Development conventions](AGENTS.md)
-
-For the test suite, install the optional reference dependencies with
-`python3 -m pip install -r requirements-test.txt`, then run `make test`.
-Run `make check-native-boundary` to check the separation between the kernel
-and the Python interfaces.
+- [Algebra operations](examples/algebra-api.md) and [console and scripting guide](docs/sessions.md)
+- [Resolution algorithms](docs/resolution-pipeline.md) and [resolution records](docs/resolution-records.md)
+- [HTTP API and optional GPU support](docs/http-and-compute.md)
+- [Kernel algorithms and proofs](native/KERNEL.md) and [benchmarks](benchmarks/README.md)
