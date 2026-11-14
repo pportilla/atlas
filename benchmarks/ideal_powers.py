@@ -181,7 +181,24 @@ def methods(c):
     return ["GTZ","Jacobian"] if c.symbolic else ["std"]
 
 
-def run_singular(c, method, batch, seed, timeout, check=None):
+def singular_renderer(c):
+    # Print the same JSON fields as the native transport. Singular stores its
+    # reduced basis in the reverse of Atlas's descending head order.
+    prefix = json.dumps({"type":"ideal", "ring":{"field":"QQ","variables":list(c.variables),
+                                                "order":c.order}}, separators=(",",":"))[:-1] + ',"generators":['
+    return rf"""
+proc renderResult(ideal J) {{
+    string out={json.dumps(prefix)}; int i;
+    for(i=size(J);i>0;i--){{
+        if(i<size(J)){{out=out+",";}}
+        out=out+"\"" + string(J[i]/leadcoef(J[i]))+"\"";
+    }}
+    return(out+"]}}");
+}}
+"""
+
+
+def run_singular(c, method, batch, seed, timeout, check=None, *, render=False):
     src = declarations(c)
     if c.symbolic:
         src += symbolic_procedure(method)
@@ -190,9 +207,15 @@ def run_singular(c, method, batch, seed, timeout, check=None):
         # Singular defines (0)^0 as (0). Both benchmarks use the ring-theoretic
         # convention I^0=(1), including I=(0).
         call = f"std(I^{c.exponent})" if c.exponent else "ideal(1)"
+    if render:
+        src += singular_renderer(c)
     if batch:
-        src += (f'ideal J={call}; int i; int t=rtimer; '
-                f'for(i=0;i<{batch};i++){{J={call};}} print("TIME "+string(rtimer-t));\n')
+        convert = "answer=renderResult(J);" if render else ""
+        src += (f'ideal J={call}; int i; string answer; {convert} int t=rtimer; '
+                f'for(i=0;i<{batch};i++){{J={call};{convert}}} print("TIME "+string(rtimer-t));\n')
+    elif render:
+        src += f'ideal J={call}; print(renderResult(J));\n'
+
     else:
         src += f'ideal J={call}; print(J);\n'
     if check is not None:
@@ -206,6 +229,15 @@ def run_singular(c, method, batch, seed, timeout, check=None):
     start=perf_counter_ns()
     output=singular(src,seed=seed,timeout=timeout)
     elapsed=(perf_counter_ns()-start)/1e6
+    if render and check is not None:
+        payload, = [json.loads(s) for s in output.splitlines() if s.startswith("{")]
+        ring = {"variables":list(c.variables), "order":c.order, "field":"QQ"}
+        if payload["type"] != "ideal" or payload["ring"] != ring:
+            raise ValueError("Incorrect serialized Singular ring")
+        expected = sorted(tuple(sorted(parse_expression(s,c.variables).items())) for s in check["generators"])
+        actual = sorted(tuple(sorted(parse_expression(s,c.variables).items())) for s in payload["generators"])
+        if actual != expected:
+            raise ValueError("Incorrect serialized Singular generators on " + c.name)
     if check is not None and "VERIFIED 1" not in output.splitlines():
         raise ValueError(f"Singular disagrees on {c.name}/{method}: {check}\n{output}")
     if batch:
@@ -248,6 +280,7 @@ def time_case(c, args):
         report["verified"] = True
 
     wire = []
+    serialized = {method: [] for method in refs}
     for warm, trials, key in ((True, args.repeats, "warm"), (False, args.cold_repeats, "fresh_command")):
         if not trials:
             continue
@@ -257,6 +290,8 @@ def time_case(c, args):
             for name in names[offset:] + names[:offset]:
                 if name != "atlas":
                     elapsed = run_singular(c, name, args.batch if warm else 0, 17 + trial, args.timeout)
+                    if warm and args.warm_json:
+                        serialized[name].append(run_singular(c, name, args.batch, 17 + trial, args.timeout, render=True))
                 elif warm:
                     elapsed, generators = run_typed(c, data, args.batch, args.timeout)
                     if generators != result["generators"]:
@@ -276,6 +311,11 @@ def time_case(c, args):
             report[key]["wins_vs_all"] = report[key].pop("wins_vs_both")
     if wire:
         report["warm_wire"] = summary(wire)
+        if args.warm_json:
+            for method in refs:
+                run_singular(c, method, 0, 31, args.timeout, result, render=True)
+            report["warm_json"] = comparison({"atlas": wire, **serialized})
+            report["warm_json"]["wins_vs_all"] = report["warm_json"].pop("wins_vs_both")
     print(c.name, *(f"{name} {report['warm'][name]['median_ms']:.5f}" for name in names), flush=True)
     return report
 
@@ -288,6 +328,7 @@ def main():
     parser.add_argument("--timeout",type=float,default=60)
     parser.add_argument("--cpu",type=int)
     parser.add_argument("--singular-only",action="store_true")
+    parser.add_argument("--warm-json",action="store_true",help="Also time complete serialized ideal results in Singular")
     parser.add_argument("--case",action="append")
     parser.add_argument("--output",type=Path)
     args=parser.parse_args()
@@ -302,6 +343,10 @@ def main():
             "benchmark_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "repeats":args.repeats,"cold_repeats":args.cold_repeats,"warm_batch_size":args.batch,"units":"milliseconds per power",
             "scope":"Complete reduced ideal on parsed objects with one discarded warm-up. Warm wire separately includes sparse parsing and result serialization. Fresh commands include loading, parsing and result printing. No result cache; run order rotates; Singular seed 17+trial. Ordinary uses built-in std(I^n). Symbolic verifies radicality, computes intersections of minimal coordinate prime powers for monomial ideals, splits squarefree coprime common factors, returns ordinary powers for complete intersections and finite reduced algebras, and compares GTZ primary filtering to Jacobian saturation on unmixed ideals (SY primary filtering for mixed dimensions).",
+            "warm_json_scope": ("Native sparse input, ideal power and JSON output via the shared Atlas wire. "
+                                "Singular starts from a parsed ideal, computes its power and serializes a JSON "
+                                "object containing the verified ring metadata and complete monic basis.")
+                                if args.warm_json else None,
             "cases":[]}
     if not args.singular_only:
         from engine.native_library import _LIBRARY

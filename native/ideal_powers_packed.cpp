@@ -59,7 +59,6 @@ bool triangular_products(const Ring& ring, const std::vector<Poly>& input) {
     if (ring.n>4 || ring.lex || input.size()<2) return false;
     for (const auto& f : input) if (f.empty() || f.m[0]!=2 || !fmpz_is_one(&f.c.front().v)) return false;
     std::map<int,Poly> forms;
-    std::vector<std::pair<int,int>> pairs;
     for (const auto& f : input) {
         int a=-1,b=-1;
         for(int j=0;j<ring.n;++j) {
@@ -68,7 +67,6 @@ bool triangular_products(const Ring& ring, const std::vector<Poly>& input) {
             if(e==1) {if(a<0)a=j;else b=j;}
         }
         if(b<0) return false;
-        pairs.emplace_back(a,b);
         // Terms divisible by the first pivot variable are exactly
         // that variable times the affine form with the later pivot.
         Poly divisor;

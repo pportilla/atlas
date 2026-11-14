@@ -130,6 +130,17 @@ class LocalNativeCliTests(unittest.TestCase):
                     self.assertNotIn("homogeneous_native_normal_form",
                                      [s["operation"] for s in record["execution"]["stages"]])
 
+    def test_finite_mixed_division_preserves_tie_order_and_wide_query(self):
+        # The degree-two head is x*z in lex and y^2 in grevlex.
+        for order, expected in (("lex", "2/9*x^3-1/21*y^2"),
+                                ("grevlex", "17/63*x^3+1/21*x*z")):
+            with self.subTest(order=order):
+                args = ["local-normal-form", "--vars", "x,y,z", "--order", order,
+                        "--gen", "x*z+y^2+x^3", "--gen", "x^4", "--gen", "y^4", "--gen", "z^4",
+                        "--poly", "1/3*x*z+2/7*y^2+5/9*x^3+z^18446744073709551617"]
+                result = self.record(args)["result"]
+                self.assertEqual((result["unit"], result["remainder"]), ("1", expected))
+
     def test_invalid_point_keeps_cli_diagnostics(self):
         args = ["algebra", "local-normal-form", "--vars", "x", "--point", "1/0",
                 "--poly", "x", "--gen", "x", "--json"]

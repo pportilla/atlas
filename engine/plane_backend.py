@@ -53,7 +53,7 @@ def ordered_roots(polynomial):
 
 
 @lru_cache(maxsize=256)
-def coefficient_field(roots, rectangles=None, *, exhaustive=False):
+def coefficient_field(roots, rectangles=None, *, exhaustive=False, root_images=False):
     """Common field for FLINT's exact root identifiers, including the embedding."""
     parsed = []
     for text in roots:
@@ -62,6 +62,8 @@ def coefficient_field(roots, rectangles=None, *, exhaustive=False):
             raise ValueError("Invalid algebraic coefficient in a plane chart.")
         parsed.append({"coefficients": match.group(1).split(", "), "index": int(match.group(2))})
     request = {"field_roots": parsed, "exhaustive": exhaustive}
+    if root_images:
+        request["root_images"] = True
     if rectangles is not None:
         request["root_rectangles"] = rectangles
     done = subprocess.run([str(_WORKER)], input=json.dumps(request),

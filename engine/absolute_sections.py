@@ -1,4 +1,6 @@
 """Transport chart ideals and exact splitting fields for geometric incidence."""
+from dataclasses import replace
+
 from .affine_kernel import _polynomial, decode, sparse_terms
 from .atlas_finite import _extend_chart, _field_mark, _integer_polynomial
 from .chart_expressions import chart_expressions
@@ -20,7 +22,8 @@ def absolute_primes(chart, equations, dimension):
         equations = (*equations, field[1])
     rows = [encode_terms(dict(sparse_terms(axes, g))) for g in dict.fromkeys(equations)]
     result = kernel_json("atlas_absolute_sections", "decompose", width=len(axes),
-                         marked=bool(field), ideal=rows, dimension=dimension)
+                         marked=bool(field), ideal=rows, dimension=dimension,
+                         root_images=chart.section_root_images if field and dimension == 0 else ())
     if result is None:
         return None
     if result["splitting_polynomials"]:
@@ -39,7 +42,7 @@ def extend_section_field(charts, roots):
     if None in marks:
         return None
     generators = tuple(dict.fromkeys((*marks, *roots)))
-    common = coefficient_field(generators, exhaustive=True)
+    common = coefficient_field(generators, exhaustive=True, root_images=True)
     if common["degree"] <= max((field[2] for field in fields), default=1):
         raise ArithmeticError("The certified splitting field did not enlarge the chart field.")
     api = chart_expressions(charts[0].variables)
@@ -50,6 +53,8 @@ def extend_section_field(charts, roots):
         return decode((T,), value).xreplace({T: theta})
 
     field = theta, read(common["minimal_polynomial"]), common["degree"], common["exact"]
-    images = {mark: read(value) for mark, value in zip(generators, common["values"])}
-    substitutions = {old: images[mark] for old, mark in zip(fields, marks)}
-    return [_extend_chart(c, field, substitutions.get(c.coefficient_field)) for c in charts]
+    images = dict(zip(generators, common["values"]))
+    substitutions = {old: read(images[mark]) for old, mark in zip(fields, marks)}
+    roots = tuple((tuple(p), tuple(map(tuple, values))) for p, values in common["root_images"])
+    return [replace(_extend_chart(c, field, substitutions.get(c.coefficient_field)),
+                    section_root_images=roots) for c in charts]

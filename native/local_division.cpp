@@ -3,6 +3,7 @@
 #include "local_point_basis.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -122,6 +123,113 @@ void reduce_homogeneous_binomial(Polynomial& pending, const Powers& m, const Red
     accumulate(pending, std::move(end), coefficient);
 }
 
+// The high byte stores total degree and the remaining bytes store exponents.
+// The first key in the map is the local head in the same order as local_head().
+struct PackedLocalOrder {
+    using Key = std::uint64_t;
+    static constexpr unsigned max_width = 7;
+    static constexpr unsigned degree_shift = 8 * max_width;
+    static constexpr unsigned max_degree = 255;
+
+    std::size_t width;
+    bool lex;
+
+    static unsigned total_degree(Key key) { return key >> degree_shift; }
+
+    bool operator()(Key a, Key b) const {
+        if (lex && total_degree(a) == total_degree(b)) return a > b;
+        return a < b;
+    }
+
+    unsigned shift(std::size_t axis) const {
+        return 8 * (lex ? width - 1 - axis : axis);
+    }
+
+    std::optional<Key> pack_below(const Powers& powers, unsigned cutoff) const {
+        Key key = 0;
+        unsigned total = 0;
+        for (std::size_t i = 0; i < width; ++i) {
+            // Compare before narrowing, including for arbitrarily large input powers.
+            if (powers[i] >= cutoff - total) return std::nullopt;
+            const unsigned power = powers[i].get_ui();
+            total += power;
+            key |= Key(power) << shift(i);
+        }
+        return key | (Key(total) << degree_shift);
+    }
+
+    Powers unpack(Key key) const {
+        Powers powers(width);
+        for (std::size_t i = 0; i < width; ++i)
+            powers[i] = (key >> shift(i)) & 255;
+        return powers;
+    }
+
+    bool divides(Key divisor, Key target) const {
+        for (std::size_t i = 0; i < width; ++i) {
+            if ((divisor & 255) > (target & 255)) return false;
+            divisor >>= 8;
+            target >>= 8;
+        }
+        return true;
+    }
+};
+
+Polynomial packed_finite_remainder(std::vector<Reducer>& reducers, const Polynomial& centered,
+                                   PackedLocalOrder order, unsigned cutoff) {
+    using Key = PackedLocalOrder::Key;
+    struct PackedReducer {
+        Key head;
+        mpq_class leading_coefficient;
+        std::vector<std::pair<Key, mpq_class>> tail;
+    };
+    // The first divisor of least ecart must still win ties in input order.
+    std::stable_sort(reducers.begin(), reducers.end(),
+                     [](const Reducer& a, const Reducer& b) { return a.ecart < b.ecart; });
+    std::vector<PackedReducer> packed;
+    packed.reserve(reducers.size());
+    for (auto& reducer : reducers) {
+        auto head = order.pack_below(reducer.head, cutoff);
+        if (!head) continue;
+        auto& row = packed.emplace_back(PackedReducer{
+            *head, std::move(reducer.row.at(reducer.head)), {}});
+        row.tail.reserve(reducer.row.size() - 1);
+        for (auto& [m, c] : reducer.row) {
+            if (m == reducer.head) continue;
+            if (auto term = order.pack_below(m, cutoff))
+                row.tail.emplace_back(*term, std::move(c));
+        }
+    }
+
+    std::map<Key, mpq_class, PackedLocalOrder> pending(order);
+    for (const auto& [m, c] : centered)
+        if (auto term = order.pack_below(m, cutoff)) pending.emplace(*term, c);
+
+    Polynomial remainder;
+    while (!pending.empty()) {
+        auto term = pending.extract(pending.begin());
+        const Key head = term.key();
+        const auto row = std::find_if(packed.begin(), packed.end(),
+            [&](const PackedReducer& r) { return order.divides(r.head, head); });
+        if (row == packed.end()) {
+            remainder.emplace(order.unpack(head), std::move(term.mapped()));
+            continue;
+        }
+        // Divisibility prevents borrow between exponent bytes. The degree
+        // check also prevents carry when adding the shifted tail monomial.
+        const Key shift = head - row->head;
+        auto& factor = term.mapped();
+        if (row->leading_coefficient != 1) factor /= row->leading_coefficient;
+        for (const auto& [m, c] : row->tail) {
+            if (order.total_degree(shift) + order.total_degree(m) >= cutoff) continue;
+            auto it = pending.try_emplace(shift + m, 0).first;
+            it->second -= factor * c;
+            if (it->second == 0) pending.erase(it);
+        }
+    }
+    return remainder;
+}
+
 // Value of the shifted axes at the center. Accumulate rational powers
 // of equal or reciprocal magnitudes before exponentiating.
 mpq_class center_coefficient(mpq_class c, const Powers& m, const std::vector<mpq_class>& point) {
@@ -173,6 +281,11 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
     const bool homogeneous = std::all_of(reducers.begin(), reducers.end(),
                                           [](const Reducer& r) { return !r.ecart; });
     const auto cutoff = known_cutoff ? std::move(known_cutoff) : finite_cutoff(heads, width);
+    if (!homogeneous && cutoff && width <= PackedLocalOrder::max_width &&
+            *cutoff > 0 && *cutoff <= PackedLocalOrder::max_degree + 1) {
+        result.remainder = packed_finite_remainder(reducers, centered, {width, lex}, cutoff->get_ui());
+        return result;
+    }
     const bool full = homogeneous || cutoff.has_value();
     Polynomial pending;
     for (const auto& [m, c] : centered) {

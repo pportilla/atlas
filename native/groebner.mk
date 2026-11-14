@@ -34,7 +34,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cp
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \
   ideal_powers.cpp ideal_power_principal.cpp ideal_powers_packed.cpp ideal_powers_dense.cpp ideal_powers_echelon.cpp ideal_powers_content.cpp ideal_powers_monomial.cpp localization.cpp localization_membership.cpp localization_special.cpp normalization.cpp normalization_content.cpp normalization_special.cpp primary_decomposition.cpp primary_special.cpp polynomial_factors.cpp resolution_tangents.cpp \
   resolution_candidate.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
-  local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp
+  local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_point_quotient.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp

@@ -9,6 +9,27 @@ from engine.local_blowups import Chart
 
 
 class FiniteCentre(unittest.TestCase):
+    def test_absolute_points_in_lex_shape_need_only_the_separating_coordinate(self):
+        from engine.absolute_sections import ExtendSectionField, absolute_primes, extend_section_field
+        from engine.chart_expressions import runtime_expressions
+        from engine.marked_field import flint_literal
+
+        x, y, z = runtime_expressions().symbols("x y z")
+        section = (x-z**2, y-z, (z+1)*(z**6-2)**2)
+        chart = Chart((x,y,z), (), (("D",1,1,section),), (), (), (), ())
+        with self.assertRaises(ExtendSectionField) as exc:
+            absolute_primes(chart, section, 0)
+        roots = exc.exception.args[0]
+        self.assertCountEqual(roots, [flint_literal((1,0,0,0,0,0,-2),i) for i in range(1,7)])
+        marked, = extend_section_field([chart], roots)
+        points = absolute_primes(marked, marked.components[0][3], 0)
+        self.assertEqual(len(set(points)), 7)
+
+        large = 2**137 + 1
+        rational = (x-large*z, y-z, (z+1)**3*(z-2)**2)
+        self.assertCountEqual(absolute_primes(chart, rational, 0),
+                              [(x+large, y+1, z+1), (x-2*large, y-2, z-2)])
+
     def test_ownership_is_checked_independently_on_rational_orbits(self):
         t, v, w = sp.symbols("t v w")
         # On this affine modification, y/x=t extends regularly across

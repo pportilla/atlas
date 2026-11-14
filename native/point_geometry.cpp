@@ -795,6 +795,11 @@ Json::Value compute(const Json::Value& r) {
 }  // namespace
 
 namespace atlas::local {
+std::optional<Polynomial> bounded_initial_at_point(const Polynomial& f, const PointRow& point) {
+    try { return initial_form(Point(point), f, true); }
+    catch (const WidePointRow&) { return std::nullopt; }
+}
+
 int hypersurface_jet_order(const Polynomial& f, const PointRow& point) {
     const Point p(point);
     if (at_point(p,f)) return 0;

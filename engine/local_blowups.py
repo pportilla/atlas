@@ -34,7 +34,7 @@ On each blowup the chart of the i-th generator of the centre keeps the points
 where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import combinations, count, islice, product
 from time import monotonic
 
@@ -65,6 +65,9 @@ class Chart:
     point_blowup: tuple = ()  # parent chart index and rational centre of an ordered plane blowup pair
     split_cone: tuple = ()  # chart rays in the common split base coordinates
     repair_projection: tuple = ()  # parent chart index and its coordinate images on an unmarked repair cover
+    # Optional exact root coordinates from the last field extension. The
+    # native section solver checks them against the chart's current modulus.
+    section_root_images: tuple = field(default=(), compare=False, repr=False)
 
     def one_sheet(self, count):
         """A field parameter describes one fixed embedding. Over Q the kernel

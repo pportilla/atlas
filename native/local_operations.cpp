@@ -1,5 +1,6 @@
 // Sparse local algebra operations shared by the dispatcher and the native CLI.
 #include "local_io.hpp"
+#include "local_point_quotient.hpp"
 #include "local_dimension.hpp"
 #include "local_division.hpp"
 #include "local_point_basis.hpp"
@@ -23,6 +24,28 @@ std::string basis_rows(const Basis& basis) {
     std::string out;
     for (const auto& f : basis) out += encode_row(f) + "\n";
     return out;
+}
+
+std::string quotient_operation(const std::string& wire) {
+    if (wire == "local_quotient_basis") return "local-quotient-basis";
+    if (wire == "local_jacobian_algebra") return "local-jacobian-algebra";
+    if (wire == "local_milnor_number") return "milnor-number";
+    if (wire == "local_tjurina_number") return "tjurina-number";
+    return {};
+}
+
+std::string quotient_rows(const PointQuotient& result) {
+    std::ostringstream out;
+    out << (result.dimension ? result.dimension->get_str() : "infinite") << '\n'
+        << result.derivatives.size() << '\n' << basis_rows(result.derivatives);
+    for (const auto& monomial : result.monomials) {
+        for (size_t i = 0; i < monomial.size(); ++i) {
+            if (i) out << ' ';
+            out << monomial[i];
+        }
+        out << '\n';
+    }
+    return out.str();
 }
 
 std::string line(std::istream& in) {
@@ -189,19 +212,23 @@ std::string operations(std::istream& in, const std::string& op) {
     const auto mode = line(in);
     const bool lex = mode == "lex";
     const auto width = names.size();
+    const bool gpu = op.size() > 4 && op.compare(op.size()-4,4,"_gpu") == 0;
+    const auto quotient = quotient_operation(gpu ? op.substr(0,op.size()-4) : op);
     const bool dimension = op == "local_dimension" || op == "local_dimension_gpu";
     const bool smoothness = op == "local_smoothness" || op == "local_smoothness_gpu";
     const bool homogeneous = op == "local_homogeneous_normal_form" || op == "local_homogeneous_normal_form_gpu";
     const bool point_basis = op == "local_point_basis" || op == "local_point_basis_gpu";
     const bool point_nf = op == "local_point_normal_form" || op == "local_point_normal_form_gpu";
     const auto point = (op == "local_project" || op == "local_translate" || op == "local_query_jet" || homogeneous || dimension || smoothness ||
-                        point_basis || point_nf) ?
+                        point_basis || point_nf || !quotient.empty()) ?
         read_point(in, width) : std::vector<mpq_class>();
     int rank = -1;
     if (smoothness || dimension) rank = std::stoi(line(in));
     const bool known = point_nf && line(in) == "1";
     Basis rows;
     for (std::string row; std::getline(in, row);) rows.push_back(decode_row(row, width));
+    if (!quotient.empty())
+        return quotient_rows(quotient_at_point(quotient,rows,names,point,lex,gpu));
     if (op == "local_translate") return basis_rows(translate_unbounded(rows, point));
     if (point_basis) {
         if (!use_sparse_point_basis(rows, point)) return "";
@@ -262,15 +289,7 @@ std::string operations(std::istream& in, const std::string& op) {
     }
     if (op == "local_partials") {
         if (rows.size() != 1) throw std::invalid_argument("Expected one polynomial for derivatives.");
-        Basis partials(width);
-        for (const auto& [powers, c] : rows.front())
-            for (size_t i = 0; i < width; ++i)
-                if (powers[i] != 0) {
-                    auto e = powers;
-                    --e[i];
-                    partials[i].emplace(std::move(e), c * powers[i]);
-                }
-        return basis_rows(partials);
+        return basis_rows(partial_derivatives(rows.front(),width));
     }
     if (op == "local_heads" || op == "local_global_heads" || op == "local_associate_heads") {
         Basis result;

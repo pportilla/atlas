@@ -478,9 +478,12 @@ struct Resolver {
 };
 // Present a finite set of exact chart coefficients in one number field.
 // Each input uses FLINT's own root order (as in PolynomialRootIndexed).
-J coefficient_field(const J& roots, const J& rectangles) {
+J coefficient_field(const J& roots, const J& rectangles, bool root_images) {
     vector<Num> values;
+    map<J, vector<Num>> families;
     for (const auto& row : roots) {
+        auto [family, inserted] = families.try_emplace(row["coefficients"]);
+        if (inserted) {
         fmpz_poly_t polynomial;
         fmpz_poly_init(polynomial);
         fmpz_t coefficient;
@@ -493,15 +496,18 @@ J coefficient_field(const J& roots, const J& rectangles) {
         }
         fmpz_clear(coefficient);
         slong degree = fmpz_poly_degree(polynomial);
-        slong index = row["index"].asInt64();
-        if (index < 1 || index > degree)
-            throw invalid_argument("Invalid algebraic root index.");
+        if (degree < 1) throw invalid_argument("Expected a nonconstant root polynomial.");
         qqbar_ptr conjugates = _qqbar_vec_init(degree);
         qqbar_roots_fmpz_poly(conjugates, polynomial, 0);
-        values.emplace_back();
-        qqbar_set(values.back().n, conjugates + index - 1);
+        family->second.resize(degree);
+        for (slong j = 0; j < degree; ++j) qqbar_swap(family->second[j].n, conjugates + j);
         _qqbar_vec_clear(conjugates, degree);
         fmpz_poly_clear(polynomial);
+        }
+        slong index = row["index"].asInt64();
+        if (index < 1 || static_cast<size_t>(index) > family->second.size())
+            throw invalid_argument("Invalid algebraic root index.");
+        values.push_back(family->second[index-1]);
     }
     if (values.empty()) throw invalid_argument("No algebraic constants.");
     if (!rectangles.isNull()) {
@@ -537,6 +543,25 @@ J coefficient_field(const J& roots, const J& rectangles) {
     Num generator = values.front();
     fmpq_poly_t expression;
     fmpq_poly_init(expression);
+    // The containment test already produces coordinates in the current
+    // power basis. They stay valid until a new primitive element is chosen.
+    vector<string> expressions(values.size());
+    vector<J> coefficients(values.size());
+    auto save_expression = [&](size_t i) {
+        expressions[i] = taken(fmpq_poly_get_str_pretty(expression, "T"));
+        if (root_images) {
+            J row(Json::arrayValue);
+            fmpq_t c;
+            fmpq_init(c);
+            for (slong j=0; j<fmpq_poly_length(expression); ++j) {
+                fmpq_poly_get_coeff_fmpq(c, expression, j);
+                row.append(taken(fmpq_get_str(nullptr,10,c)));
+            }
+            fmpq_clear(c);
+            coefficients[i] = move(row);
+        }
+    };
+    size_t last_enlargement = 0;
     for (size_t i = 1; i < values.size(); ++i) {
         // Only finitely many integers k fail to separate the embeddings of
         // Q(generator, value) by generator + k*value. For a good k, increasing
@@ -544,9 +569,21 @@ J coefficient_field(const J& roots, const J& rectangles) {
         for (slong round = 1, prec = 128; ; ++round, prec *= 2) {
             bool found = false;
             for (slong k = 0; k <= round; ++k) {
+                if (k == 0) {
+                    if (qqbar_degree(generator.n) % qqbar_degree(values[i].n) == 0 &&
+                        qqbar_express_in_field(expression, generator.n, values[i].n, 0, 0, prec)) {
+                        save_expression(i);
+                        found = true;
+                        break;
+                    }
+                    continue;
+                }
                 Num candidate = generator + Num(k)*values[i];
-                if (qqbar_express_in_field(expression, candidate.n, values[i].n, 0, 0, prec) &&
-                    qqbar_express_in_field(expression, candidate.n, generator.n, 0, 0, prec)) {
+                // Q(candidate, value) contains generator = candidate-k*value.
+                // Expressing value alone certifies both field inclusions.
+                if (qqbar_express_in_field(expression, candidate.n, values[i].n, 0, 0, prec)) {
+                    last_enlargement = i;
+                    save_expression(i);
                     generator = std::move(candidate);
                     found = true;
                     break;
@@ -564,10 +601,21 @@ J coefficient_field(const J& roots, const J& rectangles) {
     qqbar_get_fexpr_root_indexed(exact, generator.n);
     out["exact"] = taken(fexpr_get_str(exact));
     fexpr_clear(exact);
-    for (const auto& value : values) {
-        for (slong prec = 128; !qqbar_express_in_field(expression, generator.n, value.n, 0, 0, prec); prec *= 2)
-            if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
-        out["values"].append(taken(fmpq_poly_get_str_pretty(expression, "T")));
+    map<J,J> images;
+    for (size_t i=0; i<values.size(); ++i) {
+        if (i < last_enlargement || expressions[i].empty()) {
+            for (slong prec = 128; !qqbar_express_in_field(expression, generator.n, values[i].n, 0, 0, prec); prec *= 2)
+                if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
+            save_expression(i);
+        }
+        out["values"].append(expressions[i]);
+        if (root_images) images[roots[static_cast<Json::ArrayIndex>(i)]["coefficients"]].append(coefficients[i]);
+    }
+    if (root_images) {
+        out["root_images"] = arr();
+        for (auto& [equation,rows] : images) {
+            if (rows.size() + 1 == equation.size()) out["root_images"].append(arr({equation,rows}));
+        }
     }
     fmpq_poly_clear(expression);
     return out;
@@ -586,7 +634,7 @@ int main(){
         if (req.isMember("ordered_roots")) {
             out=ordered_root_labels(req["ordered_roots"]);
         } else if (req.isMember("field_roots")) {
-            out=coefficient_field(req["field_roots"], req["root_rectangles"]);
+            out=coefficient_field(req["field_roots"], req["root_rectangles"], req.get("root_images", false).asBool());
         } else {
             Resolver solver;solver.names={req["variables"][0].asString(),req["variables"][1].asString()};
             solver.embedded=req["mode"].asString()=="embedded";
