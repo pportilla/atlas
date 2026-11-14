@@ -1,0 +1,256 @@
+{
+  "input": "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+  "variables": [
+    "x",
+    "y",
+    "z",
+    "t",
+    "u"
+  ],
+  "mode": "embedded",
+  "backend": "cpu",
+  "both_zetas": true,
+  "cpu_affinity": 5,
+  "host": "AMD Ryzen 7 6800H",
+  "method": "Three alternating before/after pairs per series. Fresh timings cover CLI startup, public solver, full JSON formatting and stdout transfer into the driver. Warm timings cover the public Python resolve() call after an untimed solve in each of two long-lived interpreters with SymPy blocked. The independent driver re-parses, hashes and compares complete mathematical fields outside timed intervals. CPU times for the CLI include subprocesses.",
+  "versions": {
+    "before": {
+      "native/build/libgroebner.so": "d8ee734013307163a18b43c3f1799dd714db67391cce7bc849dfbb1f8d3c1629",
+      "engine/monomial_atlas.py": "ea90526fa3f621f88dc30047b8178f132d3017753e8d2b6b41ecbb63dca121ff"
+    },
+    "after": {
+      "native/build/libgroebner.so": "bb5154934da3d8b4ba682069e5f0f504d6b7dd985e3a1e3a430532d4757c658f",
+      "engine/monomial_atlas.py": "c9c7e5b9fc23576bb0465e65b47a19bad29af59e001a5b9531fb4d4387c69fc0"
+    }
+  },
+  "fresh_cli": {
+    "seconds": {
+      "before": [
+        5.5350652640045155,
+        5.520612235995941,
+        5.883587536984123
+      ],
+      "after": [
+        2.5705463620251976,
+        2.347765412996523,
+        2.299548471986782
+      ]
+    },
+    "median_seconds": {
+      "before": 5.5350652640045155,
+      "after": 2.347765412996523
+    },
+    "process_cpu_seconds": {
+      "before": [
+        5.504382,
+        5.510665000000001,
+        5.875461
+      ],
+      "after": [
+        2.5536139999999996,
+        2.3402600000000007,
+        2.290590999999999
+      ]
+    },
+    "median_cpu_seconds": {
+      "before": 5.510665000000001,
+      "after": 2.3402600000000007
+    },
+    "output_bytes": {
+      "before": [
+        19269710,
+        19269710,
+        19269707
+      ],
+      "after": [
+        19269710,
+        19269710,
+        19269712
+      ]
+    }
+  },
+  "warm_api": {
+    "seconds": {
+      "before": [
+        4.342586017999565,
+        4.489823580981465,
+        4.412573655979941
+      ],
+      "after": [
+        1.8367485899943858,
+        1.840607177990023,
+        1.71318949398119
+      ]
+    },
+    "median_seconds": {
+      "before": 4.412573655979941,
+      "after": 1.8367485899943858
+    },
+    "process_cpu_seconds": {
+      "before": [
+        4.310072626999999,
+        4.454670033999999,
+        4.3794073010000005
+      ],
+      "after": [
+        1.8036617980000003,
+        1.8098384349999996,
+        1.6838977879999995
+      ]
+    },
+    "median_cpu_seconds": {
+      "before": 4.3794073010000005,
+      "after": 1.8036617980000003
+    }
+  },
+  "verified": {
+    "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "charts": 3915,
+    "vertices": 565,
+    "cells": 9972,
+    "components": 566,
+    "strata": 3860,
+    "keys_equal_after_excluding_timing_and_execution": [
+      "status",
+      "engine",
+      "charts",
+      "dual_complex",
+      "summary",
+      "steps",
+      "root_families",
+      "fan",
+      "schema_version",
+      "variables",
+      "polynomial",
+      "mode",
+      "base_field",
+      "geometric_field",
+      "origin",
+      "atlas",
+      "monodromy_zeta",
+      "topological_zeta",
+      "certificate"
+    ],
+    "sha256_by_key": {
+      "charts": "4215ee4e048be5a34fdd65e07c93fd83d249a27db760d9acd583c9c10bd9fb87",
+      "atlas": "729fd8f41b7383d5fdddbf559420edffa5bc8eb71d03ffdf7fd335686ee8cf2e",
+      "dual_complex": "ffd5c754a2ad594cf05ad8f826c9fbc9d9f7cb7284b47ae790f7f9eb1ddc6421",
+      "monodromy_zeta": "00e75cbee4d5c4503924f8e9531793b66b102aa3fecaaf2ad89895ee2939c47f",
+      "topological_zeta": "a25cab6aba92ec31ab62107f0710dff5e007d702ae9afbc28f01896d1d185505"
+    },
+    "saved_chart_replay": {
+      "cell_count_by_dimension": {
+        "0": 565,
+        "1": 2501,
+        "2": 4008,
+        "3": 2767,
+        "4": 696
+      },
+      "recomputed_from": "JSON-round-tripped atlas, original polynomial and ordered variables",
+      "checked": [
+        "labelled complex and all attaching faces",
+        "ordered divisor data and Euler strata",
+        "complete monodromy and topological zeta records"
+      ],
+      "sympy_imports_blocked": true
+    },
+    "geometry_sha256_encoding": "Python json.dumps of the ordered list [charts, atlas, dual_complex, monodromy_zeta, topological_zeta], using sort_keys=True and separators=(\",\", \":\"). UTF-8."
+  },
+  "phase_method": "One separate instrumented fresh CLI on CPU 5 for each version, with the same output checks. Broad timers inside the worker, plus outer JSON handling. fan_remaining = verified fan minus crossings and strata. rest_of_solve = public resolve minus fan, Newton and zeta reduction. Startup/imports/transfers/other CLI = elapsed CLI minus measured stages. All entries in each nonoverlapping breakdown sum to the wall or process CPU time of that same actual invocation.",
+  "phase_profile": {
+    "before": {
+      "timed_cli_wall_seconds": 5.172603194980184,
+      "total_process_tree_cpu_seconds": 5.145061999999999,
+      "nonoverlapping_seconds": {
+        "newton_producer": 0.27479605298140086,
+        "fan_crossings": 0.9772928521269932,
+        "fan_strata": 1.2222881919879,
+        "fan_remaining": 2.050849356892286,
+        "zeta_reduction": 0.08332644699839875,
+        "rest_of_solve": 0.027308652992360294,
+        "worker_sending_record_json": 0.07648626001900993,
+        "cli_reading_worker_json": 0.12626873099361546,
+        "cli_pretty_json": 0.08145326600060798,
+        "process_startup_imports_transfers_and_other_cli": 0.25253338398761116
+      },
+      "nonoverlapping_process_cpu_seconds": {
+        "newton_producer": 0.24485903,
+        "fan_crossings": 0.9771601590000152,
+        "fan_strata": 1.2244677219999989,
+        "fan_remaining": 2.048495228999985,
+        "zeta_reduction": 0.08332615600000004,
+        "rest_of_solve": 0.027301962000000124,
+        "worker_sending_record_json": 0.07648688300000028,
+        "cli_reading_worker_json": 0.12625624,
+        "cli_pretty_json": 0.08144834500000003,
+        "process_startup_imports_transfers_and_other_cli": 0.2552602739999994
+      },
+      "calls": {
+        "newton": 1,
+        "crossings": 3915,
+        "strata": 3915,
+        "fan": 1,
+        "zeta": 1,
+        "solve": 1,
+        "worker_encode": 1,
+        "outer_decode": 1,
+        "cli_pretty": 1
+      },
+      "output_bytes": 19269710
+    },
+    "after": {
+      "timed_cli_wall_seconds": 2.4974139959958848,
+      "total_process_tree_cpu_seconds": 2.471514,
+      "nonoverlapping_seconds": {
+        "newton_producer": 0.32324593397788703,
+        "fan_crossings": 0.09008545335382223,
+        "fan_strata": 0.08289649974904023,
+        "fan_remaining": 1.3812007168889977,
+        "zeta_reduction": 0.08073502601473592,
+        "rest_of_solve": 0.027903658017748967,
+        "worker_sending_record_json": 0.07186855599866249,
+        "cli_reading_worker_json": 0.10737387201515958,
+        "cli_pretty_json": 0.07814765299553983,
+        "process_startup_imports_transfers_and_other_cli": 0.2539566269842908
+      },
+      "nonoverlapping_process_cpu_seconds": {
+        "newton_producer": 0.289257479,
+        "fan_crossings": 0.08938883600000597,
+        "fan_strata": 0.08378944700000052,
+        "fan_remaining": 1.3809223539999937,
+        "zeta_reduction": 0.08073505800000014,
+        "rest_of_solve": 0.027898008999999835,
+        "worker_sending_record_json": 0.07186489600000012,
+        "cli_reading_worker_json": 0.10735445,
+        "cli_pretty_json": 0.078148518,
+        "process_startup_imports_transfers_and_other_cli": 0.2621549529999996
+      },
+      "calls": {
+        "newton": 1,
+        "crossings": 3915,
+        "strata": 3915,
+        "fan": 1,
+        "zeta": 1,
+        "solve": 1,
+        "worker_encode": 1,
+        "outer_decode": 1,
+        "cli_pretty": 1
+      },
+      "output_bytes": 19269708
+    }
+  },
+  "cli_argv": [
+    "./atlas",
+    "resolve",
+    "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+    "--vars",
+    "x,y,z,t,u",
+    "--mode",
+    "embedded",
+    "--quick",
+    "--compute",
+    "cpu",
+    "--monodromy",
+    "--json"
+  ]
+}

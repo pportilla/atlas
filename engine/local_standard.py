@@ -1,10 +1,12 @@
 """Local standard bases and normal forms over QQ at rational affine points."""
 
+from math import comb, prod
+
 from . import native_polynomial as np
 from .algebra_execution import cpu_stage, stage_label
 from .algebra_groebner import reduced_basis
 from .local_algebra import _homogeneous_local_basis, _leading
-from .local_mora import _divides, weak_normal_form
+from .local_mora import _divides, finite_degree_cutoff, weak_normal_form
 from .point_germs import _nonzero_at_point, _translate
 from .polynomial import InputError, format_poly
 from .rational_point import coordinate_fraction, normalize_point
@@ -114,6 +116,73 @@ def _standard_basis(variables, generators, order):
     return _certified_rows(variables, rows, projected, order)
 
 
+def _taylor_jet(variables, shifts, terms, cutoff):
+    """Expand f(p+X) sparsely through total degree cutoff-1."""
+    result = {}
+    for powers, coefficient in terms.items():
+        base = tuple(0 if shift else e for e, shift in zip(powers, shifts))
+        room = cutoff - 1 - sum(base)
+        if room < 0:
+            continue
+        # Combine equal and reciprocal shift magnitudes before exponentiating.
+        # For example (x*y)^n at (2,1/2) has constant coefficient 1 for all n.
+        scales = {}
+        axes = []
+        for i, (e, shift) in enumerate(zip(powers, shifts)):
+            if not shift or not e:
+                continue
+            axes.append(i)
+            if shift < 0 and e % 2:
+                coefficient = -coefficient
+            magnitude = abs(shift)
+            if magnitude != 1:
+                factor = magnitude if magnitude > 1 else 1 / magnitude
+                scales[factor] = scales.get(factor, 0) + (e if magnitude > 1 else -e)
+        coefficient *= prod(factor**e for factor, e in scales.items() if e)
+        # For each axis the kth Taylor coefficient is the preceding one
+        # times (e-k+1)/(k*p_i). Only iterate over reachable degrees.
+        partials = [(base, coefficient, room)]
+        for i in axes:
+            expanded = []
+            for monomial, value, remaining in partials:
+                expanded.append((monomial, value, remaining))
+                for k in range(1, min(powers[i], remaining) + 1):
+                    value = value * (powers[i] - k + 1) / (k * shifts[i])
+                    powers_k = monomial[:i] + (k,) + monomial[i + 1:]
+                    expanded.append((powers_k, value, remaining - k))
+            partials = expanded
+        for monomial, value, _ in partials:
+            result[monomial] = result.get(monomial, 0) + value
+    return np.from_terms(variables, result)
+
+
+def _center_query(variables, shifts, query, basis, order):
+    if not any(shifts):
+        return query
+    if len(basis) < len(variables):
+        # A finite leading ideal needs a pure power for each coordinate.
+        return _translate(variables, shifts, (query,))[0]
+    terms = np.terms(variables, query)
+    active = [i for i, shift in enumerate(shifts) if shift]
+    # Small shifts are cheap in the native polynomial kernel. For larger ones
+    # compare the full binomial support to an upper bound on the retained jet.
+    full = sum(prod(e[i] + 1 for i in active) for e in terms)
+    if full >= 128:
+        heads = (_local_head(np.terms(variables, g), order) for g in basis)
+        cutoff = finite_degree_cutoff(len(variables), heads)
+        if cutoff is not None:
+            retained = 0
+            for e in terms:
+                room = cutoff - 1 - sum(k for k, a in zip(e, shifts) if not a)
+                if room >= 0:
+                    degrees = [e[i] for i in active if e[i]]
+                    box = prod(min(k, room) + 1 for k in degrees)
+                    retained += min(box, comb(room + len(degrees), len(degrees)))
+            if 4 * retained <= full:
+                return _taylor_jet(variables, shifts, terms, cutoff)
+    return _translate(variables, shifts, (query,))[0]
+
+
 def handle(operation, ring, operands, *, known_basis=False):
     if ring["field"] != "QQ" or ring["order"] not in ("lex", "grevlex"):
         raise InputError("Local standard bases require QQ and lex or grevlex order.")
@@ -165,7 +234,7 @@ def handle(operation, ring, operands, *, known_basis=False):
             result.update(reduction="standard", unit="1", remainder="0")
             return result
         with cpu_stage("center_query_at_point", variables=len(names)):
-            query, = _translate(variables, shifts, (query,))
+            query = _center_query(variables, shifts, query, basis, ring["order"])
         with cpu_stage("local_normal_form", divisors=len(basis)):
             unit, remainder, reduction = weak_normal_form(variables, basis, query, ring["order"])
         outputs = (unit, remainder)

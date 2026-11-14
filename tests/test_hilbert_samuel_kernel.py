@@ -80,11 +80,15 @@ class HilbertSamuelKernelTests(unittest.TestCase):
         width = len(bounds) + 1
         heads = [tuple(k if j == i else 0 for j in range(width)) for i, k in enumerate(bounds)]
         n = sum(bounds)+10**90
-        dimension, multiplicity, values = hs._invariants(width, heads, [0, 2, n])
+        last_bounded_degree = sum(k-1 for k in bounds)
+        query = [0, 2, last_bounded_degree-1, n]
+        dimension, multiplicity, values = hs._invariants(width, heads, query)
         e = prod(bounds)
         self.assertEqual((dimension, multiplicity), (1, e))
         self.assertEqual(values[0], (1, 1))
         self.assertEqual(values[2], (comb(width+2, 2), comb(width+1, 2)))
+        # A single bounded monomial (the upper corner) is still missing.
+        self.assertEqual(values[last_bounded_degree-1], (e*last_bounded_degree//2, e-1))
         self.assertEqual(values[n], (e*(n+1) - e*sum(k-1 for k in bounds)//2, e))
         with patch.object(hs, "_numerator", side_effect=AssertionError("computed a coefficient")):
             self.assertEqual(hs._invariants(width, heads, []), (1, e, {}))

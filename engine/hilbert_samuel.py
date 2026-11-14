@@ -7,7 +7,7 @@ from .algebra_execution import cpu_stage
 from .local_algebra import _initial_monomials
 from .point_germs import _large_translation, centered_ideal
 from .polynomial import InputError
-from .quotient_monomials import _components, _standard_boxes
+from .quotient_monomials import _components, _standard_boxes, quotient_monomials
 from .rational_point import coordinate_fraction, normalize_point
 
 
@@ -37,7 +37,7 @@ def _boxes(width, heads):
 
 
 def _series_components(width, heads, store_boxes):
-    """Dimension and multiplicity are additive and multiplicative across tensor factors."""
+    """Add dimensions and multiply multiplicities across independent tensor factors."""
     dimension, multiplicity = 0, 1
     components = []
     for axes, rows in _components(width, heads):
@@ -58,7 +58,8 @@ def _series_components(width, heads, store_boxes):
         dimension += dim
         multiplicity *= degree
         if store_boxes:
-            components.append((dim, boxes))
+            bound = max(offset+sum(lengths) for offset, lengths, _ in boxes)
+            components.append((dim, bound, boxes))
     return dimension, multiplicity, components
 
 
@@ -79,10 +80,10 @@ def _multiply(left, right, limit):
     return product
 
 
-def _numerator(components, limit, *, at_one):
-    """Sparse truncated numerator at t=0 or z=1-t, factored by coordinate components."""
+def _numerator(components, limit, *, at_one=False, reverse=False):
+    """Sparse numerator near zero, near one, or in descending degree order."""
     result = {0: 1}
-    for dim, boxes in components:
+    for dim, bound, boxes in components:
         component = {}
         for offset, lengths, free in boxes:
             if at_one:
@@ -101,9 +102,13 @@ def _numerator(components, limit, *, at_one):
             else:
                 # Over the full polynomial ring denominator (1-t)^width the
                 # box numerator is t^offset times the product of 1-t^length.
+                sign = 1
+                if reverse:
+                    offset = bound-offset-sum(lengths)
+                    sign = (-1)**len(lengths)
                 if offset > limit:
                     continue
-                box = {offset: 1}
+                box = {offset: sign}
                 for length in lengths:
                     if offset+length <= limit:
                         box = _multiply(box, {0: 1, length: -1}, limit)
@@ -120,31 +125,48 @@ def _coefficient(degree, poles):
     return comb(degree+poles-1, poles-1)
 
 
+def _series_value(numerator, degree, poles):
+    return sum(c * _coefficient(degree-k, poles) for k, c in numerator.items() if k <= degree)
+
+
 def _invariants(width, heads, degrees):
     if (0,)*width in heads:
         return -1, 0, {n: (0, 0) for n in degrees}
 
+    if not degrees:
+        length, _ = quotient_monomials(width, heads, include_basis=False)
+        if length is not None:
+            return 0, length, {}
     dimension, multiplicity, components = _series_components(width, heads, bool(degrees))
     if not degrees:
         return dimension, multiplicity, {}
 
-    # For a box, offset+sum(length-1) is at most the sum of the coordinate
-    # maxima among the heads. Beyond this bound every polynomial part of
-    # its rational series vanishes, so the Taylor coefficients at one suffice.
-    bound = sum(map(max, zip(*heads))) if heads else 0
-    early = {n for n in degrees if n <= bound}
-    late = set(degrees) - early
+    bound = sum(b for _, b, _ in components)
+    # Near the high end of a sparse numerator, count its missing terms in
+    # reverse. This also makes a query at the very last nonzero degree of
+    # a wide complete intersection independent of its number of monomials.
+    early = {n for n in degrees if n <= bound-n or width == 0}
+    high = set(degrees) - early
     values = {}
     if early:
-        numerator = _numerator(components, max(early), at_one=False)
+        numerator = _numerator(components, max(early))
         for n in early:
-            values[n] = tuple(sum(c * _coefficient(n-k, poles) for k, c in numerator.items() if k <= n)
-                              for poles in (width+1, width))
-    if late:
+            values[n] = tuple(_series_value(numerator, n, poles) for poles in (width+1, width))
+    if high:
         numerator = _numerator(components, dimension, at_one=True)
-        for n in late:
-            values[n] = tuple(sum(c * _coefficient(n, poles-k) for k, c in numerator.items() if k < poles)
-                              for poles in (dimension+1, dimension))
+        limit = bound-min(high)-width
+        reversed_numerator = _numerator(components, limit, reverse=True) if limit >= 0 else {}
+        for n in high:
+            # At n the polynomial tail uses generalized binomials even for
+            # numerator shifts j>n. Such a term first contributes at j>=n+p
+            # with binom(n-j+p-1,p-1)=(-1)^(p-1)*binom(j-n-1,p-1).
+            pair = []
+            for reduced_poles, ambient_poles in ((dimension+1, width+1), (dimension, width)):
+                tail = sum(c * _coefficient(n, reduced_poles-k)
+                           for k, c in numerator.items() if k < reduced_poles)
+                correction = _series_value(reversed_numerator, bound-n-ambient_poles, ambient_poles)
+                pair.append(tail - (-1)**(ambient_poles-1) * correction)
+            values[n] = tuple(pair)
     return dimension, multiplicity, values
 
 

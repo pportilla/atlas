@@ -71,8 +71,10 @@ complex. `record_complex` adds the original chart labels and annotations
 when they match the computed incidence.
 Identity maps, ordinary point blowups, rational plane blowups and regular
 fan charts can exchange sparse equation rows directly with the shared
-crossings and Euler operations. A plane blowup pair stores its parent and
-centre so that its projection and region can be verified again after a
+crossings and Euler operations. On affine fan charts the kernel can certify
+all coordinate-boundary crossings with a hypersurface in one ideal test and
+evaluate its Euler strata on disjoint coordinate tori. A plane blowup pair
+stores its parent and centre so that its projection and region can be verified again after a
 JSON round trip. General gluing and canonical blowups carry sparse rational values backed by
 FLINT. A marked coefficient is a polynomial modulo its irreducible relation.
 Direct symbolic callers and comparison runs can request the symbolic chart view.
