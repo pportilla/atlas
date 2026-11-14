@@ -36,8 +36,7 @@ def parse(source, variables, *, bounded=True):
     return p
 
 
-def parse_expression(source, variables, *, bounded=False, _reference=False):
-    """Read a polynomial in known names, also allowing constants in chart equations."""
+def _expression_tokens(source, variables, bounded):
     if not isinstance(source, str) or not source.strip():
         raise InputError("Enter a nonempty polynomial.")
     if bounded and (len(variables)>8 or len(source)>8192):
@@ -45,6 +44,37 @@ def parse_expression(source, variables, *, bounded=False, _reference=False):
     tokens = re.findall(r'\*\*|[A-Za-z][A-Za-z0-9_]*|[0-9]+|[^\s]', source)
     if bounded and len(tokens) > 2048:
         raise LimitError("Expression has too many tokens.")
+    return tokens
+
+
+def _check_literal_digits(tokens, digit_limit=None):
+    if digit_limit is None:
+        digit_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
+    if digit_limit:
+        for t in tokens:
+            if len(t) > digit_limit and t.isdigit():
+                raise InputError(f"Integer literal has {len(t)} digits; the active limit is {digit_limit} digits.")
+
+
+def check_expression_digits(expressions, variables):
+    """Apply the caller's decimal-literal policy before sending source strings to a worker."""
+    limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
+    if limit:
+        for source in expressions:
+            if len(source) > limit:
+                _check_literal_digits(_expression_tokens(source, variables, False), limit)
+
+
+def native_expression_source(source, variables):
+    """Encode an unrestricted polynomial in validated names for a native request."""
+    tokens = _expression_tokens(source, variables, False)
+    _check_literal_digits(tokens)
+    return " ".join(tokens)
+
+
+def parse_expression(source, variables, *, bounded=False, _reference=False):
+    """Read a polynomial in known names, also allowing constants in chart equations."""
+    tokens = _expression_tokens(source, variables, bounded)
     from . import native_library
 
     def reference():
@@ -66,11 +96,8 @@ def parse_expression(source, variables, *, bounded=False, _reference=False):
         kernel_tokens = [aliases.get(t, t) for t in tokens]
         if any(t in kernel_names and t not in aliases for t in tokens):
             raise InputError("Unknown chart variable.")
-    digit_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
-    if not bounded and digit_limit:
-        for t in tokens:
-            if len(t) > digit_limit and t.isdigit():
-                int(t)  # Apply the interpreter's literal size check before expanding.
+    if not bounded:
+        _check_literal_digits(tokens)
 
     def native():
         # Preserve Unicode whitespace and separate tokens such as '* *'.

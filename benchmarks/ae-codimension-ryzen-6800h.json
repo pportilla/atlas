@@ -1,0 +1,2280 @@
+{
+  "timestamp_utc": "2026-11-14T15:19:50.943665+00:00",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "affinity": [
+    13
+  ],
+  "atlas_native_sha256": "8469d1ac5eaf4add93ad9a1171521692c1e2e26a81063d22b142288b174d8dd1",
+  "atlas_cli_binary_sha256": "137f525136e0f658b3df2c894f7b426ac1d9458ab4e570e02a56321339e08d95",
+  "singular_version": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "trials": 7,
+  "timeout_seconds": 90,
+  "conditions": "Fresh processes, one discarded run of each solver, alternating measured order, CPU, QQ, single germ at the origin. Atlas prints the complete CLI JSON. Singular loads classifyMapGerms.lib, uses (c,ds), calls coDimMap(f), and prints entry 2. All runs check finite status and codimension.",
+  "cases": {
+    "immersion": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x+y^2",
+          "y",
+          "x^3"
+        ]
+      },
+      "finite": true,
+      "value": 0,
+      "method": "regular_map",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.451494,
+          4.799221,
+          4.312912,
+          5.290129,
+          4.63942,
+          4.974653,
+          4.397081
+        ],
+        "singular": [
+          153.628528,
+          163.036942,
+          158.0205,
+          157.599294,
+          154.92077,
+          152.843324,
+          150.943983
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.63942,
+        "singular": 154.92077
+      },
+      "singular_over_atlas": 33.392271016635696
+    },
+    "univariate": {
+      "input": {
+        "variables": [
+          "t"
+        ],
+        "components": [
+          "t^12+t^17"
+        ]
+      },
+      "finite": true,
+      "value": 10,
+      "method": "univariate_order",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.164632,
+          5.904601,
+          5.466693,
+          5.391762,
+          4.443058,
+          4.906013,
+          5.016292
+        ],
+        "singular": [
+          22.584449,
+          22.523845,
+          30.115825,
+          24.884517,
+          25.674971,
+          22.833119,
+          29.484351
+        ]
+      },
+      "median_ms": {
+        "atlas": 5.016292,
+        "singular": 24.884517
+      },
+      "singular_over_atlas": 4.960739326976978
+    },
+    "scalar-separated": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^4+y^5"
+        ]
+      },
+      "finite": true,
+      "value": 11,
+      "method": "separated_jacobian",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.509554,
+          4.504675,
+          4.283877,
+          4.876858,
+          4.453868,
+          5.134064,
+          4.574416
+        ],
+        "singular": [
+          25.937106,
+          23.64275,
+          23.518805,
+          23.277529,
+          22.766854,
+          26.72218,
+          22.477567
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.509554,
+        "singular": 23.518805
+      },
+      "singular_over_atlas": 5.215328389459358
+    },
+    "scalar-mixed": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^4+y^5+x^2*y^3"
+        ]
+      },
+      "finite": true,
+      "value": 10,
+      "method": "jacobian_target_powers",
+      "fresh_wall_ms": {
+        "atlas": [
+          5.04721,
+          4.898569,
+          5.051108,
+          4.981616,
+          4.732826,
+          4.933054,
+          5.022624
+        ],
+        "singular": [
+          30.35107,
+          28.015675,
+          28.741387,
+          23.704636,
+          30.335981,
+          31.147054,
+          23.813773
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.981616,
+        "singular": 28.741387
+      },
+      "singular_over_atlas": 5.769490663270714
+    },
+    "monomial-curve": {
+      "input": {
+        "variables": [
+          "t"
+        ],
+        "components": [
+          "t^3",
+          "t^5",
+          "t^7"
+        ]
+      },
+      "finite": true,
+      "value": 7,
+      "method": "monomial_curve_semigroup",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.804061,
+          5.229776,
+          4.67194,
+          5.188768,
+          4.561202,
+          5.065394,
+          4.362506
+        ],
+        "singular": [
+          29.051703,
+          30.76949,
+          28.256791,
+          29.732931,
+          32.053126,
+          29.475765,
+          47.901974
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.804061,
+        "singular": 29.732931
+      },
+      "singular_over_atlas": 6.189124367904571
+    },
+    "crosscap": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^2",
+          "x*y"
+        ]
+      },
+      "finite": true,
+      "value": 0,
+      "method": "double_cover_hypersurface",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.374148,
+          5.39093,
+          4.451173,
+          5.543268,
+          4.040126,
+          5.175372,
+          4.453749
+        ],
+        "singular": [
+          172.72804,
+          147.290328,
+          148.887096,
+          157.154623,
+          143.995971,
+          148.440782,
+          143.058047
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.453749,
+        "singular": 148.440782
+      },
+      "singular_over_atlas": 33.32940001782768
+    },
+    "higher-order-double-cover": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^2",
+          "y^3+x^12*y"
+        ]
+      },
+      "finite": true,
+      "value": 11,
+      "method": "double_cover_hypersurface",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.476993,
+          4.912286,
+          4.356435,
+          5.141218,
+          4.502551,
+          5.128413,
+          4.641443
+        ],
+        "singular": [
+          304.218694,
+          292.061894,
+          287.805819,
+          282.212568,
+          285.634135,
+          300.367824,
+          294.147587
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.641443,
+        "singular": 292.061894
+      },
+      "singular_over_atlas": 62.92480463511025
+    },
+    "plane-graded": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "x*y+y^5"
+        ]
+      },
+      "finite": true,
+      "value": 3,
+      "method": "graded_graph",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.973812,
+          5.337078,
+          4.608,
+          4.982418,
+          4.655891,
+          4.850268,
+          4.412451
+        ],
+        "singular": [
+          44.224633,
+          39.684912,
+          42.200647,
+          42.127259,
+          52.088298,
+          55.590016,
+          44.132168
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.850268,
+        "singular": 44.132168
+      },
+      "singular_over_atlas": 9.098913297162136
+    },
+    "plane-coordinate-change": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x+y^2",
+          "(x+y^2)*y+y^5"
+        ]
+      },
+      "finite": true,
+      "value": 3,
+      "method": "extended_tangent_jets",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.980504,
+          5.426607,
+          4.955677,
+          5.661611,
+          4.749648,
+          5.221891,
+          4.5024
+        ],
+        "singular": [
+          59.732296,
+          60.198918,
+          71.808763,
+          69.379621,
+          62.980446,
+          54.569126,
+          54.735551
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.980504,
+        "singular": 60.198918
+      },
+      "singular_over_atlas": 12.086912890743587
+    },
+    "space-graded": {
+      "input": {
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "components": [
+          "x",
+          "y",
+          "z^5+x*z+y*z^2"
+        ]
+      },
+      "finite": true,
+      "value": 1,
+      "method": "graded_graph",
+      "fresh_wall_ms": {
+        "atlas": [
+          5.096323,
+          5.477112,
+          4.843736,
+          6.461744,
+          6.398825,
+          5.045177,
+          5.228944
+        ],
+        "singular": [
+          535.283181,
+          553.92102,
+          547.623215,
+          544.468703,
+          559.855807,
+          543.903404,
+          546.448054
+        ]
+      },
+      "median_ms": {
+        "atlas": 5.228944,
+        "singular": 546.448054
+      },
+      "singular_over_atlas": 104.50447623841447
+    },
+    "positive-dimensional-contact": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2+x^3*y",
+          "x*y+x*y^4"
+        ]
+      },
+      "finite": false,
+      "value": null,
+      "method": "ramified_axis",
+      "fresh_wall_ms": {
+        "atlas": [
+          4.333231,
+          5.030078,
+          4.100521,
+          4.696567,
+          4.874725,
+          4.901234,
+          4.361133
+        ],
+        "singular": [
+          49.826803,
+          47.290048,
+          46.578663,
+          48.553205,
+          47.321918,
+          50.622807,
+          45.956546
+        ]
+      },
+      "median_ms": {
+        "atlas": 4.696567,
+        "singular": 47.321918
+      },
+      "singular_over_atlas": 10.075852851668037
+    },
+    "dense-plane-coordinate-change": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "(x+y+x*y+y^2)",
+          "(x+y+x*y+y^2)*(y+y^2)+(y+y^2)^7"
+        ]
+      },
+      "finite": true,
+      "value": 10,
+      "method": "extended_tangent_jets",
+      "fresh_wall_ms": {
+        "atlas": [
+          14.445104,
+          18.001887,
+          16.498655,
+          16.646074,
+          14.295812,
+          14.817037,
+          15.226341
+        ],
+        "singular": [
+          3190.316275,
+          3172.467417,
+          3052.88843,
+          3104.006753,
+          3164.313725,
+          3176.885449,
+          3276.113378
+        ]
+      },
+      "median_ms": {
+        "atlas": 15.226341,
+        "singular": 3172.467417
+      },
+      "singular_over_atlas": 208.3538925734029
+    }
+  },
+  "general_jet_profile": {
+    "conditions": "Pinned CPU 15, g++ -O3, standalone native calls with parsed maps, analytic shortcuts and graded graph disabled to select the same general solver. All intermediate vectors use small-pivot rational echelon forms. Before propagates target products using arbitrary representatives modulo the Jacobian, after uses canonical reduced representatives. Seven alternating before/after batches for each input. Each batch averages 8 solves for dense_plane and 15 solves for every other case.",
+    "kernel_cases": {
+      "dense_plane": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x+y+x*y+y^2",
+          "(x+y+x*y+y^2)*(y+y^2)+(y+y^2)^7"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            11.9761,
+            12.0567,
+            11.92,
+            11.9745,
+            12.1078,
+            11.9845,
+            11.9901
+          ],
+          "after": [
+            8.81835,
+            8.74533,
+            8.61588,
+            8.6153,
+            8.56781,
+            8.63329,
+            8.60613
+          ]
+        },
+        "median_ms": {
+          "before": 11.9845,
+          "after": 8.61588
+        }
+      },
+      "transformed_plane": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x+y^2",
+          "(x+y^2)*y+y^5"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            0.332344,
+            0.332272,
+            0.321991,
+            0.329819,
+            0.331016,
+            0.329618,
+            0.32961
+          ],
+          "after": [
+            0.321154,
+            0.324737,
+            0.327339,
+            0.335446,
+            0.326344,
+            0.326033,
+            0.321113
+          ]
+        },
+        "median_ms": {
+          "before": 0.329819,
+          "after": 0.326033
+        }
+      },
+      "surface_curve": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^2",
+          "y^9+x^4*y"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            0.307791,
+            0.315634,
+            0.309786,
+            0.311507,
+            0.314631,
+            0.302669,
+            0.314147
+          ],
+          "after": [
+            0.302942,
+            0.301816,
+            0.310383,
+            0.296716,
+            0.300425,
+            0.293312,
+            0.296559
+          ]
+        },
+        "median_ms": {
+          "before": 0.311507,
+          "after": 0.300425
+        }
+      },
+      "three_variables": {
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "components": [
+          "x",
+          "y",
+          "z^5+x*z+y*z^2"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            0.349369,
+            0.345152,
+            0.346456,
+            0.351804,
+            0.350277,
+            0.354709,
+            0.356376
+          ],
+          "after": [
+            0.341111,
+            0.332024,
+            0.328899,
+            0.326936,
+            0.33456,
+            0.33797,
+            0.346553
+          ]
+        },
+        "median_ms": {
+          "before": 0.350277,
+          "after": 0.33456
+        }
+      },
+      "crosscap": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^2",
+          "x*y"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            0.0174083,
+            0.0173301,
+            0.0173561,
+            0.0173114,
+            0.0170302,
+            0.0188964,
+            0.0190059
+          ],
+          "after": [
+            0.0169527,
+            0.0196258,
+            0.0173207,
+            0.0172072,
+            0.0172319,
+            0.0172359,
+            0.0182852
+          ]
+        },
+        "median_ms": {
+          "before": 0.0173561,
+          "after": 0.0172359
+        }
+      },
+      "positive_contact": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2+x*y",
+          "x*y"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            0.0656949,
+            0.0674501,
+            0.0647263,
+            0.0633925,
+            0.063673,
+            0.0700865,
+            0.0696296
+          ],
+          "after": [
+            0.0642234,
+            0.0642073,
+            0.0817098,
+            0.0951545,
+            0.109842,
+            0.107099,
+            0.0610307
+          ]
+        },
+        "median_ms": {
+          "before": 0.0656949,
+          "after": 0.0817098
+        }
+      },
+      "uncertified": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2+x^3",
+          "y^2+y^4"
+        ],
+        "batch_mean_ms": {
+          "before": [
+            6.23028,
+            5.87665,
+            5.79687,
+            5.80101,
+            5.8138,
+            5.79228,
+            5.81983
+          ],
+          "after": [
+            5.91827,
+            5.89767,
+            5.82797,
+            5.83019,
+            5.99086,
+            5.80709,
+            5.85074
+          ]
+        },
+        "median_ms": {
+          "before": 5.8138,
+          "after": 5.85074
+        }
+      }
+    },
+    "stage_timing": {
+      "case": "dense_plane",
+      "conditions": "Each of 9 pairs measures one solve in a fresh process, alternating order. Sum of timers over all attempted jet degrees. Profile probes use steady_clock and are excluded from the full kernel and CLI timings.",
+      "columns": [
+        "monomial_setup_and_jacobian",
+        "contact",
+        "extended_tangent_and_target_closure"
+      ],
+      "samples_ms": {
+        "before": [
+          [
+            4.6574539999999995,
+            0.126188,
+            6.376671
+          ],
+          [
+            4.7220249999999995,
+            0.132121,
+            6.596347
+          ],
+          [
+            4.8486139999999995,
+            0.135347,
+            6.570126999999999
+          ],
+          [
+            4.716575,
+            0.134464,
+            6.590436
+          ],
+          [
+            4.734167,
+            0.129215,
+            7.170414
+          ],
+          [
+            4.785365,
+            0.129985,
+            6.805864
+          ],
+          [
+            4.6633260000000005,
+            0.129414,
+            6.617356999999999
+          ],
+          [
+            4.694624,
+            0.136147,
+            6.606437
+          ],
+          [
+            4.779885,
+            0.128051,
+            6.582473
+          ]
+        ],
+        "after": [
+          [
+            4.591747,
+            0.122322,
+            3.180412
+          ],
+          [
+            4.646903,
+            0.122562,
+            3.229923
+          ],
+          [
+            4.715113,
+            0.12410500000000001,
+            3.3062289999999996
+          ],
+          [
+            4.748465,
+            0.124245,
+            3.293114
+          ],
+          [
+            4.7269630000000005,
+            0.125277,
+            3.293046
+          ],
+          [
+            4.70387,
+            0.129585,
+            3.275572
+          ],
+          [
+            4.727866,
+            0.123864,
+            3.292884
+          ],
+          [
+            4.694585,
+            0.122821,
+            3.247347
+          ],
+          [
+            4.650659,
+            0.121902,
+            3.292844
+          ]
+        ]
+      },
+      "median_ms": {
+        "before": [
+          4.7220249999999995,
+          0.129985,
+          6.596347
+        ],
+        "after": [
+          4.70387,
+          0.123864,
+          3.292844
+        ]
+      }
+    }
+  },
+  "special_profile": {
+    "conditions": "13 alternating before/after trials; parse once per process, 2 discarded warms, CLOCK_THREAD_CPUTIME_ID, logical CPU 7; nanoseconds per C++ ae_special call; compiled -O3 -DNDEBUG with g++, linked to Atlas libgroebner and native dependencies; arbitrary-precision rational coefficients; the one-dimensional iso_nonmonomial case measures the special precheck declining, not a complete ae_codimension computation.",
+    "cases": {
+      "dvr_wide": {
+        "label": "dvr_wide",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "3/7*x^18446744073709551673"
+        ],
+        "repetitions_per_trial": 15000,
+        "samples_ns": {
+          "baseline": [
+            589.205,
+            561.858,
+            575.957,
+            574.963,
+            561.618,
+            576.484,
+            564.302,
+            580.033,
+            576.445,
+            558.58,
+            569.023,
+            557.519,
+            556.415
+          ],
+          "candidate": [
+            461.382,
+            798.394,
+            467.515,
+            456.786,
+            464.076,
+            466.803,
+            476.047,
+            475.18,
+            453.345,
+            454.768,
+            453.645,
+            447.898,
+            455.674
+          ]
+        },
+        "median_ns": {
+          "baseline": 569.023,
+          "candidate": 461.382
+        }
+      },
+      "separated": {
+        "label": "separated",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "t"
+        ],
+        "components": [
+          "x^3+y^5+z^7+t^11"
+        ],
+        "repetitions_per_trial": 15000,
+        "samples_ns": {
+          "baseline": [
+            946.279,
+            922.351,
+            939.405,
+            918.02,
+            929.37,
+            926.869,
+            907.868,
+            929.62,
+            922.132,
+            893.668,
+            900.701,
+            897.523,
+            897.294
+          ],
+          "candidate": [
+            897.821,
+            870.399,
+            875.506,
+            874.661,
+            891.744,
+            880.542,
+            885.123,
+            887.332,
+            863.237,
+            863.115,
+            858.255,
+            852.973,
+            859.604
+          ]
+        },
+        "median_ns": {
+          "baseline": 922.132,
+          "candidate": 874.661
+        }
+      },
+      "regular_rank": {
+        "label": "regular_rank",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "t"
+        ],
+        "components": [
+          "3*x+2*y+z",
+          "x+5*y+t",
+          "z+2*t",
+          "x+y+z"
+        ],
+        "repetitions_per_trial": 15000,
+        "samples_ns": {
+          "baseline": [
+            1725.0,
+            1746.06,
+            1778.06,
+            1734.94,
+            1718.78,
+            1752.71,
+            1742.6,
+            1755.75,
+            1761.25,
+            1713.43,
+            1704.91,
+            1706.55,
+            1704.74
+          ],
+          "candidate": [
+            1743.58,
+            1750.18,
+            1766.71,
+            1728.57,
+            1751.45,
+            1744.97,
+            1768.98,
+            1771.09,
+            1712.15,
+            1708.82,
+            1698.87,
+            1713.21,
+            1724.89
+          ]
+        },
+        "median_ns": {
+          "baseline": 1734.94,
+          "candidate": 1743.58
+        }
+      },
+      "curve2wide": {
+        "label": "curve2wide",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "x^18446744073709551621",
+          "x^18446744073709551623"
+        ],
+        "repetitions_per_trial": 12000,
+        "samples_ns": {
+          "baseline": [
+            894.682,
+            899.785,
+            890.597,
+            860.441,
+            864.862,
+            880.207,
+            862.845,
+            883.702,
+            897.725,
+            858.501,
+            860.467,
+            846.142,
+            859.271
+          ],
+          "candidate": [
+            808.23,
+            792.453,
+            813.272,
+            771.772,
+            771.012,
+            798.585,
+            798.567,
+            847.163,
+            772.592,
+            793.261,
+            771.859,
+            771.544,
+            756.529
+          ]
+        },
+        "median_ns": {
+          "baseline": 864.862,
+          "candidate": 792.453
+        }
+      },
+      "curve3": {
+        "label": "curve3",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "x^3",
+          "x^4",
+          "x^5"
+        ],
+        "repetitions_per_trial": 8000,
+        "samples_ns": {
+          "baseline": [
+            1369.11,
+            1327.7,
+            1372.0,
+            1331.95,
+            1337.03,
+            1382.12,
+            1338.17,
+            1364.59,
+            1387.65,
+            1324.34,
+            1341.44,
+            1327.62,
+            1324.95
+          ],
+          "candidate": [
+            1287.74,
+            1281.37,
+            1277.32,
+            1300.36,
+            1260.72,
+            1268.87,
+            1390.01,
+            1304.18,
+            1271.5,
+            1263.77,
+            1263.52,
+            1241.95,
+            1253.59
+          ]
+        },
+        "median_ns": {
+          "baseline": 1338.17,
+          "candidate": 1271.5
+        }
+      },
+      "non_qh": {
+        "label": "non_qh",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^5+y^5+x^3*y^3"
+        ],
+        "repetitions_per_trial": 200,
+        "samples_ns": {
+          "baseline": [
+            26192.2,
+            25366.8,
+            25838.1,
+            26764.8,
+            25914.2,
+            26192.0,
+            26005.4,
+            26151.1,
+            25447.8,
+            25668.1,
+            25215.7,
+            25274.8,
+            25789.0
+          ],
+          "candidate": [
+            5734.95,
+            5556.37,
+            5596.29,
+            5559.23,
+            5500.16,
+            5647.39,
+            5662.67,
+            5615.88,
+            5450.57,
+            5427.52,
+            5430.64,
+            5473.56,
+            5517.8
+          ]
+        },
+        "median_ns": {
+          "baseline": 25838.1,
+          "candidate": 5556.37
+        }
+      },
+      "cover_pullback": {
+        "label": "cover_pullback",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "(x^2+x^3)^2",
+          "(x^2+x^3)^3"
+        ],
+        "repetitions_per_trial": 3000,
+        "samples_ns": {
+          "baseline": [
+            20833.5,
+            20941.3,
+            20676.7,
+            20727.9,
+            20685.2,
+            20680.0,
+            20929.1,
+            21012.6,
+            20398.0,
+            20382.4,
+            20155.8,
+            20147.1,
+            20296.9
+          ],
+          "candidate": [
+            20571.9,
+            21207.7,
+            20414.7,
+            20405.8,
+            20473.2,
+            20607.7,
+            21615.1,
+            21014.4,
+            20192.4,
+            20136.2,
+            20060.1,
+            19942.2,
+            20065.9
+          ]
+        },
+        "median_ns": {
+          "baseline": 20680.0,
+          "candidate": 20414.7
+        }
+      },
+      "cover_generator": {
+        "label": "cover_generator",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "x^2+x^3",
+          "(x^2+x^3)^4-7*(x^2+x^3)^2"
+        ],
+        "repetitions_per_trial": 3000,
+        "samples_ns": {
+          "baseline": [
+            12416.6,
+            12650.8,
+            12624.2,
+            12568.6,
+            12651.9,
+            12490.3,
+            12809.8,
+            12575.1,
+            12276.1,
+            12198.8,
+            12241.8,
+            12192.3,
+            12431.8
+          ],
+          "candidate": [
+            9257.99,
+            7550.28,
+            7609.27,
+            7483.35,
+            7877.23,
+            7596.95,
+            7692.56,
+            7688.28,
+            7444.31,
+            7502.17,
+            7388.05,
+            7431.92,
+            7440.54
+          ]
+        },
+        "median_ns": {
+          "baseline": 12490.3,
+          "candidate": 7550.28
+        }
+      },
+      "unfolded": {
+        "label": "unfolded",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^3+x^2"
+        ],
+        "repetitions_per_trial": 8000,
+        "samples_ns": {
+          "baseline": [
+            1355.85,
+            1326.9,
+            1399.29,
+            1362.45,
+            1355.8,
+            1361.08,
+            1369.09,
+            1351.18,
+            1343.34,
+            1299.39,
+            1332.76,
+            1336.04,
+            1316.14
+          ],
+          "candidate": [
+            1309.39,
+            1357.5,
+            1321.59,
+            1281.23,
+            1319.25,
+            1331.82,
+            1316.02,
+            1339.68,
+            1280.37,
+            1263.81,
+            1289.24,
+            1270.72,
+            1245.51
+          ]
+        },
+        "median_ns": {
+          "baseline": 1351.18,
+          "candidate": 1309.39
+        }
+      },
+      "iso_nonmonomial": {
+        "label": "iso_nonmonomial",
+        "variables": [
+          "x"
+        ],
+        "components": [
+          "(x+x^2)^2",
+          "(x+x^2)^3"
+        ],
+        "repetitions_per_trial": 3000,
+        "samples_ns": {
+          "baseline": [
+            17480.0,
+            17411.5,
+            17108.4,
+            17310.4,
+            17473.5,
+            17203.3,
+            17599.9,
+            17163.6,
+            16752.2,
+            16966.1,
+            16755.1,
+            16690.3,
+            16823.1
+          ],
+          "candidate": [
+            17291.4,
+            17319.7,
+            17564.1,
+            17092.7,
+            17276.5,
+            17273.0,
+            17634.9,
+            17544.7,
+            16679.3,
+            16717.5,
+            16685.5,
+            16553.1,
+            16589.8
+          ]
+        },
+        "median_ns": {
+          "baseline": 17163.6,
+          "candidate": 17273.0
+        }
+      }
+    },
+    "mixed_scalar_phases": {
+      "input": "x^5+y^5+x^3*y^3",
+      "conditions": "pre-parsed two-variable rational germ; warmed operations, CPU 7, process thread CPU nanoseconds, nine rounds of 3,000 repetitions. Individual substage timings are isolated measurements.",
+      "samples_ns": {
+        "whole": [
+          2823.97,
+          2789.77,
+          2783.58,
+          2744.86,
+          2846.77,
+          2770.12,
+          2813.07,
+          2761.1,
+          2817.61
+        ],
+        "rank": [
+          102.138,
+          96.0667,
+          96.4043,
+          94.741,
+          94.6707,
+          95.94,
+          93.3517,
+          95.0717,
+          96.6443
+        ],
+        "scalar": [
+          2770.05,
+          2762.45,
+          2851.99,
+          2729.49,
+          2814.05,
+          2761.14,
+          2783.8,
+          2793.61,
+          2825.25
+        ],
+        "derivatives": [
+          548.642,
+          554.743,
+          556.327,
+          536.586,
+          545.359,
+          544.785,
+          526.267,
+          547.894,
+          536.456
+        ],
+        "jacobian_basis": [
+          14699.6,
+          14370.7,
+          14877.9,
+          14468.2,
+          14693.2,
+          14633.3,
+          14422.1,
+          14656.8,
+          14528.5
+        ],
+        "colength": [
+          543.429,
+          567.604,
+          566.201,
+          543.228,
+          541.756,
+          568.873,
+          526.173,
+          559.97,
+          545.543
+        ],
+        "class_of_f": [
+          2273.41,
+          2326.34,
+          2363.61,
+          2259.25,
+          2338.5,
+          2306.23,
+          2242.95,
+          2315.03,
+          2296.62
+        ],
+        "coprime_basis_and_count": [
+          279.871,
+          306.652,
+          284.711,
+          293.978,
+          290.525,
+          287.917,
+          281.645,
+          299.568,
+          281.701
+        ],
+        "class_of_f_fast": [
+          2383.47,
+          2464.91,
+          2339.54,
+          2389.6,
+          2437.63,
+          2361.68,
+          2388.62,
+          2383.19,
+          2417.75
+        ],
+        "nilpotence_fast": [
+          206.39,
+          210.234,
+          200.569,
+          205.559,
+          199.561,
+          201.585,
+          197.257,
+          206.153,
+          202.967
+        ],
+        "euler_class": [
+          482.862,
+          499.764,
+          467.169,
+          478.467,
+          466.301,
+          456.182,
+          466.665,
+          469.844,
+          479.188
+        ],
+        "square_class": [
+          1837.19,
+          1888.86,
+          1854.95,
+          1851.26,
+          1854.24,
+          1805.81,
+          1825.44,
+          1840.5,
+          1823.78
+        ]
+      },
+      "medians_ns": {
+        "whole": 2789.77,
+        "rank": 95.94,
+        "scalar": 2783.8,
+        "derivatives": 545.359,
+        "jacobian_basis": 14633.3,
+        "colength": 545.543,
+        "class_of_f": 2306.23,
+        "coprime_basis_and_count": 287.917,
+        "class_of_f_fast": 2388.62,
+        "nilpotence_fast": 202.967,
+        "euler_class": 469.844,
+        "square_class": 1840.5
+      }
+    },
+    "mixed_scalar_euler": {
+      "input": {
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^5+y^5+x^3*y^3"
+        ]
+      },
+      "value": 14,
+      "conditions": "warm C++ call on parsed polynomials; CLOCK_THREAD_CPUTIME_ID; pinned to logical CPU 7; 200 evaluations per trial and 13 trials per version, alternating order",
+      "version_labels": {
+        "baseline": "generic Jacobian and power reductions",
+        "candidate": "coprime basis criterion, staircase length and nilpotence bound",
+        "euler": "same plus Euler class cancellation"
+      },
+      "samples_ns": {
+        "baseline": [
+          25939.0,
+          25424.6,
+          25431.1,
+          26156.2,
+          28054.1,
+          26536.5,
+          25742.0,
+          25370.1,
+          25642.5,
+          25871.3,
+          26405.3,
+          25656.5,
+          26098.6
+        ],
+        "candidate": [
+          5674.34,
+          5556.57,
+          5522.85,
+          5546.15,
+          5452.27,
+          5612.32,
+          5502.12,
+          5484.03,
+          5491.6,
+          5485.89,
+          5888.24,
+          5638.37,
+          5568.09
+        ],
+        "euler": [
+          2776.61,
+          2702.97,
+          2696.26,
+          4593.02,
+          2715.24,
+          2760.28,
+          2740.28,
+          2760.28,
+          2772.14,
+          2730.37,
+          2756.16,
+          2752.76,
+          2904.95
+        ]
+      },
+      "medians_ns": {
+        "baseline": 25871.3,
+        "candidate": 5546.15,
+        "euler": 2756.16
+      },
+      "speedup": 9.386719203529548
+    }
+  },
+  "graded_graph_profile": {
+    "conditions": "C++ timing harness, 9 trials, 35 repetitions per trial, logical CPU 8. One warmup per mode. Alternate mode order each trial. All solves check agreement before measurement. Times are microseconds per call. Isolated stage timings are medians of seven samples, in microseconds.",
+    "modes": {
+      "initial": "Direct graded elimination using generic wide Gr\u00f6bner transport",
+      "packed": "Direct graded elimination using the packed Gr\u00f6bner basis when admissible",
+      "parse": "Parse each map component as a rational polynomial",
+      "solve": "Complete native Ae computation using parsed map components"
+    },
+    "cases": [
+      {
+        "name": "plane7",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "x*y+y^7"
+        ],
+        "median_us": {
+          "initial": 69.75,
+          "packed": 38.63,
+          "parse": 5.16,
+          "solve": 60.04
+        },
+        "samples_us": {
+          "initial": [
+            71.70754285714285,
+            70.87511428571429,
+            69.72148571428572,
+            67.39737142857143,
+            69.75357142857143,
+            68.6864,
+            71.14502857142857,
+            68.12048571428572,
+            72.0084
+          ],
+          "packed": [
+            47.29137142857143,
+            38.62985714285714,
+            38.477,
+            37.2484,
+            41.43145714285714,
+            42.10988571428572,
+            38.23771428571428,
+            37.0918,
+            43.085742857142854
+          ],
+          "parse": [
+            5.0120571428571425,
+            5.144,
+            5.243342857142857,
+            5.387885714285714,
+            5.143714285714286,
+            9.262371428571429,
+            5.069571428571429,
+            5.506114285714285,
+            5.157742857142857
+          ],
+          "solve": [
+            59.37077142857143,
+            60.03517142857143,
+            62.897171428571426,
+            60.17485714285714,
+            60.43537142857143,
+            58.939685714285716,
+            58.78368571428572,
+            62.132,
+            59.61725714285714
+          ]
+        },
+        "graded_stages_us": {
+          "grading": {
+            "median": 0.73,
+            "samples": [
+              0.76,
+              0.712,
+              0.707,
+              0.777,
+              0.735,
+              0.738,
+              0.692
+            ]
+          },
+          "build_relations": {
+            "median": 2.52,
+            "samples": [
+              2.637,
+              2.518,
+              2.477,
+              2.601,
+              2.452,
+              2.586,
+              2.469
+            ]
+          },
+          "groebner_heads": {
+            "median": 21.97,
+            "samples": [
+              52.541,
+              21.863,
+              21.967,
+              22.698,
+              21.972,
+              22.455,
+              21.705
+            ]
+          },
+          "count_normal_monomials": {
+            "median": 9.96,
+            "samples": [
+              10.204,
+              9.875,
+              9.93,
+              10.14,
+              9.965,
+              10.111,
+              9.862
+            ]
+          }
+        }
+      },
+      {
+        "name": "plane12",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "x*y+y^12"
+        ],
+        "median_us": {
+          "initial": 99.57,
+          "packed": 56.75,
+          "parse": 5.24,
+          "solve": 79.19
+        },
+        "samples_us": {
+          "initial": [
+            107.2238,
+            98.88605714285714,
+            99.56648571428572,
+            100.98857142857143,
+            96.54105714285714,
+            110.76337142857143,
+            96.84991428571429,
+            99.29337142857143,
+            107.90137142857142
+          ],
+          "packed": [
+            58.01108571428571,
+            56.243742857142855,
+            58.99608571428571,
+            55.87962857142857,
+            60.317457142857144,
+            55.15511428571428,
+            56.75497142857143,
+            57.717685714285714,
+            56.66168571428572
+          ],
+          "parse": [
+            5.279428571428571,
+            5.180085714285714,
+            7.405142857142857,
+            5.243057142857142,
+            5.220142857142857,
+            5.398771428571429,
+            5.2004,
+            5.371314285714286,
+            5.187828571428572
+          ],
+          "solve": [
+            82.39174285714286,
+            78.07817142857142,
+            77.64188571428572,
+            80.108,
+            79.18508571428572,
+            77.97997142857143,
+            84.71925714285715,
+            79.60388571428571,
+            78.00571428571429
+          ]
+        },
+        "graded_stages_us": {
+          "grading": {
+            "median": 0.79,
+            "samples": [
+              0.796,
+              0.751,
+              0.755,
+              0.785,
+              0.753,
+              0.809,
+              0.894
+            ]
+          },
+          "build_relations": {
+            "median": 2.87,
+            "samples": [
+              2.746,
+              2.709,
+              2.768,
+              2.868,
+              2.882,
+              2.957,
+              3.021
+            ]
+          },
+          "groebner_heads": {
+            "median": 35.12,
+            "samples": [
+              34.322,
+              33.754,
+              34.278,
+              35.758,
+              35.123,
+              36.442,
+              37.862
+            ]
+          },
+          "count_normal_monomials": {
+            "median": 16.91,
+            "samples": [
+              16.509,
+              16.52,
+              16.548,
+              17.108,
+              16.907,
+              17.551,
+              18.219
+            ]
+          }
+        }
+      },
+      {
+        "name": "surface7",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x",
+          "y^2",
+          "y^3+x^7*y"
+        ],
+        "median_us": {
+          "initial": 150.53,
+          "packed": 82.41,
+          "parse": 7.67,
+          "solve": 112.41
+        },
+        "samples_us": {
+          "initial": [
+            152.4260857142857,
+            150.52508571428572,
+            150.8456857142857,
+            233.60525714285714,
+            248.92277142857142,
+            148.92091428571428,
+            149.63254285714285,
+            149.60477142857144,
+            149.45362857142857
+          ],
+          "packed": [
+            87.3886,
+            81.67665714285714,
+            84.13874285714286,
+            82.41205714285714,
+            135.84677142857143,
+            80.3828,
+            82.30928571428572,
+            81.3718,
+            83.38934285714285
+          ],
+          "parse": [
+            7.942714285714286,
+            7.478714285714286,
+            7.576028571428571,
+            8.465714285714286,
+            8.008285714285714,
+            7.652771428571429,
+            7.708571428571428,
+            7.6699142857142855,
+            7.4918571428571425
+          ],
+          "solve": [
+            112.41277142857143,
+            112.56534285714285,
+            118.1204,
+            113.66568571428571,
+            109.87711428571428,
+            113.26697142857142,
+            108.6946,
+            111.27948571428571,
+            110.4376
+          ]
+        },
+        "graded_stages_us": {
+          "grading": {
+            "median": 0.86,
+            "samples": [
+              0.892,
+              0.835,
+              0.859,
+              0.825,
+              0.854,
+              0.878,
+              0.895
+            ]
+          },
+          "build_relations": {
+            "median": 5.46,
+            "samples": [
+              5.406,
+              5.444,
+              5.538,
+              5.198,
+              5.459,
+              5.687,
+              5.625
+            ]
+          },
+          "groebner_heads": {
+            "median": 59.33,
+            "samples": [
+              59.325,
+              59.291,
+              59.126,
+              57.754,
+              60.785,
+              61.523,
+              63.518
+            ]
+          },
+          "count_normal_monomials": {
+            "median": 17.77,
+            "samples": [
+              17.541,
+              17.769,
+              17.553,
+              17.286,
+              18.21,
+              18.08,
+              18.838
+            ]
+          }
+        }
+      },
+      {
+        "name": "infinite",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2-y^2",
+          "2*x*y"
+        ],
+        "median_us": {
+          "initial": 63.68,
+          "packed": 32.85,
+          "parse": 5.43,
+          "solve": 59.96
+        },
+        "samples_us": {
+          "initial": [
+            63.679228571428574,
+            63.57328571428572,
+            64.4956,
+            64.5686,
+            63.33971428571429,
+            63.363771428571425,
+            64.86917142857143,
+            63.06862857142857,
+            65.17148571428571
+          ],
+          "packed": [
+            33.37708571428571,
+            32.28528571428571,
+            32.85237142857143,
+            33.3748,
+            33.3728,
+            32.542942857142855,
+            32.458485714285715,
+            32.121857142857145,
+            33.14951428571428
+          ],
+          "parse": [
+            5.426542857142858,
+            5.502971428571429,
+            5.536742857142857,
+            5.340971428571429,
+            5.380742857142857,
+            5.583714285714286,
+            5.363285714285714,
+            5.434571428571428,
+            5.401914285714286
+          ],
+          "solve": [
+            58.932514285714284,
+            59.97165714285714,
+            59.96048571428572,
+            60.682428571428574,
+            58.814885714285715,
+            62.01034285714286,
+            59.94271428571429,
+            60.563028571428575,
+            59.10228571428571
+          ]
+        },
+        "graded_stages_us": {
+          "grading": {
+            "median": 0.27,
+            "samples": [
+              0.288,
+              0.276,
+              0.264,
+              0.267,
+              0.259,
+              0.291,
+              0.271
+            ]
+          },
+          "build_relations": {
+            "median": 2.62,
+            "samples": [
+              2.73,
+              2.616,
+              2.53,
+              2.52,
+              2.479,
+              2.722,
+              2.617
+            ]
+          },
+          "groebner_heads": {
+            "median": 24.71,
+            "samples": [
+              26.565,
+              25.003,
+              24.622,
+              23.623,
+              24.316,
+              25.079,
+              24.709
+            ]
+          },
+          "count_normal_monomials": {
+            "median": 4.01,
+            "samples": [
+              4.374,
+              4.063,
+              4.005,
+              3.852,
+              3.958,
+              4.18,
+              4.015
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "double_cover_profile": {
+    "conditions": "7 alternating trials of the complete native ae_codimension operation on pre-parsed QQ polynomials with one warm repetition. Native benchmark executable, logical CPU 7, steady wall time. For wide-S the old method only reaches a lower bound, so the two results have distinct certification statuses.",
+    "cases": {
+      "crosscap": {
+        "components": [
+          "x",
+          "y^2",
+          "x*y"
+        ],
+        "variables": [
+          "x",
+          "y"
+        ],
+        "exact_value": 0,
+        "repetitions_per_trial": 600,
+        "old": {
+          "samples_ns": [
+            14072.968333333334,
+            14484.695,
+            14364.535,
+            14333.091666666667,
+            14509.158333333333,
+            14508.958333333334,
+            14582.913333333334
+          ],
+          "result": {
+            "contact_order": 2,
+            "finite": true,
+            "jet_degree": 2,
+            "method": "extended_tangent_jets",
+            "value": "0"
+          },
+          "median_ns": 14484.695
+        },
+        "new": {
+          "samples_ns": [
+            1339.4816666666666,
+            1370.6566666666668,
+            1351.5033333333333,
+            1378.54,
+            1350.3183333333334,
+            1353.775,
+            1378.055
+          ],
+          "result": {
+            "finite": true,
+            "method": "double_cover_hypersurface",
+            "value": "0"
+          },
+          "median_ns": 1353.775
+        }
+      },
+      "S12": {
+        "components": [
+          "x",
+          "y^2",
+          "y^3+x^12*y"
+        ],
+        "variables": [
+          "x",
+          "y"
+        ],
+        "exact_value": 11,
+        "repetitions_per_trial": 30,
+        "old": {
+          "samples_ns": [
+            115599.16666666667,
+            118136.96666666666,
+            118074.53333333334,
+            116146.2,
+            117993.36666666667,
+            116815.8,
+            118153.66666666667
+          ],
+          "result": {
+            "finite": true,
+            "method": "graded_graph",
+            "value": "11"
+          },
+          "median_ns": 117993.36666666667
+        },
+        "new": {
+          "samples_ns": [
+            1762.0,
+            1767.6666666666667,
+            1771.3333333333333,
+            1749.6333333333334,
+            1760.0,
+            1793.4,
+            1793.0333333333333
+          ],
+          "result": {
+            "finite": true,
+            "method": "double_cover_hypersurface",
+            "value": "11"
+          },
+          "median_ns": 1767.6666666666667
+        }
+      },
+      "mixed": {
+        "components": [
+          "x",
+          "y^2",
+          "-3*x^4*y+4*y^7+x*y^5+x^4*y^2"
+        ],
+        "variables": [
+          "x",
+          "y"
+        ],
+        "exact_value": 7,
+        "repetitions_per_trial": 15,
+        "old": {
+          "samples_ns": [
+            91118.26666666666,
+            93417.26666666666,
+            92422.0,
+            89916.6,
+            91779.46666666666,
+            91168.93333333333,
+            90680.06666666667
+          ],
+          "result": {
+            "contact_order": 2,
+            "finite": true,
+            "jet_degree": 8,
+            "method": "extended_tangent_jets",
+            "value": "7"
+          },
+          "median_ns": 91168.93333333333
+        },
+        "new": {
+          "samples_ns": [
+            35846.4,
+            35051.6,
+            37244.4,
+            36840.333333333336,
+            35352.8,
+            35702.13333333333,
+            35702.8
+          ],
+          "result": {
+            "finite": true,
+            "method": "double_cover_hypersurface",
+            "value": "7"
+          },
+          "median_ns": 35702.8
+        }
+      },
+      "dimension-three": {
+        "components": [
+          "x",
+          "y",
+          "z^2",
+          "x^3*z+y^2*z+z^5"
+        ],
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "exact_value": 4,
+        "repetitions_per_trial": 15,
+        "old": {
+          "samples_ns": [
+            261464.2,
+            263844.73333333334,
+            270047.8,
+            265441.06666666665,
+            274020.6666666667,
+            269693.06666666665,
+            265151.8
+          ],
+          "result": {
+            "finite": true,
+            "method": "graded_graph",
+            "value": "4"
+          },
+          "median_ns": 265441.06666666665
+        },
+        "new": {
+          "samples_ns": [
+            6269.866666666667,
+            3851.266666666667,
+            3964.133333333333,
+            3906.0666666666666,
+            4338.2,
+            4372.266666666666,
+            5850.4
+          ],
+          "result": {
+            "finite": true,
+            "method": "double_cover_hypersurface",
+            "value": "4"
+          },
+          "median_ns": 4338.2
+        }
+      },
+      "wide-S": {
+        "components": [
+          "x",
+          "y^2",
+          "y^3+x^18446744073709551673*y"
+        ],
+        "variables": [
+          "x",
+          "y"
+        ],
+        "exact_value": 18446744073709551672,
+        "repetitions_per_trial": 8,
+        "old": {
+          "samples_ns": [
+            3741758.875,
+            3676426.625,
+            3714275.625,
+            3666110.875,
+            3741165.25,
+            3851253.375,
+            3736678.0
+          ],
+          "result": {
+            "finite": null,
+            "jet_degree": 64,
+            "lower_bound": "64",
+            "method": "extended_tangent_jets",
+            "reason": "The exact jet work limit was reached before a finite or infinite codimension was certified.",
+            "value": null
+          },
+          "median_ns": 3736678.0
+        },
+        "new": {
+          "samples_ns": [
+            1983.75,
+            1952.375,
+            1957.375,
+            1931.25,
+            2050.125,
+            2079.0,
+            1973.75
+          ],
+          "result": {
+            "finite": true,
+            "method": "double_cover_hypersurface",
+            "value": "18446744073709551672"
+          },
+          "median_ns": 1973.75
+        }
+      }
+    }
+  }
+}

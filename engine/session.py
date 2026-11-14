@@ -86,6 +86,7 @@ remainder has a reduced local leading term.
   A.basis                                # monomials in the original coordinates
   milnor_number(f).value                 # 2 at the origin
   tjurina_number(f).value                # 2 at the origin
+  ae_codimension(x, y^2).value           # 0 for the stable fold map
 
   H = hilbert_samuel_function(ideal(f), degrees=[0, 2, 5])
   H.values                               # cumulative lengths 1, 5, 11

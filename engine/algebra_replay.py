@@ -26,7 +26,7 @@ def _command(request):
     ring, operands = request["ring"], request["operands"]
     args = ["./atlas", "algebra", request["operation"], "--vars", ",".join(ring["variables"]),
             "--field", ring["field"], "--order", ring["order"], "--compute", request["compute"]]
-    for key, flag in (("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
+    for key, flag in (("components", "--component"), ("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
                       ("numerator", "--numerator"), ("denominator", "--denominator"),
                       ("polynomial", "--poly"), ("other_polynomial", "--other-poly")):
         if key not in operands:
@@ -56,9 +56,9 @@ def _command(request):
 def _script(request, prepared):
     from .session import new_session
 
-    if request["operation"] in ("ideal", "quotient-ring"):
-        # Preserve one-shot declarations and quotient operations as a single
-        # structured record, with their original inputs and execution details.
+    if request["operation"] in ("ideal", "quotient-ring", "ae-codimension"):
+        # Preserve the original operands for one-shot declarations, quotient
+        # operations and ordered maps without expanding polynomials for presentation.
         return None
     # Each ideal declaration has its own line. The polynomial operands share
     # the operation line. Check all three before formatting any polynomial.

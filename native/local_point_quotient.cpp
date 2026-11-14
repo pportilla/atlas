@@ -170,6 +170,10 @@ PointQuotient from_ideal(const Basis& ideal, const std::vector<std::string>& nam
 }
 }
 
+std::optional<mpz_class> ideal_colength_at_origin(const Basis& generators, const std::vector<std::string>& names) {
+    return from_ideal(generators, names, PointRow(names.size()), false, false, false).dimension;
+}
+
 PointQuotient quotient_at_point(const std::string& operation, const Basis& inputs,
         const std::vector<std::string>& names, const PointRow& point, bool lex, bool prefer_modular) {
     const size_t width = names.size();

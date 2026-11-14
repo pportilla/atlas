@@ -10,6 +10,7 @@ from .series_display import format_hilbert_series
 
 
 OPERATION_DESCRIPTIONS = {
+    "ae-codimension": "compute the extended left-right codimension of a map germ at the origin",
     "gcd": "compute the monic greatest common divisor of two polynomials",
     "resultant": "compute the resultant of two polynomials in one variable over QQ",
     "factor": "factor a polynomial over QQ into monic irreducible factors",
@@ -56,7 +57,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
+                if (tokens and tokens[-1] in ("--component", "--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -89,6 +90,9 @@ def register_parser(subparsers):
         if "ideal" in keys:
             parser.add_argument("--gen", dest="ideal", action="append", default=[], metavar="POLY",
                                 help="ideal generator (repeatable; omit for the zero ideal)")
+        if "components" in keys:
+            parser.add_argument("--component", "--gen", dest="components", action="append", default=[], metavar="POLY",
+                                help="map component in target coordinate order (repeatable)")
         if name == "quotient-ring":
             parser.add_argument("--action", metavar="ACTION", default="declare",
                                 help="quotient-ring action (default: declare): " + ", ".join(QUOTIENT_ACTION_OPERANDS))
@@ -251,6 +255,11 @@ def _show(record):
               result["dimension"] if result["finite"] else "infinite")
         if result["finite"]:
             print("Basis:", ", ".join(result["basis"]) or "(empty)")
+    elif record["operation"] == "ae-codimension":
+        print("Ae-codimension:", integer_text(result["value"]) if result["finite"] else
+              "infinite" if result["finite"] is False else "inconclusive")
+        if result["finite"] is None and "reason" in result:
+            print(result["reason"])
     elif record["operation"] in ("milnor-number", "tjurina-number"):
         label = "Milnor number" if record["operation"] == "milnor-number" else "Tjurina number"
         print(f"{label}:", result["value"] if result["finite"] else "infinite")

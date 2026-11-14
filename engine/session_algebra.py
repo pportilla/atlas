@@ -371,6 +371,33 @@ class _LocalNumber(_AtPoint, _QuotientNumber):
     _infinite_display = "infinite"
 
 
+class _AeCodimension(_LocalNumber):
+    _fields = _LocalNumber._fields | {"method", "lower_bound", "jet_degree", "contact_order", "reason"}
+
+    @property
+    def method(self):
+        return self._record["result"]["method"]
+
+    @property
+    def lower_bound(self):
+        return self._record["result"].get("lower_bound")
+
+    @property
+    def jet_degree(self):
+        return self._record["result"].get("jet_degree")
+
+    @property
+    def contact_order(self):
+        return self._record["result"].get("contact_order")
+
+    @property
+    def reason(self):
+        return self._record["result"].get("reason")
+
+    def __repr__(self):
+        return "inconclusive" if self.finite is None else super().__repr__()
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class _HilbertSeries(_Result):
     _space: _CoordinateSpace
@@ -691,6 +718,8 @@ def _typed(record, space, *, quotient_parent=None):
         )
         return _Factorization(space, order, record, unit, factors)
     if kind in ("boolean", "integer"):
+        if record["operation"] == "ae-codimension":
+            return _AeCodimension(space, order, result["value"], record)
         if record["operation"] == "hilbert-samuel-multiplicity":
             return _HilbertSamuelMultiplicity(space, order, result["value"], record)
         if record["operation"] == "embedding-dimension":
@@ -706,10 +735,10 @@ def _typed(record, space, *, quotient_parent=None):
     raise ValueError(f"Unknown algebra result type {kind!r}.")
 
 
-def _evaluate(request, *, known_basis=False):
+def _evaluate(request, *, known_basis=False, typed_map=False):
     from .algebra import calculate_algebra
 
-    status, record = calculate_algebra(request, known_basis=known_basis)
+    status, record = calculate_algebra(request, known_basis=known_basis, _typed_map=typed_map)
     if status != 200:
         raise ValueError(record["error"]["message"])
     return record
@@ -843,6 +872,16 @@ def local_jacobian_algebra(polynomial, *, point=None, order=None, variables=None
 
 def milnor_number(polynomial, *, point=None, order=None, variables=None, compute="auto"):
     return _calculate_polynomials("milnor-number", order, variables, compute, polynomial=polynomial, point=point)
+
+
+def ae_codimension(*components, order=None, variables=None, compute="auto"):
+    """Extended left-right codimension of a map germ, in target coordinate order."""
+    space, values, order = _polynomial_inputs(_unpack(components), order, variables, _scalar_space)
+    request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},
+               "operands": {"components": [str(f) for f in values]}, "compute": compute}
+    # The source literals have already been parsed. Their exact products can
+    # have more decimal digits than the caller permits in a new input literal.
+    return _typed(_evaluate(request, typed_map=True), space)
 
 
 def tjurina_number(polynomial, *, point=None, order=None, variables=None, compute="auto"):
@@ -988,4 +1027,5 @@ def algebra_bindings():
             "zariski_tangent_space": zariski_tangent_space, "embedding_dimension": embedding_dimension,
             "local_dimension": local_dimension, "local_smoothness": local_smoothness,
             "local_jacobian_algebra": local_jacobian_algebra, "milnor_number": milnor_number,
+            "ae_codimension": ae_codimension,
             "tjurina_number": tjurina_number, "algebra_request": algebra_request}

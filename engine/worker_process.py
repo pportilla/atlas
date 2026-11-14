@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 from .exact_json import result_json
 from .polynomial import integer_from_decimal
@@ -48,23 +49,44 @@ class WorkerGroup:
             child.wait()
 
 
-def run_worker(module_args, data, timeout, *, owner=None):
-    root = Path(__file__).resolve().parents[1]
-    payload = result_json(data)
+def _exchange(command, payload, root, deadline, owner):
+    if deadline is not None and time.monotonic() >= deadline:
+        raise subprocess.TimeoutExpired(command, 0)
     start = owner.start if owner is not None else subprocess.Popen
-    child = start([sys.executable, "-m", *module_args], cwd=root,
-                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    child = start(command, cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                   text=True, start_new_session=True)
     try:
-        out, _ = child.communicate(payload, timeout=timeout)
-    except (KeyboardInterrupt, subprocess.TimeoutExpired):
-        _kill_group(child)
-        child.communicate()
-        raise
+        with child:
+            try:
+                timeout = None if deadline is None else max(0, deadline - time.monotonic())
+                out, _ = child.communicate(payload, timeout=timeout)
+            except (KeyboardInterrupt, subprocess.TimeoutExpired, UnicodeEncodeError):
+                _kill_group(child)
+                raise
     finally:
         if owner is not None:
             owner.discard(child)
-    if child.returncode:
+    return child.returncode, out
+
+
+def run_worker(module_args, data, timeout, *, owner=None, native_command=None):
+    """An optional native worker can decline and share its deadline with the general worker."""
+    root = Path(__file__).resolve().parents[1]
+    deadline = None if timeout is None else time.monotonic() + timeout
+    payload = result_json(data)
+    command = [sys.executable, "-m", *module_args]
+    if native_command is not None:
+        try:
+            code, out = _exchange(native_command, payload, root, deadline, owner)
+        except (FileNotFoundError, PermissionError):
+            code = 75
+        # Old native executables return 2 for an unknown invocation. A current
+        # one returns 75 for the general parser or device dispatcher.
+        if code in (2, 75):
+            code, out = _exchange(command, payload, root, deadline, owner)
+    else:
+        code, out = _exchange(command, payload, root, deadline, owner)
+    if code:
         raise RuntimeError("Computation worker stopped unexpectedly.")
     try:
         # Worker output can contain computed dimensions with thousands of digits.

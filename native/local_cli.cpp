@@ -1,5 +1,6 @@
 // Fresh-process CPU frontend for local and global ideal operations.
 #include "local_io.hpp"
+#include "ae_codimension.hpp"
 #include "local_division.hpp"
 #include "local_dimension.hpp"
 #include "local_point_basis.hpp"
@@ -131,7 +132,7 @@ mpq_class coordinate(const std::string& s) {
 bool is_option(const std::string& s) {
     static const std::set<std::string> flags = {
         "--field", "--vars", "--order", "--compute", "--gpu", "--gen", "--poly",
-        "--prime", "--numerator", "--denominator", "--exponent", "--action", "--other-poly", "--point", "--json", "--help", "-h", "--"
+        "--component", "--prime", "--numerator", "--denominator", "--exponent", "--action", "--other-poly", "--point", "--json", "--help", "-h", "--"
     };
     return flags.count(s.substr(0, s.find('=')));
 }
@@ -147,6 +148,7 @@ Request arguments(int argc, char** argv) {
         if (arg == "--json") { r.json = true; continue; }
         const auto eq = arg.find('=');
         auto flag = arg.substr(0, eq);
+        if (flag == "--component" && r.operation == "ae-codimension") flag = "--gen";
         if (flag != "--gen" && flag != "--poly" && flag != "--vars" && flag != "--point" &&
             flag != "--field" && flag != "--order" && flag != "--compute" &&
             !(power_query(r.operation) && flag == "--exponent") &&
@@ -185,7 +187,7 @@ Request arguments(int argc, char** argv) {
         if (name.empty() || name.size()>24 || !std::isalpha(name.front()) ||
             !std::all_of(name.begin(), name.end(), [](char c){ return std::isalnum(c) || c=='_'; }) ||
             !distinct.insert(name).second) throw std::invalid_argument("Invalid variables.");
-    if (global_ideal_query(r.operation)) {
+    if (global_ideal_query(r.operation) || r.operation == "ae-codimension") {
         if (point) throw std::invalid_argument("Unexpected point.");
         return r;
     }
@@ -223,7 +225,7 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
         if (!s.empty() && s.front()=='-') args.push_back(flag+"="+s);
         else { args.push_back(flag); args.push_back(s); }
     };
-    for (const auto& g : r.generators) operand("--gen",g);
+    for (const auto& g : r.generators) operand(r.operation == "ae-codimension" ? "--component" : "--gen",g);
     for (const auto& g : r.primes) operand("--prime",g);
     if (r.numerator) operand("--numerator",*r.numerator);
     if (r.denominator) operand("--denominator",*r.denominator);
@@ -238,7 +240,8 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
     request["operation"] = r.operation;
     request["ring"] = ring;
     request["compute"] = r.compute;
-    if (!hypersurface_query(r.operation)) request["operands"]["ideal"] = array(r.generators);
+    if (r.operation == "ae-codimension") request["operands"]["components"] = array(r.generators);
+    else if (!hypersurface_query(r.operation)) request["operands"]["ideal"] = array(r.generators);
     if (r.operation == "localization") request["operands"]["prime"] = array(r.primes);
     if (r.numerator) request["operands"]["numerator"] = *r.numerator;
     if (r.denominator) request["operands"]["denominator"] = *r.denominator;
@@ -418,14 +421,19 @@ Json::Value calculate(const Request& r) {
     Basis input;
     for (const auto& source : r.generators) {
         auto f = parse_expression(r.names, source);
-        if (!f.empty() || global_ideal_query(r.operation)) input.push_back(std::move(f));
+        if (!f.empty() || global_ideal_query(r.operation) || r.operation == "ae-codimension") input.push_back(std::move(f));
     }
     Json::Value doc, ring;
     ring["variables"] = array(r.names);
     ring["field"] = "QQ";
     ring["order"] = r.order;
     auto& result = doc["result"];
-    if (local_quotient(r.operation)) {
+    if (r.operation == "ae-codimension") {
+        result = ae_codimension(input, r.names);
+        result["scope"] = "origin";
+        result["type"] = "integer";
+        stages("ae_codimension");
+    } else if (local_quotient(r.operation)) {
         if (r.query) input.push_back(parse_expression(r.names, *r.query));
         result = local_quotient_result(r, input, stages);
     } else if (dimension_query(r.operation)) {
@@ -502,7 +510,7 @@ Json::Value calculate(const Request& r) {
 void write_record(std::ostream& stream, const Json::Value& record, const std::string& operation) {
     const auto& result = record["result"];
     const char* key = result["type"] == "integer" ? "value" : "dimension";
-    if (!local_quotient(operation) || !result[key].isString()) {
+    if ((!local_quotient(operation) && operation != "ae-codimension") || !result[key].isString()) {
         stream << json_text(record) << '\n';
         return;
     }
@@ -515,18 +523,54 @@ void write_record(std::ostream& stream, const Json::Value& record, const std::st
            << json_text(fields).substr(1) << ',' << json_text(envelope).substr(1) << '\n';
 }
 
+// The Python entry point has already validated the ring, operation and ordered
+// components. Run under its ordinary worker supervision and reuse the complete
+// CLI record, including the arbitrary-precision integer writer and replay.
+int ae_worker() {
+    try {
+        Json::Value data;
+        if (!(std::cin >> data)) return 75;
+        Request request;
+        request.operation = "ae-codimension";
+        request.compute = data["compute"].asString();
+        if (request.compute != "cpu" &&
+                (request.compute != "auto" || needs_device_dispatch() || std::getenv("ATLAS_GROEBNER_GPU")))
+            return 75;
+        const auto& ring = data["ring"];
+        request.order = ring["order"].asString();
+        for (const auto& name : ring["variables"]) request.names.push_back(name.asString());
+        for (const auto& component : data["operands"]["components"])
+            request.generators.push_back(component.asString());
+        const auto result = calculate(request);
+        std::cout << "[200,";
+        write_record(std::cout, result, request.operation);
+        std::cout << "]\n";
+        return 0;
+    } catch (const std::exception&) {
+        // The shared worker distinguishes input limits, grammar errors and
+        // computation failures. A partially completed request never succeeds.
+        return 75;
+    }
+}
+
 void show(const Request& r, const Json::Value& result) {
     Strings point;
     for (const auto& q : r.point) point.push_back(q.get_str());
     std::cout << (r.names.empty() ? "QQ" : "QQ[" + join(r.names,", ") + "]") << "   " << r.order << '\n';
-    if ((dimension_query(r.operation) || local_quotient(r.operation)) && !r.point_given) std::cout << "Scope: origin\n";
+    if ((dimension_query(r.operation) || local_quotient(r.operation) || r.operation == "ae-codimension") && !r.point_given) std::cout << "Scope: origin\n";
     else if (r.point_given || !point.empty()) std::cout << "Scope: point\nPoint: (" << join(point,", ") << ")\n";
     auto generators = [](const Json::Value& gens, const char* zero) {
         Strings polys;
         for (const auto& g : gens) polys.push_back(g.asString());
         return polys.empty() ? std::string(zero) : join(polys, ", ");
     };
-    if (local_quotient(r.operation)) {
+    if (r.operation == "ae-codimension") {
+        std::cout << "Ae-codimension: ";
+        if (result["finite"].isNull()) std::cout << "inconclusive\n" << result["reason"].asString();
+        else if (result["finite"].asBool()) std::cout << result["value"].asString();
+        else std::cout << "infinite";
+        std::cout << '\n';
+    } else if (local_quotient(r.operation)) {
         const bool number = result["type"] == "integer";
         const auto& length = result[number ? "value" : "dimension"];
         if (result.isMember("generators"))
@@ -665,9 +709,10 @@ int run_isolated(const Request& r, char** argv) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--ae-worker") return ae_worker();
     if (argc < 4 || std::string(argv[2]) != "algebra" ||
         (std::string(argv[3]) != "local-normal-form" && std::string(argv[3]) != "local-standard-basis" &&
-         !global_ideal_query(argv[3]) && !dimension_query(argv[3]) && !local_quotient(argv[3])))
+         std::string(argv[3]) != "ae-codimension" && !global_ideal_query(argv[3]) && !dimension_query(argv[3]) && !local_quotient(argv[3])))
         return 2;
     try {
         auto request = arguments(argc,argv);

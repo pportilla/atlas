@@ -8,11 +8,14 @@ the maximal-ideal filtration. In finite length these lift to a basis of the
 local algebra. A surviving pure power in every degree implies infinite length.
 """
 
-from . import native_polynomial as np
+import json
+
+from . import native_library, native_polynomial as np
 from .algebra_execution import cpu_stage, current_execution, stage_label
 from .algebra_groebner import reduced_basis
 from .local_kernel import local_request
-from .polynomial import InputError, format_poly, integer_from_decimal, integer_text, rational_text
+from .polynomial import (InputError, LimitError, format_poly, integer_from_decimal, integer_text,
+                         native_expression_source, parse_expression, rational_text)
 from .quotient_monomials import decode_row, quotient_monomials
 from .rational_point import coordinate_fraction, normalize_point
 
@@ -104,6 +107,38 @@ def handle(operation, ring, operands, *, known_basis=False):
     if ring["field"] != "QQ" or ring["order"] not in ("lex", "grevlex"):
         raise InputError("Quotient algebras require QQ and lex or grevlex order.")
     names = ring["variables"]
+    if operation == "ae-codimension":
+        components = operands["components"]
+        try:
+            with cpu_stage("ae_codimension", variables=len(names), components=len(components)):
+                if native_library._MODE == "native":
+                    # Submit the original expressions together. Expanding and decoding
+                    # them in the host would only re-encode them for the native solver.
+                    reply, = native_library.affine_request([
+                        "local_ae_expressions", " ".join(names), ring["order"],
+                        *(native_expression_source(source, names) for source in components),
+                    ])
+                else:
+                    # Retain the independent parser in the project's reference/check modes.
+                    variables = tuple(map(np.Symbol, names))
+                    rows = [np.from_terms(variables, parse_expression(f, names)) for f in components]
+                    reply, = local_request("local_ae_codimension", variables, ring["order"], rows)
+        except UnicodeEncodeError as error:
+            raise InputError("A polynomial string must contain valid Unicode.") from error
+        except ArithmeticError as error:
+            message = str(error)
+            if message.startswith("Invalid map component: "):
+                message = message.removeprefix("Invalid map component: ")
+                if message in ("The chart expression is nested too deeply.", "Chart exponent exceeds FLINT's limits."):
+                    raise LimitError(message) from error
+                raise InputError(message) from error
+            if message == "Each map component must vanish at the origin.":
+                raise InputError(message) from error
+            raise
+        result = json.loads(reply)
+        if isinstance(result["value"], str):
+            result["value"] = integer_from_decimal(result["value"])
+        return {**result, "type": "integer", "ring": ring, "scope": "origin"}
     variables = tuple(map(np.Symbol, names))
     if operation in ("local-quotient-basis", "local-jacobian-algebra", "milnor-number", "tjurina-number"):
         return _point_quotient(operation, ring, operands, variables)

@@ -211,6 +211,74 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift, boo
     return projected;
 }
 
+// Pack rational rows once for leading-term queries. A lift by total degree
+// gives the local order. With lift disabled the same engine uses its global order.
+bool compute_packed_basis(Engine& engine, const Basis& rows, size_t width, bool lex,
+                          bool lift, bool prefer_modular) {
+    if (!width || width + lift > MAX_VARIABLES) return false;
+    Ring ring;
+    ring.init(static_cast<int>(width + lift), lex ? 1 : (lift ? 2 : 0));
+    std::vector<Poly> polys;
+    for (const auto& row : rows) if (!row.empty()) {
+        const auto top = max_total_degree(row);
+        if (top > MAX_DEGREE) return false;
+        std::vector<u64> packed(row.size() * ring.stride);
+        std::vector<const mpq_class*> coefficients;
+        coefficients.reserve(row.size());
+        mpz_class denominator = 1;
+        for (const auto& [e, q] : row) {
+            long powers[MAX_VARIABLES];
+            long d = 0;
+            for (size_t i = 0; i < width; ++i) {
+                powers[i + lift] = e[i].get_si();
+                d += powers[i + lift];
+            }
+            if (lift) powers[0] = top.get_si() - d;
+            ring.pack(packed.data() + coefficients.size() * ring.stride, powers);
+            mpz_lcm(denominator.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q.get_mpq_t()));
+            coefficients.push_back(&q);
+        }
+        std::vector<size_t> order(row.size());
+        std::iota(order.begin(), order.end(), 0);
+        auto monomial = [&](size_t i) { return packed.data() + i * ring.stride; };
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            return ring.compare(monomial(a), monomial(b)) > 0;
+        });
+        Poly poly;
+        poly.m.reserve(packed.size());
+        poly.c.reserve(row.size());
+        mpz_class integer;
+        for (const auto i : order) {
+            const auto q = coefficients[i]->get_mpq_t();
+            mpz_divexact(integer.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q));
+            mpz_mul(integer.get_mpz_t(), integer.get_mpz_t(), mpq_numref(q));
+            poly.m.insert(poly.m.end(), monomial(i), monomial(i) + ring.stride);
+            poly.c.emplace_back();
+            fmpz_set_mpz(&poly.c.back().v, integer.get_mpz_t());
+        }
+        primitive(poly, nullptr);
+        polys.push_back(std::move(poly));
+    }
+    if (!prefer_modular || !modular_basis(ring, polys, engine)) {
+        engine.R = ring;
+        engine.compute(polys, 0);
+    }
+    return true;
+}
+
+}
+
+std::optional<std::vector<Powers>> packed_lex_heads(const Basis& rows, size_t width) {
+    try {
+        Engine engine;
+        if (!compute_packed_basis(engine, rows, width, true, false, false)) return std::nullopt;
+        std::vector<Powers> heads;
+        heads.reserve(engine.G.size());
+        for (const auto& g : engine.G) heads.push_back(unpack_powers(engine.R, g.p.m.data()));
+        return heads;
+    } catch (const Limit&) {
+        return std::nullopt;
+    }
 }
 
 // A dimension query only needs the supports of the leading monomials. Keep
@@ -240,56 +308,10 @@ std::optional<std::vector<std::vector<int>>> local_leading_supports(
         for (const auto& term : row) if (total_degree(term.first) != d) { lift = true; break; }
         if (lift) break;
     }
-    if (width + lift > MAX_VARIABLES) return std::nullopt;
-    Ring ring;
-    ring.init(static_cast<int>(width + lift), lex ? 1 : (lift ? 2 : 0));
-    std::vector<Poly> polys;
     try {
-        for (const auto& row : rows) if (!row.empty()) {
-            const auto top = max_total_degree(row);
-            if (top > MAX_DEGREE) return std::nullopt;
-            std::vector<u64> packed(row.size() * ring.stride);
-            std::vector<const mpq_class*> coefficients;
-            coefficients.reserve(row.size());
-            mpz_class denominator = 1;
-            for (const auto& [e, q] : row) {
-                long powers[MAX_VARIABLES];
-                long d = 0;
-                for (size_t i = 0; i < width; ++i) {
-                    powers[i + lift] = e[i].get_si();
-                    d += powers[i + lift];
-                }
-                if (lift) powers[0] = top.get_si() - d;
-                ring.pack(packed.data() + coefficients.size() * ring.stride, powers);
-                mpz_lcm(denominator.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q.get_mpq_t()));
-                coefficients.push_back(&q);
-            }
-            std::vector<size_t> order(row.size());
-            std::iota(order.begin(), order.end(), 0);
-            auto monomial = [&](size_t i) { return packed.data() + i * ring.stride; };
-            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-                return ring.compare(monomial(a), monomial(b)) > 0;
-            });
-            Poly poly;
-            poly.m.reserve(packed.size());
-            poly.c.reserve(row.size());
-            mpz_class integer;
-            for (const auto i : order) {
-                const auto q = coefficients[i]->get_mpq_t();
-                mpz_divexact(integer.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q));
-                mpz_mul(integer.get_mpz_t(), integer.get_mpz_t(), mpq_numref(q));
-                poly.m.insert(poly.m.end(), monomial(i), monomial(i) + ring.stride);
-                poly.c.emplace_back();
-                fmpz_set_mpz(&poly.c.back().v, integer.get_mpz_t());
-            }
-            primitive(poly, nullptr);
-            polys.push_back(std::move(poly));
-        }
         Engine engine;
-        if (!prefer_modular || !modular_basis(ring, polys, engine)) {
-            engine.R = ring;
-            engine.compute(polys, 0);
-        }
+        if (!compute_packed_basis(engine, rows, width, lex, lift, prefer_modular)) return std::nullopt;
+        const auto& ring = engine.R;
         for (const auto& g : engine.G) {
             // Every lifted row is homogeneous. Suppressing t turns its
             // leading term into its local leading term in the original axes.

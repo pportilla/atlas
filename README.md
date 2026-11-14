@@ -14,7 +14,8 @@ console, scripting environment, and HTTP interface.
   ordinary and symbolic powers of ideals.
 - **Local algebra and geometry.** Compute in quotient rings and localizations,
   normalize affine algebras, and study singular points through local dimension,
-  tangent cones, multiplicities, and Milnor and Tjurina numbers.
+  tangent cones, multiplicities, and Milnor and Tjurina numbers. For maps
+  between smooth germs, compute the extended right-left codimension.
 - **Resolution of singularities.** Compute embedded and intrinsic resolutions
   of hypersurface germs at the origin. Inspect the chart maps and strict
   transforms, recover the labelled dual complex of the exceptional divisor,

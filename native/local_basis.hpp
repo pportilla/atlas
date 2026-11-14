@@ -21,6 +21,8 @@ const Powers& global_head(const Polynomial& polynomial, bool lex);
 Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex, bool prefer_modular = false);
 Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex,
                      bool prefer_modular, bool& used_finite_jet);
+// Leading exponents of the global lex basis, when packed arithmetic suffices.
+std::optional<std::vector<Powers>> packed_lex_heads(const Basis& generators, size_t width);
 std::optional<std::vector<std::vector<int>>> local_leading_supports(
     const Basis& centered, size_t width, bool lex, bool prefer_modular);
 

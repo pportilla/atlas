@@ -1,5 +1,7 @@
 // Sparse local algebra operations shared by the dispatcher and the native CLI.
 #include "local_io.hpp"
+#include "ae_codimension.hpp"
+#include <json/writer.h>
 #include "local_monomial.hpp"
 #include "local_point_quotient.hpp"
 #include "local_dimension.hpp"
@@ -227,7 +229,22 @@ std::string operations(std::istream& in, const std::string& op) {
     if (smoothness || dimension) rank = std::stoi(line(in));
     const bool known = point_nf && line(in) == "1";
     Basis rows;
-    for (std::string row; std::getline(in, row);) rows.push_back(decode_row(row, width));
+    if (op == "local_ae_expressions") {
+        for (std::string source; std::getline(in, source);) {
+            try {
+                rows.push_back(parse_expression(names, source));
+            } catch (const std::runtime_error& error) {
+                throw std::invalid_argument("Invalid map component: " + std::string(error.what()));
+            }
+        }
+    } else {
+        for (std::string row; std::getline(in, row);) rows.push_back(decode_row(row, width));
+    }
+    if (op == "local_ae_expressions" || op == "local_ae_codimension") {
+        Json::StreamWriterBuilder writer;
+        writer["indentation"] = "";
+        return Json::writeString(writer, ae_codimension(rows, names)) + "\n";
+    }
     if (!quotient.empty())
         return quotient_rows(quotient_at_point(quotient,rows,names,point,lex,gpu));
     if (op == "local_translate") return basis_rows(translate_unbounded(rows, point));

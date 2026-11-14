@@ -178,6 +178,66 @@ The [physical-device test](../tests/test_polynomial_gcd.py) uses $hA$ and $h(A+1
 
 If the selected algebra backend confirms that its device index is unavailable, the GCD runs directly in FLINT and the execution record names the missing backend and index. An inconclusive device probe leaves the modular calculation eligible to try the device.
 
+### Extended right-left codimension
+
+For a single map germ $f:(\mathbb Q^n,0)\to(\mathbb Q^p,0)$ let
+$R=\mathbb Q[[x]]$, $B=\mathbb Q[[y]]$ and regard $R$ as a $B$-module by
+substitution $y\mapsto f$. The extended tangent quotient is
+$N=R^p/(df\,R^n+f^*(B^p))$. Its vector-space dimension is the
+$\mathcal A_e$-codimension. Constant vector fields on both spaces take part.
+[Definition and cusp computation, Mond §1.1](https://www.journalofsingularities.com/volume12/mond.pdf)
+
+**Filtered jets.** Set $M=R^p/df\,R^n$ and $I=(f)R$. At jet degree $D$,
+sparse rational echelon bases compute the source Jacobian module and the
+target-vector span separately. Independent target rows generate successive
+products by $f_j$ modulo the Jacobian module. The finite-jet quotient dimension
+is always a lower bound. Full contact layers from degree $k\le D$ imply
+$\mathfrak m^k M\subset IM$ by Nakayama over $R$ applied modulo $IM$.
+Thus $M$ is finite over $B$ by completeness. For $L_d$ the image of
+$\mathfrak m^d M$ in $N$, full tangent layers from degree $d$ through $D$
+give $L_d=L_{D+1}$. If $d+k\le D+1$, then
+$L_d=L_{d+k}\subset (y)L_d$ and Nakayama over $B$ gives $L_d=0$.
+This proves the reported dimension, even when earlier jet dimensions have
+temporarily stopped growing. A positive-dimensional support for
+$M/IM$, detected locally using $f$ and the maximal minors of $df$, certifies
+infinity because target fields contribute at most $p$ constants modulo $I$.
+[Filtered computation](ae_codimension.cpp)
+
+**Positive gradings.** When the source admits positive weights making each
+component homogeneous, introduce graph equations $y_j-f_j$ and square-zero
+markers $z_j$ with every $z_i z_j=0$. Impose the Jacobian rows
+$\sum_j (\partial_i f_j)z_j$. In the resulting ring the marker-degree-one part
+is the polynomial Jacobian cokernel. Under lex order $x>y>z$, reduction of
+a target vector introduces no source variable. Standard monomials linear
+in the markers and divisible by some $x_i$ therefore form a basis of the
+normal quotient. Partitioning by the first such $x_i$ gives monomial
+colengths, including a proof of infinity when a section has infinite length.
+Positive weights identify the completion with the product of the finite
+weight pieces, so the finite count or infinite conclusion applies at the origin.
+[Graded graph computation](ae_graded.cpp)
+
+**Scalar germs and curves.** For an isolated scalar germ, the Jacobian algebra
+has length $\mu$. The image of $B$ is spanned by $1,[f],\dots,[f]^{e-1}$,
+where $e$ is the nilpotence index of $[f]$. Its minimal polynomial is $T^e$,
+so these classes are independent and the answer is $\mu-e$. For a primitive
+monomial curve with numerical semigroup $S$, there are initially $p\,g(S)$
+missing powers across the $p$ target positions. The disjoint source vectors
+$t^j df$ eliminate $1+g(S)-\mathrm{type}(S)$ directions. The kernel counts
+the gaps and pseudo-Frobenius numbers using the Apéry set. Regular maps, ramified
+covers and split unfoldings admit further direct tangent-space calculations.
+[Native formulas and their hypotheses](ae_special.cpp)
+
+**Multiplicity-two maps into a hypersurface.** For $f=(u,v^2,h(u,v))$ set
+$s=v^2$, $A=\mathbb Q[[u,s]]$ and $R=A\oplus vA$. The even part of $h$ can
+be removed by a target coordinate change. Writing its odd part as $vP(u,s)$,
+the target subalgebra is $A\oplus vP A$. Each target position therefore
+contributes $v(A/P)$ before quotienting by source fields. Odd multiples of
+$\partial_{u_i}f$ and even multiples of $\partial_vf$ eliminate the first
+$n$ positions. The complementary multiples give the ideal
+$(P,\partial_{u_1}P,\dots,\partial_{u_{n-1}}P,s\partial_sP)$ in the last
+position. Atlas computes its local colength. For $h=v^3+u^k v$ this gives
+$k-1$, including exponents beyond 64 bits. [Native reduction](ae_special.cpp)
+
 ### Quotient bases and lengths at the origin
 
 In the global quotient, the monomials outside the leading ideal give a basis. At the origin, the leading term is the term of **lowest** total degree, with ties broken by the declared lex or grevlex order. A denominator invertible at the origin has a nonzero constant leading term. Thus localization preserves the leading ideal for this local order.

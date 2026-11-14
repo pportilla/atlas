@@ -3,7 +3,7 @@ import re
 from subprocess import TimeoutExpired
 
 from .algebra_replay import make_replay
-from .polynomial import InputError, integer_from_decimal, integer_text, parse_expression
+from .polynomial import InputError, check_expression_digits, integer_from_decimal, integer_text, parse_expression
 from .rational_point import normalize_point
 
 
@@ -43,6 +43,7 @@ QUOTIENT_ACTION_OPERANDS = {
     "power": ("polynomial", "exponent"),
 }
 OPERATION_OPERANDS = {
+    "ae-codimension": ("components",),
     "gcd": ("polynomial", "other_polynomial"),
     "resultant": ("polynomial", "other_polynomial", "variables"),
     "factor": ("polynomial",),
@@ -117,6 +118,8 @@ def _degrees(values):
 def _request(data):
     _fields(data, "request", ("operation", "ring", "operands"), ("compute",))
     operation = data["operation"]
+    if operation == "ae_codimension":
+        operation = "ae-codimension"
     if not isinstance(operation, str) or operation not in OPERATION_OPERANDS:
         raise InputError("Unknown algebra operation. Choose " + ", ".join(OPERATION_OPERANDS) + ".")
     compute = data.get("compute", "auto")
@@ -126,6 +129,8 @@ def _request(data):
     ring = data["ring"]
     _fields(ring, "ring", ("variables",), ("field", "order"))
     names = _names(ring["variables"])
+    if operation == "ae-codimension" and not names:
+        raise InputError("A map germ requires at least one source coordinate.")
     if ring.get("field", "QQ") != "QQ":
         raise InputError("The supported coefficient field is QQ.")
     order = ring.get("order", "grevlex")
@@ -164,10 +169,12 @@ def _request(data):
     elif operation in LOCAL_STANDARD_OPERANDS:
         # These two operations have always returned an explicit origin point.
         operands = dict(operands, point=["0"] * len(names))
-    for key in ("ideal", "other_ideal", "prime"):
+    for key in ("ideal", "other_ideal", "prime", "components"):
         if key in operands and (not isinstance(operands[key], list)
                                 or not all(isinstance(f, str) for f in operands[key])):
             raise InputError(f"{key} must be an array of polynomial strings.")
+    if "components" in operands and not operands["components"]:
+        raise InputError("A map germ requires at least one target component.")
     for key in ("polynomial", "other_polynomial", "numerator", "denominator"):
         if key in operands and not isinstance(operands[key], str):
             raise InputError(f"{key} must be a polynomial string.")
@@ -235,7 +242,7 @@ def dispatch(data, *, known_basis=False):
                 result_operands = dict(operands, ideal=basis)
         elif operation in ("gcd", "factor", "resultant"):
             from . import algebra_polynomial as handler
-        elif operation in ("quotient-basis", "multiplicity") or operation in LOCAL_QUOTIENT_OPERANDS:
+        elif operation in ("ae-codimension", "quotient-basis", "multiplicity") or operation in LOCAL_QUOTIENT_OPERANDS:
             from . import local_algebra as handler
             if known_basis and operation == "multiplicity":
                 handler_options["known_basis"] = True
@@ -263,7 +270,7 @@ def dispatch(data, *, known_basis=False):
             "execution": observed, "replay": make_replay(request, operands)}
 
 
-def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None):
+def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None, _typed_map=False):
     """Run one operation in an isolated worker and return (HTTP status, record)."""
     from .worker_process import run_worker
 
@@ -271,6 +278,18 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None):
     if known_basis:
         args.append("--known-basis")
     try:
+        if isinstance(request, dict) and request.get("operation") in ("ae-codimension", "ae_codimension"):
+            from . import native_library
+            try:
+                request = _request(request)
+                if not _typed_map:
+                    check_expression_digits(request["operands"]["components"], request["ring"]["variables"])
+            except InputError as error:
+                return 400, error_record("invalid_request", str(error))
+            if (native_library._MODE == "native" and request["compute"] in ("auto", "cpu")
+                    and all(s.isascii() for s in request["operands"]["components"])):
+                return run_worker(args, request, timeout, owner=owner,
+                                  native_command=["native/build/local_algebra", "--ae-worker"])
         # Send integers as decimal strings across the worker boundary, where
         # the host's JSON encoder may enforce a decimal digit limit.
         operands = request.get("operands") if isinstance(request, dict) else None

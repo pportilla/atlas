@@ -21,10 +21,13 @@ LOCAL_SOURCES := local_cli.cpp
 build/bench_local_dimension: ../benchmarks/local_dimension_kernel.cpp local_dimension.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
+build/bench_ae_codimension: ../benchmarks/ae_codimension_kernel.cpp ae_codimension.hpp ae_graded.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
 build/bench_ideal_powers: ../benchmarks/ideal_powers_kernel.cpp ideal_powers.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
-build/local_algebra: $(LOCAL_SOURCES) local_io.hpp local_basis.hpp local_division.hpp primary_decomposition.hpp normalization.hpp localization.hpp ideal_powers.hpp quotient_ring.hpp $(GROEBNER_LIB)
+build/local_algebra: $(LOCAL_SOURCES) ae_codimension.hpp local_io.hpp local_basis.hpp local_division.hpp primary_decomposition.hpp normalization.hpp localization.hpp ideal_powers.hpp quotient_ring.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(LOCAL_SOURCES) -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
 # Install a command marker only once the corresponding native frontend exists.
@@ -36,6 +39,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp modular_re
   atlas_incidence.cpp torus_sections.cpp monomial_resolution.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \
   quotient_ring.cpp quotient_packed.cpp quotient_inverse.cpp quotient_finite_inverse.cpp ideal_powers.cpp ideal_power_principal.cpp ideal_powers_packed.cpp ideal_powers_dense.cpp ideal_powers_echelon.cpp ideal_powers_content.cpp ideal_powers_monomial.cpp localization.cpp localization_membership.cpp localization_special.cpp normalization.cpp normalization_content.cpp normalization_special.cpp primary_decomposition.cpp primary_special.cpp polynomial_factors.cpp resolution_tangents.cpp \
+  ae_codimension.cpp ae_special.cpp ae_graded.cpp \
   resolution_candidate.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))

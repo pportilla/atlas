@@ -48,6 +48,7 @@ _RING_EXAMPLES = {
     "local_smoothness": "local_smoothness(ideal(y - x^2)).value",
     "local_jacobian_algebra": "local_jacobian_algebra(y^2 - x^3).basis",
     "milnor_number": "milnor_number(y^2 - x^3).value",
+    "ae_codimension": "ae_codimension(x, y^2).value",
     "tjurina_number": "tjurina_number(y^2 - x^3).value",
 }
 
