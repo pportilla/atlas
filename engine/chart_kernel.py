@@ -47,13 +47,14 @@ def owned_strata(chart):
     factor to vanish. Earlier factors are exclusions on later pieces.
     """
     from . import kernel
-    from .affine_kernel import _sparse_expression, rational_factor_rows
+    from .affine_kernel import _sparse_expression, rational_factor_rows, sparse_terms
+    from .euler_lattice import benefits_from_lattice, strata as lattice_strata
     from .groebner import groebner
 
     variables = chart.variables
     base = tuple(dict.fromkeys((*chart.ambient, *chart.region, *chart.fibre)))
     ideals = [component[3] for component in chart.components]
-    if not (chart.ambient or chart.region or chart.removed) or chart.torus:
+    if chart.torus:
         return kernel.strata(variables, base, ideals, chart.removed)
 
     basis = groebner(base, variables)
@@ -62,7 +63,7 @@ def owned_strata(chart):
         return {}
     factors = ()
     if generators:
-        shortest = min(generators, key=lambda g: len(str(g)))
+        shortest = min(generators, key=lambda g: len(sparse_terms(variables, g)))
         _, rows = rational_factor_rows(variables, shortest)
         if len(rows) > 1 or rows and rows[0][1] > 1:
             factors = tuple(_sparse_expression(variables, row) for row, _, _ in rows)
@@ -74,7 +75,10 @@ def owned_strata(chart):
             continue
         def restrict(ideals):
             return [tuple(dict.fromkeys(part.reduce(g)[1] for g in ideal)) for ideal in ideals]
-        here = kernel.strata(variables, part.exprs, restrict(ideals), restrict(removed))
+        divisors = restrict(ideals)
+        exclusions = restrict(removed)
+        integrate = lattice_strata if benefits_from_lattice(variables, divisors) else kernel.strata
+        here = integrate(variables, part.exprs, divisors, exclusions)
         if here is None:
             return None
         for labels, chi in here.items():
