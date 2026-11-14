@@ -278,6 +278,10 @@
       }
     },
     "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
-    "verification": "Full comparison on all six CLI outputs. The headless HTTP solver and native replay of its serialized chart equations reproduced the same complex, strata and both zeta records."
+    "verification": "Full comparison on all six CLI outputs. The headless HTTP solver and native replay of its serialized chart equations reproduced the same complex, strata and both zeta records.",
+    "subsequent_http_replay": {
+      "kernel_sha256": "7d4936cb91ef5c1622d112acc123f51999d1997c4d3339d3b77eb37ddc1fc042",
+      "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266"
+    }
   }
 }
