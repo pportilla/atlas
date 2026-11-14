@@ -1,5 +1,6 @@
 #include "ae_graded_surface.hpp"
 #include "ae_surface_coordinates.hpp"
+#include "small_prime_rank.hpp"
 #include <flint/fmpz.h>
 #include <flint/fmpz_mat.h>
 #include <flint/nmod_mat.h>
@@ -57,6 +58,26 @@ struct Matrix {
     fmpz_mat_t m;
     Matrix(int rows, int cols) { fmpz_mat_init(m,rows,cols); }
     ~Matrix() { fmpz_mat_clear(m); }
+
+    int rank_without(const std::vector<int>& unit_columns) {
+        // Keep monomials in degree order for fraction-free elimination.
+        // Arbitrary column permutations can make its pivot integers larger.
+        int kept = 0;
+        auto unit = unit_columns.begin();
+        for (int col = 0; col < fmpz_mat_ncols(m); ++col) {
+            if (unit != unit_columns.end() && col == *unit) {
+                ++unit;
+            } else {
+                if (kept != col) fmpz_mat_swap_cols(m,nullptr,kept,col);
+                ++kept;
+            }
+        }
+        fmpz_mat_t remaining;
+        fmpz_mat_window_init(remaining,m,0,0,fmpz_mat_nrows(m),kept);
+        const int rank = fmpz_mat_rank(remaining);
+        fmpz_mat_window_clear(remaining);
+        return rank;
+    }
 };
 
 constexpr unsigned long prime = 65521;
@@ -65,6 +86,17 @@ struct ModularMatrix {
     nmod_mat_t m;
     ModularMatrix(int rows, int cols) { nmod_mat_init(m,rows,cols,prime); }
     ~ModularMatrix() { nmod_mat_clear(m); }
+
+    int rank_without(const std::vector<int>& unit_columns) {
+        int end = nmod_mat_ncols(m);
+        for (auto i = unit_columns.rbegin(); i != unit_columns.rend(); ++i)
+            nmod_mat_swap_cols(m,nullptr,*i,--end);
+        nmod_mat_t remaining;
+        nmod_mat_window_init(remaining,m,0,0,nmod_mat_nrows(m),end);
+        const int rank = modular_rank_in_place<prime>(remaining);
+        nmod_mat_window_clear(remaining);
+        return rank;
+    }
 };
 
 Residues residues(const std::vector<mpz_class>& f) {
@@ -133,12 +165,6 @@ struct TangentRanks {
             const auto& coeff = [&]() -> const auto& {
                 if constexpr (modular) return powers_mod[row.power]; else return powers[row.power];
             }();
-            if (j==2) {
-                // The Euler relation leaves only a monomial in x^a,y^b.
-                if constexpr (modular) nmod_mat_entry(mat.m,r,base+x) = 1;
-                else fmpz_one(fmpz_mat_entry(mat.m,r,base+x));
-                continue;
-            }
             // df/dx has first component a*x^(a-1), df/dy has second
             // component b*y^(b-1). They have disjoint pivots. For a target
             // row H in either position perform the monomial division, carrying
@@ -192,22 +218,25 @@ struct TangentRanks {
         const int second = std::clamp(degrees[1]+1,0,f.b-1);
         const int base = first+second;
         const int cols = base+std::max(0,degrees[2]+1);
+        // Euler's identity removes third-position rows divisible by h. The
+        // remaining third-position rows are distinct coordinate vectors
+        // x^(ai)y^(bj). Quotient out their coordinates over either field.
+        std::vector<int> unit_columns;
+        for (int i=0; i<=degrees[2]; i+=f.a) if ((degrees[2]-i)%f.b==0)
+            unit_columns.push_back(base+i);
+        const int remaining_cols = cols-static_cast<int>(unit_columns.size());
+        if (!remaining_cols) return 0;
         std::vector<Pullback> rows;
-        for (int j=0; j<3; ++j) {
+        for (int j=0; j<2; ++j) {
             // Cayley-Hamilton on the free QQ[x^a,y^b]-module QQ[x,y]
             // bounds the powers of h needed to span the target algebra.
             for (int k=0; k<f.a*f.b && k*f.c<=degrees[j]; ++k) {
                 const int d = degrees[j]-k*f.c;
-                // Euler's homogeneous derivative identity gives the target
-                // relation (a*x^a, b*y^b, c*h)*q=0 in the Jacobian
-                // quotient for every target polynomial q. Eliminate the
-                // third-position rows divisible by h using this relation.
-                if (j == 2 && k) break;
                 for (int i=0; i<=d; i+=f.a) if ((d-i)%f.b==0)
                     rows.push_back({j,i,k});
             }
         }
-        if (rows.empty()) return cols;
+        if (rows.empty()) return remaining_cols;
         if (rows.size()*cols > 600000) return std::nullopt;
         for (const auto& generator : rows)
             while (static_cast<int>(powers.size()) <= generator.power) {
@@ -217,12 +246,12 @@ struct TangentRanks {
             }
         ModularMatrix mod(rows.size(),cols);
         fill<true>(mod,rows,degrees,first,base);
-        const int lower = nmod_mat_rank(mod.m);
+        const int lower = mod.rank_without(unit_columns);
         // An invertible minor modulo a prime is invertible over QQ.
-        if (lower == std::min(static_cast<int>(rows.size()),cols)) return cols-lower;
+        if (lower == std::min(static_cast<int>(rows.size()),remaining_cols)) return remaining_cols-lower;
         Matrix mat(rows.size(),cols);
         fill<false>(mat,rows,degrees,first,base);
-        return cols-fmpz_mat_rank(mat.m);
+        return remaining_cols-mat.rank_without(unit_columns);
     }
 };
 }

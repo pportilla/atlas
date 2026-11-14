@@ -57,9 +57,14 @@ $(GROEBNER_LIB): $(KERNEL_OBJECTS)
 
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify build/test_local_dimension_graph
+test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank
 	./build/test_groebner_verify
 	./build/test_local_dimension_graph
+	./build/test_small_prime_rank
+
+build/test_small_prime_rank: test_small_prime_rank.cpp small_prime_rank.hpp
+	@mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< -o $@ $(LDFLAGS) $(shell pkg-config --libs flint)
 
 build/test_local_dimension_graph: test_local_dimension_graph.cpp local_dimension_graph.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp

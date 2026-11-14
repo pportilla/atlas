@@ -241,10 +241,16 @@ Target rows are pullbacks of monomials $X^iY^jZ^k$ in each position.
 Multiplication by $h$ is an endomorphism of the free $S$-module $R$ of rank
 $ab$. Its homogeneous characteristic equation bounds the necessary powers by
 $k<ab$. In the third position it suffices to use $k=0$, since
-$df\cdot(x,y)^{\mathsf T}=(a x^a,b y^b,c h)^{\mathsf T}$ by Euler's identity. Subtract the rank of these
-target rows from the surviving source dimension in each weight. Full rank
-modulo a prime certifies full rank over $\mathbb Q$. Otherwise Atlas computes
-the exact rational rank of the integer matrix.
+$df\cdot(x,y)^{\mathsf T}=(a x^a,b y^b,c h)^{\mathsf T}$ by Euler's identity.
+The remaining third-position rows are distinct coordinate vectors, so remove
+their rows and columns before computing rank. Whenever the Jacobian pivot
+divides a whole pullback, its contribution to the third position is a
+monomial shift of $-h^k\partial_x h$ or $-h^k\partial_y h$. The modular
+calculation reuses these products across rows and weights. It reduces entries
+as pivots are encountered and skips the zero suffix of each pivot row.
+A full-rank minor modulo the prime certifies full rank over $\mathbb Q$.
+Otherwise Atlas constructs the integer matrix independently and computes its
+exact rank with the surviving columns in their original order.
 
 The remaining quotient $N$ is generated over $S$ by the residue monomials in
 each position. Their maximum weight is $W=a+b-2-\min(a,b,c)$. For $w>W$,

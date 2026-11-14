@@ -35,6 +35,25 @@ class AeGradedTests(unittest.TestCase):
                 result = calculate("ae-codimension", components=components)
                 self.assertEqual((result["finite"], result["value"]), (expected is not None, expected))
 
+    def test_mixed_forms_with_bad_modular_rank(self):
+        # Exact graded graph elimination gives these lengths for the unscaled
+        # forms. Rescaling either source axis over QQ preserves the grading
+        # and the quotient after compensating in the corresponding target.
+        # Modulo 65521 the rescaled third component loses one variable.
+        for a, b, form, expected in [
+            (3, 7, "{x}^2-3*{x}*{y}-{y}^2", 242),
+            (2, 3, "{x}^5+{x}^4*{y}-{x}*{y}^4+{y}^5", 115),
+        ]:
+            weights = []
+            for x, y in [("x", "y"), ("(65521*x)", "y"), ("x", "(65521*y)")]:
+                with self.subTest(a=a, b=b, x=x, y=y):
+                    components = [f"x^{a}", f"y^{b}", form.format(x=x, y=y)]
+                    result = calculate("ae-codimension", components=components)
+                    self.assertEqual((result["method"], result["finite"], result["value"]),
+                                     ("graded_tangent_ranks", True, expected))
+                    weights.append(result["last_weight"])
+            self.assertEqual(len(set(weights)), 1)
+
     def test_plane_unfolding(self):
         # For (x, xy+y^d), eliminate the x component using df/dx.
         # Modulo df/dy, x=-d*y^(d-1). The remaining tangent space has
