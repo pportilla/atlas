@@ -1,0 +1,215 @@
+{
+  "surface_run": {
+    "state": "finished",
+    "command_argv": [
+      "./atlas",
+      "resolve",
+      "z^2-(x^2*(x+2*y)^2+4*y^3*(x+y)^2)*(x^2*(x+2*y)^2+4*y*(x+y)^2)",
+      "--vars",
+      "x,y,z",
+      "--mode",
+      "intrinsic",
+      "--json"
+    ],
+    "equation": "z^2-(x^2*(x+2*y)^2+4*y^3*(x+y)^2)*(x^2*(x+2*y)^2+4*y*(x+y)^2)",
+    "coefficient_field": "QQ",
+    "git_commit": "18e668177ede6e38292c8fa584c92023d89a206a",
+    "native_library_sha256": "6b1a946343e6b3c49db6f8e885b8c3b3aedd71b5b5ce52c3e21130086347286c",
+    "conditions": "One fresh intrinsic CLI run on a shared host. Timings are wall time. Memory is for the instrumented resolution worker.",
+    "cpu_affinity": "1,3,5,7,9,11,13,15",
+    "limits": {
+      "wall_s": 5400,
+      "worker_rss_gib": 10.2,
+      "host_minimum_available_mib": 2500
+    },
+    "wall_s": 5401.074,
+    "worker_peak_rss_gib": 1.306,
+    "stop_reason": "external comparison time limit",
+    "exit_code": 130,
+    "returned_resolution_record": false,
+    "resolution_status": null
+  },
+  "chart23_jet_layer": {
+    "stage": "B9 centre selection, chart 23",
+    "frame_equations": 140,
+    "largest_polynomial_terms": 4034,
+    "seconds_since_previous_native_test_return": 1465.529,
+    "emptiness_check_seconds": 1.307,
+    "timing_scope": "Wall interval between two frame tests. Periodic stacks recorded the native implicit jet during this interval."
+  },
+  "milestones": {
+    "B8_selected_s": 43.262,
+    "B8_constructed_s": 49.624,
+    "B9_search_started_s": 442.851,
+    "B9_selected": false,
+    "B9_selected_s": null,
+    "B9_constructed": false,
+    "B9_constructed_s": null,
+    "baseline_B9_search_started_s": 437.584,
+    "matched_chart_records": {
+      "pre-b8.json": {
+        "records": 30,
+        "identical": true
+      },
+      "post-b8.json": {
+        "records": 36,
+        "identical": true
+      }
+    },
+    "last_started_B9_chart_zero_based": 23,
+    "last_returned_B9_chart_zero_based": 22
+  },
+  "previous_surface_run": {
+    "native_library_sha256": "ccd714445dec0c4654b3a77d528a354668f2d79142bf58578533babfae7e532f",
+    "time_limit_s": 2800,
+    "B9_selected": false,
+    "B9_constructed": false,
+    "worker_peak_rss_gib": 2.633,
+    "seven_equation_chart1_closure_s": 901.859
+  },
+  "published_chart1_seven_equation_closure_s": 934.513,
+  "chart_regularity_checks": [
+    {
+      "chart_zero_based": 1,
+      "equation_terms": [
+        6,
+        4,
+        2
+      ],
+      "multiplier_terms": 2872,
+      "resolver_calls": [
+        {
+          "start_s": 947.366,
+          "result": "yes",
+          "duration_ms": 35.802
+        }
+      ],
+      "previous_public_run": {
+        "saturation_s": 368.555,
+        "saturation_returned": true
+      },
+      "isolated_median_ms": {
+        "Atlas": 12.373,
+        "Singular": 19.647,
+        "Singular_with_input": 32.581
+      }
+    },
+    {
+      "chart_zero_based": 22,
+      "equation_terms": [
+        11,
+        10,
+        3,
+        3
+      ],
+      "multiplier_terms": 1170,
+      "resolver_calls": [
+        {
+          "start_s": 1920.17,
+          "result": "yes",
+          "duration_ms": 45.683
+        }
+      ],
+      "previous_public_run": {
+        "saturation_s": 510.971,
+        "saturation_returned": false
+      },
+      "isolated_median_ms": {
+        "Atlas": 23.766,
+        "Singular": 77.559,
+        "Singular_with_input": 83.001
+      }
+    },
+    {
+      "chart_zero_based": 23,
+      "equation_terms": [
+        8,
+        12,
+        4,
+        13
+      ],
+      "multiplier_terms": 435,
+      "resolver_calls": [
+        {
+          "start_s": 1978.632,
+          "result": "yes",
+          "duration_ms": 73.379
+        }
+      ],
+      "previous_public_run": null,
+      "isolated_median_ms": {
+        "Atlas": 23.219,
+        "Singular": 239.443,
+        "Singular_with_input": 240.786
+      }
+    }
+  ],
+  "isolated_comparison": {
+    "harness": "benchmarks/component_regularity.py",
+    "trials": 9,
+    "command_argv": [
+      "python3",
+      "benchmarks/component_regularity.py",
+      "--trials",
+      "9",
+      "--output",
+      "component-regularity.json"
+    ],
+    "logical_cpu": [
+      15
+    ],
+    "Singular_version": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "conditions": "Same QQ equations and candidate in fresh Singular processes. Atlas includes native transport and sparse parsing. Singular reports the verified component calculation with polynomials loaded and including input. Both exclude process launch."
+  },
+  "last_sampled_resolver_operation": {
+    "operation": "native normal-form reduction of a derivative for maximal contact",
+    "where": [
+      "engine/groebner.py:214 (_cpu_remainder)",
+      "engine/groebner.py:250 (remainder)",
+      "engine/groebner.py:255 (reduce)",
+      "engine/centre_frame.py:109 (_reduced_terms)",
+      "engine/centre_frame.py:116 (derivative)",
+      "engine/centres.py:252 (_contact)",
+      "engine/centres.py:211 (_level)",
+      "engine/centres.py:449 (_residue)"
+    ],
+    "sample_period_s": 30,
+    "scope": "Last available periodic resolver-worker stack; an unrelated worker can update the progress display.",
+    "last_started_chart_zero_based": 23
+  },
+  "independent_chart23_point_check": {
+    "coordinates": [
+      "x",
+      "y",
+      "u",
+      "z",
+      "a",
+      "b"
+    ],
+    "point": [
+      "0",
+      "-1/4",
+      "15/26",
+      "0",
+      "0",
+      "0"
+    ],
+    "atlas_native_library_sha256": "20ac57b70acd3294dab0a8d7361fbd75dfcd183654cd4dd25fadb12cfa9bba66",
+    "scope": "Order at this smooth rational point of chart 23. The full resolver tests the centre across the frame and its working loci.",
+    "Atlas": {
+      "order": 6,
+      "remainder_mod_m6": "0",
+      "remainder_mod_m7": "-480/169*b^6",
+      "trials": 3,
+      "local_normal_form_median_ms": {
+        "m6": 451.923,
+        "m7": 1929.655
+      }
+    },
+    "Singular": {
+      "order": 6,
+      "first_nonmember_power": 7,
+      "method": "local standard basis and normal forms"
+    }
+  }
+}
