@@ -17,6 +17,18 @@ sys.path.insert(0, str(ROOT / "benchmarks"))
 
 @unittest.skipUnless(_kernel() and os.getenv("ATLAS_GROEBNER") != "sympy", "the native Groebner kernel is not in use")
 class GroebnerKernelTests(unittest.TestCase):
+    def test_rational_monomial_rows_in_chart_order(self):
+        from unittest.mock import patch
+        from engine import groebner as gb
+        a, b = sp.Dummy("row"), sp.Dummy("row")
+        expr = -sp.Rational(3, 5) * a**2 * b
+        with patch.object(gb, "_MODE", "native"), patch.object(gb, "_expanded_qq_line", side_effect=AssertionError):
+            self.assertEqual(_line((b, a), expr), "-3/5 1 2")
+            self.assertEqual(_line((a, b), expr), "-3/5 2 1")
+            self.assertEqual(_line((a, b), sp.Mul(0, a, evaluate=False)), "")
+        self.assertIsNone(gb._monomial_row((a, b), a**-1))
+        self.assertIsNone(gb._monomial_row((a, b), sp.Dummy("row")))
+
     def test_graded_lex_and_its_ordered_quotients(self):
         from unittest.mock import patch
         from engine import groebner as gb
@@ -95,6 +107,52 @@ class GroebnerKernelTests(unittest.TestCase):
             with self.subTest(f=f):
                 self.assertEqual(native.reduce(f)[1], reference.reduce(f)[1])
                 self.assertEqual(native.contains(f), reference.contains(f))
+
+    def test_monomial_deletions_between_fraction_free_reduction_steps(self):
+        x, y, z = sp.symbols("x y z")
+        # x^20 is settled before the fifteen y -> 1/2 steps. After z*y^16
+        # disappears the settled and pending coefficients share a factor of 3,
+        # which the kernel extracts at its eighth scaling.
+        kept = x**20/11 + y**15/7 - sp.Rational(5, 13)
+        f = sp.expand(z*y**16 + 3*(kept + z*sum(y**i for i in range(16))))
+        remainder = sp.expand(3*kept.subs(y, sp.Rational(1, 2)))
+        for order in ("lex", "grevlex"):
+            for ideal, expected in (((z, 2*y - 1), remainder), ((), f), ((1,), sp.Integer(0))):
+                with self.subTest(order=order, ideal=ideal):
+                    native, reference = self.assert_same(ideal, (x, y, z), order)
+                    self.assertEqual(reference.reduce(f)[1], expected)
+                    self.assertEqual(native.reduce(f)[1], expected)
+                    self.assertTrue(native.contains(f - expected))
+
+    def test_membership_with_settled_terms_and_cancellation(self):
+        from unittest.mock import patch
+
+        x, y, z = sp.symbols("x y z")
+        relation = 2*y - z - 1
+        # y^2 first creates lower terms that later cancel. An x or a z term
+        # can settle the answer before that complete reduction finishes.
+        member = 4*y**2 - (z + 1)**2
+        for ideal, cases in (
+            ((relation,), ((x + member, x), (2*y, z + 1), (member, 0))),
+            ((), ((sp.Integer(0), 0), (x, x))),
+            ((1,), ((x + member, 0),)),
+        ):
+            basis, reference = self.assert_same(ideal, (x, y, z), "lex")
+            for f, expected in cases:
+                with self.subTest(ideal=ideal, f=f):
+                    self.assertEqual(reference.reduce(f)[1], expected)
+                    self.assertEqual(basis.reduce(f)[1], expected)
+                    self.assertIs(basis.contains(f), expected == 0)
+
+        # Retain the packed basis across polynomial requests beyond its range.
+        basis = groebner((relation,), (x, y, z), order="lex")
+        for f, expected in ((x**40000*relation, 0), (x**40000*(relation + 1), x**40000)):
+            self.assertIs(basis.contains(f), expected == 0)
+            self.assertEqual(basis.reduce(f)[1], expected)
+
+        with patch.object(_kernel(), "atlas_groebner_contains", None, create=True):
+            self.assertTrue(basis.contains(member))
+            self.assertFalse(basis.contains(member + x))
 
     def test_a_declared_groebner_prefix_gives_the_same_basis(self):
         x, y, z = sp.symbols("x y z")
@@ -237,6 +295,20 @@ class ModularRouteTests(unittest.TestCase):
         self.assertEqual(modular, exact)
         self.assertEqual(len(exact.split("\n")) - 1, 6)
         self.assertGreater(counts[0], 50)  # primes: the coefficients have thousands of bits
+
+    def test_monomial_deletions_stay_within_the_direct_work_budget(self):
+        # 820 terms disappear under x. Only the 41 powers of y remain.
+        dense = ";".join(f"1 {i} {j}" for i in range(41) for j in range(41 - i))
+        payload = f"2 0 0\n1 1 0\n{dense}\n".encode()
+        handle = self.library.atlas_groebner(payload, len(payload))
+        self.assertTrue(handle)
+        try:
+            expected = ";".join(f"1 0 {j}" for j in reversed(range(41)))
+            self.assertEqual(self.library.atlas_groebner_text(handle).decode().splitlines(),
+                             [expected, "1 1 0"])
+            self.assertEqual(self.library.atlas_groebner_route(handle), 0)
+        finally:
+            self.library.atlas_groebner_free(handle)
 
     def test_the_hilbert_route_gives_the_same_basis(self):
         x, y, z = sp.symbols("x y z")

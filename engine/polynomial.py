@@ -135,20 +135,22 @@ def checked_native(native, reference):
     return value
 
 
+def integer_from_decimal(text):
+    """Decode an exact kernel integer, even beyond Python's input-literal limit."""
+    if len(text) < 640:  # Below Python's smallest configurable guard.
+        return int(text)
+    digit_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
+    return int(Decimal(text)) if digit_limit and len(text) > digit_limit else int(text)
+
+
 def sparse_row(row):
     """Read FLINT's rational coefficient and exponent tuples without a dense representation."""
-    digit_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
-
-    def integer(text):
-        # Exact arithmetic can produce a coefficient larger than Python's
-        # decimal literal limit, even when every input literal fits.
-        return int(Decimal(text)) if digit_limit and len(text) > digit_limit else int(text)
-
     terms = {}
     for term in row.split(";") if row else ():
         coefficient, *powers = term.split()
         numerator, _, denominator = coefficient.partition("/")
-        terms[tuple(map(int, powers))] = Fraction(integer(numerator), integer(denominator or "1"))
+        terms[tuple(map(integer_from_decimal, powers))] = Fraction(
+            integer_from_decimal(numerator), integer_from_decimal(denominator or "1"))
     return terms
 
 
@@ -156,19 +158,17 @@ def _parse_tokens(tokens, variables, bounded):
     pos = 0
     zero = (0,) * len(variables)
 
-    def expr(binding=0, depth=0):
+    def expr(binding):
         nonlocal pos
-        if bounded and depth > 64:
-            raise LimitError("Expression nesting is too deep.")
         t = tokens[pos]
         pos += 1
         if t == '(':
-            a = expr(0, depth+1)
+            a = yield 0
             if tokens[pos] != ')':
                 raise InputError("Expected a closing parenthesis.")
             pos += 1
         elif t in ('-', '+'):
-            a = expr(25, depth+1)
+            a = yield 25
             if t == '-':
                 a = {k: -c for k, c in a.items()}
         elif t in variables:
@@ -205,7 +205,7 @@ def _parse_tokens(tokens, variables, bounded):
                         a = mul(a, a, bounded)
                 a = b
                 continue
-            b = expr(prec+1, depth+1)
+            b = yield prec+1
             if op == '+':
                 a = add(a, b, bounded)
             elif op == '-':
@@ -219,18 +219,36 @@ def _parse_tokens(tokens, variables, bounded):
                 if bounded: checked(a)
         return a
 
-    p = expr()
+    # Each yielded precedence starts a subexpression. Feed its polynomial back
+    # to the waiting parent without recursing through the Python call stack.
+    waiting = [expr(0)]
+    p = None
+    while waiting:
+        try:
+            binding = waiting[-1].send(p)
+        except StopIteration as done:
+            p = done.value
+            waiting.pop()
+        else:
+            if bounded and len(waiting) > 64:
+                raise LimitError("Expression nesting is too deep.")
+            waiting.append(expr(binding))
+            p = None
     if tokens[pos] is not None:
         raise InputError(f"Unexpected token {tokens[pos]!r}. Use * for multiplication.")
     return p
 
 
+def integer_text(n):
+    """Format computed coefficients and exponents beyond the decimal literal budget."""
+    if type(n) is not int:
+        n = int(n)
+    return str(n) if n.bit_length() < 2000 else str(Decimal(n))
+
+
 def rational_text(value):
-    """Format computed integers beyond the interpreter's decimal literal budget."""
-    def integer(n):
-        return str(n) if n.bit_length() < 2000 else str(Decimal(n))
     den = value.denominator
-    return integer(value.numerator) if den == 1 else integer(value.numerator) + "/" + integer(den)
+    return integer_text(value.numerator) if den == 1 else integer_text(value.numerator) + "/" + integer_text(den)
 
 
 def format_poly(p, names, scalar=rational_text):
@@ -242,7 +260,7 @@ def format_poly(p, names, scalar=rational_text):
         negative = coeff.startswith('-')
         if negative:
             coeff = coeff[1:]
-        factors = [s if k == 1 else f'{s}^{k}' for s, k in zip(names, e) if k]
+        factors = [s if k == 1 else f'{s}^{integer_text(k)}' for s, k in zip(names, e) if k]
         if coeff != '1' or not factors:
             factors.insert(0, coeff)
         words.append(('-' if negative else '+' if words else '') + '*'.join(factors))

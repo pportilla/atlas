@@ -33,11 +33,27 @@ function svgElement(tag, attrs, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
+function readRecord(text) {
+  return JSON.parse(text, (_key, value, context) => {
+    if (typeof value !== "number" || Number.isSafeInteger(value)) return value;
+    if (context) return /^-?\d+$/.test(context.source) ? BigInt(context.source) : value;
+    if (!Number.isFinite(value) || Number.isInteger(value)) {
+      throw new Error("This result needs a browser that supports exact JSON integers.");
+    }
+    return value;
+  });
+}
+function recordJSON(value, space) {
+  return JSON.stringify(value, (_key, field) => typeof field === "bigint" ? JSON.rawJSON(String(field)) : field, space);
+}
+function isNumeric(value) {
+  return typeof value === "number" || typeof value === "bigint";
+}
 function stringify(value) {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return typeof value === "string" ? value : recordJSON(value, 2);
 }
 function code(value) {
-  return el("code", "", typeof value === "string" ? value : JSON.stringify(value));
+  return el("code", "", typeof value === "string" ? value : recordJSON(value));
 }
 function plural(count, single, multiple) {
   return count + " " + (count === 1 ? single : multiple);
@@ -213,7 +229,7 @@ function tuple(entries, open = "(", close = ")", separator = ", ") {
   node.append(open);
   entries.forEach((entry, index) => {
     if (index) node.append(separator);
-    if (typeof entry === "number") node.append(signed(entry));
+    if (isNumeric(entry)) node.append(signed(entry));
     else {
       const tokens = tokensOf(entry);
       renderTokens(tokens, 0, tokens.length, node);
@@ -279,7 +295,7 @@ function centerCharts(list) {
 function valueNode(key, value) {
   if (value === null || value === undefined || value === "") return document.createTextNode("—");
   if (typeof value === "boolean") return document.createTextNode(value ? "yes" : "no");
-  if (typeof value === "number") {
+  if (isNumeric(value)) {
     return document.createTextNode(/elapsed_ms$/.test(key) ? duration(value) : signed(value));
   }
   if (typeof value === "string") {
@@ -289,7 +305,7 @@ function valueNode(key, value) {
   }
   if (Array.isArray(value)) {
     if (!value.length) return document.createTextNode("—");
-    if (value.every((v) => typeof v === "number")) return tuple(value);
+    if (value.every(isNumeric)) return tuple(value);
     if (value.every((v) => typeof v === "string")) {
       if (ID_KEYS.has(key)) return joined(value.map(idNode), ", ");
       if (key === "point" || key === "center") return tuple(value);
@@ -299,11 +315,11 @@ function valueNode(key, value) {
     if (key === "center_charts" && value.every((v) => v && typeof v === "object" && !Array.isArray(v))) {
       return centerCharts(value);
     }
-    if (value.length <= 12 && value.every((v) => Array.isArray(v) && v.length && v.every((n) => typeof n === "number"))) {
+    if (value.length <= 12 && value.every((v) => Array.isArray(v) && v.length && v.every(isNumeric))) {
       return joined(value.map((v) => tuple(v)), ", ");
     }
   }
-  const text = JSON.stringify(value);
+  const text = recordJSON(value);
   return foldable(code(text), text.length);
 }
 function dataList(entries) {
@@ -551,7 +567,7 @@ function drawGraph(vertices, cells, branches) {
   if (!layout) return null;
   const { points, adj } = layout;
 
-  const everyVertexHas = (key) => ids.every((id) => Number.isFinite(record.get(id)[key]));
+  const everyVertexHas = (key) => ids.every((id) => isNumeric(record.get(id)[key]));
   const weightKey = everyVertexHas("self_intersection") ? "self_intersection" : null;
   const sizeKey = ["total_multiplicity", "multiplicity", "ambient_order"].find(everyVertexHas) || null;
   const arrows = new Map();
@@ -881,7 +897,7 @@ function showZeta(data) {
   const line = el("p", "zeta m");
   line.append(zetaName(variable), " = ", zetaQuotient(zeta, variable));
   panel.append(line);
-  if (Number.isFinite(zeta.milnor_fiber_euler_characteristic)) {
+  if (isNumeric(zeta.milnor_fiber_euler_characteristic)) {
     const euler = el("p", "zeta-euler m");
     euler.title = "Euler characteristic of the Milnor fiber";
     euler.append("χ(", el("i", "", "F"), el("sub", "", "0"), ") = " + signed(zeta.milnor_fiber_euler_characteristic));
@@ -1383,6 +1399,7 @@ function getRequest() {
     mode: form.elements.mode.value,
     compute: $("compute").value,
     monodromy: $("zeta").checked,
+    ...($("exhaustive").checked ? { search: "exhaustive" } : {}),
   };
 }
 function sameGerm(a, b) {
@@ -1453,6 +1470,7 @@ $("variables").addEventListener("input", () => {
 });
 form.querySelectorAll('[name="mode"]').forEach((input) => input.addEventListener("change", updateInput));
 $("compute").addEventListener("change", updateInput);
+$("exhaustive").addEventListener("change", updateInput);
 function setMode(mode) {
   const input = form.querySelector('input[name="mode"][value="' + mode + '"]');
   if (input) input.checked = true;
@@ -1473,6 +1491,7 @@ function writeAddress(request) {
   const params = new URLSearchParams({ f: request.polynomial, vars: request.variables.join(","), mode: request.mode });
   if (request.compute !== "cpu") params.set("compute", request.compute);
   if (!request.monodromy) params.set("zeta", "0");
+  if (request.search === "exhaustive") params.set("search", request.search);
   ownHash = "#" + params;
   try { history.replaceState(null, "", ownHash); } catch { /* The page works without it. */ }
 }
@@ -1486,6 +1505,7 @@ function readAddress() {
   if (["embedded", "intrinsic"].includes(params.get("mode"))) setMode(params.get("mode"));
   if (["cpu", "auto", "gpu"].includes(params.get("compute"))) $("compute").value = params.get("compute");
   $("zeta").checked = params.get("zeta") !== "0";
+  $("exhaustive").checked = params.get("search") === "exhaustive";
   variablesFollow = followsPolynomial();
   return true;
 }
@@ -1524,11 +1544,14 @@ async function resolveGerm() {
   $("result").setAttribute("aria-busy", "true");
   waiting("Computing the resolution…");
   try {
-    const response = await fetch("/api/resolve", {
+    const response = await fetch(request.search === "exhaustive" ? "/api/searches" : "/api/resolve", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
     });
     let data;
-    try { data = await response.json(); } catch { throw new Error("The local server returned an unreadable response."); }
+    try { data = readRecord(await response.text()); } catch (error) {
+      if (error instanceof SyntaxError) throw new Error("The local server returned an unreadable response.");
+      throw error;
+    }
     if (response.status === 409) {
       // The server is busy with a search, possibly the one for this very input.
       try {
@@ -1546,13 +1569,11 @@ async function resolveGerm() {
     }
     if (!response.ok || data.error) throw new Error(data.error || "Resolution failed (HTTP " + response.status + ").");
     if (response.status === 202) {
-      // The quick resolver was inconclusive and the server went on to an
-      // exhaustive search in the background.
       ++searchTransition;
       renderSearch(data);
       pollSearch();
       waiting("");
-      $("announcements").textContent = "The quick resolver was inconclusive. An exhaustive search is running.";
+      $("announcements").textContent = "An exhaustive search is running.";
     } else {
       showResult(data, request);
       writeAddress(request);
@@ -1578,7 +1599,7 @@ form.addEventListener("submit", (event) => {
 });
 $("export").addEventListener("click", () => {
   if (!lastResult) return;
-  const blob = new Blob([JSON.stringify(lastResult, null, 2) + "\n"], { type: "application/json" });
+  const blob = new Blob([recordJSON(lastResult, 2) + "\n"], { type: "application/json" });
   const address = URL.createObjectURL(blob);
   const link = el("a");
   link.href = address;
@@ -1626,6 +1647,7 @@ function viewSearchResult() {
   setMode(request.mode);
   $("compute").value = request.compute || "cpu";
   $("zeta").checked = request.monodromy === true;
+  $("exhaustive").checked = true;
   variablesFollow = followsPolynomial();
   fitInput();
   showResult(searchJob.result, getRequest());
@@ -1664,7 +1686,7 @@ function renderSearch(job) {
 
 async function searchFetch(url, options) {
   const response = await fetch(url, options);
-  const data = await response.json();
+  const data = readRecord(await response.text());
   if (!response.ok) {
     const error = new Error(data.error || "Search request failed.");
     error.status = response.status;

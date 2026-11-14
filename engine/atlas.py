@@ -51,9 +51,11 @@ After Newton repairs the toric parents omit the closed centres and the
 children own their inverse images. The local cover of conjugate centres
 counts all lifts of the selected points.
 
-Intrinsic boundaries restrict to the strict transform. On smooth surfaces
-the overlap diagonal identifies geometric prime curves and transverse
-intersection points give the edges, also within a single divisor label.
+Intrinsic boundaries restrict to the smooth strict transform. On each
+birational overlap, equality of generic points identifies the geometric
+components of every positive-dimensional intersection. Containment of
+these primes and counts of transverse points with specified faces give
+the incidences, including between branches of a single ambient divisor.
 Counts on conjugate plane curves can determine incidence by Galois symmetry.
 On a finite centre a common ratio of base coordinates can label the roots of
 a split divisor across its charts when each root has one generic owner.
@@ -77,6 +79,7 @@ from math import prod
 import re
 
 from . import native_polynomial as np
+from .affine_kernel import _polynomial
 from .chart_expressions import chart_expressions
 from .reference import sp
 
@@ -84,13 +87,6 @@ from .local_blowups import Chart, GiveUp, _own_failures, _strata, cells, dual_ce
 from .strata import records
 from .fan_geometry import split_cone
 from .polynomial import InputError, format_poly
-
-
-def _polynomial(terms, variables):
-    if np.native_ring(variables):
-        return np.from_terms(variables, terms)
-    return sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(v**k for v, k in zip(variables, powers) if k))
-                    for powers, c in terms.items()))
 
 
 @lru_cache(maxsize=16384)
@@ -200,7 +196,8 @@ def from_record(record, polynomial, *, native=None):
     coefficient field, removed centres and the owned part of each chart."""
     native = _use_native(native)
     if record.get("atlas"):
-        return from_json(record["atlas"], native=native)
+        charts = from_json(record["atlas"], native=native)
+        return _restore_record_maps(charts)
     engine = record.get("engine")
     if engine == "verified-ideal-blowup":
         if native:
@@ -280,8 +277,16 @@ def from_record(record, polynomial, *, native=None):
         charts.append(affine)
     if fan and any("blown_up" in item or "ray_indices" not in item for item in items):
         from .newton_repair import join_atlas
-        return join_atlas(record, charts)
+        joined = join_atlas(record, charts)
+        return _restore_record_maps(joined) if joined is not None else None
     return charts or None
+
+
+def _restore_record_maps(charts):
+    """Keep certified projections available for the next serialization."""
+    from .repair_replay import restore_repair_maps
+    result = restore_repair_maps(charts)
+    return list(result) if result is not None else charts
 
 
 @lru_cache(maxsize=16384)
@@ -300,6 +305,9 @@ def to_json(charts):
              "map": {name: _record_text(expr, c.variables) for name, expr in c.coordinates},
              **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1]}} if c.torus else {}),
              **({"split_cone": c.split_cone} if c.split_cone else {}),
+             **({"repair_projection": {"parent": c.repair_projection[0], "map":
+                    [_record_text(g, c.variables) for g in c.repair_projection[1]]}}
+                if c.repair_projection else {}),
              **({"point_blowup": {"parent": c.point_blowup[0], "center": list(c.point_blowup[1])}}
                 if c.point_blowup else {}),
              **({"coefficient_field": {"generator": c.coefficient_field[0].name,
@@ -334,6 +342,13 @@ def from_json(data, *, native=None):
                     not _field_relation(t, relation, degree)):
                 raise InputError("The coefficient field needs its irreducible relation of the stated degree.")
             coefficient_field = (t, relation, degree, field["embedding"])
+        projection = ()
+        if "repair_projection" in item:
+            link = item["repair_projection"]
+            if (not isinstance(link, dict) or type(link.get("parent")) is not int
+                    or link["parent"] < 0 or not isinstance(link.get("map"), list)):
+                raise InputError("A repair projection needs its parent chart index and coordinate map.")
+            projection = (link["parent"], ideal(link["map"]))
         charts.append(Chart(tuple(symbols.values()), ambient,
                             tuple((c["id"], c["multiplicity"], c["nu"], ideal(c["ideal"])) for c in item["components"]),
                             ideal(item["fibre"]), ideal(item["region"]),
@@ -342,7 +357,7 @@ def from_json(data, *, native=None):
                             (tuple(map(tuple, item["torus"]["rays"])), tuple(map(tuple, item["torus"]["linear_map"])))
                             if item.get("torus") else (),
                             (item["point_blowup"]["parent"], tuple(item["point_blowup"]["center"]))
-                            if "point_blowup" in item else (), split_cone(item, len(item["map"]))))
+                            if "point_blowup" in item else (), split_cone(item, len(item["map"])), projection))
     return charts
 
 
@@ -401,6 +416,83 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True)
     return {**answer, "cells": found, "reason": reason}
 
 
+def _intrinsic_product(charts, dimension):
+    """Identify a common affine-space factor directly in the chart equations.
+
+    Each retained base coordinate must be the identical free chart variable
+    and occur in the origin fibre. It can occur nowhere else in the chart
+    data. The overlap equations then separate into those of the smaller
+    charts and equality in the common affine factor.
+    """
+    if not charts or dimension <= 2:
+        return None
+    factors = None
+    for c in charts:
+        if len(c.coordinates) != dimension or len(dict(c.coordinates)) != dimension:
+            return None
+        equations = (*c.ambient, *c.region, *(g for ideal in c.removed for g in ideal),
+                     *(g for _, _, _, ideal in c.components for g in ideal))
+        dependencies = set().union(*(getattr(g, "free_symbols", ()) for g in equations))
+        if c.coefficient_field:
+            dependencies.add(c.coefficient_field[0])
+        candidates = set()
+        for name, axis in c.coordinates:
+            if axis in dependencies or axis not in c.variables or axis not in c.fibre:
+                continue
+            others = (g for key, g in c.coordinates if key != name)
+            if any(axis in getattr(g, "free_symbols", ()) for g in others):
+                continue
+            if any(axis in getattr(g, "free_symbols", ()) for g in c.fibre if g != axis):
+                continue
+            candidates.add(name)
+        factors = candidates if factors is None else factors.intersection(candidates)
+        if not factors:
+            return None
+    if dimension - len(factors) < 2:
+        return None
+    reduced = []
+    for c in charts:
+        axes = {v for name, v in c.coordinates if name in factors}
+        projection = c.repair_projection
+        if projection:
+            index, mapping = projection
+            if not 0 <= index < len(charts) or len(mapping) != len(charts[index].variables):
+                return None
+            parent_axes = {v: name for name, v in charts[index].coordinates if name in factors}
+            retained = []
+            for variable, image in zip(charts[index].variables, mapping):
+                if variable in parent_axes:
+                    if image != dict(c.coordinates)[parent_axes[variable]]:
+                        return None
+                elif axes.intersection(getattr(image, "free_symbols", ())):
+                    return None
+                else:
+                    retained.append(image)
+            projection = index, tuple(retained)
+        torus = ()
+        if c.torus:
+            rays, linear = c.torus
+            indices = [i for i, (name, _) in enumerate(c.coordinates) if name not in factors]
+            local = [i for i, v in enumerate(c.variables) if v not in axes]
+            if (len(c.variables) == len(rays) == len(linear) == dimension
+                    and all(len(row) == dimension for row in (*rays, *linear))
+                    and all(not row[j] for i,row in enumerate(rays) for j in range(dimension)
+                            if (i in local) != (j in indices))
+                    and all(not row[j] for i,row in enumerate(linear) for j in range(dimension)
+                            if (i in indices) != (j in indices))):
+                torus = (tuple(tuple(rays[i][j] for j in indices) for i in local),
+                         tuple(tuple(linear[i][j] for j in indices) for i in indices))
+        reduced.append(replace(c, variables=tuple(v for v in c.variables if v not in axes),
+                               fibre=tuple(g for g in c.fibre if g not in axes),
+                               coordinates=tuple(pair for pair in c.coordinates if pair[0] not in factors),
+                               torus=torus, split_cone=(), point_blowup=(), repair_projection=projection))
+    boundary = boundary_complex(reduced, dimension - len(factors), intrinsic=True)
+    if boundary["status"] != "complete":
+        return None
+    return {**boundary, "vertices": [{**v, "dimension": v["dimension"] + len(factors)}
+                                     for v in boundary["vertices"]]}
+
+
 def boundary_complex(charts, dimension, intrinsic=False):
     """The exceptional intersections meeting the origin. Restriction to each
     smooth strict component computes its boundary in intrinsic mode."""
@@ -411,6 +503,17 @@ def boundary_complex(charts, dimension, intrinsic=False):
         toric = torus_complex(charts, dimension, intrinsic)
         if toric is not None:
             return toric
+    if intrinsic:
+        product = _intrinsic_product(charts, dimension)
+        if product is not None:
+            return product
+    incomplete_repair = False
+    if intrinsic:
+        from .repair_replay import restore_repair_maps
+        verified = restore_repair_maps(charts)
+        incomplete_repair = verified is None
+        if verified is not None:
+            charts = verified
     ambient_charts = charts
     if intrinsic:
         charts = [replace(c, ambient=(*c.ambient, *ideal),
@@ -454,16 +557,23 @@ def boundary_complex(charts, dimension, intrinsic=False):
             for u, v in pairs:
                 edges.extend({"id": f"C{u}-{v}.{i+1}", "dimension": 1, "vertices": [u, v], "faces": [u, v]}
                              for i in range(count // len(pairs)))
-        if not reason and dimension == 2:
-            known = {}
-            for c in charts:
-                owned = replace(c, fibre=tuple(dict.fromkeys((*c.region, *c.fibre))), region=())
-                if _own_failures(owned, dimension, known)[0]:
-                    reason = "The local branches of a restricted exceptional divisor need separate incidences."
-                    break
     else:
         edges, reason = dual_cells(counts, order)
-    if reason:
+    # Counts determine faces only for a simple normal crossings boundary.
+    # Restricting one ambient divisor to the strict transform can produce
+    # several branches that intersect each other, even when there is only
+    # one ambient label in the chart.
+    if intrinsic and dimension >= 2 and not reason:
+        known = {}
+        for c in charts:
+            owned = replace(c, fibre=tuple(dict.fromkeys((*c.region, *c.fibre))), region=())
+            if _own_failures(owned, dimension, known)[0]:
+                reason = "The local branches of the restricted exceptional divisors need separate incidences."
+                break
+    if incomplete_repair:
+        reason = "The saved charts do not certify a complete cover of the deleted repair centres."
+        edges = []
+    elif reason:
         from .atlas_gluing import glued_complex
         glued = glued_complex(ambient_charts, dimension + int(intrinsic), intrinsic,
                               counts=None if intrinsic else counts)

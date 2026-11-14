@@ -1,7 +1,8 @@
 """Local CLI and HTTP frontend, using only the Python standard library."""
 import argparse
+import codeop
+from contextlib import contextmanager
 import json
-import os
 from pathlib import Path
 import shlex
 import signal
@@ -18,25 +19,15 @@ MAX_SECONDS=55
 CAPACITY=threading.BoundedSemaphore(2)
 
 
-def run_job(data, timeout=MAX_SECONDS):
-    child = subprocess.Popen([sys.executable, '-m', 'engine.worker'],cwd=ROOT,
-        stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,start_new_session=True)
+def run_job(data, timeout=MAX_SECONDS, *, owner=None):
+    from .worker_process import run_worker
     try:
-        out,_ = child.communicate(json.dumps(data),timeout=timeout)
-    except KeyboardInterrupt:
-        try: os.killpg(child.pid,signal.SIGKILL)
-        except ProcessLookupError: pass
-        child.communicate()
-        raise
+        return run_worker(['engine.worker'], data, timeout, owner=owner)
     except subprocess.TimeoutExpired:
-        try: os.killpg(child.pid,signal.SIGKILL)
-        except ProcessLookupError: pass
-        child.communicate()
         from .resolve import inconclusive
         return 200, inconclusive(data, {'description':f'The quick worker reached its {timeout:g}-second wall-clock limit.'},1000*timeout)
-    if child.returncode:
+    except RuntimeError:
         return 422, {'error':'Worker stopped before it produced a certified result.'}
-    return json.loads(out)
 
 
 class AtlasServer(ThreadingHTTPServer):
@@ -44,11 +35,16 @@ class AtlasServer(ThreadingHTTPServer):
     def __init__(self, address, handler):
         super().__init__(address,handler)
         from .search_jobs import SearchJobs
+        from .algebra_basis_store import AlgebraBasisStore
+        from .worker_process import WorkerGroup
         self.search_jobs = SearchJobs()
+        self.algebra_bases = AlgebraBasisStore()
+        self.workers = WorkerGroup()
 
     def server_close(self):
         if hasattr(self, "search_jobs"):
             self.search_jobs.close()
+            self.workers.close()
         super().server_close()
 
 
@@ -70,7 +66,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlsplit(self.path).path
         static={'/':('index.html','text/html'),'/index.html':('index.html','text/html'),
+                '/algebra.html':('algebra.html','text/html'),'/algebra.js':('algebra.js','text/javascript'),
+                '/algebra-session.js':('algebra-session.js','text/javascript'),
+                '/resolution.css':('resolution.css','text/css'),'/algebra.css':('algebra.css','text/css'),
+                '/atlas-mark.svg':('atlas-mark.svg','image/svg+xml'),
                 '/style.css':('style.css','text/css'),'/app.js':('app.js','text/javascript')}
+        if path in ('/fonts/stix-two-text.woff2', '/fonts/stix-two-text-italic.woff2', '/fonts/instrument-sans.woff2'):
+            return self.send(200, (WEB / path[1:]).read_bytes(), 'font/woff2')
         if path=='/api/health': return self.obj(200,{'status':'ok'})
         if path=='/api/searches/current':
             return self.obj(200,{'job':self.server.search_jobs.get()})
@@ -83,28 +85,51 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path=urlsplit(self.path).path
-        if path not in ('/api/resolve','/api/searches'): return self.obj(404,{'error':'Unknown endpoint.'})
+        algebra = path in ('/api/algebra', '/api/algebra/exhaustive')
+        exhaustive = path in ('/api/searches', '/api/algebra/exhaustive')
+        if not algebra and path not in ('/api/resolve','/api/searches'): return self.obj(404,{'error':'Unknown endpoint.'})
+        def reject(status, message, code='invalid_request'):
+            if algebra:
+                from .algebra import error_record
+                return self.obj(status, error_record(code, message))
+            return self.obj(status, {'error': message})
         if self.headers.get_content_type()!='application/json':
-            return self.obj(415,{'error':'Send application/json.'})
+            return reject(415, 'Send application/json.')
         try: size=int(self.headers.get('Content-Length',''))
-        except ValueError: return self.obj(411,{'error':'Content-Length is required.'})
-        if not 0 < size <= MAX_REQUEST: return self.obj(413,{'error':'Request is empty or too large.'})
+        except ValueError: return reject(411, 'Content-Length is required.')
+        if size <= 0: return reject(413, 'Request is empty.')
+        if size > MAX_REQUEST and not exhaustive:
+            endpoint = '/api/algebra/exhaustive' if algebra else '/api/searches'
+            return reject(413, f'Standard requests accept up to {MAX_REQUEST} bytes. Choose exhaustive mode or post to {endpoint}.')
         try:
             self.connection.settimeout(10)
-            data=json.loads(self.rfile.read(size))
-        except (ValueError,OSError,RecursionError): return self.obj(400,{'error':'Invalid JSON request.'})
+            # Allocate as bytes arrive. An enormous claimed length with a short
+            # body must not reserve memory for the entire claim.
+            body = bytearray()
+            while len(body) < size:
+                chunk = self.rfile.read(min(size - len(body), 64 * 1024))
+                if not chunk:
+                    return reject(400, 'Incomplete request body.')
+                body.extend(chunk)
+            data = json.loads(body)
+            del body
+        except (ValueError,OSError,RecursionError): return reject(400, 'Invalid JSON request.')
+        except MemoryError: return reject(503, 'Insufficient memory to read the request.', 'worker_unavailable')
         def start_search():
             try: job=self.server.search_jobs.start(data)
             except ValueError as exc: return self.obj(400,{'error':str(exc)})
             except RuntimeError as exc: return self.obj(409,{'error':str(exc)})
             except OSError: return self.obj(503,{'error':'Could not start the search process.'})
             return self.obj(202,job)
-        if path=='/api/searches' or (isinstance(data,dict) and data.get('search')=='exhaustive'):
+        if path=='/api/searches' or (path=='/api/resolve' and isinstance(data,dict) and data.get('search')=='exhaustive'):
             return start_search()
-        if not CAPACITY.acquire(False): return self.obj(429,{'error':'Both computation slots are busy. Try again shortly.'})
+        if not CAPACITY.acquire(False): return reject(429, 'Both computation slots are busy. Try again shortly.', 'busy')
         try:
+            if algebra:
+                timeout = None if exhaustive else MAX_SECONDS
+                return self.obj(*self.server.algebra_bases.calculate(data, timeout=timeout, owner=self.server.workers))
             automatic=isinstance(data,dict) and 'search' not in data
-            status,res=run_job(dict(data,search='quick') if automatic else data)
+            status,res=run_job(dict(data,search='quick') if automatic else data, owner=self.server.workers)
             if automatic and status==200:
                 pending_zeta = (data.get('monodromy') is True and
                                 res.get('monodromy_zeta', {}).get('status') == 'unavailable')
@@ -155,8 +180,11 @@ def show(r):
 
 
 def make_parser():
-    parser=argparse.ArgumentParser(prog='atlas',description='Exact local resolutions of hypersurface germs over Q.')
+    from .algebra_cli import register_parser
+    parser=argparse.ArgumentParser(prog='atlas',description='Exact rational ideal arithmetic and local hypersurface resolutions.')
     sub=parser.add_subparsers(dest='command',required=True)
+    parser.command_names = sub.choices
+    register_parser(sub)
     calc=sub.add_parser('resolve',help='resolve at the origin')
     calc.add_argument('polynomial');calc.add_argument('--vars',required=True,metavar='x,y[,z,...]')
     calc.add_argument('--mode',choices=['embedded','intrinsic'],default='embedded')
@@ -173,6 +201,8 @@ def make_parser():
     compute.add_argument('--gpu',dest='compute',action='store_const',const='gpu',
                          help='use available GPU kernels (equivalent to --compute gpu)')
     sub.add_parser('devices',help='list available Triton and OpenCL GPU backends')
+    script=sub.add_parser('run',help='run an Atlas script')
+    script.add_argument('file',help='UTF-8 Atlas script or - for standard input')
     zeta=sub.add_parser('monodromy',help='compute the local monodromy zeta function from a saved resolution')
     zeta.add_argument('record',help='Atlas resolution JSON file, or - for standard input')
     zeta.add_argument('--json',action='store_true',help="print factors and A'Campo contributions")
@@ -181,7 +211,28 @@ def make_parser():
     return parser
 
 
-def run_command(parser, argv):
+def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False):
+    request = dict(polynomial=polynomial, variables=variables, mode=mode, search=search, compute=compute)
+    if monodromy:
+        request['monodromy'] = True
+    return run_job(request, timeout=MAX_SECONDS if search == 'quick' else None)
+
+
+@contextmanager
+def session_decimals(unlimited):
+    """Allow exact decimal input and output only during a standalone math session."""
+    if not unlimited or not hasattr(sys, "set_int_max_str_digits"):
+        yield
+        return
+    previous = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        yield
+    finally:
+        sys.set_int_max_str_digits(previous)
+
+
+def run_command(parser, argv, *, unlimited_decimals=False):
     if argv and argv[0]=='resolve' and '--' not in argv:
         # Protect a leading unary minus even when flags precede the polynomial.
         options={'--vars','--mode','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
@@ -190,6 +241,13 @@ def run_command(parser, argv):
                 argv=[*argv[:pos],*argv[pos+1:],'--',token]
                 break
     args=parser.parse_args(argv)
+    if args.command=='algebra':
+        from .algebra_cli import run
+        return run(args)
+    if args.command=='run':
+        from .session import run_script
+        with session_decimals(unlimited_decimals):
+            return run_script(args.file, calculate_resolution)
     if args.command=='monodromy':
         from .monodromy import monodromy_zeta
         try:
@@ -224,11 +282,10 @@ def run_command(parser, argv):
             except KeyboardInterrupt: pass
             finally: signal.signal(signal.SIGTERM,previous)
         return 0
-    request={'variables':[v.strip() for v in args.vars.split(',')],'mode':args.mode,
-             'polynomial':args.polynomial,'compute':args.compute,'search':args.search}
-    if args.monodromy: request['monodromy']=True
     try:
-        status,r=run_job(request,timeout=MAX_SECONDS if args.search=='quick' else None)
+        status,r=calculate_resolution(args.polynomial, [v.strip() for v in args.vars.split(',')],
+                                      mode=args.mode, search=args.search, compute=args.compute,
+                                      monodromy=args.monodromy)
     except KeyboardInterrupt:
         print('Resolution interrupted.',file=sys.stderr)
         return 130
@@ -239,15 +296,53 @@ def run_command(parser, argv):
         (not args.monodromy or r.get('monodromy_zeta',{}).get('status')=='computed')) else 3
 
 
-def run_session(parser):
+def read_expression(line):
+    """Collect continued expressions and indented blocks at the prompt."""
+    try:
+        while codeop.compile_command(line, symbol="single") is None:
+            line += "\n" + input('... ')
+    except (SyntaxError, ValueError, OverflowError):
+        pass  # The evaluator provides the Atlas syntax diagnostic.
+    return line
+
+
+def run_session(parser, *, unlimited_decimals=False):
+    from .session import HELP, SessionError, new_session
+    from .session_transcript import SessionTranscript
+    session = new_session(calculate_resolution)
+    transcript = SessionTranscript()
     try:
         import readline  # Enable arrow-key editing and in-session history for input().
     except ImportError:
         pass
 
+    # Derive shell-command names from argparse so newly registered subcommands
+    # are available here. An opening parenthesis selects function-call syntax.
+    shell_names = {*parser.command_names, ":save", "help", "quit", "exit", "-h", "--help"}
     while True:
         try:
             line = input('atlas> ')
+            words = line.split(maxsplit=1)
+            if not words:
+                continue
+            tail = words[1] if len(words) == 2 else ""
+            is_variable = words[0] in session.variables
+            if words[0] not in shell_names or is_variable or tail.startswith(("(", "=", ".")):
+                with session_decimals(unlimited_decimals):
+                    line = read_expression(line)
+                    try:
+                        for display, value in session.run(line, transcript=transcript):
+                            if display:
+                                print(value)
+                    except SessionError as error:
+                        source = line.splitlines()
+                        statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
+                        print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
+                    except ValueError as error:
+                        # Rendering a numeric preview can exceed an explicitly
+                        # configured interpreter digit limit.
+                        print(str(error), file=sys.stderr)
+                continue
             try:
                 argv = shlex.split(line)
             except ValueError as error:
@@ -257,9 +352,27 @@ def run_session(parser):
                 continue
             if argv in (['quit'], ['exit']):
                 return 0
+            if argv[0] == ':save':
+                if len(argv) != 2:
+                    print('Usage: :save FILE.atlas', file=sys.stderr)
+                    continue
+                try:
+                    transcript.save(argv[1])
+                    print(f'Saved session to {argv[1]}')
+                except (OSError, ValueError) as error:
+                    print(f'Cannot save session: {error}', file=sys.stderr)
+                continue
+            if argv in (['help', 'save'], ['help', ':save']):
+                print('Use :save FILE.atlas to write the session. Replay it with ./atlas run FILE.atlas.')
+                continue
             if argv == ['help']:
                 parser.print_help()
+                print('\n' + HELP)
+                print('\nSave this session with :save FILE.atlas.')
                 print('\nType help COMMAND for its options or quit to leave Atlas.')
+                continue
+            if argv == ['help', 'script']:
+                print(HELP)
                 continue
             if argv[0] == 'help':
                 if len(argv) != 2:
@@ -267,7 +380,7 @@ def run_session(parser):
                     continue
                 argv = [argv[1], '--help']
             try:
-                run_command(parser, argv)
+                run_command(parser, argv, unlimited_decimals=unlimited_decimals)
             except SystemExit:
                 # argparse has already printed the requested help or usage error.
                 pass
@@ -278,15 +391,19 @@ def run_session(parser):
             print()
 
 
-def main():
+def main(*, unlimited_decimals=False):
     parser = make_parser()
     argv = sys.argv[1:]
     if argv:
-        return run_command(parser, argv)
+        # The standalone parent also decodes and prints exact integer fields
+        # returned by the worker, including resolution multiplicities.
+        with session_decimals(unlimited_decimals):
+            return run_command(parser, argv, unlimited_decimals=unlimited_decimals)
 
     from .welcome import print_welcome
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
     print_welcome(interactive=interactive)
     if interactive:
-        return run_session(parser)
+        with session_decimals(unlimited_decimals):
+            return run_session(parser, unlimited_decimals=unlimited_decimals)
     return 0

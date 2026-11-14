@@ -4,6 +4,8 @@ Atlas computes resolutions of hypersurface germs at the origin over the algebrai
 
 C++17, GMP, FLINT and libnormaliz handle point blowups, exact linear algebra and polyhedral computations. Python assembles the charts and drives the general ideal-blowup search. Each candidate centre is decided by an exact native kernel: Gröbner bases over the rationals, saturation, ideal quotients, the Jacobian smoothness test and the charts of a blowup. When coefficients swell it switches to a Hilbert-driven computation for lexicographic and elimination orders, or to images modulo many primes whose lift it certifies over the rationals. [Algorithms and proofs](native/KERNEL.md). FLINT handles factorization over the rationals, exact algebraic roots, and arithmetic in the marked number fields used by the verifier. General blowups, intrinsic chains and archived number-field charts exchange sparse polynomials with the kernel. Python schedules the work, transports coefficient and exponent rows, and assembles the result. Optional Triton and OpenCL kernels handle chart substitutions, modular matrix updates and Gröbner replays. Atlas runs independently of Singular and SageMath.
 
+For a comparison of the two systems and a phased roadmap for bringing more algebra to the Atlas CLI and browser, see [Atlas and Singular](README-singular-comparison.md).
+
 ## Build and run
 
 Install a C++17 compiler, Make, pkg-config, Python 3.10 or later and the development libraries for GMP (including gmpxx), FLINT, JsonCpp and libnormaliz. The project was tested on Linux with FLINT 3.6, SymPy 1.14 and Python 3.14. The optional OpenCL plugins need OpenCL headers, a loader and a compatible device driver. The Triton path uses a GPU-enabled PyTorch installation and a matching Triton compiler in the Python environment that runs Atlas.
@@ -33,6 +35,91 @@ Choose distinct variable names beginning with a letter. Use rational coefficient
 
 The local interface is available at <http://127.0.0.1:8765>. CLI exit code 0 means resolved, 2 means an input or computation error and 3 means the quick search was inconclusive. Use `--json` to retain the equations and complete incidence records.
 
+## Working at the prompt and in scripts
+
+At `atlas>`, define a polynomial in its own coordinates and give the resolution
+a name. Assignment is quiet. Enter a name or a field to inspect its value.
+
+~~~text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> R = resolve(f)
+atlas> R.divisors
+[E1, E2, E3]
+atlas> E = R.branches[0].meets[0]
+atlas> E.charts
+[B3.u, B3.v]
+atlas> C = R.chart("B3.u")
+atlas> u, v = C.coordinates
+atlas> e = E.equation_in(C)
+atlas> e
+u
+atlas> total = C.pullback(f)
+atlas> total == u^6 * v^3 * C.strict_transform
+True
+atlas> total.multiplicity(e)
+6
+~~~
+
+`coordinates("x", "y", coeffs=QQ)` explicitly selects the default input
+coefficient field. Fractions such as `(1/2)*x` are exact. Each call to
+`coordinates` creates a separate coordinate space. Resolution defaults to
+embedded mode and the same exhaustive search as the command-line solver.
+`resolve(f, mode="intrinsic")` selects intrinsic mode.
+
+The standalone prompt and `./atlas run FILE` accept and print exact
+integers and fractions beyond Python’s usual 4,300-decimal-digit threshold.
+An explicit `PYTHONINTMAXSTRDIGITS` or `python3 -X int_max_str_digits=...`
+setting controls decimal input and output for these sessions. Applications
+embedding the session use their host interpreter’s policy.
+
+`C.pullback(f)` substitutes the ambient chart’s map into a polynomial in
+the input coordinates. In `B3.u`, the images of `x` and `y` are `u^2*v` and
+`u^3*v^2`, so the pullback is `u^6*v^3*(v-1)`. The local equation of
+`E3` is `u`. Its multiplicity is the largest power of `u` dividing that
+pullback. In `B3.v`, the local equation of the same divisor is `v`.
+
+`R.coordinates` returns the original generators. `C.coordinates`,
+`C.map["x"]`, `C.strict_transform` and `E.equation_in(C)` use the chart’s
+own polynomial coordinates. Use `E.ideal_in(C)` for a list of generators.
+A strict transform that needs several generators also returns a list.
+On charts presented with ambient relations, these values are polynomial
+representatives. Factor multiplicity currently requires a polynomial ring.
+
+`polynomial(source, variables=...)` reads a quoted expression using the
+names in an existing coordinate space. For example, the intersection of
+`E3` and the strict transform in `B3.u` is given by `u = 0` and `v = 1`.
+Eliminating `u` leaves an ideal in `v`. Use its coordinates for subsequent
+calculations in that ring.
+
+~~~text
+atlas> s = polynomial("v-1", variables=C.coordinates)
+atlas> s == C.strict_transform
+True
+atlas> J = eliminate(ideal(e, s), u)
+atlas> q = polynomial("v^2+v+1", variables=J.coordinates)
+atlas> normal_form(q, J)
+3
+~~~
+
+Run this calculation with `./atlas run examples/chart-elimination.atlas`.
+[Chart and elimination script](examples/chart-elimination.atlas)
+
+Run `./atlas run examples/cusp.atlas` to execute the [cusp script](examples/cusp.atlas),
+or `./atlas run -` to read a script from standard input. Files use the same
+assignments, operations, and field access as the prompt. Use `print(...)` to
+choose script output and `for chart in E.charts:` to visit several charts.
+At the prompt, finish an indented block with a blank line. In a script, an
+error reports the filename and line and stops execution. Type `help script`
+at the prompt for a short reference.
+
+Type `:save "my session.atlas"` at the prompt to write the successful
+mathematical statements in order, including assignments and explicit
+`print(...)` calls. Saving again replaces the file with the current session.
+Replay it with `./atlas run "my session.atlas"`. If a statement fails, earlier
+successful statements on the same line are still saved. An interrupted or
+failed `for` or `if` block restores the variable bindings from before the block.
+
 ## Resolution algorithms
 
 | Input or method | Computation |
@@ -53,6 +140,16 @@ The CLI and Python API continue searching by default until they certify a resolu
 Embedded mode also resolves effective divisors with repeated components. It resolves the reduced support, then computes the original strict-transform ideal and the multiplicities of the pullback along each exceptional prime. For example, the exceptional multiplicities for `(y^2-x^3)^2` are 4, 6 and 12. Intrinsic resolution requires a reduced germ. A repeated global factor that is a unit at the origin poses no restriction.
 
 The default exhaustive mode accepts rational polynomials in any finite positive number of variables and removes the quick parser and wall-clock limits. After the structured algorithms it enumerates finitely generated blowup ideals over the rationals and proposed geometric boundary ideals over number fields. Each candidate receives repeated attempts with increasing verification time and algebraic effort. Under idealized unbounded resources there is a finite certificate for a reduced hypersurface in characteristic zero. Embedded desingularization exists over the base field, a sequence of blowups over affine space can be presented as one blowup of an ideal, and its finitely many geometric stratum components are defined over a finite extension. These facts justify the search space. Priority candidates include the Jacobian locus, coordinate centers and successive blowups along repeated rational tangents. The integer enumeration can take impractically long even on a small polynomial. Ctrl-C stops an exhaustive CLI calculation. [Bierstone and Milman](https://arxiv.org/abs/alg-geom/9709028) · [Composition of blowups, Stacks Project](https://stacks.math.columbia.edu/tag/080B)
+
+### Coefficient and exponent sizes
+
+Exhaustive resolution and the algebra CLI use exact rational coefficients. For example, `./atlas resolve '2^20000*x+y' --vars x,y` handles a coefficient with 6,021 decimal digits. Sparse monomials can have exponents beyond a machine word. The packed Gröbner engine switches to wide arithmetic above total degree 32,767. These inputs can still be expensive when an operation has to expand a power or produce many charts. In two variables, $(x+y)^N$ has $N+1$ terms.
+
+Quick resolution accepts at most 256 decimal digits in an integer literal, degree 128 (both the written exponent and intermediate total degree), and 4,096 bits in each numerator or denominator during expansion. A quick attempt can therefore be inconclusive for an input that the default CLI resolves. Exhaustive polynomial parsing also supports deeply nested input. At the prompt or in scripts, pass deeply nested formulas as text to `polynomial("…", variables=[x,y])`, since raw script expressions also pass through Python's parser. [Input parser](engine/polynomial.py)
+
+The exhaustive Newton fan accepts arbitrary-precision lattice coordinates. For example, `./atlas resolve 'x^4097+y^4097+z^4097' --vars x,y,z --exhaustive` certifies the embedded resolution in three charts. If the first Newton-face check exceeds its coefficient, exponent, time or Gröbner basis budget, exhaustive resolution retries with an exact rational GCD or a Gröbner basis on the torus. Fan construction still has a 35-second budget, 16,000 rays and 120,000 intermediate cone records. If this shortcut gives up, the resolver can continue searching for a certificate by other methods. [Fan construction](native/newton_fan.cpp) · [Newton-face tests](engine/newton_faces.py)
+
+Euler projection stores only occupied powers and uses arbitrary-precision exponents and fibre counts. For example, it computes the compactly supported Euler characteristic of the complex curve $x^N+y^N=1$ as $N(2-N)$ even for $N=2^{64}$. Polynomial expansion, large intermediate bases and the number of output charts can still exhaust available memory or time. [Euler projection tests](tests/test_constructible_euler.py)
 
 ## The four-variable example
 
@@ -130,17 +227,35 @@ curl -s http://127.0.0.1:8765/api/resolve -H 'Content-Type: application/json' \
 ./atlas resolve 'x^5+z*y^3+z^15+t^4*x+t^8' --vars x,y,z,t --mode intrinsic --gpu --json
 ~~~
 
-Use `POST /api/searches` with the same body for an exhaustive background job. Get its state and result with `GET /api/searches/{id}` or `GET /api/searches/current`. Cancel with `DELETE /api/searches/{id}`.
+For large requests, select **Exhaustive** in the browser or send the same JSON body to the explicit exhaustive endpoint. `POST /api/searches` starts a resolution job. Poll with `GET /api/searches/{id}` and cancel with `DELETE /api/searches/{id}`. `POST /api/algebra/exhaustive` returns the algebra result on the same connection. Both routes accept requests above the usual 32,768-byte limit. The exhaustive algebra route also lifts the ordinary 55-second calculation deadline. The algebra CLI already uses that policy. [HTTP interface](engine/app.py)
 
-CPU is the default. On a machine with a working Triton toolchain, the ordinary native build (`make`) is sufficient. Use `make gpu` to also build the OpenCL plugins. With `--gpu` (equivalently `--compute gpu`, or `"compute":"gpu"` over HTTP) Atlas attempts eligible work on the selected device. By default it tries Triton, then OpenCL, then the exact CPU implementation. Identity resolutions can finish entirely on the CPU. The `execution.stages` entries identify the chart and rank certificates and the actual modular replay batches from the solve and its verification workers. The primary certificate retains its original backend fields.
+Resolution defaults to CPU and rational ideal arithmetic defaults to auto. On a machine with a working Triton toolchain, the ordinary native build (`make`) is sufficient. Use `make gpu` to also build the OpenCL plugins. With `--gpu` (equivalently `--compute gpu`, or `"compute":"gpu"` over HTTP) Atlas attempts eligible work on the selected device. By default it tries Triton, then OpenCL, then the exact CPU implementation. Identity resolutions can finish entirely on the CPU. The `execution.stages` entries identify the chart and rank certificates and the actual modular replay batches from the solve and its verification workers. The primary certificate retains its original backend fields.
 
 `./atlas devices` lists backend/device pairs. Use `RESOLUTION_GPU_BACKEND=triton` or `opencl` to select a backend and `RESOLUTION_GPU_INDEX` to select an ordinal in its list. Triton discovery compiles and executes an integer test on the requested device. OpenCL uses the GPUs enumerated by its driver. For automatic size-based dispatch, use `--compute auto`. The initial thresholds are 50,000 chart–monomial pairs and 256 matrix columns. Adjust them with `RESOLUTION_GPU_MIN_PAIRS` and `RESOLUTION_GPU_MIN_COLS`. Modular replays in automatic mode use the native CPU threads by default.
+
+For Gröbner traces, `--compute auto` uses measured row-reduction times for the selected device, CPU and kernel build. To calibrate, run the following from a built checkout with a working GPU driver. Substitute `triton` for `opencl` to profile that backend.
+
+~~~sh
+python3 benchmarks/groebner_trace_profile.py --backend opencl --index 0 --sizes 6 7 8 \
+  --write-auto-profile "${XDG_CACHE_HOME:-$HOME/.cache}/resolution-atlas/groebner-trace-opencl-0.json"
+~~~
+
+`auto` considers batches with a measured prime, row count, column count and reducer-entry count. The GPU must save at least 10% at the median and its upper-quartile time must beat the CPU's lower quartile. A cold process also charges the observed startup cost. Unmeasured batches use native threads. Set `ATLAS_TRACE_PROFILE` to read a calibration from another path. CPU-only requests bypass calibration and GPU discovery.
 
 | Operation | Independent GPU work | Exactness |
 |---|---|---|
 | Toric chart transforms, dimensions 2–8 | Compute exponents for many terms and charts. Triton reuses a ray–monomial table when cones share enough rays. | The host bounds every dot product before the launch, checks nonnegative strict powers, and retains the exact coefficients. |
 | Projective Jacobian rank | Find a pivot, normalize its row, then update tiles of the trailing matrix in parallel. Successive pivots stay ordered and the matrix stays on the device. | All products are integer residues. C++ verifies the proposed maximal minor independently. |
 | Modular Gröbner bases | Reduce independent S-pairs of the same degree on the selected GPU. Replay across primes, using native threads for small batches after a GPU trace. The execution report records trace pairs and replay primes separately. | The native solver lifts by CRT and rational reconstruction. Independent S-pair and generator checks share a reduction plan and run on CPU threads with arbitrary-precision integers. |
+| Normal form and membership modulo a monomial ideal | For an explicit GPU request, Triton or OpenCL finds a divisor for each removable term. | The host checks each witness, checks every surviving term for irreducibility and retains its exact rational coefficient. |
+
+All eight rational ideal operations share the request's compute policy across intermediate bases. For example, the following lexicographic elimination computes a basis using the selected device, lifts and checks the basis on the CPU, then projects to the surviving variable. On the Radeon 680M the basis replay used four OpenCL batches totaling 12 primes. The returned ideal in QQ[y] is generated by `y^3-y^2/2147483629+4/2147483629`.
+
+~~~sh
+./atlas algebra eliminate --vars x,y --order lex --gen 'x^2+2147483629*y-1' --gen 'x*y-2' --eliminate x --compute gpu --json
+~~~
+
+Each work record in `execution.stages` includes its actual backend. Intermediate bases in a derived operation also carry a label. `groebner_certification` reports the host's lift and verification times and the number of certified bases. A failed launch records its reason in `execution.fallback_reasons` and the exact CPU computation supplies the result. [Phase 1 CPU/GPU comparison](benchmarks/README.md#phase-1-rational-ideal-arithmetic)
 
 To compare devices, run `python3 benchmarks/charts.py --backend triton` and `python3 benchmarks/gpu.py --backend triton`, or select `opencl`. Both drivers measure warm solves and fresh CLI invocations, check geometry against the CPU, and require the requested backend to have run. [Benchmarks](benchmarks/README.md)
 
@@ -150,7 +265,7 @@ The performance target is elapsed time from input polynomial to certified atlas 
 
 1. **Establish cross-device baselines.** Run the same correctness and timing suite on a supported NVIDIA CUDA GPU, AMD ROCm GPU and an integrated GPU. Include Intel XPU where the installed backend passes the integer probe, and OpenCL where available. Use ordinary Triton for the shared kernels. Select tile sizes and thresholds from measured workload shapes. Compare a Gluon specialization against this baseline if profiling shows that explicit layouts or shared memory could improve full solves.
 2. **Share exact work across charts.** In Newton, diagonal toric and binomial engines, compute ray–monomial valuations, minima and face membership in batches. Reuse those data across incident charts and minimize readbacks. Keep the independent verifier's own pullback, ownership and face checks. Fan refinement and the next binomial blowup depend on the previous subdivision.
-3. **Accelerate the costly algebra phases.** The Katsura-7 benchmark measures the full certified Gröbner solve on both CPU and GPU, with separate trace, replay, lift and verification timings. Use it to evaluate dispatch thresholds on other devices. For Jacobian rank, batch matrices of similar size and test blocked pivot panels. [Katsura-7 results and reproduction](benchmarks/README.md#full-katsura-7-solve-on-cpu-and-gpu)
+3. **Accelerate the costly algebra phases.** The Katsura-6, -7 and -8 benchmarks measure full certified CPU, GPU and automatic solves, with separate trace, replay, lift and verification timings. Use the matching trace profiles to evaluate automatic dispatch on other devices. For Jacobian rank, batch matrices of similar size and test blocked pivot panels. [Profiles and full solves](benchmarks/README.md#profiling-katsura-6--7-and--8)
 4. **Batch within each blowup step.** In plane, chain, origin, repaired Newton and general-search paths, group independent child-chart substitutions, jets and Jacobian tests with compatible coefficient fields. Synchronize before selecting the global centre and before constructing the next dependent generation. Keep marked embeddings, the order of blowups and the owned complement of each centre intact.
 5. **Extend the shared atlas verifier.** Batch independent chart–divisor subsets, local incidence and Euler computations. Merge overlap evidence and form the exact zeta functions on the host. Validate against fresh and saved records in both modes, including labelled attachments, conjugate branches, companion embedded resolutions and partial results. Promote a path to automatic dispatch after repeated end-to-end timings show which sizes benefit on that device.
 

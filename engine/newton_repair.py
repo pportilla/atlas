@@ -317,7 +317,7 @@ def _chart_polynomial(text, variables):
     return backend.from_terms(variables, parse_expression(text, names))
 
 
-def patch_record(chart, parent, chart_id):
+def patch_record(chart, parent, chart_id, parent_index=None):
     """Express a local blowup chart over the original coordinate space.
 
     Its local fibre cuts out the chosen Newton points, also on the cover:
@@ -335,8 +335,10 @@ def patch_record(chart, parent, chart_id):
     parent_map = tuple(_chart_polynomial(text, parent_variables) for text in parent["map"].values())
     mapping = pullbacks(chart.variables, tuple(substitutions[v.name] for v in parent_variables),
                         parent_variables, parent_map)
+    projection = ((parent_index, tuple(substitutions[v.name] for v in parent_variables))
+                  if parent_index is not None else ())
     patch = replace(chart, fibre=tuple(mapping), region=tuple(dict.fromkeys((*chart.region, *chart.fibre))),
-                    coordinates=tuple(zip(parent["map"], mapping)))
+                    coordinates=tuple(zip(parent["map"], mapping)), repair_projection=projection)
     item, = to_json([patch])
     item.update(id=chart_id, parent=parent["id"])
     item["exceptional"] = [{"id": c["id"], "ideal": c["ideal"], "equation": ", ".join(c["ideal"]),
@@ -359,8 +361,11 @@ def join_atlas(record, toric_charts):
     from .atlas import from_json
     parents = [item for item in record["charts"] if "ray_indices" in item]
     patches = [item for item in record["charts"] if "ray_indices" not in item]
-    if len(parents) != len(toric_charts) or any("region" not in item for item in patches):
+    if len(parents) != len(toric_charts):
         return None
+    if any("region" not in item for item in patches):
+        from .archived_newton import archived_repair_charts
+        return archived_repair_charts(record, toric_charts)
     result = []
     for item, chart in zip(parents, toric_charts):
         centres = [tuple(_chart_polynomial(text, chart.variables) for text in centre["ideal"])

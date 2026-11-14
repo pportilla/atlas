@@ -225,6 +225,8 @@ public:
     // `keep` are left alone. With num and den the exact remainder is f*num/den.
     // With a bound, a reducer is used only when it keeps the sugar within it.
     void reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar = nullptr, long bound = LONG_MAX);
+    // Consume a query; the first irreducible term proves nonmembership.
+    bool contains(Poly& f);
     std::string division(Poly& f, Rational& scale);
     // Buchberger's algorithm for homogeneous generators when the Hilbert
     // series of the ideal they generate is known (its numerator, for the
@@ -265,6 +267,8 @@ protected:
     std::vector<Delayed> waiting_;
 
     enum Outcome { ZERO, POSTPONED, READY };
+    template<bool membership>
+    bool reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, long bound);
     void attempt(std::vector<Poly>& input, size_t known);
     Outcome head(Poly& f, long& sugar);
     bool pending_below(long sugar) const {
@@ -273,8 +277,8 @@ protected:
             if (d.sugar < sugar) return true;
         return false;
     }
-    void guard(const Poly& f) const {
-        if (bit_limit_ && !f.empty() && fmpz_bits(&f.c[0].v) > bit_limit_) throw Swell();
+    void guard(const Poly& f, size_t head = 0) const {
+        if (bit_limit_ && head < f.size() && fmpz_bits(&f.c[head].v) > bit_limit_) throw Swell();
         if (work_limit_ > 0 && work_ > work_limit_) throw Swell();
     }
     const u64* lead(int g) const { return G[g].p.m.data(); }

@@ -11,6 +11,29 @@ from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, f
 
 
 class AffineMaps(unittest.TestCase):
+    def test_native_input_rows_reuse_encodings_in_chart_order(self):
+        from engine import native_polynomial as np
+        a, b = np.Dummy("v"), np.Dummy("v")
+        variables = [a, b]
+        self.assertEqual(np.row(variables, a), "1 1 0")
+        with patch.object(np, "_chart_positions", side_effect=AssertionError("row encoded twice")):
+            self.assertEqual(np.row(tuple(variables), a), "1 1 0")
+        variables.reverse()
+        self.assertEqual(np.row(variables, a), "1 0 1")
+        self.assertEqual(np.row(variables, b), "1 1 0")
+        self.assertEqual(np.row(variables, 1), "1 0 0")
+        with self.assertRaises(TypeError):
+            np.row(variables, 1.0)
+
+    def test_coordinate_rows_reuse_native_chart_variables(self):
+        from engine import native_polynomial as np
+        a, b = np.Dummy("row"), np.Dummy("row")
+        with patch.object(affine_kernel, "_polynomial", side_effect=AssertionError):
+            self.assertIs(affine_kernel._sparse_expression((b, a), "1 0 1"), a)
+            self.assertIs(affine_kernel._sparse_expression((a, b), "1 0 1"), b)
+        with self.assertRaises(ValueError):
+            affine_kernel._sparse_expression((a, a), "1 0 1")
+
     def test_common_characters_with_arbitrary_signed_coordinates(self):
         # Nonsymmetric, orientation reversing, and too large for a machine integer.
         shear = 2**100
@@ -120,6 +143,31 @@ class AffineMaps(unittest.TestCase):
         self.assertEqual(_dimension(variables, (sp.S.One,)), -1)
         self.assertEqual(frame_locus(variables, (a*b,), (b,), closure=True), (a,))
         self.assertTrue(frame_locus(variables, (a*b,), (a, b)))
+
+    def test_dimension_adds_heights_of_disjoint_leading_supports(self):
+        from engine.ideal_operations import dimension
+        from engine.native_polynomial import symbols
+
+        variables = symbols("x0:31")
+        generators = []
+        for i in range(10):
+            # Interleave the coordinates so components are not adjacent in the ring.
+            a, b, c = variables[i], variables[10+i], variables[20+i]
+            generators.extend((a*b, b*c, c*a))
+        self.assertEqual(dimension(variables, generators), 11)  # ten triangles and a free line
+        self.assertEqual(dimension(variables, ()), 31)
+        self.assertEqual(dimension(variables, (1,)), -1)
+
+    def test_dimension_groups_transitively_overlapping_supports(self):
+        from engine.ideal_operations import dimension
+        from engine.native_polynomial import symbols
+
+        a, b, c, d, e, f, g = variables = symbols("x0:7")
+        # The bridge b*c joins the disjoint edges a*b and c*d. Two
+        # coordinates cover the path and one covers the separate edge.
+        self.assertEqual(dimension(variables, (a*b, c*d, e*f, b*c)), 4)
+        # One coordinate now covers the bridge and both outer edges.
+        self.assertEqual(dimension(variables, (a*b, b*c, b*d, e*f)), 5)
 
     def test_inverse_wider_than_packed_graph(self):
         local, base = sp.symbols("u:17"), sp.symbols("x:17")

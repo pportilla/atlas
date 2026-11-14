@@ -2,9 +2,11 @@
 
 Each regular cone supplies the lattice basis of its chart and a common
 linear map from torus coordinates to the original input. The maps and
-strict equations are checked. All exceptional rays must be internal, so
-their intersections lie over the origin. Transversality to every boundary
-stratum excludes components supported on smaller orbits.
+strict equations are checked. For internal rays their intersections lie
+over the origin. For rays mapping onto positive-dimensional centres, an
+orbit lies over the origin precisely when every base monomial vanishes.
+Smooth transverse sections and their character restrictions identify
+the closures of the components meeting those orbits.
 
 An orbit section of Newton dimension at least two is geometrically
 connected by the toric Lefschetz theorem, hence integral by smoothness.
@@ -19,7 +21,7 @@ from functools import lru_cache
 from itertools import combinations
 
 from .fan_geometry import canonical_laurent_terms, complete_fan as _complete_fan
-from .newton_faces import certify_face
+from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 
 
 def _normalized(terms):
@@ -27,23 +29,23 @@ def _normalized(terms):
     if first == 1:
         return tuple(sorted(terms.items()))
     from .native_library import affine_request
-    from .polynomial import checked_native, format_poly, sparse_row
+    from .polynomial import checked_native, format_poly, rational_text, sparse_row
     names = tuple(f"x{i}" for i in range(len(next(iter(terms)))))
     def native():
-        row, = affine_request(["function", " ".join(names), f"({format_poly(terms,names)})/({first})"])
+        row, = affine_request(["function", " ".join(names), f"({format_poly(terms,names)})/({rational_text(first)})"])
         return tuple(sorted(sparse_row(row).items()))
     return checked_native(native, lambda: tuple((e, Fraction(c)/first) for e, c in sorted(terms.items())))
 
 
 @lru_cache(maxsize=4096)
-def _orbit(rays, terms):
-    return _section(_normalized(canonical_laurent_terms(rays, dict(terms))))
+def _orbit(rays, terms, exhaustive=False):
+    return _section(_normalized(canonical_laurent_terms(rays, dict(terms))), exhaustive)
 
 
 @lru_cache(maxsize=4096)
-def _section(terms):
+def _section(terms, exhaustive):
     common = dict(terms)
-    proof = certify_face(common)
+    proof = certify_face(common, exhaustive=exhaustive)
     if proof["status"] != "nondegenerate":
         return None
     dimension = proof["face_dimension"]
@@ -52,12 +54,36 @@ def _section(terms):
     if dimension > 1:
         return 1, None
     edge = proof["edge"]
-    coefficients = {int(k): Fraction(v) for k, v in edge["root_polynomial"].items()}
     # Torus nondegeneracy in one primitive character means every nonzero
     # root is simple. Translating the segment to start at zero makes its
     # constant coefficient nonzero, so its degree counts all its roots.
-    signature = tuple(edge["direction"]), _normalized({(k,): c for k, c in coefficients.items()})
+    signature = tuple(edge["direction"]), _normalized(edge_polynomial(edge))
     return edge["degree"], signature
+
+
+@lru_cache(maxsize=4096)
+def _absolute_torus_section(terms):
+    """Prove geometric irreducibility on the open torus by factoring its monomial-free equation."""
+    from .affine_kernel import _polynomial
+    from .chart_expressions import runtime_expressions
+    from .geometric_components import _certify, _factor_records
+    from .reference import QQ
+    variables = runtime_expressions().symbols(f"orbit_var0:{len(terms[0][0])}")
+    expression = _polynomial(dict(terms), variables)
+    factors = _factor_records(variables, expression, QQ)
+    if len(factors) != 1:
+        return False
+    factor, multiplicity, data = factors[0]
+    return multiplicity == 1 and _certify(variables, factor, data, QQ, 1) is True
+
+
+@lru_cache(maxsize=4096)
+def _affine_orbit(rays, terms, exhaustive):
+    common = _normalized(canonical_laurent_terms(rays, dict(terms)))
+    section = _section(common, exhaustive)
+    if section == (1, None) and not _absolute_torus_section(common):
+        return None
+    return section
 
 
 def _chart_terms(chart, dimension, common_linear):
@@ -94,10 +120,11 @@ def _chart_terms(chart, dimension, common_linear):
         if len(ideal) != 1 or ideal[0] not in axes:
             return None
         at = axes.index(ideal[0])
-        if min(rays[at]) <= 0 or at in boundary:
+        if at in boundary:
             return None
         boundary[at] = label
-    if any((min(ray) > 0) != (i in boundary) for i, ray in enumerate(rays)):
+    axes_of_orthant = {tuple(int(i == j) for i in range(dimension)) for j in range(dimension)}
+    if any((ray not in axes_of_orthant) != (i in boundary) for i, ray in enumerate(rays)):
         return None
     return rays, boundary, sparse_terms(axes, strict[0][0])
 
@@ -126,11 +153,18 @@ def torus_complex(charts, dimension, intrinsic):
 
 def section_complex(chart_terms, dimension, intrinsic):
     """Orbit sections of a verified regular cover with its maps in the common torus."""
+    chart_terms = tuple(chart_terms)
+    if any(details is None for details in chart_terms):
+        return None
+    over_base_strata = any(min(rays[i]) == 0 for rays, boundary, _ in chart_terms for i in boundary)
+    if over_base_strata:
+        if not intrinsic:
+            return None
     sections, labels, rays_by_label = {}, [], {}
+    exhaustive = exhaustive_faces()
+    visible = set()
     global_equation = None
     for details in chart_terms:
-        if details is None:
-            return None
         rays, boundary, terms = details
         try:
             original = _normalized(canonical_laurent_terms(rays, dict(terms)))
@@ -163,16 +197,27 @@ def section_complex(chart_terms, dimension, intrinsic):
                     restricted = tuple(term for term in hyperplanes[first] if all(term[0][i] == 0 for i in other))
                 if not restricted:
                     return None
-                orbit = _orbit(rays, restricted)
+                boundary_face = all(i in boundary for i in indices)
+                orbit = (_affine_orbit(rays, restricted, exhaustive) if over_base_strata and boundary_face
+                         else _orbit(rays, restricted, exhaustive))
                 if orbit is None:
                     return None
-                if any(i not in boundary for i in indices):
+                if (over_base_strata and orbit[0] and
+                        all(any(rays[i][j] for i in indices) for j in range(dimension))):
+                    # This orbit lies over the origin. Every subface with
+                    # a segment section has all its roots represented here.
+                    names = [boundary[i] for i in indices if i in boundary]
+                    for k in range(1, len(names)+1):
+                        visible.update(map(frozenset, combinations(names, k)))
+                if not boundary_face:
                     continue
                 key = frozenset(boundary[i] for i in indices)
                 value = orbit if intrinsic else (1, None)
                 if key in sections and sections[key] != value:
                     return None
                 sections[key] = value
+    if over_base_strata:
+        sections = {key: section for key, section in sections.items() if key in visible}
     ids, vertices, cells = {}, [], []
     order = labels.index
     for key in sorted(sections, key=lambda k: (len(k), sorted(map(order, k)))):

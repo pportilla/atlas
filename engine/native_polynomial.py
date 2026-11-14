@@ -12,7 +12,7 @@ from functools import cached_property, lru_cache
 from itertools import count
 
 from .native_library import affine_request
-from .polynomial import format_poly, rational_text, sparse_row
+from .polynomial import format_poly, integer_text, rational_text, sparse_row
 
 
 @dataclass(frozen=True, order=True)
@@ -73,11 +73,11 @@ class Expr:
     def __int__(self):
         return int(self.scalar)
     def __eq__(self, other):
+        if isinstance(other, Expr):
+            return self._coords == other._coords and self._terms == other._terms
         if isinstance(other, (int,Fraction)):
             return self.is_number and self.scalar == other
-        if not isinstance(other, Expr):
-            return NotImplemented
-        return self._coords == other._coords and self._terms == other._terms
+        return NotImplemented
     def __lt__(self, other):
         return self.scalar < coerce(other).scalar
     def __le__(self, other):
@@ -200,7 +200,26 @@ def terms(variables, value):
 
 
 def row(variables, value):
-    return ';'.join(rational_text(c) + ' ' + ' '.join(map(str, e)) for e,c in terms(variables,value).items())
+    """Encode an immutable polynomial in the requested chart coordinate order."""
+    return _encoded_row(tuple(variables), coerce(value))
+
+
+@lru_cache(maxsize=16384)
+def _encoded_row(variables, value):
+    columns = _chart_positions(variables)
+    indices = tuple(columns[key] for key in value._coords)
+    lines = []
+    for powers, coefficient in value._terms:
+        exponents = ['0'] * len(variables)
+        for index, power in zip(indices, powers):
+            exponents[index] = integer_text(power)
+        lines.append(rational_text(coefficient) + ' ' + ' '.join(exponents))
+    return ';'.join(lines)
+
+
+@lru_cache(maxsize=1024)
+def _chart_positions(variables):
+    return {v._coords[0]: i for i, v in enumerate(variables)}
 
 
 @lru_cache(maxsize=1024)
@@ -238,7 +257,7 @@ def _binary(op, left, right):
         raise ZeroDivisionError
     keys = tuple(sorted(set(left._coords).union(right._coords)))
     header, names = _names(keys)
-    source = (f'({left.text(names)})^{int(right)}' if op == '^' else
+    source = (f'({left.text(names)})^{integer_text(int(right))}' if op == '^' else
               f'({left.text(names)}){op}({right.text(names)})')
     result, = affine_request(['function', header, source])
     return _decode(keys, result)

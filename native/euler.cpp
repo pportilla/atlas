@@ -77,15 +77,26 @@ bool disjoint(const Set& a, const Set& b) {
     return true;
 }
 
-// A polynomial in one variable over the polynomials in the others: the
-// coefficient of v^k is (*c)[k] for k < len, and the last one is not zero.
+// Only store the nonzero coefficients. Specializing a leading coefficient
+// to zero removes one term from the shared prefix.
+using FibreTerm = std::pair<Z, MP>;
+using FibreTerms = std::vector<FibreTerm>;
 struct Uni {
-    std::shared_ptr<const std::vector<MP>> c;
-    int len = 0;
-    int degree() const { return len - 1; }
-    const MP& lead() const { return (*c)[len - 1]; }
-    const MP& at(int k) const { return (*c)[k]; }
+    std::shared_ptr<const FibreTerms> terms;
+    size_t len = 0;
+    const FibreTerm& at(size_t i) const { return (*terms)[i]; }
+    const Z& degree() const { return at(len - 1).first; }
+    const MP& lead() const { return at(len - 1).second; }
 };
+
+struct PowerLess {
+    bool operator()(const Z& a, const Z& b) const { return fmpz_cmp(&a.v, &b.v) < 0; }
+};
+
+Uni fibre_polynomial(FibreTerms terms) {
+    const size_t count = terms.size();
+    return {std::make_shared<const FibreTerms>(std::move(terms)), count};
+}
 
 // A piece of the base, and what a polynomial is on it; `some` false for zero.
 struct Case {
@@ -226,89 +237,98 @@ struct Euler::State {
 
     // f as a polynomial in the variable v.
     Uni split(const MP& f, int v) const {
-        Z exact;
-        fmpz_mpoly_degree_fmpz(&exact.v, f.p, v, ctx);
-        if (fmpz_cmp_si(&exact.v, INT_MAX) >= 0) throw Limit("Fibre degree is too large to materialize.");
-        const slong degree = fmpz_get_si(&exact.v);
-        auto coefficients = std::make_shared<std::vector<MP>>();
-        Uni out;
-        if (degree < 0) return out;
-        coefficients->assign(static_cast<size_t>(degree) + 1, MP(ctx));
         fmpz_mpoly_univar_t u;
         fmpz_mpoly_univar_init(u, ctx);
         fmpz_mpoly_to_univar(u, f.p, v, ctx);
-        const slong length = fmpz_mpoly_univar_length(u, ctx);
-        for (slong i = 0; i < length; ++i) {
-            const slong e = fmpz_mpoly_univar_get_term_exp_si(u, i, ctx);
-            fmpz_mpoly_univar_get_term_coeff((*coefficients)[static_cast<size_t>(e)].p, u, i, ctx);
+        FibreTerms terms;
+        for (slong i = fmpz_mpoly_univar_length(u, ctx); i-- > 0;) {
+            Z exponent;
+            fmpz_set(&exponent.v, u->exps + i);
+            MP coefficient(ctx);
+            fmpz_mpoly_univar_swap_term_coeff(coefficient.p, u, i, ctx);
+            terms.emplace_back(std::move(exponent), std::move(coefficient));
         }
         fmpz_mpoly_univar_clear(u, ctx);
-        out.len = static_cast<int>(degree) + 1;
-        out.c = std::move(coefficients);
-        return out;
+        return fibre_polynomial(std::move(terms));
     }
-    // c^d * q(v = -p0/c), for d the degree of q in v and c a nonzero integer.
+    MP constant_term(const Uni& p) const {
+        return p.len && fmpz_is_zero(&p.at(0).first.v) ? p.at(0).second : MP(ctx);
+    }
+    // Homogeneous evaluation at v = -p0/c. Skip gaps between successive
+    // exponents, including leading powers common to all terms.
     MP substituted(const MP& q, int v, const MP& p0, const fmpz_t c) const {
         const Uni parts = split(q, v);
-        if (parts.len <= 1) return q;
-        MP minus(ctx), result(parts.lead()), term(ctx);
+        if (!parts.len || fmpz_is_zero(&parts.degree().v)) return q;
+        if (p0.zero()) return constant_term(parts);
+        MP minus(ctx), result(parts.lead()), factor(ctx), term(ctx);
         fmpz_mpoly_neg(minus.p, p0.p, ctx);
-        Z power;
-        fmpz_one(&power.v);
-        for (int k = parts.degree() - 1; k >= 0; --k) {
-            fmpz_mul(&power.v, &power.v, c);
-            fmpz_mpoly_mul(result.p, result.p, minus.p, ctx);
-            fmpz_mpoly_scalar_mul_fmpz(term.p, parts.at(k).p, &power.v, ctx);
+        Z gap, distance, scalar;
+        auto multiply_power = [&]() {
+            if (!fmpz_mpoly_pow_fmpz(factor.p, minus.p, &gap.v, ctx))
+                throw Limit("The Euler substitution could not expand a polynomial power.");
+            fmpz_mpoly_mul(result.p, result.p, factor.p, ctx);
+        };
+        for (size_t k = parts.len - 1; k > 0; --k) {
+            const auto& next = parts.at(k - 1);
+            fmpz_sub(&gap.v, &parts.at(k).first.v, &next.first.v);
+            multiply_power();
+            fmpz_sub(&distance.v, &parts.degree().v, &next.first.v);
+            if (!fmpz_pow_fmpz(&scalar.v, c, &distance.v))
+                throw Limit("The Euler substitution could not materialize a coefficient.");
+            fmpz_mpoly_scalar_mul_fmpz(term.p, next.second.p, &scalar.v, ctx);
             fmpz_mpoly_add(result.p, result.p, term.p, ctx);
         }
+        gap = parts.at(0).first;
+        if (!fmpz_is_zero(&gap.v)) multiply_power();
         return result;
     }
 
-    static void trim(std::vector<MP>& r) {
-        while (!r.empty() && r.back().zero()) r.pop_back();
-    }
-    static Uni wrap(std::vector<MP>&& r) {
-        Uni out;
-        out.len = static_cast<int>(r.size());
-        out.c = std::make_shared<const std::vector<MP>>(std::move(r));
-        return out;
-    }
     Uni derivative(const Uni& g) const {
-        std::vector<MP> d;
-        for (int k = 1; k < g.len; ++k) {
+        FibreTerms d;
+        for (size_t k = 0; k < g.len; ++k) {
+            const auto& [power, coefficient] = g.at(k);
+            if (fmpz_is_zero(&power.v)) continue;
+            Z exponent;
+            fmpz_sub_ui(&exponent.v, &power.v, 1);
             MP term(ctx);
-            fmpz_mpoly_scalar_mul_si(term.p, g.at(k).p, k, ctx);
-            d.push_back(std::move(term));
+            fmpz_mpoly_scalar_mul_fmpz(term.p, coefficient.p, &power.v, ctx);
+            d.emplace_back(std::move(exponent), std::move(term));
         }
-        return wrap(std::move(d));
+        return fibre_polynomial(std::move(d));
     }
     // A pseudo-remainder of a by b: lc(b)^k * a = q*b + r with deg r < deg b,
     // then divided by integers and by factors of lc(b) common to its
     // coefficients. Where lc(b) is not zero it is the remainder up to a
     // function without zeros.
     Uni remainder(const Uni& a, const Uni& b) const {
-        std::vector<MP> r(a.c->begin(), a.c->begin() + a.len);
-        const int db = b.degree();
+        std::map<Z, MP, PowerLess> coefficients(a.terms->begin(), a.terms->begin() + a.len);
+        const Z& db = b.degree();
         const MP& lb = b.lead();
+        const bool monic = fmpz_mpoly_equal_si(lb.p, 1, ctx);
         MP term(ctx);
-        while (static_cast<int>(r.size()) - 1 >= db) {
-            const int dr = static_cast<int>(r.size()) - 1;
-            const MP lr = std::move(r.back());
-            r.pop_back();
-            if (!lb.constant() || !fmpz_mpoly_equal_si(lb.p, 1, ctx))
-                for (MP& coefficient : r) fmpz_mpoly_mul(coefficient.p, coefficient.p, lb.p, ctx);
-            for (int k = 0; k < db; ++k) {
-                if (b.at(k).zero()) continue;
-                fmpz_mpoly_mul(term.p, lr.p, b.at(k).p, ctx);
-                MP& target = r[static_cast<size_t>(k + dr - db)];
-                fmpz_mpoly_sub(target.p, target.p, term.p, ctx);
+        while (!coefficients.empty() && fmpz_cmp(&coefficients.rbegin()->first.v, &db.v) >= 0) {
+            auto leading = coefficients.extract(std::prev(coefficients.end()));
+            Z shift;
+            fmpz_sub(&shift.v, &leading.key().v, &db.v);
+            if (!monic)
+                for (auto& entry : coefficients) fmpz_mpoly_mul(entry.second.p, entry.second.p, lb.p, ctx);
+            for (size_t k = 0; k + 1 < b.len; ++k) {
+                const auto& [power, coefficient] = b.at(k);
+                Z target;
+                fmpz_add(&target.v, &power.v, &shift.v);
+                auto entry = coefficients.try_emplace(std::move(target), ctx).first;
+                fmpz_mpoly_mul(term.p, leading.mapped().p, coefficient.p, ctx);
+                MP& value = entry->second;
+                fmpz_mpoly_sub(value.p, value.p, term.p, ctx);
+                if (value.zero()) coefficients.erase(entry);
             }
-            trim(r);
         }
-        if (r.empty()) return wrap(std::move(r));
-        MP content(r[0]);
-        for (size_t k = 1; k < r.size() && !(content.constant() && fmpz_mpoly_equal_si(content.p, 1, ctx)); ++k)
-            if (!r[k].zero()) content = gcd(content, r[k]);
+        if (coefficients.empty()) return fibre_polynomial({});
+        FibreTerms r;
+        for (auto& entry : coefficients) r.emplace_back(entry.first, std::move(entry.second));
+        MP content(r[0].second);
+        for (size_t k = 1; k < r.size() && !fmpz_mpoly_equal_si(content.p, 1, ctx); ++k)
+            content = gcd(content, r[k].second);
         Z integer;
         for (slong i = 0; i < fmpz_mpoly_length(content.p, ctx); ++i) {
             Z coefficient;
@@ -316,16 +336,16 @@ struct Euler::State {
             fmpz_gcd(&integer.v, &integer.v, &coefficient.v);
         }
         if (!fmpz_is_one(&integer.v))
-            for (MP& coefficient : r) fmpz_mpoly_scalar_divexact_fmpz(coefficient.p, coefficient.p, &integer.v, ctx);
+            for (auto& entry : r) fmpz_mpoly_scalar_divexact_fmpz(entry.second.p, entry.second.p, &integer.v, ctx);
         normalize(content);
         while (!content.constant() && !lb.constant()) {
             MP common = gcd(content, lb);
             normalize(common);
             if (common.constant()) break;
-            for (MP& coefficient : r) coefficient = quotient(coefficient, common);
+            for (auto& entry : r) entry.second = quotient(entry.second, common);
             content = quotient(content, common);
         }
-        return wrap(std::move(r));
+        return fibre_polynomial(std::move(r));
     }
 
     // The pieces of the piece (z, u) on which p has a constant degree.
@@ -343,7 +363,6 @@ struct Euler::State {
             }
             // On what is left the leading coefficient vanishes.
             --p.len;
-            while (p.len > 0 && p.lead().zero()) --p.len;
         }
         out.push_back({p, false, z, u});
         return out;
@@ -372,12 +391,12 @@ struct Euler::State {
             for (Case& h : degrees(p, t.z, t.u)) {
                 if (!h.some) {
                     todo.push_back({t.g, t.some, rest, h.z, h.u});
-                } else if (h.g.degree() == 0) {
+                } else if (fmpz_is_zero(&h.g.degree().v)) {
                     out.push_back(h);
                 } else if (!t.some) {
                     todo.push_back({h.g, true, rest, h.z, h.u});
                 } else {
-                    const bool first = t.g.degree() >= h.g.degree();
+                    const bool first = fmpz_cmp(&t.g.degree().v, &h.g.degree().v) >= 0;
                     const Uni& a = first ? t.g : h.g;
                     const Uni& b = first ? h.g : t.g;
                     std::vector<Uni> pending;
@@ -464,13 +483,14 @@ struct Euler::State {
                     fmpz_mpoly_degree_fmpz(&degree.v, p.p, v, ctx);
                     if (!fmpz_is_one(&degree.v)) continue;
                     const Uni parts = split(p, v);
-                    if (!parts.at(1).constant()) continue;
+                    if (!parts.lead().constant()) continue;
                     Z c;
-                    fmpz_mpoly_get_fmpz(&c.v, parts.at(1).p, ctx);
+                    fmpz_mpoly_get_fmpz(&c.v, parts.lead().p, ctx);
+                    const MP p0 = constant_term(parts);
                     Set remaining;
                     for (int other : equations) {
                         if (other == id) continue;
-                        const int next = condition(substituted(conditions[static_cast<size_t>(other)], v, parts.at(0), &c.v));
+                        const int next = condition(substituted(conditions[static_cast<size_t>(other)], v, p0, &c.v));
                         if (next >= 0) remaining = with(remaining, next);
                     }
                     return closed(remaining);
@@ -503,15 +523,17 @@ struct Euler::State {
         }
         Z value;
         for (const Case& piece : gcd_cases(fibre, below, Set())) {
-            if (!piece.some || piece.g.degree() == 1) {
+            if (!piece.some || fmpz_is_one(&piece.g.degree().v)) {
                 const auto part = open_part(piece.z, piece.u);
                 fmpz_add(&value.v, &value.v, &part.v);
-            } else if (piece.g.degree() > 1) {
+            } else if (fmpz_cmp_si(&piece.g.degree().v, 1) > 0) {
                 std::vector<Uni> pair = {piece.g, derivative(piece.g)};
                 for (const Case& repeated : gcd_cases(pair, piece.z, piece.u)) {
                     if (!repeated.some) throw Limit("A polynomial of known degree became zero.");
                     const auto part = open_part(repeated.z, repeated.u);
-                    fmpz_addmul_ui(&value.v, &part.v, piece.g.degree() - repeated.g.degree());
+                    Z count;
+                    fmpz_sub(&count.v, &piece.g.degree().v, &repeated.g.degree().v);
+                    fmpz_addmul(&value.v, &part.v, &count.v);
                 }
             }
         }

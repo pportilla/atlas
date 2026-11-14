@@ -97,6 +97,131 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         tangent = replace(c, components=(c.components[0], ("strict", 1, 1, (z-y*(y-x**2),))))
         self.assertIsNone(glued_complex([tangent], 3, intrinsic=True))
 
+    def test_higher_intersections_of_one_restricted_exceptional_divisor(self):
+        from itertools import combinations
+        from math import prod
+        from engine.chart_expressions import runtime_expressions
+        api = runtime_expressions()
+        for dimension in (3, 4):
+            with self.subTest(dimension=dimension):
+                coordinates = api.symbols(f"x0:{dimension}")
+                w = api.Symbol("w")
+                variables = (*coordinates, w)
+                images = tuple(w*v for v in coordinates) + (w,)
+                strict = w-prod(coordinates)
+                chart = Chart(variables, (), (("D", 1, 1, (w,)), ("strict", 1, 1, (strict,))),
+                              images, (), tuple(zip(map(str, variables), images)), ())
+                # Blowup of the origin with w as pivot. The second presentation
+                # shears coordinates; over w=0, the branches still have distinct
+                # generic points, though they meet on this nonempty overlap.
+                move = {coordinates[0]: coordinates[0]+coordinates[1]}
+                other = replace(chart, region=(api.S.One,),
+                                components=(chart.components[0], ("strict", 1, 1, (strict.xreplace(move),))),
+                                coordinates=tuple((k,g.xreplace(move)) for k,g in chart.coordinates),
+                                fibre=tuple(g.xreplace(move) for g in chart.fibre))
+                dual = glued_complex([chart, other], dimension+1, intrinsic=True)
+                self.assertEqual(dual["status"], "complete")
+                vertices = [v["id"] for v in dual["vertices"]]
+                self.assertEqual(len(vertices), dimension)
+                faces = {frozenset([v]): v for v in vertices}
+                for cell in dual["cells"]:
+                    ends = cell["vertices"]
+                    self.assertCountEqual(cell["faces"], [faces[frozenset(k)] for k in combinations(ends,len(ends)-1)])
+                    faces[frozenset(ends)] = cell["id"]
+                self.assertEqual(len(faces), 2**dimension-1)
+                tangent = replace(chart, components=(chart.components[0],
+                                  ("strict", 1, 1, (w-coordinates[0]*(coordinates[0]-coordinates[1]**2),))))
+                self.assertIsNone(glued_complex([tangent], dimension+1, intrinsic=True))
+
+    def test_one_intrinsic_vertex_lies_in_two_ambient_divisors(self):
+        from engine.chart_expressions import runtime_expressions
+        api = runtime_expressions()
+        x,y,z,w = variables = api.symbols("x y z w")
+        rows = (("D",1,1,(x,)), ("E",1,1,(y,)), ("F",1,1,(z,)), ("strict",1,1,(y-x,)))
+        images = (x*y*z,x*x*y*z,x*y*z*z,x*y*z*w)
+        chart = Chart(variables, (), rows, images, (), tuple(zip(("a","b","c","d"),images)), ())
+        dual = glued_complex([chart,replace(chart,region=(api.S.One,))],4,intrinsic=True)
+        self.assertEqual(dual["status"], "complete")
+        self.assertEqual(len(dual["vertices"]), 2)
+        shared, = [v for v in dual["vertices"] if v.get("ambient_components") == ["D","E"]]
+        edge, = dual["cells"]
+        self.assertCountEqual(edge["vertices"], [shared["id"],"F"])
+        from engine.strata import annotate_complex
+        annotated = {**dual, "vertices": [{"id": v["id"], "dimension": 99} for v in dual["vertices"]]}
+        self.assertEqual(annotate_complex(annotated, dual)["vertices"], dual["vertices"])
+
+    def test_two_triangles_have_different_parallel_edges(self):
+        from engine.chart_expressions import runtime_expressions
+        api = runtime_expressions()
+        x,y,z,w = variables = api.symbols("x y z w")
+        # The sections of D and E on the threefold are disjoint lines at
+        # x=0 and x=1. F cuts each in one point. The second chart exchanges
+        # these roots, so counting faces or matching them by local order fails.
+        base = w*y*z
+        images = (base, x*base, w*base, z*base)
+        rows = (("D",1,1,(y,)), ("E",1,1,(w,)), ("F",1,1,(z,)), ("strict",1,1,(w-y-x*(x-1),)))
+        chart = Chart(variables, (), rows, images, (), tuple(zip(("X","Y","Z","W"), images)), ())
+        move = {x: 1-x, y: y+z}
+        other = replace(chart, components=tuple((k,n,j,tuple(g.xreplace(move) for g in ideal))
+                                                for k,n,j,ideal in rows),
+                        coordinates=tuple((k,g.xreplace(move)) for k,g in chart.coordinates),
+                        fibre=tuple(g.xreplace(move) for g in images), region=(api.S.One,))
+        for charts in ([chart,other], [other,chart]):
+            dual = glued_complex(charts,4,intrinsic=True)
+            self.assertEqual(dual["status"], "complete")
+            edges = {c["id"]: c["vertices"] for c in dual["cells"] if c["dimension"] == 1}
+            parallel = {k for k,v in edges.items() if set(v) == {"D","E"}}
+            triangles = [c for c in dual["cells"] if c["dimension"] == 2]
+            self.assertEqual((len(edges),len(parallel),len(triangles)), (4,2,2))
+            self.assertCountEqual([f for c in triangles for f in c["faces"] if f in parallel], parallel)
+            for c in triangles:
+                self.assertCountEqual([edges[f] for f in c["faces"]], [["D","E"],["D","F"],["E","F"]])
+
+    def test_birational_inverse_is_verified_on_the_marked_sheet(self):
+        from engine.chart_expressions import runtime_expressions
+        from engine.repair_gluing import _birational_parameters
+        api = runtime_expressions()
+        x,y,t = variables = api.symbols("x y t")
+        m = t**2-2
+        field = (t,m,2,"sqrt(2)")
+        c = Chart(variables,(m,),(),(),(),(),(),coefficient_field=field)
+        self.assertIsNotNone(_birational_parameters(c,(t*x,x*y)))
+        # Over Q(t), x -> (t²-2)x has an inverse. Both its coordinate and
+        # its inverse denominator vanish identically on the stated sheet.
+        self.assertIsNone(_birational_parameters(c,(m*x,y)))
+        self.assertIsNone(_birational_parameters(c,(x**2,y)))
+        from engine.repair_gluing import _reduced_fraction, transition_on_field_sheet
+        with self.assertRaisesRegex(ArithmeticError, "denominator"):
+            _reduced_fraction(c,x,api.S.Zero)
+        # In K=Q(sqrt(2)), the target inverse y=B/A specializes to
+        # (x²-2)/(x-t). Cancellation makes the transition regular on x=t,
+        # including this entire exceptional branch.
+        source = (x-t,y*(x*x-2))
+        target = (x,x*y)
+        transfer, holes = transition_on_field_sheet(c,c,source,target)
+        self.assertEqual(holes, ())
+        from engine.groebner import groebner
+        answer = groebner((m,),variables).reduce(transfer(y)-y*(x+t))[1]
+        self.assertEqual(answer, 0)
+
+
+    def test_a_regular_transition_can_contract_a_prime_outside_the_overlap(self):
+        from engine.chart_expressions import runtime_expressions
+        from engine.atlas_gluing import _prime_groups
+        from engine.repair_gluing import transition_on_field_sheet
+        api = runtime_expressions()
+        x,y = axes = api.symbols("x y")
+        charts = [Chart(axes,(),(),(),(),(),()),Chart(axes,(),(),(),(),(),())]
+        maps = [(x,x*y),(x,y)]
+        def transition(i,j):
+            return transition_on_field_sheet(charts[i],charts[j],maps[i],maps[j])
+        def overlap(i,j):
+            self.fail("Both rational transitions are available.")
+        # x=0 is contracted to a point on y=0. These two curves have no
+        # common generic point where the forward and inverse maps agree.
+        pieces = [((0,"strict"),(x,)),((1,"strict"),(y,))]
+        self.assertEqual(len(_prime_groups(charts,pieces,overlap,transition)),2)
+
     def test_only_the_retained_complement_counts_and_separate_embeddings_glue(self):
         names = list("xy")
         for text in ("y^2-x^3", "(y^2-2*x^4)^2-x^11"):

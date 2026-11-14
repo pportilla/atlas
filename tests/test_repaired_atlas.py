@@ -13,6 +13,52 @@ from engine.resolve import resolve
 
 
 class RepairedNewtonAtlas(unittest.TestCase):
+    def test_repaired_cycle_over_conjugate_centres_in_a_product(self):
+        from collections import Counter
+        from engine.native_library import _MODE
+        from engine.repair_gluing import repair_charts
+        if _MODE in ("sympy", "check"):
+            self.skipTest("The full 26-sheet replay exercises the production kernel.")
+        names = list("xyz")
+        text = "x^3+y^3+z^3-3*x*y*z+x^4+y^4+z^4"
+        result = resolve(dict(polynomial=text, variables=names, mode="intrinsic", search="quick"))
+        expected = result["dual_complex"]
+        self.assertEqual(expected["status"], "complete")
+        # The tangent cubic is a triangle. The rational point and the two
+        # conjugate points are repaired by chains subdividing its three edges.
+        vertices = {v["id"] for v in expected["vertices"]}
+        edges = [c["vertices"] for c in expected["cells"]]
+        self.assertEqual((len(vertices),len(edges)), (10,10))
+        self.assertTrue(all(c["dimension"] == 1 and c["faces"] == c["vertices"] for c in expected["cells"]))
+        self.assertEqual(Counter(v for edge in edges for v in edge), {v:2 for v in vertices})
+        reached = {next(iter(vertices))}
+        for _ in vertices:
+            for edge in edges:
+                if reached.intersection(edge):
+                    reached.update(edge)
+        self.assertEqual(reached, vertices)
+        stored = json.loads(json.dumps(result["atlas"]))
+        for chart in stored:
+            free = ["free_a","free_b"]
+            chart["coordinates"].extend(free)
+            chart["map"].update(zip(("a","b"),free))
+            chart["fibre"].extend(free)
+            if chart.get("repair_projection"):
+                chart["repair_projection"]["map"].extend(free)
+            if chart.get("torus"):
+                for matrix in chart["torus"].values():
+                    for row in matrix:
+                        row.extend((0,0))
+                    matrix.extend(([0,0,0,1,0],[0,0,0,0,1]))
+        found = atlas.boundary_complex(atlas.from_json(stored), 5, intrinsic=True)
+        self.assertEqual(found["status"], "complete")
+        self.assertEqual(found["cells"], expected["cells"])
+        self.assertEqual({(v["id"],v["dimension"]) for v in found["vertices"]}, {(v,3) for v in vertices})
+        damaged = json.loads(json.dumps(result["atlas"]))
+        link = next(row["repair_projection"] for row in damaged if row.get("repair_projection"))
+        link["map"][0] += "+1"
+        self.assertIsNone(repair_charts(atlas.from_json(damaged)))
+
     def test_separating_cover_when_one_coordinate_is_constant(self):
         u, x, y, theta = sp.symbols("u x y theta")
         coords, free = (u, x, y), (x, y)

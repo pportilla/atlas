@@ -13,6 +13,10 @@
   <header class="site-header page">
     <h1 class="wordmark">Resolution Atlas</h1>
     <p class="tagline">Local resolution of hypersurface germs over <span class="m">ℚ</span></p>
+    <nav class="view-nav" aria-label="Atlas views">
+      <a href="/" aria-current="page">Resolution</a>
+      <a href="/algebra.html">Algebra</a>
+    </nav>
   </header>
 
   <main class="page">
@@ -36,6 +40,7 @@
           <label title="Resolve the hypersurface itself and inspect the exceptional locus on its smooth model."><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
         </fieldset>
         <label class="option check" title="Also compute the zeta function of the local monodromy."><input type="checkbox" id="zeta" name="zeta" checked> Zeta function</label>
+        <label class="option check" title="Start a cancellable background search without the standard request-size or calculation time limit."><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive search</label>
         <select class="option" id="compute" name="compute" aria-label="Compute device" title="Where eligible rank tests and chart transforms run. The CPU does everything else.">
           <option value="cpu">CPU</option>
           <option value="auto">CPU or GPU</option>

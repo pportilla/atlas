@@ -1,0 +1,15 @@
+# Embedded resolution of the ordinary cusp at the origin.
+x, y = coordinates("x", "y")
+f = y^2 - x^3
+R = resolve(f)
+
+print(R.divisors)
+branch = R.branches[0]
+E = branch.meets[0]
+print("Branch", branch.id, "meets", E.id, "in chart", branch.chart.id)
+print("Strict transform:", branch.chart.strict_transform)
+
+for chart in E.charts:
+    e = E.equation_in(chart)
+    total = chart.pullback(f)
+    print(E.id, "in", chart.id, "has local equation", e, "and multiplicity", total.multiplicity(e))

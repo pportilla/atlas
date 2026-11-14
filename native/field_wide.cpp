@@ -88,8 +88,38 @@ void monic(Terms& p) {
     for (auto& term : p) fmpq_div(term.second.q, term.second.q, lead.q);
 }
 
-// Always choose the first divisor whose head divides the current term.
-// This gives both the canonical remainder and the public ordered quotients.
+// In a basis computation x^a = +/-M can replace all copies in one term at once.
+// Every substitution lowers the monomial and preserves its residue modulo the
+// reducers. Ordered division still performs each step to collect its quotients.
+bool reduce_binomial_power(Terms& p, const Terms& divisor) {
+    if (divisor.size() != 2) return false;
+    const auto& [lead, lc] = *divisor.begin();
+    const auto& [tail, tc] = *divisor.rbegin();
+    size_t variable = lead.size();
+    for (size_t j = 0; j < lead.size(); ++j) {
+        if (fmpz_is_zero(&lead[j].v)) continue;
+        if (variable != lead.size() || !fmpz_is_zero(&tail[j].v)) return false;
+        variable = j;
+    }
+    if (variable == lead.size()) return false;
+    Coefficient ratio;
+    fmpq_div(ratio.q, tc.q, lc.q);
+    if (!fmpz_is_one(fmpq_denref(ratio.q)) || !fmpz_is_pm1(fmpq_numref(ratio.q))) return false;
+
+    auto head = p.extract(p.begin());
+    auto& powers = head.key();
+    Z copies, leftover;
+    fmpz_fdiv_qr(&copies.v, &leftover.v, &powers[variable].v, &lead[variable].v);
+    powers[variable] = std::move(leftover);
+    for (size_t j = 0; j < powers.size(); ++j)
+        fmpz_addmul(&powers[j].v, &copies.v, &tail[j].v);
+    // x^a = -(tc/lc) M, so equal signs flip the coefficient for odd powers.
+    if (fmpq_sgn(ratio.q) > 0 && fmpz_is_odd(&copies.v))
+        fmpq_neg(head.mapped().q, head.mapped().q);
+    add(p, std::move(powers), head.mapped());
+    return true;
+}
+
 Terms divide(Terms p, const Rows& reducers, Rows* quotients = nullptr) {
     Terms remainder(p.key_comp());
     while (!p.empty()) {
@@ -100,6 +130,7 @@ Terms divide(Terms p, const Rows& reducers, Rows* quotients = nullptr) {
             remainder.insert(p.extract(head));
             continue;
         }
+        if (!quotients && reduce_binomial_power(p, reducers[k])) continue;
         auto shift = difference(head->first, reducers[k].begin()->first);
         Coefficient factor;
         fmpq_div(factor.q, head->second.q, reducers[k].begin()->second.q);
@@ -218,12 +249,12 @@ std::string calculate(std::istream& input) {
     std::string result;
     if (op == "basis") {
         for (auto& p : basis(std::move(rows))) print_row(result, p);
-    } else if (op == "divide" && !rows.empty()) {
+    } else if ((op == "divide" || op == "remainder") && !rows.empty()) {
         Terms f = std::move(rows.front());
         rows.erase(rows.begin());
         for (auto& g : rows) if (g.empty()) throw std::invalid_argument("Cannot divide by zero.");
-        Rows quotients(rows.size(), Terms(order));
-        auto remainder = divide(std::move(f), rows, &quotients);
+        Rows quotients(op == "divide" ? rows.size() : 0, Terms(order));
+        auto remainder = divide(std::move(f), rows, op == "divide" ? &quotients : nullptr);
         for (auto& q : quotients) print_row(result, q);
         print_row(result, remainder);
     } else throw std::invalid_argument("Invalid sparse polynomial operation.");
@@ -245,3 +276,4 @@ extern "C" char* atlas_wide_block(const char* input, size_t length) noexcept {
 }
 
 extern "C" int atlas_grlex_abi() noexcept { return 1; }
+extern "C" int atlas_wide_remainder_abi() noexcept { return 1; }

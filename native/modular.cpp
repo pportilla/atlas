@@ -130,6 +130,16 @@ bool execute(const uint32_t* code, size_t from, size_t to, uint32_t p, uint32_t*
     return true;
 }
 
+// FLINT owns the large numerator and denominator allocated during rational
+// reconstruction. Release each pair even when constructing the basis throws.
+struct LiftedRational {
+    fmpq value;
+    LiftedRational() { fmpq_init(&value); }
+    ~LiftedRational() { fmpq_clear(&value); }
+    LiftedRational(const LiftedRational&) = delete;
+    LiftedRational& operator=(const LiftedRational&) = delete;
+};
+
 struct Slot {
     uint32_t offset = 0, length = 0;
 };
@@ -137,7 +147,12 @@ struct Slot {
 using TraceScreen = int (*)(uint32_t, uint32_t, uint32_t, const uint32_t*, const uint32_t*,
                             const uint32_t*, const uint32_t*, const uint32_t*, uint32_t*);
 thread_local TraceScreen trace_screen = nullptr;
+using TraceProfile = void (*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+                              double, double, double);
+thread_local TraceProfile trace_profile = nullptr;
 thread_local uint64_t cpu_trace_batches = 0, cpu_trace_pairs = 0;
+thread_local uint64_t certified_bases = 0, certification_attempts = 0;
+thread_local uint64_t lift_ns = 0, verification_ns = 0;
 #include "trace_rows.inc"
 
 // The coefficients of f modulo p, divided by the leading one. False when p
@@ -253,7 +268,12 @@ private:
     size_t hash(const u64* mono) const {
         u64 h = 0;
         for (int i = 1; i < R.stride; ++i) h = (h ^ mono[i]) * 0x9E3779B97F4A7C15ULL;
-        return static_cast<size_t>(h >> 20);
+        // Fold the high exponent fields into the low table-index bits.
+        // Otherwise monomials differing only in those fields repeatedly
+        // follow the same linear-probing chain.
+        h ^= h >> 33;
+        h *= 0xff51afd7ed558ccdULL;
+        return static_cast<size_t>(h ^ (h >> 33));
     }
     void begin_block() {
         rows_.clear();
@@ -428,6 +448,102 @@ ReplayBatch active_batch() {
     return has_scoped_batch ? scoped_batch : default_batch.load();
 }
 
+void replay_on_host(const Tracer& tracer, const std::vector<uint32_t>& primes,
+                    std::vector<uint32_t>& pools, std::vector<uint32_t>& status) {
+    if (primes.empty() || tracer.code.empty()) return;
+    const size_t lanes = std::min<size_t>(primes.size(), std::max(1u, std::thread::hardware_concurrency()));
+    std::vector<u64> scratch(lanes * tracer.work_size);
+    std::atomic<size_t> cursor{0};
+    auto worker = [&](size_t lane) {
+        u64* work = scratch.data() + lane * tracer.work_size;
+        for (size_t b; (b = cursor.fetch_add(1)) < primes.size();)
+            if (status[b] && !execute(tracer.code.data(), 0, tracer.code.size(), primes[b],
+                                      pools.data() + b * tracer.pool.size(), work))
+                status[b] = 0;
+    };
+    std::vector<std::thread> crew;
+    crew.reserve(lanes - 1);
+    try {
+        for (size_t lane = 1; lane < lanes; ++lane) crew.emplace_back(worker, lane);
+    } catch (const std::system_error&) {
+        // Overlapping solves may exhaust the available worker threads. Those
+        // already running and the calling thread consume the remaining primes.
+    }
+    worker(0);
+    for (std::thread& thread : crew) thread.join();
+}
+
+// Merge new prime images into the existing CRT residues and reconstruct
+// rational coefficients. The last image is held out as a witness.
+bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::vector<std::vector<uint32_t>>& images,
+                              uint32_t trace_prime, size_t& used, Z& modulus, std::vector<Z>& lifted,
+                              std::vector<LiftedRational>& rational) {
+    const size_t coefficients = lifted.size();
+    const uint32_t witness = primes.back();
+    // The CRT inverse is shared by every coefficient of this image.
+    // For r in [0,M), r + M ((image - r) / M mod p) is the unique
+    // representative in [0,Mp). Save M and its inverse once per prime.
+    const size_t first_prime = used;
+    std::vector<Z> prefix_moduli;
+    std::vector<uint32_t> inverses;
+    prefix_moduli.reserve(primes.size() - used - 1);
+    for (; used + 1 < primes.size(); ++used) {
+        prefix_moduli.push_back(modulus);
+        inverses.push_back(n_invmod(fmpz_fdiv_ui(&modulus.v, primes[used]), primes[used]));
+        fmpz_mul_ui(&modulus.v, &modulus.v, primes[used]);
+    }
+    std::atomic<bool> stable{true};
+    auto lift = [&](size_t begin, size_t end) {
+        for (size_t k = first_prime; k < used; ++k) {
+            const uint32_t p = primes[k], inverse = inverses[k - first_prime];
+            const fmpz* product = &prefix_moduli[k - first_prime].v;
+            for (size_t i = begin; i < end; ++i) {
+                const uint32_t old = fmpz_fdiv_ui(&lifted[i].v, p);
+                const uint32_t difference = images[k][i] + p - old;
+                const u64 correction = static_cast<u64>(difference) * inverse % p;
+                fmpz_addmul_ui(&lifted[i].v, product, correction);
+            }
+        }
+        for (size_t i = begin; i < end && stable.load(std::memory_order_relaxed); ++i) {
+            if (!fmpq_reconstruct_fmpz(&rational[i].value, &lifted[i].v, &modulus.v)) {
+                stable.store(false, std::memory_order_relaxed);
+                break;
+            }
+            const u64 den = fmpz_fdiv_ui(fmpq_denref(&rational[i].value), witness);
+            const u64 num = fmpz_fdiv_ui(fmpq_numref(&rational[i].value), witness);
+            // Arnold's criterion needs the trace prime not to divide a denominator.
+            if (!den || static_cast<u64>(images.back()[i]) * den % witness != num ||
+                !fmpz_fdiv_ui(fmpq_denref(&rational[i].value), trace_prime))
+                stable.store(false, std::memory_order_relaxed);
+        }
+    };
+    // Assign adjacent coefficients to each worker. Their residues and
+    // rational outputs are disjoint through every prime in this round.
+    const size_t lanes = std::max<size_t>(1, std::min<size_t>(std::thread::hardware_concurrency(),
+                                                              (coefficients + 2047) / 2048));
+    std::atomic<size_t> next{0};
+    const size_t chunk = (coefficients + lanes - 1) / lanes;
+    auto worker = [&] {
+        for (size_t lane; (lane = next.fetch_add(1, std::memory_order_relaxed)) < lanes;) {
+            const size_t begin = lane * chunk;
+            lift(begin, std::min(coefficients, begin + chunk));
+        }
+    };
+    std::vector<std::thread> crew;
+    crew.reserve(lanes - 1);
+    try {
+        for (size_t k = 1; k < lanes; ++k) crew.emplace_back([&] {
+            worker();
+            flint_cleanup();
+        });
+    } catch (const std::system_error&) {
+        // Any started workers and the calling thread finish all chunks.
+    }
+    worker();
+    for (auto& t : crew) t.join();
+    return stable;
+}
+
 double since(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
@@ -537,39 +653,39 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
             for (uint32_t& p : fresh) p = static_cast<uint32_t>(next_prime = previous(next_prime));
             std::vector<uint32_t> pools(batch * static_cast<size_t>(pool_size));
             std::vector<uint32_t> status(batch, 1);
-            for (size_t b = 0; b < batch; ++b)
-                for (size_t k = 0; k < generators.size() && status[b]; ++k)
-                    if (!monic_image(generators[k], fresh[b], pools.data() + b * pool_size + tracer.inputs[k].offset)) status[b] = 0;
+            auto seed_inputs = [&] {
+                for (size_t b = 0; b < batch; ++b)
+                    for (size_t k = 0; k < generators.size() && status[b]; ++k)
+                        if (!monic_image(generators[k], fresh[b], pools.data() + b * pool_size + tracer.inputs[k].offset))
+                            status[b] = 0;
+            };
+            seed_inputs();
             bool done = false;
             const ReplayBatch batch_hook = active_batch();
             // After a device-built trace, the first few replay primes make
             // smaller batches than the trace layer itself. Native threads
-            // avoid a second transfer of the full program for those batches.
-            if (batch_hook && !(tracer.device_screened && batch < 16) && !tracer.code.empty()) {
+            // avoid retransferring the full program for batches below 16 or
+            // that fit one host wave (up to 32 independent primes).
+            const size_t host_lanes = std::min<size_t>(32, std::thread::hardware_concurrency());
+            if (batch_hook && !(tracer.device_screened && (batch < 16 || batch <= host_lanes)) && !tracer.code.empty()) {
                 std::vector<uint32_t> answer(batch, 0);
                 if (batch_hook(tracer.code.data(), tracer.code.size(), pool_size, tracer.work_size, fresh.data(),
                                static_cast<uint32_t>(batch), pools.data(), answer.data()) == 0) {
                     for (size_t b = 0; b < batch; ++b) status[b] = status[b] && answer[b];
                     done = true;
                     stats.gpu = true;
+                } else {
+                    // A failed device readback may have overwritten the host
+                    // buffer. Restore every generator image before CPU replay.
+                    // All other slots are written by the replay before use.
+                    seed_inputs();
                 }
             }
-            if (!done) {
+            if (!done && !tracer.code.empty()) {
+                const size_t active = std::count(status.begin(), status.end(), 1u);
+                replay_on_host(tracer, fresh, pools, status);
                 ++cpu_batches;
-                cpu_primes += batch;
-                std::atomic<size_t> cursor{0};
-                auto worker = [&] {
-                    std::vector<u64> work(tracer.work_size);
-                    for (size_t b; (b = cursor.fetch_add(1)) < batch;)
-                        if (status[b] && !execute(tracer.code.data(), 0, tracer.code.size(), fresh[b],
-                                                  pools.data() + b * pool_size, work.data()))
-                            status[b] = 0;
-                };
-                const size_t threads = std::min<size_t>(batch, std::max(1u, std::thread::hardware_concurrency()));
-                std::vector<std::thread> crew;
-                for (size_t t = 1; t < threads; ++t) crew.emplace_back(worker);
-                worker();
-                for (std::thread& t : crew) t.join();
+                cpu_primes += active;
             }
             for (size_t b = 0; b < batch; ++b) {
                 if (!status[b]) { ++rejected; ++stats.rejected; continue; }
@@ -587,23 +703,8 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
 
             // Lift all images but the last, which serves as a witness.
             clock = std::chrono::steady_clock::now();
-            for (; used + 1 < primes.size(); ++used) {
-                for (size_t i = 0; i < coefficients; ++i)
-                    fmpz_CRT_ui(&lifted[i].v, &lifted[i].v, &modulus.v, images[used][i], primes[used], 0);
-                fmpz_mul_ui(&modulus.v, &modulus.v, primes[used]);
-            }
-            std::vector<fmpq> rational(coefficients);
-            for (fmpq& q : rational) fmpq_init(&q);
-            bool stable = true;
-            const uint32_t witness = primes.back();
-            for (size_t i = 0; i < coefficients && stable; ++i) {
-                if (!fmpq_reconstruct_fmpz(&rational[i], &lifted[i].v, &modulus.v)) { stable = false; break; }
-                const u64 den = fmpz_fdiv_ui(fmpq_denref(&rational[i]), witness);
-                const u64 num = fmpz_fdiv_ui(fmpq_numref(&rational[i]), witness);
-                if (!den || static_cast<u64>(images.back()[i]) * den % witness != num) stable = false;
-                // Arnold's criterion needs the trace prime not to divide a denominator.
-                if (!fmpz_fdiv_ui(fmpq_denref(&rational[i]), trace_prime)) stable = false;
-            }
+            std::vector<LiftedRational> rational(coefficients);
+            const bool stable = reconstruct_coefficients(primes, images, trace_prime, used, modulus, lifted, rational);
             std::vector<Poly> basis;
             if (stable) {
                 size_t i = 0;
@@ -611,25 +712,27 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
                 for (size_t g = 0; g < tracer.outputs.size(); ++g) {
                     const uint32_t length = tracer.outputs[g].length;
                     fmpz_one(&common.v);
-                    for (uint32_t t = 0; t < length; ++t) fmpz_lcm(&common.v, &common.v, fmpq_denref(&rational[i + t]));
+                    for (uint32_t t = 0; t < length; ++t) fmpz_lcm(&common.v, &common.v, fmpq_denref(&rational[i + t].value));
                     Poly f;
                     f.m = tracer.output_monomials[g];
                     f.c.resize(length);
                     for (uint32_t t = 0; t < length; ++t) {
-                        fmpz_divexact(&factor.v, &common.v, fmpq_denref(&rational[i + t]));
-                        fmpz_mul(&f.c[t].v, &factor.v, fmpq_numref(&rational[i + t]));
+                        fmpz_divexact(&factor.v, &common.v, fmpq_denref(&rational[i + t].value));
+                        fmpz_mul(&f.c[t].v, &factor.v, fmpq_numref(&rational[i + t].value));
                     }
                     i += length;
                     basis.push_back(std::move(f));
                 }
             }
-            for (fmpq& q : rational) fmpq_clear(&q);
-            stats.lift_seconds += since(clock);
+            const auto lifting = std::chrono::steady_clock::now() - clock;
+            stats.lift_seconds += std::chrono::duration<double>(lifting).count();
+            lift_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(lifting).count();
             if (!stable) continue;
 
             // Certification over Q.
             clock = std::chrono::steady_clock::now();
             ++stats.verifications;
+            ++certification_attempts;
             std::optional<bool> proved = HomogeneousCertificate{}.check(H, basis, generators);
             if (!proved.has_value()) {
                 Engine check;
@@ -641,7 +744,9 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
                     proved = f.empty();
                 }
             }
-            stats.verify_seconds += since(clock);
+            const auto verifying = std::chrono::steady_clock::now() - clock;
+            stats.verify_seconds += std::chrono::duration<double>(verifying).count();
+            verification_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(verifying).count();
             if (!*proved) continue;
             std::vector<Poly> affine;
             for (const Poly& f : basis) affine.push_back(dehomogenize(H, R, f));
@@ -649,6 +754,7 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
             // so this only removes redundant elements and reduces the tails.
             result.R = R;
             result.compute(affine, affine.size());
+            ++certified_bases;
             return true;
         }
     }
@@ -660,6 +766,11 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
 using namespace atlas;
 
 extern "C" {
+
+// Optional per-thread benchmark observer. A completed layer reports degree,
+// prime, dimensions, CSR edge count, rank, device use and the wall times for
+// symbolic preparation, numeric reduction (including transfers), and echelon.
+void atlas_groebner_swap_trace_profile(TraceProfile* hook) noexcept { std::swap(trace_profile, *hook); }
 
 // A solve can accelerate trace construction on this thread and restore its
 // previous setting. A null hook uses the native row reducer for large layers.
@@ -698,6 +809,15 @@ void atlas_groebner_swap_batch(ReplayBatch* hook, int* active) noexcept {
 void atlas_groebner_cpu_replays(uint64_t* batches, uint64_t* primes) noexcept {
     *batches = cpu_batches;
     *primes = cpu_primes;
+}
+
+// Monotone per-calling-thread counters. Include unsuccessful lift and check
+// attempts, and count a basis only once its certified affine output is ready.
+void atlas_groebner_certification_counts(uint64_t* counts) noexcept {
+    counts[0] = certified_bases;
+    counts[1] = certification_attempts;
+    counts[2] = lift_ns;
+    counts[3] = verification_ns;
 }
 
 // For benchmarks and tests of a batch backend: trace the problem, then replay
@@ -749,21 +869,7 @@ long atlas_groebner_replay_compare(const char* input, size_t length, uint32_t co
                 if (!monic_image(generators[k], primes[b], host.data() + b * pool_size + tracer->inputs[k].offset)) host_status[b] = 0;
         device = host;
         clock = std::chrono::steady_clock::now();
-        {
-            std::atomic<size_t> cursor{0};
-            auto worker = [&] {
-                std::vector<u64> work(tracer->work_size);
-                for (size_t b; (b = cursor.fetch_add(1)) < count;)
-                    if (host_status[b] && !execute(tracer->code.data(), 0, tracer->code.size(), primes[b],
-                                                   host.data() + b * pool_size, work.data()))
-                        host_status[b] = 0;
-            };
-            const size_t threads = std::min<size_t>(count, std::max(1u, std::thread::hardware_concurrency()));
-            std::vector<std::thread> crew;
-            for (size_t t = 1; t < threads; ++t) crew.emplace_back(worker);
-            worker();
-            for (std::thread& t : crew) t.join();
-        }
+        replay_on_host(*tracer, primes, host, host_status);
         seconds[1] = since(clock);
         const ReplayBatch batch_hook = active_batch();
         if (!batch_hook) return -1;

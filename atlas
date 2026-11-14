@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
+import os
+import sys
+
 from engine.app import main
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    # Explicit interpreter settings take precedence over the standalone
+    # mathematical console's default of arbitrary-precision decimal input.
+    unlimited_decimals = (
+        "int_max_str_digits" not in sys._xoptions
+        and (sys.flags.ignore_environment or not os.environ.get("PYTHONINTMAXSTRDIGITS"))
+    )
+    raise SystemExit(main(unlimited_decimals=unlimited_decimals))

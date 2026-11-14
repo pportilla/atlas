@@ -1,0 +1,119 @@
+/* Algebra inputs */
+.algebra .operation-field { margin-bottom: 1.4rem; }
+.algebra .algebra-field { min-width: 0; display: grid; align-content: start; gap: .32rem; }
+.algebra .algebra-field > span, .algebra legend {
+  font: 600 .81rem/1.4 var(--ui);
+}
+.algebra .algebra-field > small { color: var(--muted); font-size: .73rem; line-height: 1.4; }
+.algebra select, .algebra input[type=text] {
+  min-width: 0; width: 100%; min-height: 2.4rem; padding: .42rem .64rem;
+  background: var(--field); border: 1px solid var(--rule-strong); border-radius: 4px;
+}
+.algebra input[type=text] { font: .86rem/1.45 var(--mono); }
+.algebra select { font: .84rem/1.35 var(--ui); }
+.algebra #operation { min-height: 2.65rem; font-size: .96rem; }
+.algebra .algebra-operands { display: grid; gap: 1.05rem; margin: 0; }
+.algebra .algebra-operands fieldset { min-width: 0; }
+.algebra legend i { font: italic 1.05em var(--math); }
+.algebra .operand-source { margin: .3rem 0; }
+.algebra .generator-list { display: grid; gap: .4rem; margin: .32rem 0; }
+.algebra .generator-row { display: flex; align-items: center; gap: .35rem; }
+.algebra .generator-row input { flex: 1; }
+.algebra .generator-row button {
+  min-width: 2.1rem; min-height: 2.3rem; padding: 0; justify-content: center;
+  border: 1px solid transparent; color: var(--muted); background: transparent; font: 1.2rem var(--ui);
+}
+.algebra .generator-row button:hover { color: var(--text); border-color: var(--rule); background: var(--wash); }
+.algebra .generator-list + .link { min-height: 1.75rem; font-size: .8rem; font-weight: 550; color: var(--accent); }
+.algebra .generator-list + .link::before { content: "+"; margin-right: .3em; }
+.algebra #polynomial-field input, .algebra #other-polynomial-field input { margin-top: .32rem; }
+.algebra .variable-choices { display: flex; flex-wrap: wrap; gap: .3rem .85rem; margin-top: .3rem; }
+.algebra .variable-choices label { display: flex; align-items: center; gap: .3rem; min-height: 2rem; font: .85rem var(--mono); }
+.algebra input[type=checkbox] { accent-color: var(--accent); }
+.algebra .operand-help summary { font-size: .78rem; color: var(--muted); }
+.algebra .operand-help .helper, .algebra .algebra-operands fieldset > .helper { margin-top: .4rem; }
+.algebra .algebra-settings {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem .75rem;
+  margin: 1.1rem 0; padding-top: 1rem; border-top: 1px solid var(--rule);
+}
+.algebra .algebra-settings input, .algebra .algebra-settings select { min-height: 2.2rem; font-size: .8rem; }
+.algebra .algebra-settings select { padding-inline: .35rem; }
+.algebra .algebra-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.algebra .submit-algebra { align-items: center; gap: .65rem 1rem; }
+.algebra .submit-algebra .primary { min-height: 2.6rem; }
+.algebra .submit-algebra .check { display: flex; align-items: center; gap: .35rem; font-size: .77rem; }
+.algebra #pending:not(:empty) { flex-basis: 100%; }
+.algebra .helper { color: var(--muted); font-size: .78rem; line-height: 1.5; }
+
+/* Typeset problem and answer */
+.algebra .problem {
+  margin: 0; padding: clamp(1.15rem, 3vw, 2.2rem) clamp(1.12rem, 3.4vw, 2.65rem);
+  border: 1px solid var(--rule); border-top: 3px solid var(--accent);
+  background: var(--wash); color: var(--text);
+}
+.algebra .problem figcaption, .algebra .result-heading {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .3rem .8rem;
+}
+.algebra #problem-operation { color: var(--accent); }
+.algebra #problem-ring, .algebra #result-ring { font: normal 1rem/1.4 var(--math); color: var(--muted); overflow-wrap: anywhere; }
+.algebra #problem-title {
+  margin: clamp(1.4rem, 3vw, 2.5rem) 0 clamp(1.3rem, 2.8vw, 2.2rem);
+  color: var(--accent); font: normal clamp(2.85rem, 5.3vw, 4.95rem)/1 var(--math);
+  letter-spacing: -.045em; overflow-wrap: anywhere;
+}
+.algebra #problem-title sub, .algebra #problem-title sup { font-size: .46em; line-height: 0; }
+.algebra .problem-equations {
+  display: grid; gap: .6rem; max-height: 16rem; overflow: auto;
+  padding: 0 0 .2rem .95rem; border-left: 2px solid var(--rule-strong);
+  font: normal clamp(1.45rem, 2.6vw, 2.15rem)/1.38 var(--math);
+}
+.algebra .equation-row { display: grid; grid-template-columns: 1em auto minmax(0, 1fr); align-items: baseline; gap: .4em; }
+.algebra .equation-label { text-align: right; }
+.algebra .equals { color: var(--muted); }
+.algebra .equation-rhs { min-width: 0; overflow-wrap: anywhere; }
+.algebra .generator-count { font: .7rem var(--ui); color: var(--muted); }
+.algebra #problem-order { margin-top: 1.5rem; color: var(--muted); font: .79rem/1.5 var(--ui); overflow-wrap: anywhere; }
+.algebra .math-expression { font-family: var(--math); }
+.algebra .math-expression i { font-style: italic; }
+.algebra .math-expression sup { font-size: .58em; line-height: 0; }
+.algebra .power-mark, .algebra .fraction-bar {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.algebra .math-fraction {
+  display: inline-flex; flex-direction: column; min-width: .65em; margin-inline: .07em;
+  text-align: center; vertical-align: -.22em; font-size: .73em; line-height: 1.08;
+}
+.algebra .math-fraction > :first-child { padding-inline: .13em; border-bottom: 1px solid currentColor; }
+.algebra .math-operator { display: inline-block; vertical-align: baseline; color: transparent; font-size: 0; }
+.algebra .math-operator::after { color: var(--text); font: normal var(--operator-size, 1rem)/1 var(--math); }
+.algebra .math-plus::after { content: "+"; margin-inline: .12em; }
+.algebra .math-minus::after { content: "−"; margin-inline: .12em; }
+.algebra .math-product::after { content: "·"; margin-inline: .06em; }
+.algebra .problem-equations { --operator-size: clamp(1.45rem, 2.6vw, 2.15rem); }
+.algebra #result {
+  margin: 0 0 1rem; padding: 1rem 0 1.1rem; border-top: 2px solid var(--accent);
+  border-bottom: 1px solid var(--rule);
+}
+.algebra #result-title { color: var(--accent); font: 600 .87rem/1.5 var(--ui); }
+.algebra #result-value {
+  --operator-size: clamp(1.65rem, 3.3vw, 2.7rem);
+  margin-top: .45rem; max-height: 19rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: normal var(--operator-size)/1.4 var(--math);
+}
+.algebra #result-value ul { margin: 0; padding: 0; list-style: none; }
+.algebra #result-value li + li { border-top: 1px dotted var(--rule); }
+.algebra .stale-note, .algebra .error { margin: 0 0 .7rem; }
+.algebra #export { margin-top: .9rem; }
+.algebra #execution { margin: 1rem 0 .5rem; }
+.algebra .algebra-section { margin-top: 1.15rem; padding-top: .95rem; border-top: 1px solid var(--rule); }
+.algebra .algebra-result-header { display: flex; align-items: center; justify-content: space-between; gap: .35rem; flex-wrap: wrap; }
+.algebra .algebra-section h2 { font: normal 1.35rem/1.2 var(--math); }
+.algebra .algebra-section pre { margin: .55rem 0 .8rem; }
+.algebra #session-items { margin-top: .45rem; }
+.algebra #session-items li { padding: .3rem 0; overflow-wrap: anywhere; }
+.algebra #session-items li + li { border-top: 1px solid var(--rule); }
+.algebra #session-replay .algebra-actions { margin: .35rem 0; }
+@media (max-width: 480px) {
+  .algebra .problem { padding: 1rem .95rem; }
+  .algebra .problem-equations { padding-left: .65rem; }
+}

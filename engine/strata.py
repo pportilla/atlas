@@ -196,13 +196,16 @@ def annotate_complex(old, found):
         if dimensions(found) != dimensions(old):
             raise AssertionError("The atlas and the reference have different cell counts.")
     old_vertices = {v["id"]: v for v in old["vertices"]}
+    aliases = {}
     if set(old_vertices) != {v["id"] for v in found["vertices"]}:
         aliases = _vertex_aliases(found, old)
         if aliases is None:
             return found
         found = {**found, "cells": [{**cell, "vertices": [aliases[u] for u in cell["vertices"]],
                                      "faces": [aliases.get(f, f) for f in cell["faces"]]} for cell in found["cells"]]}
-    found["vertices"] = list(old_vertices.values())
+    proved = {aliases.get(v["id"], v["id"]): v for v in found["vertices"]}
+    found = {**found, "vertices": [{**old_vertex, **proved[name], "id": name}
+                                    for name, old_vertex in old_vertices.items()]}
     if CHECK and Counter(frozenset(c["vertices"]) for c in old["cells"]) != Counter(
             frozenset(c["vertices"]) for c in found["cells"]):
         raise AssertionError("The atlas and the reference have different cell incidences.")

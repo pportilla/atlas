@@ -1,0 +1,4 @@
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal(x^2-1, y-x, order="lex")
+remainder = normal_form(x^2+y/2, I, compute="cpu")
+print(remainder.json)

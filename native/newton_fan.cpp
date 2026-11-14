@@ -15,26 +15,24 @@
 
 namespace {
 using Z = mpz_class;
-using Ray = std::vector<long>;
+using Ray = std::vector<Z>;
 using Rays = std::vector<Ray>;
 using Face = std::vector<int>;
-using BigRow = std::vector<Z>;
 using JsonValue = Json::Value;
 constexpr size_t max_rays = 16000, max_cone_records = 120000;
 constexpr long max_coordinate = 100000000;
 
-long coordinate(const Z& z) {
-    if (z<0 || z>max_coordinate) throw std::runtime_error("Newton fan exceeded its ray-coordinate budget.");
-    return z.get_si();
+Z dot(const Ray& a, const Ray& b) {
+    Z value;
+    for(size_t j=0;j<a.size();++j) mpz_addmul(value.get_mpz_t(),a[j].get_mpz_t(),b[j].get_mpz_t());
+    return value;
 }
-long dot(const Ray& a, const Ray& b) {
-    // One argument in these calls is a monomial or a difference of monomials,
-    // whose l1 norm is at most 256. The other is a bounded nonnegative ray.
-    return std::inner_product(a.begin(),a.end(),b.begin(),0L);
-}
-JsonValue array(const std::vector<long>& vec) {
+JsonValue array(const Ray& vec) {
     JsonValue ans(Json::arrayValue);
-    for (long x:vec) ans.append(Json::Int64(x));
+    for(const auto& x:vec) {
+        if(x.fits_slong_p()) ans.append(Json::Int64(x.get_si()));
+        else ans.append(x.get_str());
+    }
     return ans;
 }
 JsonValue ids(const Face& face) {
@@ -56,6 +54,7 @@ struct Candidate { Ray point; Face support; };
 
 class Fan {
     int n;
+    bool exhaustive;
     Rays rays;
     std::map<Ray,int> index;
     std::vector<Cell> cells;
@@ -64,6 +63,8 @@ class Fan {
     int newton_ray_count = 0, newton_vertices = 0;
 
     int id(const Ray& r) {
+        if(!exhaustive && *std::max_element(r.begin(),r.end())>max_coordinate)
+            throw std::runtime_error("Newton fan exceeded its ray-coordinate budget.");
         auto [it, fresh]=index.emplace(r,static_cast<int>(rays.size()));
         if (fresh) {
             if (rays.size()>=max_rays) throw std::runtime_error("Newton fan exceeded its ray budget.");
@@ -73,7 +74,7 @@ class Fan {
     }
     void matrix(Matrix& m,const Face& c) const {
         for(int row=0;row<n;++row) for(int col=0;col<n;++col)
-            fmpz_set_si(fmpz_mat_entry(m.a,row,col), rays[c[col]][row]);
+            fmpz_set_mpz(fmpz_mat_entry(m.a,row,col), rays[c[col]][row].get_mpz_t());
     }
     Z add_cell(Face c) {
         if(cells.size()>=max_cone_records) throw std::runtime_error("Newton fan exceeded its cone budget.");
@@ -117,7 +118,7 @@ class Fan {
             if(static_cast<int>(cut.size())>dim-1 || dim>2) {
                 fmpz_mat_t test; fmpz_mat_init(test,cut.size(),n);
                 for(size_t i=0;i<cut.size();++i) for(int j=0;j<n;++j)
-                    fmpz_set_si(fmpz_mat_entry(test,i,j),rays[cut[i]][j]);
+                    fmpz_set_mpz(fmpz_mat_entry(test,i,j),rays[cut[i]][j].get_mpz_t());
                 const auto rank=fmpz_mat_rank(test); fmpz_mat_clear(test);
                 if(rank!=dim-1) continue;
             }
@@ -138,7 +139,7 @@ class Fan {
         // a lattice point in the half-open fundamental parallelepiped. Sampling
         // extra small multiples only improves the choice, never the proof.
         for(int k=0;k<n;++k) {
-            BigRow generator(n),num(n);
+            Ray generator(n),num(n);
             for(int j=0;j<n;++j) generator[j]=integer(fmpz_mat_entry(inv.a,j,k));
             for(int multiple=1;multiple<=96;++multiple) {
                 Z sum=0,largest=0;
@@ -147,7 +148,7 @@ class Fan {
                     sum+=num[j]; largest=std::max(largest,num[j]);
                 }
                 if(!sum) break;
-                BigRow point(n); Z common=0;
+                Ray point(n); Z common=0;
                 for(int row=0;row<n;++row) {
                     for(int j=0;j<n;++j) point[row]+=rays[cell.rays[j]][row]*num[j];
                     if(!mpz_divisible_p(point[row].get_mpz_t(),den.get_mpz_t()))
@@ -163,7 +164,7 @@ class Fan {
                 if(!best.point.empty() && (score>best_sum || (score==best_sum && maximum>=best_max))) continue;
                 Ray r(n); Face support;
                 for(int j=0;j<n;++j) {
-                    r[j]=coordinate(point[j]/common);
+                    r[j]=point[j]/common;
                     if(num[j]!=0) support.push_back(cell.rays[j]);
                 }
                 best={r,support}; best_sum=score; best_max=maximum;
@@ -199,16 +200,16 @@ class Fan {
         }
     }
 public:
-    explicit Fan(int dimension):n(dimension) {
+    Fan(int dimension,bool exhaustive):n(dimension),exhaustive(exhaustive) {
         for(int j=0;j<n;++j) {Ray e(n);e[j]=1;id(e);}
     }
     void build(const Rays& support) {
         // The positive-height section of this pointed cone is the Newton
         // polyhedron. Its nonhorizontal generating rays give precisely its
         // lattice vertices. Its facet equations give the normal rays.
-        std::vector<BigRow> generators;
-        for(const auto& e:support) {BigRow row(e.begin(),e.end());row.push_back(1);generators.push_back(row);}
-        for(int j=0;j<n;++j) {BigRow row(n+1);row[j]=1;generators.push_back(row);}
+        Rays generators=support;
+        for(auto& row:generators) row.push_back(1);
+        for(int j=0;j<n;++j) {Ray row(n+1);row[j]=1;generators.push_back(row);}
         libnormaliz::set_thread_limit(1);
         libnormaliz::Cone<Z> hull(libnormaliz::Type::cone,generators);
         Rays vertices;
@@ -217,18 +218,18 @@ public:
             for(int j=0;j<n;++j) {
                 if(!mpz_divisible_p(r[j].get_mpz_t(),r.back().get_mpz_t()))
                     throw std::logic_error("Nonintegral Newton vertex.");
-                vertex[j]=coordinate(r[j]/r.back());
+                vertex[j]=r[j]/r.back();
             }
             vertices.push_back(vertex);
         }
         std::sort(vertices.begin(),vertices.end()); newton_vertices=vertices.size();
-        std::map<Ray,long> normals;
+        std::map<Ray,Z> normals;
         for(const auto& h:hull.getSupportHyperplanes()) {
             Z common=0;
             for(int j=0;j<n;++j) mpz_gcd(common.get_mpz_t(),common.get_mpz_t(),h[j].get_mpz_t());
             if(!common) continue;  // facet at infinity
-            Ray r(n); for(int j=0;j<n;++j) r[j]=coordinate(h[j]/common);
-            long order=dot(r,vertices.front()); for(const auto& m:vertices) order=std::min(order,dot(r,m));
+            Ray r(n); for(int j=0;j<n;++j) r[j]=h[j]/common;
+            Z order=dot(r,vertices.front()); for(const auto& m:vertices) order=std::min(order,dot(r,m));
             normals.emplace(r,order);
         }
         for(const auto& [r,order]:normals) id(r);
@@ -279,7 +280,9 @@ public:
 
 JsonValue compute(const JsonValue& obj) {
     const auto& terms=obj["exponents"];
-    if(!terms.isArray() || terms.empty() || terms.size()>4096)
+    const bool exhaustive=obj.get("exhaustive",false).asBool();
+    if(!terms.isArray() || terms.empty()) throw std::invalid_argument("Expected a nonempty array of exponent vectors.");
+    if(!exhaustive && terms.size()>4096)
         throw std::invalid_argument("Expected 1–4096 exponent vectors.");
     const int n=terms[0].size();
     if(n<2 || n>8) throw std::invalid_argument("Newton fan dimension must be 2–8.");
@@ -287,16 +290,21 @@ JsonValue compute(const JsonValue& obj) {
     for(const auto& row:terms) {
         if(!row.isArray() || static_cast<int>(row.size())!=n) throw std::invalid_argument("Inconsistent exponent dimension.");
         Ray e;
-        long total=0;
+        Z total;
         for(const auto& entry:row) {
-            if(!entry.isInt() || entry.asInt()<0) throw std::invalid_argument("Expected nonnegative integer exponents.");
-            e.push_back(entry.asInt()); total+=e.back();
+            if(!(entry.isInt64() || entry.isUInt64() || (exhaustive && entry.isString())))
+                throw std::invalid_argument("Expected nonnegative integer exponents.");
+            const auto digits=entry.asString();
+            if(digits.empty() || digits.find_first_not_of("0123456789")!=std::string::npos)
+                throw std::invalid_argument("Expected nonnegative integer exponents.");
+            e.emplace_back(digits,10);
+            if(!exhaustive) total+=e.back();
         }
-        if(total>128) throw std::invalid_argument("Total degree exceeds 128.");
+        if(!exhaustive && total>128) throw std::invalid_argument("Total degree exceeds 128.");
         support.push_back(e);
     }
     std::sort(support.begin(),support.end());support.erase(std::unique(support.begin(),support.end()),support.end());
-    Fan fan(n); fan.build(support); return fan.report();
+    Fan fan(n,exhaustive); fan.build(support); return fan.report();
 }
 } // namespace
 int main() {

@@ -126,6 +126,31 @@ for mode,dimension in [('embedded',34),('intrinsic',33)]:
         raise AssertionError('An altered relative Jacobian order passed validation')
 """)
 
+    def test_intrinsic_components_of_a_marked_tacnode_product(self):
+        from engine import native_library
+        if native_library._MODE != "native":
+            self.skipTest("Tests the native worker and chart-only replay.")
+        self.guard("""
+from engine import atlas, native_polynomial as np
+from engine.candidate_field import indexed_field
+from engine.general_resolution import _attempt
+from engine.graph_record import graph_outputs
+from engine.resolution_search import ResolutionCandidate
+x, y, *free = coords = np.symbols('v0:35')
+u, v, w = np.symbols('U V W')
+field, theta = indexed_field((1,0,-2),1)
+candidate = ResolutionCandidate((x**3,x*y,y**2), (u,v,w), ((x,y,u),(x,y,w)), field,theta,'tacnode product')
+f = y**2-x**4
+state, record = _attempt(coords,f,candidate,'intrinsic',1,30)
+assert state == 'certified'
+record.update(variables=list(map(str,coords)), polynomial=str(f), mode='intrinsic')
+saved, output = graph_outputs(record,np.terms(coords,f),intrinsic=True,integrals=False)
+import json
+replay = atlas.boundary_complex(atlas.from_json(json.loads(json.dumps(saved))),len(coords),True)
+assert replay == output['dual_complex'] and replay['status'] == 'complete'
+assert replay['cells'] == [] and [v['dimension'] for v in replay['vertices']] == [33,33]
+""")
+
     def test_archived_graph_computes_both_integrals_without_symbolic_import(self):
         import sympy as sp
         from engine import native_library

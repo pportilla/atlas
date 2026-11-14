@@ -6,7 +6,7 @@ from math import gcd
 from operator import index
 
 from .native_library import Unavailable, _library, affine_request
-from .polynomial import checked_native, format_poly, sparse_row
+from .polynomial import checked_native, format_poly, integer_from_decimal, integer_text, sparse_row
 
 
 def split_cone(item, dimension):
@@ -151,7 +151,7 @@ def lattice_pivots(exponents):
         raise ValueError("Expected nonempty Laurent support with a common vector length.")
 
     def native():
-        result = affine_request(["lattice_pivots", str(len(rows[0])), *(" ".join(map(str,r)) for r in rows)])
+        result = affine_request(["lattice_pivots", str(len(rows[0])), *(" ".join(map(integer_text,r)) for r in rows)])
         return list(map(int, result))
 
     return checked_native(native, lambda: _reference_lattice_pivots(rows))
@@ -165,8 +165,8 @@ def _lattice_images(rays, exponents, *, translate=False):
 
     def native():
         op = "lattice_support" if translate else "lattice_characters"
-        rows = affine_request([op, str(n), *(" ".join(map(str,r)) for r in (*rays, *exponents))])
-        return tuple(tuple(map(int, row.split())) for row in rows)
+        rows = affine_request([op, str(n), *(" ".join(map(integer_text,r)) for r in (*rays, *exponents))])
+        return tuple(tuple(map(integer_from_decimal, row.split())) for row in rows)
 
     def reference():
         import sympy as sp

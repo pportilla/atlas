@@ -33,7 +33,8 @@ def resolve(request):
     if compute is not None and compute not in ('cpu','auto','gpu'):
         raise InputError('Compute must be cpu, auto, or gpu.')
     from .native_library import replay_scope
-    with replay_scope(compute) as replay:
+    from .newton_faces import face_search
+    with replay_scope(compute) as replay, face_search(request.get('search', 'exhaustive') == 'exhaustive'):
         proofs = []
         result = _resolve(request, proofs)
         result['execution'] = _execution(compute, proofs, replay.report())
@@ -222,7 +223,7 @@ def _resolve_polynomial(p, request, start):
         if r is None and len(p)==2 and 2 <= len(variables) <= 8:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
-        if r is None and native_range:
+        if r is None and (native_range or exhaustive and singular and 3 <= len(variables) <= 8):
             from .newton_backend import resolve_newton
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,

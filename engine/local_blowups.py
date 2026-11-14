@@ -35,7 +35,7 @@ where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
 from dataclasses import dataclass, replace
-from itertools import combinations, islice
+from itertools import combinations, islice, product
 from time import monotonic
 
 from .chart_expressions import chart_expressions
@@ -63,6 +63,7 @@ class Chart:
     torus: tuple = ()  # regular cone rays and common linear map to the input coordinates
     point_blowup: tuple = ()  # parent chart index and rational centre of an ordered plane blowup pair
     split_cone: tuple = ()  # chart rays in the common split base coordinates
+    repair_projection: tuple = ()  # parent chart index and its coordinate images on an unmarked repair cover
 
     def one_sheet(self, count):
         """A field parameter describes one fixed embedding. Over Q the kernel
@@ -89,8 +90,23 @@ def _present(variables, ideal, removed=()):
     """Whether V(ideal) has a point outside the removed centres."""
     if empty_locus(variables, ideal):
         return False
-    relevant = [z for z in removed if not empty_locus(variables, (*ideal, *z))]
-    return any(not radical_subset(variables, (u,), ideal) for u in _covers(variables, relevant))
+    basis = groebner(ideal, variables) if removed else None
+    relevant = []
+    for hole in removed:
+        # On the closed locus, use normal forms before forming products of
+        # generators. The complement of V(J) is the union of their D(g).
+        residues = tuple(dict.fromkeys(basis.reduce(f)[1] for f in hole))
+        if any(f != 0 and not getattr(f, "free_symbols", ()) for f in residues):
+            continue
+        choices = tuple(f for f in residues if f != 0)
+        if not choices:
+            return False
+        if not empty_locus(variables, (*ideal, *choices)) and choices not in relevant:
+            relevant.append(choices)
+    if not relevant:
+        return True
+    from .affine_kernel import frame_locus
+    return any(not frame_locus(variables, tuple(ideal), units) for units in product(*relevant))
 
 
 def _dimension(variables, ideal):
@@ -257,10 +273,24 @@ def _failures_here(chart, dimension, *, reference=False):
                 basis = groebner(bad, variables)
                 if reference:
                     import sympy as sp
-                    matrix = sp.Matrix([[basis.reduce(sp.diff(g, v))[1] for v in variables] for g in gens])
-                    minors = {sp.expand(matrix.extract(list(rows), list(columns)).det(method="berkowitz"))
-                              for rows in combinations(range(len(gens)), rank)
-                              for columns in combinations(range(len(variables)), rank)}
+                    # In the fibre ring, duplicate or zero Jacobian rows
+                    # contribute only zero minors and repeated generators.
+                    gradients = {tuple(basis.reduce(sp.diff(g,v))[1] for v in variables) for g in set(gens)}
+                    gradients.discard((0,)*len(variables))
+                    minors = set()
+                    for rows in combinations(gradients, rank):
+                        active = [i for i in range(len(variables)) if any(row[i] for row in rows)]
+                        for columns in combinations(active,rank):
+                            block = [[row[i] for i in columns] for row in rows]
+                            minor = sp.expand(sp.Matrix(block).det(method="berkowitz"))
+                            if minor:
+                                minors.add(minor)
+                                if not minor.free_symbols:
+                                    break
+                        else:
+                            continue
+                        # A nonzero constant generates the unit ideal.
+                        break
                 else:
                     from .affine_kernel import frame_minor
                     minors = set()

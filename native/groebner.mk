@@ -11,11 +11,11 @@ endif
 .PHONY: all
 all: $(GROEBNER_LIB)
 
-$(GROEBNER_LIB): groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp groebner.hpp
+$(GROEBNER_LIB): trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp groebner.hpp
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) -fPIC $(GROEBNER_SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
 
-$(GROEBNER_LIB): trace_screen.inc trace_rows.inc groebner_verify.hpp
+$(GROEBNER_LIB): trace_screen.inc trace_rows.inc groebner_verify.hpp trace_levels.hpp
 
 .PHONY: test-verify
 test-verify: build/test_groebner_verify
@@ -39,6 +39,6 @@ OPENCL_CFLAGS ?= $(if $(OPENCL_INCLUDE),-I$(OPENCL_INCLUDE))
 .PHONY: gpu
 gpu: all $(GROEBNER_GPU_LIB)
 
-$(GROEBNER_GPU_LIB): opencl_groebner.cpp
+$(GROEBNER_GPU_LIB): opencl_groebner.cpp trace_levels.hpp
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPENCL_CFLAGS) -fPIC $(GROEBNER_SHARED) $< -o $@ $(LDFLAGS) $(OPENCL_LIBS)

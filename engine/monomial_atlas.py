@@ -211,7 +211,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     regions = fan_cover(cones, n)
     if regions is None:
         raise InvalidChart("The monomial chart cones do not form a complete regular subdivision of the orthant.")
-    defer_complex = intrinsic and any(min(ray) == 0 and ray not in axes for cone in cones for ray in cone)
+    internal_surface = n == 3 and all(ray in axes or min(ray) > 0 for cone in cones for ray in cone)
+    defer_complex = False
     sections, surface_charts = [], []
     embedded = True
     branch_equations = {}
@@ -384,7 +385,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             terms = tuple(sorted((e[:n], c) for e,c in strict.items()))
             details = cone, dict(zip(exceptional, here)), terms
             sections.append(details)
-            if n == 3:
+            if internal_surface:
                 # After removing the marked parameter these equations are
                 # defined over Q, on each of the identical geometric sheets.
                 fibre = [_polynomial_row({e: 1}) for e in monomials]

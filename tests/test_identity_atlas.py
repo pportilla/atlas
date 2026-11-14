@@ -1,4 +1,5 @@
 import copy
+from decimal import Decimal
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import unittest
 
 from engine.monodromy import monodromy_zeta
 from engine.resolve import resolve
-from engine.strata import resolution_strata
+from engine.strata import InvalidChart, rational_chart_outputs, resolution_strata
 from engine.topological import topological_zeta
 
 
@@ -17,6 +18,30 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RationalCharts(unittest.TestCase):
+    def test_worker_certifies_single_component_with_4501_digit_multiplicity(self):
+        digits = "1" + "0" * 4499 + "7"
+        power = 10**4500 + 7
+        for names in (["x"], ["x", "y"]):
+            with self.subTest(names=names):
+                request = dict(polynomial="x^" + digits, variables=names, mode="embedded")
+                reply = subprocess.run([sys.executable, "-m", "engine.worker"], cwd=ROOT,
+                                       input=json.dumps(request), text=True, capture_output=True,
+                                       timeout=15, check=True)
+                # Read JSON integers exactly without changing this process's decimal limit.
+                status, record = json.loads(reply.stdout, parse_int=lambda s: int(Decimal(s)))
+                self.assertEqual(status, 200, reply.stderr)
+                self.assertEqual(record["status"], "resolved")
+                self.assertEqual(record["steps"], [])
+                chart, = record["atlas"]
+                component, = chart["components"]
+                self.assertEqual(chart["map"], dict(zip(names, chart["coordinates"])))
+                self.assertEqual(component["ideal"], [chart["map"]["x"]])
+                self.assertEqual(component["multiplicity"], power)
+                component["multiplicity"] += 1
+                exponent = (power,) + (0,) * (len(names) - 1)
+                with self.assertRaises(InvalidChart):
+                    rational_chart_outputs(record, {exponent: 1}, integrals=False)
+
     def test_cli_and_saved_atlas_without_sympy(self):
         # sitecustomize runs in the actual CLI's resolution worker as well as
         # in the command reading a previously serialized chart.

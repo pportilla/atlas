@@ -1,10 +1,9 @@
 """A regular Newton modification of a hypersurface germ in arbitrary input dimension."""
-from fractions import Fraction
 from itertools import combinations
 from math import comb, prod
 
 from .chart_batch import transform_batch
-from .newton_faces import certify_face
+from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 from .newton_fan import build_fan
 from .polynomial import format_poly, LimitError
 
@@ -110,8 +109,7 @@ def subsets(cone):
 
 def _label_roots(index, edge):
     family = f'alpha{index}'
-    coefficients = {(int(k),):Fraction(v) for k,v in edge['root_polynomial'].items()}
-    polynomial = format_poly(coefficients,['T'])
+    polynomial = format_poly(edge_polynomial(edge),['T'])
     return family, {
         'degree':edge['degree'], 'polynomial':polynomial, 'direction':edge['direction'],
         'definition':f'{family}_j is root j of {polynomial} = 0, ordered by real then imaginary part, starting at 1.'
@@ -275,14 +273,14 @@ def _blow_up_failures(result, poly, variables, mode, fan, deadline, original, de
     if answer is None or not answer['repairs']:
         return None
     repairs = answer['repairs']
-    names = {chart['id']:chart for chart in result['charts']}
+    parents = {chart['id']:(i,chart) for i,chart in enumerate(result['charts'])}
     blowups = sum(len(r['blowups']) for r in repairs)
     points = sum(r['points'] for r in repairs)
     for r in repairs:
-        parent = names[r['chart']]
+        parent_index, parent = parents[r['chart']]
         parent.setdefault('blown_up',[]).append({'id':r['id'],'ideal':r['ideal']})
         for k, chart in enumerate(r['charts'], 1):
-            result['charts'].append(patch_record(chart, parent, f"{r['id']}.{k}"))
+            result['charts'].append(patch_record(chart, parent, f"{r['id']}.{k}", parent_index))
         result['steps'].append({'id':r['id'],'type':'blowups where a Newton face is degenerate','chart':r['chart'],
                                 'points':r['points'],'ideal':r['ideal'],'centers':r['blowups']})
     # The fan before the blowups describes a different boundary. Its labels
@@ -296,7 +294,7 @@ def _blow_up_failures(result, poly, variables, mode, fan, deadline, original, de
         charts = from_record(result, original, native=_MODE == "native")
         result['atlas'] = to_json(charts)
         result['dual_complex'] = boundary_complex(charts, len(variables), mode == 'intrinsic')
-    result['summary'] = (f"Regular Newton modification with {len(names)} charts, then {blowups} blowups over "
+    result['summary'] = (f"Regular Newton modification with {len(parents)} charts, then {blowups} blowups over "
                          f"{points} point{'s' if points!=1 else ''} where a face is degenerate.")
     proof = result['certificate']
     proof['method'] = 'regular Newton fan, exact torus Jacobian tests, and blowups certified by ideal calculations'
@@ -317,7 +315,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
     last_limit = None
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
-            fan=build_fan(transformed)
+            fan=build_fan(transformed, exhaustive=exhaustive_faces())
             if not fan['isomorphism_off_origin']:
                 continue
             result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,defer_outputs=defer_outputs)

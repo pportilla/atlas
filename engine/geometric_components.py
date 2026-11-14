@@ -15,7 +15,7 @@ from .native_polynomial import native_ring
 from . import field_factors, kernel
 from .affine_kernel import (_primitive_support, _sparse_expression, _sparse_terms, frame_derivative, rational_factor_rows,
                             sparse_terms)
-from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, saturate
+from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
 from .groebner import CHECK, _MODE, groebner
 
 
@@ -319,15 +319,16 @@ def _intersection(variables, a, b, domain):
     return tuple(g for g in basis.exprs if selector not in g.free_symbols)
 
 
-def _coverage(variables, components, ideal, domain):
-    if not components or not _disjoint(variables,components,domain):
+def _coverage(variables, components, ideal, domain, reduced_support):
+    if not components or not reduced_support and not _disjoint(variables,components,domain):
         return False
     if not all(ideal_subset(variables,ideal,p,domain=domain) for p in components):
         return False
     union = components[0]
     for prime in components[1:]:
         union = _intersection(variables, union, prime, domain)
-    return ideal_subset(variables,union,ideal,domain=domain)
+    contains = radical_subset if reduced_support else ideal_subset
+    return contains(variables,union,ideal,domain=domain)
 
 
 def _projection_matrices_reference(n, effort):
@@ -419,7 +420,7 @@ def _coordinate_images(variables, projection):
     return images
 
 
-def _shape(variables, generators, dimension, domain, effort, matrix, inverse=None):
+def _shape(variables, generators, dimension, domain, effort, matrix, inverse=None, *, reduced_support=False):
     u, z, t = variables[:dimension], variables[dimension:-1], variables[-1]
     images = _coordinate_images(variables, matrix)
     if inverse is None:
@@ -433,12 +434,12 @@ def _shape(variables, generators, dimension, domain, effort, matrix, inverse=Non
     if _MODE != "sympy":
         data = _rational_shape(ideal, u, z, t, domain)
         if data is not None:
-            answer = _shape_components(variables, dimension, domain, effort, images_back, ideal, data)
+            answer = _shape_components(variables, dimension, domain, effort, images_back, ideal, data, reduced_support)
         if not CHECK:
             return answer
     reference = _fraction_shape(ideal, u, z, t, domain)
     expected = None if reference is None else _shape_components(
-        variables, dimension, domain, effort, images_back, ideal, reference)
+        variables, dimension, domain, effort, images_back, ideal, reference, reduced_support)
     if CHECK:
         if expected is not None and (answer is None or set(answer) != set(expected)):
             raise AssertionError("The two elimination methods give different geometric components.")
@@ -446,7 +447,7 @@ def _shape(variables, generators, dimension, domain, effort, matrix, inverse=Non
     return expected
 
 
-def _shape_components(variables, dimension, domain, effort, images, ideal, data):
+def _shape_components(variables, dimension, domain, effort, images, ideal, data, reduced_support):
     u, t = variables[:dimension], variables[-1]
     graph, h, numerator = data
     factors = _factor_records((*u, t), numerator, domain)
@@ -454,13 +455,13 @@ def _shape_components(variables, dimension, domain, effort, images, ideal, data)
     for factor,multiplicity,certificate in factors:
         if t not in factor.free_symbols:
             continue  # content is invertible in K(u)
-        if multiplicity!=1 or _certify((*u, t), factor, certificate, domain, effort) is not True:
+        if (multiplicity != 1 and not reduced_support) or _certify((*u, t), factor, certificate, domain, effort) is not True:
             return None
         # The graph over D(product h) is a geometrically integral
         # hypersurface there. Saturation contracts its prime to the chart.
         prime = saturate(variables,(*graph,factor),chart_expressions(variables).prod(set(h)),domain=domain)
         primes.append(prime)
-    if not _coverage(variables, primes, ideal, domain):
+    if not _coverage(variables, primes, ideal, domain, reduced_support):
         return None
     return [ideal_basis(variables, field_factors.compose(variables, images, variables, prime, domain),
                         domain=domain) for prime in primes]
@@ -553,8 +554,13 @@ def _fraction_shape(ideal, u, z, t, domain):
     return graph, h, numerator
 
 
-def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1):
-    """List pairwise disjoint geometric prime ideals, [] for empty, or None.
+def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1, reduced_support=False):
+    """List certified geometric prime ideals, [] for empty, or None.
+
+    By default the primes must be disjoint and give the original ideal.
+    A reduced-support decomposition allows meeting branches and nilpotents.
+    Absolute primality and radical containment of the intersection ideal
+    prove that every geometric component is accounted for on the entire chart.
 
     Designed for smooth equidimensional strata. Returned coordinates and ideals
     are over the supplied field K. A geometric component that is not individually
@@ -592,7 +598,8 @@ def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1):
             remaining = [g for g in generators if g!=f]
             equations = field_factors.compose(others, tuple(value if v==x else v for v in variables),
                                               variables, remaining, domain)
-            smaller = geometric_components(others,equations,dimension,domain=domain,effort=effort)
+            smaller = geometric_components(others,equations,dimension,domain=domain,effort=effort,
+                                           reduced_support=reduced_support)
             if smaller is None:
                 return None
             return [ideal_basis(variables,(*prime, f),domain=domain) for prime in smaller]
@@ -600,12 +607,13 @@ def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1):
         if dimension!=len(variables)-1:
             return None
         factors = _factor_records(variables, generators[0], domain)
-        if any(m != 1 or _certify(variables, p, data, domain, effort) is not True for p, m, data in factors):
+        if any((m != 1 and not reduced_support) or _certify(variables, p, data, domain, effort) is not True
+               for p, m, data in factors):
             return None
         candidates = [(p,) for p, _, _ in factors]
-        return candidates if _disjoint(variables,candidates,domain) else None
+        return candidates if reduced_support or _disjoint(variables,candidates,domain) else None
     for projection,inverse in _projections(variables,effort):
-        found = _shape(variables,generators,dimension,domain,effort,projection,inverse)
+        found = _shape(variables,generators,dimension,domain,effort,projection,inverse,reduced_support=reduced_support)
         if found is not None:
             return found
     return None

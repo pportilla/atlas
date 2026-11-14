@@ -45,7 +45,7 @@ class HomogeneousCertificate : private Engine {
     // cancellations. Bound the total extra graph across degrees, as well as
     // the number of per-thread coefficient slots.
     static constexpr size_t max_columns = 65536, max_edges = 1U << 20;
-    size_t columns_used = 0, edges_used = 0;
+    std::atomic<size_t> columns_used{0}, edges_used{0};
 
     void prepare_rows(Degree& plan, std::vector<Poly>& polynomials) {
         std::unordered_map<Monomial, uint32_t, Hash> ids;
@@ -55,7 +55,7 @@ class HomogeneousCertificate : private Engine {
             std::copy_n(m, R.stride, key.data());
             const auto entry = ids.emplace(key, static_cast<uint32_t>(monomials.size()));
             if (entry.second) {
-                if (++columns_used > max_columns) throw TooWide{};
+                if (columns_used.fetch_add(1, std::memory_order_relaxed) >= max_columns) throw TooWide{};
                 monomials.push_back(key);
             }
             return entry.first->second;
@@ -74,8 +74,9 @@ class HomogeneousCertificate : private Engine {
             col.divisor = reducer(monomials[j].data());
             if (col.divisor >= 0) {
                 const Poly& g = G[col.divisor].p;
-                if (g.size() - 1 > max_edges - edges_used) throw TooWide{};
-                edges_used += g.size() - 1;
+                const size_t count = g.size() - 1;
+                if (count > max_edges || edges_used.fetch_add(count, std::memory_order_relaxed) > max_edges - count)
+                    throw TooWide{};
                 col.tail.reserve(g.size() - 1);
                 u64 shift[MAX_STRIDE], child[MAX_STRIDE];
                 R.divide(shift, monomials[j].data(), g.m.data());
@@ -150,6 +151,13 @@ class HomogeneousCertificate : private Engine {
             largest = std::max(largest, degree.columns.size());
             for (const Row& row : degree.rows) jobs.push_back({&degree, &row});
         }
+        return all_jobs(jobs.size(), max_columns / largest, [&](size_t k) {
+            return vanishes(*jobs[k].degree, *jobs[k].row);
+        });
+    }
+
+    template<class Operation>
+    static bool all_jobs(size_t count, size_t max_workers, Operation run) {
         std::atomic<size_t> cursor{0};
         std::atomic<bool> failed{false};
         std::mutex lock;
@@ -158,8 +166,8 @@ class HomogeneousCertificate : private Engine {
             try {
                 while (!failed.load(std::memory_order_relaxed)) {
                     const size_t k = cursor.fetch_add(1, std::memory_order_relaxed);
-                    if (k >= jobs.size()) return;
-                    if (!vanishes(*jobs[k].degree, *jobs[k].row)) failed.store(true, std::memory_order_relaxed);
+                    if (k >= count) return;
+                    if (!run(k)) failed.store(true, std::memory_order_relaxed);
                 }
             } catch (...) {
                 std::lock_guard<std::mutex> guard(lock);
@@ -167,8 +175,7 @@ class HomogeneousCertificate : private Engine {
                 failed.store(true, std::memory_order_relaxed);
             }
         };
-        const size_t workers = std::min<size_t>({jobs.size(), std::max(1U, std::thread::hardware_concurrency()),
-                                                 max_columns / largest});
+        const size_t workers = std::min<size_t>({count, std::max(1U, std::thread::hardware_concurrency()), max_workers});
         std::vector<std::thread> crew;
         crew.reserve(workers);
         try {
@@ -230,8 +237,16 @@ public:
         }
         std::map<u64, Degree> plans;
         try {
-            for (auto& group : polynomials)
-                prepare_rows(plans[group.first], group.second);
+            // Each degree owns its symbolic closure; only the overall count
+            // of allocated columns and tail entries is shared.
+            using Group = std::pair<Degree*, std::vector<Poly>*>;
+            std::vector<Group> groups;
+            for (auto& group : polynomials) groups.emplace_back(&plans[group.first], &group.second);
+            std::reverse(groups.begin(), groups.end());
+            all_jobs(groups.size(), groups.size(), [&](size_t k) {
+                prepare_rows(*groups[k].first, *groups[k].second);
+                return true;
+            });
         } catch (const TooWide&) {
             return std::nullopt;
         }

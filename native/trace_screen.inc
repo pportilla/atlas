@@ -9,6 +9,10 @@
         while (first && B[first - 1].sugar == degree && B.size() - first < 256) --first;
         const size_t jobs = B.size() - first;
         if (jobs < 8) return;
+        using Clock = std::chrono::steady_clock;
+        Clock::time_point start{}, packed{}, reduced{};
+        const TraceProfile profile = trace_profile;
+        if (profile) start = Clock::now();
         // These caps limit speculative work, never the underlying exact trace.
         const size_t word_limit = std::min<size_t>(budget, 4u << 20);
         const size_t width_limit = std::min<size_t>(16384, word_limit / jobs);
@@ -82,8 +86,10 @@
             return kernel(p_, static_cast<uint32_t>(jobs), width, initial.data(), offsets.data(),
                           pivots.data(), targets.data(), coefficients.data(), remainders.data());
         };
-        if (trace_screen && reduce(trace_screen) == 0 &&
-            std::all_of(remainders.begin(), remainders.end(), [this](uint32_t v) { return v < p_; })) {
+        if (profile) packed = Clock::now();
+        const bool on_device = trace_screen && reduce(trace_screen) == 0 &&
+            std::all_of(remainders.begin(), remainders.end(), [this](uint32_t v) { return v < p_; });
+        if (on_device) {
             device_screened = true;
         } else {
             // Overwrite even a partial device result. Reuse the symbolic work
@@ -92,6 +98,8 @@
             ++cpu_trace_batches;
             cpu_trace_pairs += jobs;
         }
+
+        if (profile) reduced = Clock::now();
 
         // Homogeneous pairs of this degree have scalar coefficients in this
         // elimination. B.back() is processed first, in increasing lcm order.
@@ -140,4 +148,10 @@
             }
         }
         B.resize(kept);
+        if (profile) {
+            using Seconds = std::chrono::duration<double>;
+            profile(static_cast<uint32_t>(degree), p_, static_cast<uint32_t>(jobs), width, offsets[width],
+                    static_cast<uint32_t>(kept - first), on_device, Seconds(packed - start).count(),
+                    Seconds(reduced - packed).count(), Seconds(Clock::now() - reduced).count());
+        }
     }

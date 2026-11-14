@@ -1,6 +1,8 @@
 """Global characters and faces on a certified common torus atlas."""
 from collections import Counter
 from copy import deepcopy
+from itertools import combinations
+import json
 import unittest
 
 import sympy as sp
@@ -138,6 +140,112 @@ class FourVariableTorus(unittest.TestCase):
                         self.assertEqual(cell["root"], by_id[face]["root"])
                         comparisons += 1
         self.assertGreater(comparisons, 0)
+
+
+class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
+    def test_higher_rank_relative_fan_from_saved_equations(self):
+        from engine.native_library import affine_request, _MODE
+        from engine.polynomial import format_poly, sparse_row
+        from engine.strata import rational_chart_outputs
+        names = list("xyzt")
+        section = "x^2+y^3+z^3+t^6+y*z*t^2"
+        family = section+"+w*y*z*t^2"
+        record = resolve(dict(variables=names, polynomial=section, mode="intrinsic", search="quick"))
+        full = [*names, "w"]
+        charts = json.loads(json.dumps(record["atlas"]))
+        for chart in charts:
+            coords = chart["coordinates"]
+            coords.append("extra")
+            chart["map"]["w"] = "extra"
+            chart["fibre"].append("extra")
+            for key in ("rays", "linear_map"):
+                matrix = chart["torus"][key]
+                for row in matrix:
+                    row.append(0)
+                matrix.append([0, 0, 0, 0, 1])
+            # This is a family on the relative fan. Its incidence must be
+            # computed from the new strict equation, which depends on w.
+            exceptional = [c for c in chart["components"] if c["id"] != "strict"]
+            indices = [coords.index(c["ideal"][0]) for c in exceptional]
+            rows = affine_request(["chart", " ".join(coords), " ".join(full),
+                                   *(chart["map"][v] for v in full), "0", family, " ".join(map(str, indices))])
+            for c, row in zip(exceptional, rows):
+                self.assertEqual((c["multiplicity"], c["nu"]), tuple(map(int, row.split())))
+            strict = next(c for c in chart["components"] if c["id"] == "strict")
+            strict["ideal"] = [format_poly(sparse_row(rows[-1]), coords)]
+        dual = torus_complex(atlas.from_json(charts), 5, True)
+        self.assertEqual((dual["status"], len(dual["vertices"]), len(dual["cells"])), ("complete", 4, 3))
+        def adjacencies(complex):
+            return Counter(frozenset(c["vertices"]) for c in complex["cells"])
+        self.assertEqual(adjacencies(dual), adjacencies(record["dual_complex"]))
+        if _MODE != "sympy":
+            _, found = rational_chart_outputs(dict(variables=full, atlas=charts), parse(family, full), intrinsic=True)
+            self.assertEqual(found["dual_complex"], dual)
+
+    def test_two_sheets_and_every_face_from_the_saved_fan(self):
+        from engine.native_library import _MODE
+        from engine.strata import InvalidChart, rational_chart_outputs
+        names = list("xyztu")
+        source = "(x*y)^2-2*(z*t*u)^2"
+        polynomial = parse(source, names)
+        record = resolve(dict(polynomial=source, variables=names, mode="intrinsic", search="quick"))
+        def check(boundary):
+            self.assertEqual(boundary["status"], "complete")
+            # On each character sheet the maximal faces of the regular fan
+            # meeting the origin are these three coordinate tetrahedra.
+            simplices = [(1, 4, 5, 6), (1, 2, 5, 6), (1, 2, 3, 6)]
+            expected = {frozenset(f"E{i}.{sheet}" for i in face)
+                        for sheet in (1, 2) for simplex in simplices
+                        for size in range(1, 5) for face in combinations(simplex, size)}
+            by_id = {v["id"]: frozenset([v["id"]]) for v in boundary["vertices"]}
+            by_id.update((c["id"], frozenset(c["vertices"])) for c in boundary["cells"])
+            self.assertCountEqual(by_id.values(), expected)
+            for cell in boundary["cells"]:
+                vertices = by_id[cell["id"]]
+                self.assertCountEqual((by_id[f] for f in cell["faces"]), (vertices-{v} for v in vertices))
+
+        check(record["dual_complex"])
+        saved = json.loads(json.dumps(dict(variables=names, atlas=record["atlas"])))
+        charts = atlas.from_json(saved["atlas"])
+        check(torus_complex(charts, len(names), True))
+        if _MODE != "sympy":
+            check(rational_chart_outputs(saved, polynomial, intrinsic=True)[1]["dual_complex"])
+        strict, = (c for c in saved["atlas"][0]["components"] if c["id"] == "strict")
+        strict["ideal"][0] += "+1"
+        self.assertIsNone(torus_complex(atlas.from_json(saved["atlas"]), len(names), True))
+        if _MODE != "sympy":
+            with self.assertRaises(InvalidChart):
+                rational_chart_outputs(saved, polynomial, intrinsic=True)
+
+    def test_three_term_section_on_the_same_toric_modification(self):
+        from engine.affine_kernel import chart_data
+        from engine.chart_expressions import runtime_expressions
+        from engine.native_library import _MODE
+        from engine.strata import rational_chart_outputs
+        names = list("xyzt")
+        source = "(x*y)^2+3*x*y*z*t+(z*t)^2"
+        api = runtime_expressions()
+        x, y, z, t = base = tuple(map(api.Symbol, names))
+        f = (x*y)**2+3*x*y*z*t+(z*t)**2
+        # The projected toric charts come from the subdivision for the same
+        # segment. Recompute their pullbacks for this different hypersurface.
+        support = resolve(dict(variables=names, polynomial="(x*y)^2-2*(z*t)^2",
+                               mode="intrinsic", search="quick"))
+        charts = atlas.from_json(support["atlas"])
+        for chart, item in zip(charts, support["atlas"]):
+            axes = [ideal[0] for label, _, _, ideal in chart.components if label != "strict"]
+            _, strict = chart_data(chart.variables, [g for _, g in chart.coordinates], axes, f, base)
+            equation = atlas._record_text(strict, chart.variables)
+            next(c for c in item["components"] if c["id"] == "strict")["ideal"] = [equation]
+        saved = dict(variables=names, atlas=support["atlas"])
+        if _MODE == "sympy":
+            dual = torus_complex(atlas.from_json(saved["atlas"]), len(names), True)
+        else:
+            _, found = rational_chart_outputs(saved, parse(source, names), intrinsic=True)
+            dual = found["dual_complex"]
+        self.assertEqual(dual["status"], "complete")
+        self.assertEqual(len(dual["vertices"]), 8)
+        self.assertEqual(Counter(c["dimension"] for c in dual["cells"]), {1:10, 2:4})
 
 
 if __name__ == "__main__":

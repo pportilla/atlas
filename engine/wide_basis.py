@@ -1,90 +1,53 @@
-"""Sparse FLINT bases over Q when packed monomials cannot hold the ideal.
-
-The basis consists of monic primitive autoreduced Buchberger rows. Lex
-and grevlex use the FLINT orders directly. Normal forms use multivariate
-division by those same rows. Keep the sparse rows intact: a single power
-of degree a billion takes one term throughout this computation.
-"""
-from functools import cached_property
-
-from . import native_polynomial as np
-from .chart_expressions import chart_expressions
-from .reference import sp
-
-from .affine_kernel import _library, _request, _ring, _sparse_expression, _sparse_terms
+"""Rational bases and division with arbitrary-precision exponent vectors."""
+from .affine_kernel import _library
+from .algebra_execution import record_stage
+from .field_wide import WideBlockBasis, _ask, _expanded_row, wide_block_basis
+from .reference import QQ
 
 
-def _order_key(monomial, order):
-    if order == "lex":
-        return monomial
-    return sum(monomial), tuple(-e for e in reversed(monomial))
+class WideBasis(WideBlockBasis):
+    """Keep the packed QQ interface and omit quotients in the sparse ring."""
 
-
-class WideBasis:
-    def __init__(self, gens, order, rows):
-        self.gens = gens
-        self.order = order
-        self.rows = sorted(rows, key=lambda row: _order_key(_sparse_terms(row)[0][0], order), reverse=True)
-        self.exprs = [_sparse_expression(gens, row) for row in self.rows]
-        self._ring = _ring(gens)
-
-    @cached_property
-    def polys(self):
-        # Compatibility view for callers that explicitly request Poly objects.
-        if np.native_ring(self.gens):
-            return self.exprs
-        return [sp.Poly.from_dict(dict(_sparse_terms(row)), *self.gens, domain=sp.QQ) for row in self.rows]
+    def remainder(self, value):
+        if hasattr(self.library, "atlas_wide_remainder_abi"):
+            row = _expanded_row(self.gens, value)
+            answer, = _ask(self.library, "remainder", len(self.gens), self.order, False, (row, *self.rows))
+            result = self.expression(answer)
+        else:
+            result = super().remainder(value)
+        record_stage("normal_form", "cpu", divisors=len(self.rows), algorithm="wide")
+        return result
 
     def reduce(self, value):
-        rows = _request(["wide_division", self._ring.header, self.order, self._ring.text(value),
-                         *map(self._ring.text, self.exprs)])
-        # Public rational bases expose the remainder, as on the packed path.
-        return None, _sparse_expression(self.gens, rows[-1])
+        return None, self.remainder(value)
 
     def contains(self, value):
-        return self.reduce(value)[1] == 0
+        return self.remainder(value) == 0
+
+
+def wide_basis_from_rows(rows, gens, order):
+    """Use already reduced rows in basis order for division beyond the packed range."""
+    library = _library()
+    if order in ("lex", "grevlex", "first") and hasattr(library, "atlas_wide_block"):
+        return WideBasis(library, gens, QQ, None, order, rows)
+    return None
 
 
 def wide_basis(ideal, gens, order):
     if order == "first":
-        from .field_wide import wide_block_basis
         return wide_block_basis(ideal, gens, order)
-    if order not in ("lex", "grevlex") or not gens or not hasattr(_library(), "atlas_wide_abi"):
+    library = _library()
+    if order not in ("lex", "grevlex") or not gens or not hasattr(library, "atlas_wide_block"):
         return None
-    ring = _ring(gens)
-    rows = _request(["wide_basis", ring.header, order, *(ring.text(f) for f in ideal)])
-    return WideBasis(tuple(gens), order, rows)
+    # Intermediate leading exponents can exceed a machine word even when every
+    # input exponent fits. The sparse block kernel uses fmpz throughout.
+    rows = _ask(library, "basis", len(gens), order, False, (_expanded_row(gens, f) for f in ideal))
+    return WideBasis(library, gens, QQ, None, order, rows)
 
 
 def wide_colon(ideal, by, variables):
-    """Compute I:J by elimination and exact polynomial divisions over Q.
-
-    The contraction of (tI,(1-t)J) is I intersect J. For a nonzero
-    principal J=(b), divide those intersection generators by b to obtain
-    I:b. Intersect the results for the generators of the denominator ideal.
-    """
-    from .groebner import groebner
+    """Use the same elimination and exact division as rational algebra requests."""
+    from .ideal_operations import quotient
     if not hasattr(_library(), "atlas_wide_block"):
         return None
-    variables = tuple(variables)
-    t = chart_expressions(variables).Dummy("intersection")
-
-    def meet(left, right):
-        lifted = (*(t*f for f in left), *((1-t)*f for f in right))
-        result = groebner(lifted, (t, *variables), order="first")
-        return tuple(f for f in result.exprs if t not in f.free_symbols)
-
-    result = (chart_expressions(variables).S.One,)
-    ring = _ring(variables)
-    for b in by:
-        if b == 0:
-            continue
-        shared = meet(ideal, (b,))
-        rows = []
-        for f in shared:
-            q, r = _request(["wide_division", ring.header, "grevlex", ring.text(f), ring.text(b)])
-            if r:
-                raise ArithmeticError("An intersection generator was not divisible by its principal generator.")
-            rows.append(_sparse_expression(variables, q))
-        result = tuple(rows) if result == (1,) else meet(result, rows)
-    return tuple(groebner(result, variables).exprs)
+    return quotient(variables, ideal, by).generators

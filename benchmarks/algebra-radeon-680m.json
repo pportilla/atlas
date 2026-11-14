@@ -1,0 +1,395 @@
+{
+  "workload": "Katsura-6 over QQ, grevlex, last variable scaled by 2^192",
+  "device": {
+    "index": 0,
+    "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+    "vendor": "AMD",
+    "version": "OpenCL 3.0 ",
+    "driver": "26.0.8-1ubuntu0.3",
+    "backend": "opencl"
+  },
+  "unavailable_index": 1,
+  "exactly_equal": true,
+  "basis_size": 41,
+  "result_sha256": "8074fbfa80965c136fa9e4efb2f1ef8976669e887b77e7be0d20059cadcf21b6",
+  "timing": "Fresh CLI process through exact host verification and complete JSON result decoding (milliseconds)",
+  "median_ms": {
+    "cpu": 195.543,
+    "gpu": 377.469,
+    "fallback": 287.151
+  },
+  "samples": {
+    "cpu": [
+      {
+        "end_to_end_ms": 199.697,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 29.718783,
+              "verify_ms": 7.757465
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 68.442
+        }
+      },
+      {
+        "end_to_end_ms": 195.543,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 30.070179,
+              "verify_ms": 8.651365
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 68.053
+        }
+      },
+      {
+        "end_to_end_ms": 194.707,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 29.931585,
+              "verify_ms": 7.616289
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 67.436
+        }
+      }
+    ],
+    "gpu": [
+      {
+        "end_to_end_ms": 377.469,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "opencl",
+              "batches": 4,
+              "pairs": 150,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "opencl",
+              "batches": 2,
+              "primes": 96,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 4,
+              "primes": 30
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 38.151075,
+              "verify_ms": 8.428524
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 224.226
+        }
+      },
+      {
+        "end_to_end_ms": 381.256,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "opencl",
+              "batches": 4,
+              "pairs": 150,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "opencl",
+              "batches": 2,
+              "primes": 96,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 4,
+              "primes": 30
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 31.011068,
+              "verify_ms": 8.13517
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 228.654
+        }
+      },
+      {
+        "end_to_end_ms": 350.665,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "opencl",
+              "batches": 4,
+              "pairs": 150,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "opencl",
+              "batches": 2,
+              "primes": 96,
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              }
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 4,
+              "primes": 30
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 29.965981,
+              "verify_ms": 7.58041
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 207.692
+        }
+      }
+    ],
+    "fallback": [
+      {
+        "end_to_end_ms": 331.439,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 31.655845,
+              "verify_ms": 7.930192
+            }
+          ],
+          "fallback_reasons": [
+            "opencl trace: OpenCL trace kernel or device unavailable",
+            "opencl: OpenCL replay failed"
+          ],
+          "elapsed_ms": 164.909,
+          "note": "opencl trace: OpenCL trace kernel or device unavailable opencl: OpenCL replay failed"
+        }
+      },
+      {
+        "end_to_end_ms": 287.151,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 29.234417,
+              "verify_ms": 7.307765
+            }
+          ],
+          "fallback_reasons": [
+            "opencl trace: OpenCL trace kernel or device unavailable",
+            "opencl: OpenCL replay failed"
+          ],
+          "elapsed_ms": 143.05,
+          "note": "opencl trace: OpenCL trace kernel or device unavailable opencl: OpenCL replay failed"
+        }
+      },
+      {
+        "end_to_end_ms": 278.107,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_trace",
+              "backend": "cpu",
+              "batches": 4,
+              "pairs": 150
+            },
+            {
+              "operation": "groebner_replay",
+              "backend": "cpu",
+              "batches": 6,
+              "primes": 126
+            },
+            {
+              "operation": "groebner_certification",
+              "backend": "cpu",
+              "bases": 1,
+              "attempts": 1,
+              "lift_ms": 31.052912,
+              "verify_ms": 7.99767
+            }
+          ],
+          "fallback_reasons": [
+            "opencl trace: OpenCL trace kernel or device unavailable",
+            "opencl: OpenCL replay failed"
+          ],
+          "elapsed_ms": 142.418,
+          "note": "opencl trace: OpenCL trace kernel or device unavailable opencl: OpenCL replay failed"
+        }
+      }
+    ]
+  }
+}

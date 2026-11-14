@@ -115,24 +115,16 @@ void append_factor(Factors& factors,Poly factor,Exp power) {
     }
 }
 
-vector<Num> directions(const Poly& f,Exp m) {
-    // A monomial tangent cone has at most one finite direction. This common
-    // case does not require allocating or factoring a dense polynomial.
-    size_t terms=0;
-    Exp v_power=0;
-    for(const auto& [k,c]:f) if(add_powers(k.first,k.second)==m) {
-        ++terms;
-        v_power=k.second;
-        if(terms==2) break;
-    }
-    if(terms==1) return v_power ? vector<Num>{Num(0)} : vector<Num>{};
+vector<Num> ordered_roots(const vector<pair<Exp,Num>>& terms) {
+    if(terms.empty()) throw invalid_argument("The zero polynomial does not define a finite root family.");
+    if(terms.size()==1) return terms[0].first ? vector<Num>{Num(0)} : vector<Num>{};
     gr_ctx_t ctx; gr_ctx_init_complex_qqbar(ctx);
     gr_poly_t p; gr_poly_init(p,ctx);
     int status=0;
-    for(auto& [k,c]:f) if(add_powers(k.first,k.second)==m) {
-        if(k.second==numeric_limits<Exp>::max())
-            throw Fail("Tangent polynomial length exceeds a signed FLINT word.");
-        status |= gr_poly_set_coeff_scalar(p,k.second,c.n,ctx);
+    for(auto& [power,c]:terms) {
+        if(power==numeric_limits<Exp>::max())
+            throw Fail("Root polynomial length exceeds a signed FLINT word.");
+        status |= gr_poly_set_coeff_scalar(p,power,c.n,ctx);
     }
     gr_vec_t roots; gr_vec_init(roots,0,ctx);
     fmpz_vec_t mult; fmpz_vec_init(mult,0);
@@ -143,11 +135,46 @@ vector<Num> directions(const Poly& f,Exp m) {
         out.push_back(r);
     }
     fmpz_vec_clear(mult); gr_vec_clear(roots,ctx); gr_poly_clear(p,ctx); gr_ctx_clear(ctx);
-    if(status) throw Fail("The exact algebraic tangent-root computation did not finish.");
+    if(status) throw Fail("The exact algebraic root computation did not finish.");
     sort(out.begin(),out.end(),[](const Num& a,const Num& b){
         int s=qqbar_cmp_re(a.n,b.n);return s<0 || (!s && qqbar_cmp_im(a.n,b.n)<0);
     });
     return out;
+}
+
+vector<Num> directions(const Poly& f,Exp m) {
+    vector<pair<Exp,Num>> terms;
+    for(const auto& [k,c]:f) if(add_powers(k.first,k.second)==m) terms.emplace_back(k.second,c);
+    return ordered_roots(terms);
+}
+
+J ordered_root_labels(const J& rows) {
+    if(!rows.isArray()) throw invalid_argument("Root polynomial terms must be an array.");
+    vector<pair<Exp,Num>> terms;
+    for(const auto& row:rows) {
+        if(!row.isArray() || row.size()!=2 || !row[0].isUInt64() ||
+           row[0].asUInt64()>=static_cast<Json::UInt64>(WORD_MAX) || !row[1].isString())
+            throw invalid_argument("Expected a nonnegative exponent and a rational coefficient per root polynomial term.");
+        fmpq_t q; fmpq_init(q);
+        if(fmpq_set_str(q,row[1].asCString(),10)!=0 || fmpz_is_zero(fmpq_denref(q))) {
+            fmpq_clear(q);
+            throw invalid_argument("Invalid root polynomial coefficient.");
+        }
+        fmpq_canonicalise(q);
+        Num c; qqbar_set_fmpq(c.n,q); fmpq_clear(q);
+        if(!c.zero()) terms.emplace_back(row[0].asInt64(),c);
+    }
+    J result=arr();
+    for(const auto& root:ordered_roots(terms)) {
+        if(qqbar_is_rational(root.n)) {
+            fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q,root.n);
+            result.append(taken(fmpq_get_str(nullptr,10,q))); fmpq_clear(q);
+        } else {
+            fexpr_t expr; fexpr_init(expr); qqbar_get_fexpr_root_indexed(expr,root.n);
+            result.append(taken(fexpr_get_str(expr))); fexpr_clear(expr);
+        }
+    }
+    return result;
 }
 
 bool reduced_at_origin(const Poly& f) {
@@ -459,7 +486,9 @@ int main(){
             limit.rlim_cur=min<rlim_t>(limit.rlim_cur,rlim_t(1)<<30);
             if(setrlimit(RLIMIT_AS,&limit)!=0) throw Fail("Could not bound the exact-arithmetic worker.");
         }
-        if (req.isMember("field_roots")) {
+        if (req.isMember("ordered_roots")) {
+            out=ordered_root_labels(req["ordered_roots"]);
+        } else if (req.isMember("field_roots")) {
             out=coefficient_field(req["field_roots"], req["root_rectangles"]);
         } else {
             Resolver solver;solver.names={req["variables"][0].asString(),req["variables"][1].asString()};

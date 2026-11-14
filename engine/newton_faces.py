@@ -7,6 +7,8 @@ coordinate subtorus maps onto the character torus of that lattice. In
 characteristic zero this is a smooth surjective map, even if the projected
 lattice has finite index. Multiplication by a Laurent monomial is a unit.
 """
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fractions import Fraction
 from math import gcd, lcm
 from pathlib import Path
@@ -14,9 +16,25 @@ import subprocess
 
 from .fan_geometry import lattice_pivots as _pivot_axes
 from .binomial_kernel import _newton, edge_parameters, projected_support, _integer
-from .native_library import CHECK
+from .native_library import CHECK, current_replay_scope
+from .polynomial import integer_text, rational_text, sparse_row
 
 _KERNEL = Path(__file__).resolve().parents[1] / "native" / "build" / "face_gb"
+_EXHAUSTIVE = ContextVar("atlas_exhaustive_faces", default=False)
+
+
+@contextmanager
+def face_search(exhaustive):
+    """Use the request's face-check policy during resolution and atlas verification."""
+    token = _EXHAUSTIVE.set(exhaustive)
+    try:
+        yield
+    finally:
+        _EXHAUSTIVE.reset(token)
+
+
+def exhaustive_faces():
+    return _EXHAUSTIVE.get()
 
 
 def _edge(terms, support, axis):
@@ -28,8 +46,14 @@ def _edge(terms, support, axis):
     polynomial = {k:terms[e] for e,k in zip(support, powers)}
     return {
         "start": list(begin), "direction": list(direction), "degree": length,
-        "root_polynomial": {str(k):str(c) for k,c in sorted(polynomial.items())},
+        "root_polynomial": {integer_text(k):rational_text(c) for k,c in sorted(polynomial.items())},
     }, {(k,):v for k,v in polynomial.items()}
+
+
+def edge_polynomial(edge):
+    """Decode the recorded rational polynomial in its primitive character."""
+    return sparse_row(";".join(f"{coefficient} {power}"
+                               for power, coefficient in edge["root_polynomial"].items()))
 
 
 def _primitive_reference(coefficients):
@@ -60,7 +84,7 @@ def _kernel(terms, dimension, timeout):
     if primitive == "coefficient" or any(max(e)>4096 for e in terms):
         return "undetermined", {"reason":"A face coefficient or exponent exceeds the Gröbner input budget."}
     rows = [f"{dimension} {len(terms)}"]
-    rows.extend(f"{c} " + " ".join(map(str,e)) for e,c in zip(terms,primitive))
+    rows.extend(integer_text(c) + " " + " ".join(map(str,e)) for e,c in zip(terms,primitive))
     if not _KERNEL.is_file():
         raise RuntimeError("Native Newton-face checker is not built. Run make.")
     try:
@@ -81,20 +105,72 @@ def _kernel(terms, dimension, timeout):
     return status, info
 
 
-def certify_face(face_terms, timeout=5.0):
+def _exact_kernel(terms, dimension):
+    from . import native_polynomial as np
+    from .algebra_groebner import reduced_basis
+
+    # The coordinatewise power map is finite étale on the torus in
+    # characteristic zero. In one variable it multiplies the gcd degree by
+    # its degree, since the translated edge has a nonzero constant term.
+    strides = tuple(gcd(*powers) for powers in zip(*terms))
+    terms = {tuple(e[i] // strides[i] for i in range(dimension)): c for e,c in terms.items()}
+    axes = tuple(np.Symbol(f"face{i}") for i in range(dimension))
+    f = np.from_terms(axes, terms)
+    derivatives = []
+    for i in range(dimension):
+        partial = {e[:i] + (e[i]-1,) + e[i+1:]: c*e[i] for e,c in terms.items() if e[i]}
+        derivatives.append(np.from_terms(axes, partial))
+    if dimension == 1:
+        from .polynomial_gcd import monic_gcd
+        common = monic_gcd(axes, f, derivatives[0])
+        degree = max(e[0] for e in np.terms(axes, common)) * strides[0]
+        return ("degenerate" if degree else "nondegenerate"), {"gcd_degree": degree}
+
+    # On a torus each x_i is invertible, so ordinary partials cut out the
+    # same ideal as logarithmic partials. Inverting the coordinate product
+    # excludes every point on an axis, including in the proper-ideal case.
+    ring = (*axes, np.Symbol("faceInverse"))
+    inverse = np.from_terms(ring, {(1,)*len(ring): 1, (0,)*len(ring): -1})
+    basis = reduced_basis((f, *derivatives, inverse), ring)
+    unit = basis.exprs == (1,)
+    return ("nondegenerate" if unit else "degenerate"), {"basis_size": len(basis.exprs), "unit_ideal": unit}
+
+
+def _exact_face(terms, dimension):
+    from .algebra_execution import algebra_execution, current_execution
+    replay = current_replay_scope()
+    if replay is None or replay.compute != "gpu" or current_execution() is not None:
+        return _exact_kernel(terms, dimension)
+    # Resolution tracks device replay across every stage. Give its requested
+    # device to the shared gcd and basis operations, then merge their counts.
+    with algebra_execution(**replay.settings()) as run:
+        result = _exact_kernel(terms, dimension)
+    replay.merge(run.replay.report())
+    for reason in run.reasons:
+        if reason not in replay.reasons:
+            replay.reasons.append(reason)
+    return result
+
+
+def certify_face(face_terms, timeout=5.0, *, exhaustive=None):
     """Check the supplied nonempty face-term dictionary over Qbar.
 
     Return JSON-safe status, method and dimensions. For an edge, edge.direction
     is primitive and edge.root_polynomial maps powers to rational coefficients
     in its character. Its simple roots label the geometric components.
+    An exhaustive search retries an inconclusive bounded test using exact
+    rational algebra with arbitrary-precision coefficients and exponents.
     """
+    exhaustive = exhaustive_faces() if exhaustive is None else exhaustive
     terms = {tuple(e):Fraction(c) for e,c in face_terms.items() if c}
     if not terms:
         raise ValueError("A Newton face must contain a nonzero monomial.")
     support = sorted(terms)
     n = len(support[0])
-    if not 1<=n<=8 or any(len(e)!=n or any(type(x)!=int for x in e) for e in support):
-        raise ValueError("Face exponents must be integer vectors of a common dimension from 1 to 8.")
+    if not n or any(len(e)!=n or any(type(x)!=int for x in e) for e in support):
+        raise ValueError("Face exponents must be integer vectors of a common positive dimension.")
+    if not exhaustive and n>8:
+        raise ValueError("The bounded face checker accepts at most eight coordinates.")
     axes = _pivot_axes(support)
     dimension = len(axes)
     result = {"face_dimension": dimension, "term_count": len(terms), "projection_axes": axes}
@@ -113,5 +189,9 @@ def certify_face(face_terms, timeout=5.0):
     if dimension>1:
         reduced = dict(zip(projected_support(support, axes), (terms[e] for e in support)))
     method = "univariate square-free gcd" if dimension==1 else "torus Jacobian Gröbner basis over Q"
-    status, details = _kernel(reduced,dimension,timeout)
+    if dimension <= 8 and (not exhaustive or _KERNEL.is_file()):
+        status, details = _kernel(reduced,dimension,timeout)
+        if status != "undetermined" or not exhaustive:
+            return dict(result, status=status, method=method, **details)
+    status, details = _exact_face(reduced, dimension)
     return dict(result, status=status, method=method, **details)

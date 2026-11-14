@@ -1,0 +1,1152 @@
+{
+  "request": {
+    "arguments": [
+      "algebra",
+      "normal-form",
+      "--vars",
+      "x,y",
+      "--order",
+      "lex",
+      "--gen",
+      "x^8",
+      "--gen",
+      "y^9",
+      "--poly",
+      "(1+x+y)^120/7",
+      "--json"
+    ]
+  },
+  "expected_rule": "C(120,i)*C(120-i,j)/7 for all 0<=i<8, 0<=j<9",
+  "equal_to_oracle": true,
+  "identical_full_public_results": true,
+  "input_terms": 7381,
+  "kept": 72,
+  "result": {
+    "type": "polynomial",
+    "ring": {
+      "field": "QQ",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "order": "lex"
+    },
+    "polynomial": "30440916512930748979440/7*x^7*y^8+2297427661353264073920/7*x^7*y^7+287178457669158009240*x^6*y^8+21471286554703402560*x^7*y^6+21471286554703402560*x^6*y^7+16103464916027551920*x^5*y^8+1192849253039077920*x^7*y^5+1391657461878924240*x^6*y^6+1192849253039077920*x^5*y^7+745530783149423700*x^4*y^8+54717855643994400*x^7*y^4+76604997901592160*x^6*y^5+76604997901592160*x^5*y^6+54717855643994400*x^4*y^7+27358927821997200*x^3*y^8+1989740205236160*x^7*y^3+3482045359163280*x^6*y^4+4178454430995936*x^5*y^5+3482045359163280*x^4*y^6+1989740205236160*x^3*y^7+746152576963560*x^2*y^8+53776762303680*x^7*y^2+125479112041920*x^6*y^3+188218668062880*x^5*y^4+188218668062880*x^4*y^5+125479112041920*x^3*y^6+53776762303680*x^2*y^7+13444190575920*x*y^8+6722095287960/7*x^7*y+3361047643980*x^6*y^2+6722095287960*x^5*y^3+8402619109950*x^4*y^4+6722095287960*x^3*y^5+3361047643980*x^2*y^6+6722095287960/7*x*y^7+840261910995/7*y^8+59487568920/7*x^7+59487568920*x^6*y+178462706760*x^5*y^2+297437844600*x^4*y^3+297437844600*x^3*y^4+178462706760*x^2*y^5+59487568920*x*y^6+59487568920/7*y^7+521820780*x^6+3130924680*x^5*y+7827311700*x^4*y^2+10436415600*x^3*y^3+7827311700*x^2*y^4+3130924680*x*y^5+521820780*y^6+27225432*x^5+136127160*x^4*y+272254320*x^3*y^2+272254320*x^2*y^3+136127160*x*y^4+27225432*y^5+1173510*x^4+4694040*x^3*y+7041060*x^2*y^2+4694040*x*y^3+1173510*y^4+40120*x^3+120360*x^2*y+120360*x*y^2+40120*y^3+1020*x^2+2040*x*y+1020*y^2+120/7*x+120/7*y+1/7"
+  },
+  "result_sha256": "2956ff9abb8890aafa88936928cd6409763a3a349d6437d423a98e47b5ac17b7",
+  "workload": "(1+x+y)^120/7 modulo (x^8,y^9) in QQ[x,y], lex x>y",
+  "measured_at": "2026-11-14T06:29:18+00:00",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "device": {
+    "index": 0,
+    "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+    "vendor": "AMD",
+    "version": "OpenCL 3.0 ",
+    "driver": "26.0.8-1ubuntu0.3",
+    "backend": "opencl"
+  },
+  "unavailable_index": 1,
+  "builds": {
+    "before": {
+      "native/groebner.cpp": "389e4706886d061e62f1c34d412838148ebe3c3f313b38e8ad6129131c4dc4dd",
+      "native/groebner.hpp": "2a10ebe2be25b3258334232c912fc5db9dc07ea2158168b84271485d5361d624",
+      "native/build/libgroebner.so": "9c2bee3f0b216cf984d8bb4d92a655b35c1fbe2fad4101d5205052fcf21d48b4",
+      "native/build/libgroebner_opencl.so": "173e78c92fe6e1841a50a211eec8306e5383948b0db86db22e86e082a3004e2e",
+      "benchmarks/algebra_gpu.py": "8cbf0654f7115b5acf4af53901bcf68babbba5b978c4247aba8d745cf73954a0"
+    },
+    "after": {
+      "native/groebner.cpp": "49af6d80a2aa6ac5d077ffcc135b9749ae87c296277f4232882f906ef3ae6de5",
+      "native/groebner.hpp": "0500c2e87570d57a54c6671f41cf4140a46334473c8c438aec9826f8c45a5581",
+      "native/build/libgroebner.so": "5b6338fab8f4a924e396c9695b11c0e54c74407709d2a8971711fb601a05dd6a",
+      "native/build/libgroebner_opencl.so": "173e78c92fe6e1841a50a211eec8306e5383948b0db86db22e86e082a3004e2e",
+      "benchmarks/algebra_gpu.py": "8cbf0654f7115b5acf4af53901bcf68babbba5b978c4247aba8d745cf73954a0"
+    }
+  },
+  "check": "Every run checked against all 72 exact multinomial coefficients. Inputs have 7381 terms, 7309 are removed. The public CLI GPU report must show a physical device normal form and host verification.",
+  "method": "One untimed warm-up per mode, seven fresh-process repeats per case in rotating order (reversed on the second cycle), followed by seven paired, alternating calls in persistent workers to atlas_groebner_reduce with serialized input and a retained basis. The native timing includes input parsing, exact reduction and output serialization. Output oracle checks run outside timings. Same host, toolchain, optimization flags, and all other native sources. All translation units in each build were compiled against the corresponding header. OS and driver caches can be warm.",
+  "cli_median_ms": {
+    "before_cpu": 808.029,
+    "after_cpu": 153.169,
+    "after_gpu": 252.827,
+    "after_auto": 170.848,
+    "after_fallback": 239.447
+  },
+  "native_median_ms": {
+    "before": 810.344,
+    "after": 1.658
+  },
+  "cli_samples": {
+    "before_cpu": [
+      {
+        "round": 1,
+        "end_to_end_ms": 867.63,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 737.468
+        }
+      },
+      {
+        "round": 2,
+        "end_to_end_ms": 841.351,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 717.447
+        }
+      },
+      {
+        "round": 3,
+        "end_to_end_ms": 804.466,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 688.876
+        }
+      },
+      {
+        "round": 4,
+        "end_to_end_ms": 803.651,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 688.256
+        }
+      },
+      {
+        "round": 5,
+        "end_to_end_ms": 808.029,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 691.057
+        }
+      },
+      {
+        "round": 6,
+        "end_to_end_ms": 807.515,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 692.112
+        }
+      },
+      {
+        "round": 7,
+        "end_to_end_ms": 826.921,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 699.231
+        }
+      }
+    ],
+    "after_cpu": [
+      {
+        "round": 1,
+        "end_to_end_ms": 172.968,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 36.62
+        }
+      },
+      {
+        "round": 2,
+        "end_to_end_ms": 176.702,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 36.58
+        }
+      },
+      {
+        "round": 3,
+        "end_to_end_ms": 150.884,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 32.439
+        }
+      },
+      {
+        "round": 4,
+        "end_to_end_ms": 150.839,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 33.901
+        }
+      },
+      {
+        "round": 5,
+        "end_to_end_ms": 153.466,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 34.06
+        }
+      },
+      {
+        "round": 6,
+        "end_to_end_ms": 153.169,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 33.939
+        }
+      },
+      {
+        "round": 7,
+        "end_to_end_ms": 148.356,
+        "execution": {
+          "requested": "cpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 33.946
+        }
+      }
+    ],
+    "after_gpu": [
+      {
+        "round": 1,
+        "end_to_end_ms": 287.549,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2145567,
+              "elapsed_ns": 96132017
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 131.251
+        }
+      },
+      {
+        "round": 2,
+        "end_to_end_ms": 270.513,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2149255,
+              "elapsed_ns": 93793976
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 127.818
+        }
+      },
+      {
+        "round": 3,
+        "end_to_end_ms": 249.044,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2115090,
+              "elapsed_ns": 88218422
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 120.376
+        }
+      },
+      {
+        "round": 4,
+        "end_to_end_ms": 249.998,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2072449,
+              "elapsed_ns": 91206312
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 122.191
+        }
+      },
+      {
+        "round": 5,
+        "end_to_end_ms": 252.827,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2959818,
+              "elapsed_ns": 92676342
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 124.049
+        }
+      },
+      {
+        "round": 6,
+        "end_to_end_ms": 255.4,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2081486,
+              "elapsed_ns": 91536366
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 124.512
+        }
+      },
+      {
+        "round": 7,
+        "end_to_end_ms": 250.82,
+        "execution": {
+          "requested": "gpu",
+          "backend": "opencl",
+          "device": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic) (opencl, index 0) and CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "monomial_normal_form",
+              "backend": "opencl",
+              "device": {
+                "index": 0,
+                "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+                "vendor": "AMD",
+                "version": "OpenCL 3.0 ",
+                "driver": "26.0.8-1ubuntu0.3",
+                "backend": "opencl"
+              },
+              "terms": 7381,
+              "divisors": 2,
+              "removed": 7309,
+              "host_verified": true,
+              "verify_ns": 2064304,
+              "elapsed_ns": 91167559
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 122.715
+        }
+      }
+    ],
+    "after_auto": [
+      {
+        "round": 1,
+        "end_to_end_ms": 195.538,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 50.479
+        }
+      },
+      {
+        "round": 2,
+        "end_to_end_ms": 175.479,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 46.115
+        }
+      },
+      {
+        "round": 3,
+        "end_to_end_ms": 171.211,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 48.81
+        }
+      },
+      {
+        "round": 4,
+        "end_to_end_ms": 162.58,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 45.238
+        }
+      },
+      {
+        "round": 5,
+        "end_to_end_ms": 170.848,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 47.674
+        }
+      },
+      {
+        "round": 6,
+        "end_to_end_ms": 164.636,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 44.64
+        }
+      },
+      {
+        "round": 7,
+        "end_to_end_ms": 164.054,
+        "execution": {
+          "requested": "auto",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [],
+          "elapsed_ms": 44.402
+        }
+      }
+    ],
+    "after_fallback": [
+      {
+        "round": 1,
+        "end_to_end_ms": 262.06,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 119.06,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 2,
+        "end_to_end_ms": 242.25,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 112.642,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 3,
+        "end_to_end_ms": 236.055,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 109.019,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 4,
+        "end_to_end_ms": 236.338,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 109.637,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 5,
+        "end_to_end_ms": 239.447,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 110.073,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 6,
+        "end_to_end_ms": 237.663,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 109.868,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      },
+      {
+        "round": 7,
+        "end_to_end_ms": 248.748,
+        "execution": {
+          "requested": "gpu",
+          "backend": "cpu",
+          "device": "CPU",
+          "stages": [
+            {
+              "operation": "groebner_basis",
+              "backend": "cpu",
+              "algorithm": "direct",
+              "order": "lex",
+              "generators": 2,
+              "known": 0
+            },
+            {
+              "operation": "normal_form",
+              "backend": "cpu",
+              "divisors": 2
+            }
+          ],
+          "fallback_reasons": [
+            "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+          ],
+          "elapsed_ms": 113.543,
+          "note": "opencl monomial normal form: OpenCL monomial divisor kernel or device unavailable"
+        }
+      }
+    ]
+  },
+  "native_samples_ms": {
+    "before": [
+      709.849771,
+      777.095281,
+      801.437344,
+      810.344339,
+      856.340052,
+      851.273881,
+      889.569263
+    ],
+    "after": [
+      1.744059,
+      1.580128,
+      1.657986,
+      1.50184,
+      1.766902,
+      1.608131,
+      2.653749
+    ]
+  }
+}

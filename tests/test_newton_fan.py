@@ -6,7 +6,7 @@ from math import gcd, prod
 import unittest
 
 from engine.newton_fan import build_fan
-from engine.polynomial import parse
+from engine.polynomial import LimitError, parse
 
 
 def determinant(matrix):
@@ -60,6 +60,35 @@ def check_fan(test, fan, support):
 
 
 class NewtonFan(unittest.TestCase):
+    def test_exhaustive_resolution_certifies_large_compact_face(self):
+        from engine.resolve import resolve
+
+        expression = "x^4098+y^4098+z^4098+x^2049*y^2049+x^2049*z^2049+y^2049*z^2049"
+        request = {"polynomial": expression, "variables": list("xyz"), "mode": "embedded"}
+        self.assertEqual(resolve(dict(request, search="quick"))["status"], "inconclusive")
+        resolution = resolve(dict(request, search="exhaustive"))
+        self.assertEqual((resolution["status"], resolution["engine"]), ("resolved", "newton-polyhedron"))
+        face, = (f for f in resolution["certificate"]["compact_faces"] if f["face_dimension"] == 2)
+        self.assertEqual(face["status"], "nondegenerate")
+        self.assertTrue(face["unit_ideal"])
+        self.assertEqual(len(resolution["charts"]), 3)
+
+    def test_exhaustive_fan_is_invariant_under_dilation_and_translation(self):
+        standard = [(2, 0, 0), (0, 2, 0), (0, 0, 2)]
+        diagonal_fan = build_fan(standard)
+        for degree in (130, 4097, 2**300):
+            support = [tuple(degree if i == j else 0 for j in range(3)) for i in range(3)]
+            with self.subTest(degree=degree):
+                self.assertEqual(build_fan(support, exhaustive=True), diagonal_fan)
+                with self.assertRaises(LimitError):
+                    build_fan(support)
+        base = [(2, 0, 0), (0, 3, 0), (0, 0, 5), (1, 1, 1)]
+        offset = (2**129, 4, 2**143)
+        support = [tuple(c+t for c, t in zip(row, offset)) for row in base]
+        fan = build_fan(support, exhaustive=True)
+        self.assertEqual(fan, build_fan(base))
+        check_fan(self, fan, support)
+
     def test_nonconvenient_four_variable_germ(self):
         p = parse("x^5+z*y^3+z^15+t^4*x+t^8", ["x","y","z","t"])
         fan = build_fan(p)

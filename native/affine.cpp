@@ -293,21 +293,8 @@ class RecordParser {
         if (budget) checked(a);
     }
 
-    Polynomial expr(int binding, int depth) {
-        if (budget && depth > 64) throw Limit("Input budget: Expression nesting is too deep.");
-        if (depth > 1000) throw Limit("The chart expression is nested too deeply.");
-        Polynomial result(ring);
-        const char token = peek();
-        if (token == '(' || token == '-' || token == '+') {
-            ++at;
-            auto argument = expr(token == '(' ? 0 : 25, depth+1);
-            if (token == '(') {
-                if (peek() != ')') throw std::invalid_argument("Missing closing parenthesis.");
-                ++at;
-            }
-            fmpq_mpoly_swap(result.p, argument.p, ring.ctx);
-            if (token == '-') fmpq_mpoly_neg(result.p, result.p, ring.ctx);
-        } else if (token >= '0' && token <= '9') {
+    void atom(Polynomial& result, char token) {
+        if (token >= '0' && token <= '9') {
             const auto n = integer();
             fmpq_mpoly_set_fmpz(result.p, &n.v, ring.ctx);
         } else if (std::isalpha(static_cast<unsigned char>(token))) {
@@ -319,58 +306,124 @@ class RecordParser {
         } else {
             throw std::invalid_argument("Expected a number, a chart variable or a parenthesis.");
         }
+    }
 
-        for (;;) {
-            const char op = peek();
-            const int level = power() ? 30 : op == '*' || op == '/' ? 20 : op == '+' || op == '-' ? 10 : -1;
-            if (level < binding) return result;
-            ++at;
-            if (level == 30) {
-                if (op == '*') ++at;
-                peek();
-                const auto exponent = integer(true);
-                if (power()) throw std::invalid_argument("Parenthesize chained powers explicitly.");
-                if (budget) {
-                    // Match the public expansion schedule: the product budget
-                    // applies before each multiply, even when terms cancel.
-                    Polynomial value(ring);
-                    fmpq_mpoly_one(value.p, ring.ctx);
-                    ulong n = fmpz_get_ui(&exponent.v);
-                    while (n) {
-                        if (n & 1) multiply(value, result);
-                        n /= 2;
-                        if (n) multiply(result, result);
-                    }
-                    fmpq_mpoly_swap(value.p, result.p, ring.ctx);
-                } else if (!fmpq_mpoly_pow_fmpz(result.p, result.p, &exponent.v, ring.ctx))
-                    throw Limit("Chart exponent exceeds FLINT's limits.");
-                continue;
+    void apply_power(Polynomial& result) {
+        at += input[at] == '*' ? 2 : 1;
+        peek();
+        const auto exponent = integer(true);
+        if (power()) throw std::invalid_argument("Parenthesize chained powers explicitly.");
+        if (budget) {
+            // The product budget applies before each multiply, even when terms cancel.
+            Polynomial value(ring);
+            fmpq_mpoly_one(value.p, ring.ctx);
+            ulong n = fmpz_get_ui(&exponent.v);
+            while (n) {
+                if (n & 1) multiply(value, result);
+                n /= 2;
+                if (n) multiply(result, result);
             }
-            auto right = expr(level+1, depth+1);
-            if (op == '+') fmpq_mpoly_add(result.p, result.p, right.p, ring.ctx);
-            else if (op == '-') fmpq_mpoly_sub(result.p, result.p, right.p, ring.ctx);
-            else if (op == '*') { multiply(result, right); continue; }
-            else {
-                if (fmpq_mpoly_is_zero(right.p, ring.ctx) || !fmpq_mpoly_is_fmpq(right.p, ring.ctx))
-                    throw std::invalid_argument("Division needs a nonzero rational constant.");
-                fmpq_t denominator;
-                fmpq_init(denominator);
-                fmpq_mpoly_get_fmpq(denominator, right.p, ring.ctx);
-                fmpq_mpoly_scalar_div_fmpq(result.p, result.p, denominator, ring.ctx);
-                fmpq_clear(denominator);
-            }
-            if (budget) checked(result);
+            fmpq_mpoly_swap(value.p, result.p, ring.ctx);
+        } else if (!fmpq_mpoly_pow_fmpz(result.p, result.p, &exponent.v, ring.ctx)) {
+            throw Limit("Chart exponent exceeds FLINT's limits.");
         }
+    }
+
+    struct Operator {
+        char symbol;
+        int binding;
+    };
+
+    static constexpr int prefix_binding = 25;
+    static constexpr int sum_binding = 10;
+
+    void apply(Operator op, std::vector<Polynomial>& values) {
+        auto& right = values.back();
+        if (op.binding == prefix_binding) {
+            if (op.symbol == '-') fmpq_mpoly_neg(right.p, right.p, ring.ctx);
+            return;
+        }
+        auto& left = values[values.size()-2];
+        switch (op.symbol) {
+        case '+': fmpq_mpoly_add(left.p, left.p, right.p, ring.ctx); break;
+        case '-': fmpq_mpoly_sub(left.p, left.p, right.p, ring.ctx); break;
+        case '*': multiply(left, right); break;
+        case '/': {
+            if (fmpq_mpoly_is_zero(right.p, ring.ctx) || !fmpq_mpoly_is_fmpq(right.p, ring.ctx))
+                throw std::invalid_argument("Division needs a nonzero rational constant.");
+            fmpq_t denominator;
+            fmpq_init(denominator);
+            fmpq_mpoly_get_fmpq(denominator, right.p, ring.ctx);
+            fmpq_mpoly_scalar_div_fmpq(left.p, left.p, denominator, ring.ctx);
+            fmpq_clear(denominator);
+            break;
+        }
+        }
+        if (budget && op.symbol != '*') checked(left);
+        values.pop_back();
     }
 
 public:
     RecordParser(std::string s, Variables& r, const InputBudget* b = nullptr)
         : input(std::move(s)), ring(r), budget(b) {}
     Polynomial run() {
-        auto result = expr(0, 0);
-        peek();
-        if (at != input.size()) throw std::invalid_argument("Unexpected chart token, use * for multiplication.");
-        return result;
+        std::vector<Operator> pending;
+        std::vector<Polynomial> values;
+        bool needs_atom = true;
+        for (;;) {
+            const char token = peek();
+            if (needs_atom) {
+                if (budget && pending.size() > 64)
+                    throw Limit("Input budget: Expression nesting is too deep.");
+                if (token == '(' || token == '-' || token == '+') {
+                    pending.push_back({token, token == '(' ? 0 : prefix_binding});
+                    ++at;
+                    continue;
+                }
+                values.emplace_back(ring);
+                atom(values.back(), token);
+                needs_atom = false;
+                continue;
+            }
+            if (power()) {
+                apply_power(values.back());
+                continue;
+            }
+
+            const int level = token == '*' || token == '/' ? 20 : token == '+' || token == '-' ? sum_binding : 0;
+            while (!pending.empty() && pending.back().binding > level) {
+                if (!budget && level == sum_binding && pending.back().binding == sum_binding+1) {
+                    // Keep a large partial sum on the stack while smaller summands
+                    // combine. Each deferred sum is over twice the size of its right
+                    // operand, so a flat run needs only logarithmically many levels.
+                    auto& right = values.back();
+                    const auto& left = values[values.size()-2];
+                    if (fmpq_mpoly_length(left.p, ring.ctx)/2 > fmpq_mpoly_length(right.p, ring.ctx)) {
+                        // a - b + c becomes a + ((-b) + c) before reassociation.
+                        if (pending.back().symbol == '-') {
+                            fmpq_mpoly_neg(right.p, right.p, ring.ctx);
+                            pending.back().symbol = '+';
+                        }
+                        break;
+                    }
+                }
+                apply(pending.back(), values);
+                pending.pop_back();
+            }
+            if (level) {
+                // The right operand ends at the next operator of equal or lower precedence.
+                pending.push_back({token, level+1});
+                ++at;
+                needs_atom = true;
+            } else if (!pending.empty()) {
+                if (token != ')') throw std::invalid_argument("Missing closing parenthesis.");
+                pending.pop_back();
+                ++at;
+            } else {
+                if (at != input.size()) throw std::invalid_argument("Unexpected chart token, use * for multiplication.");
+                return std::move(values.back());
+            }
+        }
     }
 };
 
@@ -575,7 +628,9 @@ std::string factorization(const Polynomial& f, bool geometric) {
     for (slong i = 0; i < fmpq_mpoly_factor_length(factors.value, ctx); ++i) {
         Polynomial factor(f.ring);
         fmpq_mpoly_factor_get_base(factor.p, factors.value, i, ctx);
-        result += std::to_string(fmpq_mpoly_factor_get_exp_si(factors.value, i, ctx));
+        char* multiplicity = fmpz_get_str(nullptr, 10, factors.value->exp + i);
+        result += multiplicity;
+        flint_free(multiplicity);
         if (geometric) result += primitive_vertices(factor) ? " 1" : " 0";
         result += '\n';
         emit(result, factor);
@@ -661,11 +716,76 @@ int cover_height(const Supports& supports, int n, int height, int best) {
     return best;
 }
 
-std::string wide_basis(std::istream& in, const std::string& operation) {
+// Supports joined through any common coordinate must be searched together.
+// On disjoint coordinate sets minimum cover sizes add.
+int component_cover_height(Supports& supports, int n) {
+    if (supports.size() < 2) return static_cast<int>(supports.size());
+    std::vector<int> parent(n, -1);
+    auto root = [&](int v) {
+        while (parent[v] >= 0) {
+            if (parent[parent[v]] >= 0) parent[v] = parent[parent[v]];
+            v = parent[v];
+        }
+        return v;
+    };
+    for (const auto& row : supports) {
+        int component = root(row.front());
+        for (int v : row) {
+            int other = root(v);
+            if (component == other) continue;
+            if (parent[component] > parent[other]) std::swap(component, other);
+            parent[component] += parent[other];
+            parent[other] = component;
+        }
+    }
+
+    // Preserve coordinate order while renumbering each component. The search
+    // then allocates its scratch rows in that component's coordinates alone.
+    std::vector<int> local(n), widths(n);
+    for (int v = 0; v < n; ++v) local[v] = widths[root(v)]++;
+    std::vector<Supports> groups(n);
+    for (auto& row : supports) {
+        const int component = root(row.front());
+        for (int& v : row) v = local[v];
+        groups[component].push_back(std::move(row));
+    }
+    int total = 0;
+    for (int i = 0; i < n; ++i) {
+        auto& group = groups[i];
+        if (group.empty()) continue;
+        std::sort(group.begin(), group.end(), [](const auto& a, const auto& b) {
+            return a.size() == b.size() ? a < b : a.size() < b.size();
+        });
+        total += cover_height(group, widths[i], 0, widths[i]);
+    }
+    return total;
+}
+
+std::string ordered_polynomials(std::istream& in, const std::string& operation) {
     const auto names = line(in), order = line(in);
     if (order != "lex" && order != "grevlex") throw std::invalid_argument("Unknown monomial order.");
     Variables ring(names, order == "lex" ? ORD_LEX : ORD_DEGREVLEX);
     std::string out;
+    if (operation == "polynomial_gcd" || operation == "gcd_from_lcm") {
+        const auto a = read(in, ring), b = read(in, ring);
+        Polynomial result(ring);
+        if (operation == "polynomial_gcd") {
+            if (!fmpq_mpoly_gcd(result.p, a.p, b.p, ring.ctx))
+                throw Limit("FLINT could not compute the polynomial gcd.");
+        } else {
+            const auto lcm = read(in, ring);
+            Polynomial cofactor(ring);
+            // (a) intersect (b) = (lcm). Dividing twice avoids expanding a*b.
+            if (fmpq_mpoly_is_zero(lcm.p, ring.ctx) || fmpq_mpoly_is_zero(a.p, ring.ctx) ||
+                !fmpq_mpoly_divides(cofactor.p, lcm.p, a.p, ring.ctx) ||
+                !fmpq_mpoly_divides(result.p, b.p, cofactor.p, ring.ctx))
+                throw std::logic_error("Inexact division while recovering a gcd from its principal intersection.");
+        }
+        if (!fmpq_mpoly_is_zero(result.p, ring.ctx))
+            fmpq_mpoly_make_monic(result.p, result.p, ring.ctx);
+        emit(out, result);
+        return out;
+    }
     if (operation == "wide_division") {
         auto f = read(in, ring);
         std::vector<Polynomial> divisors, quotients;
@@ -692,18 +812,25 @@ std::string wide_basis(std::istream& in, const std::string& operation) {
             if (!fmpq_mpoly_is_zero(f.p, ring.ctx))
                 fmpz_mpoly_vec_append(input.v, f.p->zpoly, ring.ctx->zctx);
         }
-        if (!input.v->length) return operation == "wide_dimension" ? std::to_string(ring.n) + "\n" : out;
-        fmpz_mpoly_buchberger_naive(basis.v, input.v, ring.ctx->zctx);
-        fmpz_mpoly_vec_autoreduction_groebner(reduced.v, basis.v, ring.ctx->zctx);
+        const bool dimension = operation == "wide_dimension" || operation == "basis_dimension";
+        if (!input.v->length) return dimension ? std::to_string(ring.n) + "\n" : out;
+        // basis_dimension receives a Gröbner basis for the specified order.
+        // Its leading supports determine dimension without computing a second basis.
+        auto rows = input.v;
+        if (operation != "basis_dimension") {
+            fmpz_mpoly_buchberger_naive(basis.v, input.v, ring.ctx->zctx);
+            fmpz_mpoly_vec_autoreduction_groebner(reduced.v, basis.v, ring.ctx->zctx);
+            rows = reduced.v;
+        }
         Supports supports;
         std::vector<Z> powers(ring.n);
         std::vector<fmpz*> entries;
         for (auto& e : powers) entries.push_back(&e.v);
-        for (slong i = 0; i < reduced.v->length; ++i) {
+        for (slong i = 0; i < rows->length; ++i) {
             Polynomial f(ring);
-            auto p = fmpz_mpoly_vec_entry(reduced.v, i);
+            auto p = fmpz_mpoly_vec_entry(rows, i);
             if (fmpz_mpoly_is_zero(p, ring.ctx->zctx)) continue;
-            if (operation == "wide_dimension") {
+            if (dimension) {
                 fmpz_mpoly_get_term_exp_fmpz(entries.data(), p, 0, ring.ctx->zctx);
                 std::vector<int> row;
                 for (int j = 0; j < ring.n; ++j) if (!fmpz_is_zero(entries[j])) row.push_back(j);
@@ -716,11 +843,8 @@ std::string wide_basis(std::istream& in, const std::string& operation) {
             fmpq_mpoly_make_monic(f.p, f.p, ring.ctx);
             emit(out, f);
         }
-        if (operation == "wide_dimension") {
-            std::sort(supports.begin(), supports.end(), [](const auto& a, const auto& b) {
-                return a.size() == b.size() ? a < b : a.size() < b.size();
-            });
-            return std::to_string(ring.n - cover_height(supports, ring.n, 0, ring.n)) + "\n";
+        if (dimension) {
+            return std::to_string(ring.n - component_cover_height(supports, ring.n)) + "\n";
         }
     }
     return out;
@@ -731,8 +855,10 @@ std::string affine(std::istream& in) {
     if (operation == "bm_residual" || operation == "bm_requirements" || operation == "bm_values")
         return centre_weights(in, operation);
     if (operation == "fan_cover") return fan_cover(in);
-    if (operation == "wide_basis" || operation == "wide_division" || operation == "wide_dimension")
-        return wide_basis(in, operation);
+    if (operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
+        operation == "wide_basis" || operation == "wide_division" ||
+        operation == "wide_dimension" || operation == "basis_dimension")
+        return ordered_polynomials(in, operation);
     if (operation == "lattice_valuations" || operation == "lattice_characters" || operation == "lattice_support" ||
         operation == "lattice_dimension" || operation == "lattice_pivots")
         return lattice(in, operation);

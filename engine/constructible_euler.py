@@ -12,6 +12,7 @@ from math import prod
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
+from .polynomial import integer_from_decimal
 from .reference import sp
 from .reference import QQ
 
@@ -205,7 +206,7 @@ def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
         if not result:
             raise ArithmeticError(library.atlas_groebner_error().decode())
         try:
-            total = int(ctypes.string_at(result))
+            total = integer_from_decimal(ctypes.string_at(result).decode("ascii"))
         finally:
             library.atlas_groebner_release(result)
     else:

@@ -1,0 +1,13 @@
+# Intersect the strict transform of the cusp with its exceptional divisor E3.
+x, y = coordinates("x", "y")
+R = resolve(y^2-x^3)
+C = R.chart("B3.u")
+u, v = C.coordinates
+e = R.divisor("E3").equation_in(C)
+s = polynomial("v-1", variables=C.coordinates)
+print(s == C.strict_transform)
+
+# The projected intersection has v = 1, so v^2+v+1 has remainder 3.
+J = eliminate(ideal(e, s), u)
+q = polynomial("v^2+v+1", variables=J.coordinates)
+print(normal_form(q, J))

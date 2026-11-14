@@ -53,6 +53,22 @@ class ConstructibleEuler(unittest.TestCase):
         self.assertEqual(euler_characteristic((x,y),(),((),)),0)
         self.assertEqual(euler_characteristic((x,y),(),((1,),)),1)
 
+    def test_sparse_fibres_and_substitution_beyond_a_machine_word(self):
+        from engine import native_library
+        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_euler"):
+            self.skipTest("Requires the sparse FLINT Euler kernel.")
+        with patch("engine.groebner.CHECK", False):
+            n = 2**64
+            # Projecting the Fermat curve to y gives n sheets off the n
+            # roots of unity, and exactly one point over each root.
+            for power in (n, 10**2200):
+                self.assertEqual(euler_characteristic((x,y),(x**power + y**power - 1,)), power*(2-power))
+            # Substitution x = -y has even and odd powers, and x = 0
+            # specializes directly to the sparse constant coefficient.
+            self.assertEqual(euler_characteristic((x,y),(x+y, x**n + y**n - 2)), n)
+            self.assertEqual(euler_characteristic((x,y),(x+y, x**(n+1) + y**(n+1) - 2)), 0)
+            self.assertEqual(euler_characteristic((x,y),(x, x**n + y**n - 1)), n)
+
     def test_ramification_and_a_whole_line_fiber(self):
         curve = y**2-x*(x-1)*(x-2)
         # Over the x-line the degree-two map has three simple branch points.

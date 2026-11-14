@@ -69,6 +69,22 @@ class ComponentTests(unittest.TestCase):
         for f, expected in ((x**2+sp.sqrt(2)*y**2, False), (x**2+sp.sqrt(2)*y**2+1, True)):
             self.assertIs(_factor_equations(sp.Poly(f,x,y,domain=field), 1), expected)
 
+    def test_reduced_support_projection_proves_meeting_primes_and_global_coverage(self):
+        from engine.chart_expressions import runtime_expressions
+        from engine.geometric_components import _intersection
+        from engine.reference import QQ
+        x,y,z = coords = runtime_expressions().symbols("x y z")
+        curves = ((y-x**2,z-x), (y-x**3,z-2*x))
+        ideal = _intersection(coords, *curves, QQ)
+        expected = {ideal_basis(coords, curve) for curve in curves}
+        self.assertIsNone(_shape(coords, ideal, 1, QQ, 1, coords, coords))
+        self.assertEqual(set(_shape(coords, ideal, 1, QQ, 1, coords, coords, reduced_support=True)), expected)
+        # An entire component is vertical for this projection. Even the
+        # reduced-support test must refuse this incomplete generic shape.
+        vertical = (x-1,z)
+        larger = _intersection(coords, ideal, vertical, QQ)
+        self.assertIsNone(_shape(coords, larger, 1, QQ, 1, coords, coords, reduced_support=True))
+
     def test_special_fiber_lost_by_generic_projection(self):
         x,y,z = self.v
         line_a = (y,z)

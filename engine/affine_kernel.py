@@ -12,6 +12,7 @@ from operator import index
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
+from .polynomial import integer_text, rational_text
 from .reference import sp
 
 from . import groebner as gb
@@ -40,7 +41,7 @@ class _RingText:
         if isinstance(value, np.Expr):
             return value.text(self.names)
         if isinstance(value, (int, Fraction)):
-            return str(value)
+            return rational_text(value)
         if not isinstance(value, sp.Basic):
             raise TypeError("Supply a parsed rational polynomial.")
         if value.is_Symbol:
@@ -48,13 +49,14 @@ class _RingText:
                 raise ArithmeticError("A polynomial uses an undeclared coordinate.")
             return self.names[value]
         if value.is_Rational:
-            return str(value.p) if value.q == 1 else f"({value.p}/{value.q})"
+            text = rational_text(value)
+            return text if value.q == 1 else f"({text})"
         if value.is_Add or value.is_Mul:
             sep = "+" if value.is_Add else "*"
             return "(" + sep.join(self.text(a) for a in value.args) + ")"
         if value.is_Pow and value.exp.is_Integer:
             exponent = int(value.exp)
-            power = f"({self.text(value.base)})^{abs(exponent)}"
+            power = f"({self.text(value.base)})^{integer_text(abs(exponent))}"
             return power if exponent >= 0 else f"(1/{power})"
         raise ArithmeticError("Expected a rational polynomial in the specified coordinates.")
 
@@ -124,10 +126,31 @@ def _sparse_terms(row):
     return tuple(sparse_row(row).items())
 
 
+def _polynomial(terms, variables):
+    if np.native_ring(variables):
+        return np.from_terms(variables, terms)
+    return sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(v**k for v, k in zip(variables, powers) if k))
+                    for powers, c in terms.items()))
+
+
+@lru_cache(maxsize=64)
+def _coordinate_rows(size):
+    return {"1 " + " ".join("1" if j == i else "0" for j in range(size)): i for i in range(size)}
+
+
+@lru_cache(maxsize=256)
+def _can_reuse_coordinates(variables):
+    return len(set(variables)) == len(variables) and all(v.is_Symbol for v in variables)
+
+
 @lru_cache(maxsize=16384)
 def _sparse_expression(variables, row):
-    from .atlas import _polynomial
-    value = _polynomial(dict(_sparse_terms(row)), variables)
+    # Wide rings can have arbitrarily many variables. Only build the table for packed rings.
+    coordinate = _coordinate_rows(len(variables)).get(row) if len(variables) <= gb._MAX_VARIABLES else None
+    if coordinate is not None and _can_reuse_coordinates(variables):
+        value = variables[coordinate]
+    else:
+        value = _polynomial(dict(_sparse_terms(row)), variables)
     if len(gb._lines) >= gb._CACHE_LIMIT:
         gb._lines.clear()
     gb._lines[(variables, value)] = row
@@ -181,7 +204,6 @@ def decode(variables, text):
         return _sparse_expression(variables, row)
 
     def reference():
-        from .atlas import _polynomial
         terms = parse_expression(text, list(names), _reference=True)
         return _polynomial(terms, variables)
 

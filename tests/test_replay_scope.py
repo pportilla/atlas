@@ -1,5 +1,6 @@
 import ctypes
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from threading import Barrier
 import unittest
 from unittest.mock import patch
@@ -60,6 +61,51 @@ class ReplayScopeTests(unittest.TestCase):
             other.merge(report)
             self.assertEqual(other.report(), report)
 
+    def test_copied_context_cannot_rebase_parent_thread_counters(self):
+        with native.replay_scope("cpu") as parent:
+            self.basis()
+            baseline = parent.report()
+            self.basis()
+
+            def worker():
+                self.assertIsNone(native.current_replay_scope())
+                with native.replay_scope("gpu", backend="reference") as child:
+                    self.basis()
+                    return child.report()
+
+            with ThreadPoolExecutor(1) as pool:
+                child = pool.submit(copy_context().run, worker).result()
+            self.assertEqual(child["backend"], "reference")
+            report = parent.report()
+            self.assertEqual(report["backends"], {"cpu": {"batches": 2 * baseline["batches"],
+                                                         "primes": 2 * baseline["primes"]}})
+            if "certification" in report:
+                self.assertEqual(report["certification"]["bases"], 2)
+                self.assertEqual(child["certification"]["bases"], 1)
+
+    @unittest.skipUnless(hasattr(native._kernel(), "atlas_groebner_certification_counts"), "rebuild the modular kernel")
+    def test_partial_failed_readback_restores_inputs_and_counts_cpu_verification(self):
+        with native.replay_scope("cpu"):
+            exact = self.basis()
+
+        def damaged_readback(code, length, pool, work, primes, count, pools, status, index):
+            # A failed transfer might already have overwritten generator slots.
+            ctypes.memset(pools, 0, count * pool * ctypes.sizeof(ctypes.c_uint32))
+            return 1
+
+        with patch.object(native, "_opencl_replay", return_value=damaged_readback), \
+             native.replay_scope("gpu", backend="opencl") as scope:
+            self.assertEqual(self.basis(), exact)
+            report = scope.report()
+        self.assertEqual(report["backend"], "cpu")
+        self.assertNotIn("devices", report)
+        self.assertIn("OpenCL replay failed", report["fallback_reasons"][0])
+        cert = report["certification"]
+        self.assertEqual(cert["bases"], 1)
+        self.assertGreaterEqual(cert["attempts"], cert["bases"])
+        self.assertGreater(cert["verify_ms"], 0)
+        self.assertGreater(cert["lift_ms"], 0)
+
     def test_lazy_selection_restores_outer_context_on_error(self):
         with native.replay_scope("gpu", backend="triton", index=1) as gpu, \
              patch("engine.gpu_devices.triton_device", side_effect=AssertionError("unneeded probe")):
@@ -84,19 +130,31 @@ class ReplayScopeTests(unittest.TestCase):
                 parent.merge(report)
                 self.assertEqual(parent.report(), report)
 
-    def test_listed_opencl_device_runs_the_certified_replay(self):
+    def test_listed_opencl_device_and_overlapping_cpu_run_the_certified_replay(self):
         from engine.native_backend import gpu_devices
         devices = gpu_devices()
         if not devices or native._opencl_replay() is None:
             self.skipTest("requires an OpenCL GPU and the indexed replay plugin")
-        with native.replay_scope("cpu") as cpu:
-            exact = self.basis()
-            expected = cpu.report()
-        with native.replay_scope("gpu", backend="opencl", index=devices[0]["index"]) as gpu:
-            self.assertEqual(self.basis(), exact)
-            report = gpu.report()
-            self.assertEqual(report["backend"], "opencl", report)
-            self.assertEqual(report["primes"], expected["primes"])
+        ready = Barrier(2)
+        def solve(compute):
+            with native.replay_scope(compute, backend="opencl", index=devices[0]["index"]) as scope:
+                ready.wait(timeout=10)
+                basis = self.basis()
+                ready.wait(timeout=30)
+                return basis, scope.report()
+
+        with ThreadPoolExecutor(2) as pool:
+            (exact, cpu), (candidate, gpu) = pool.map(solve, ("cpu", "gpu"))
+        self.assertEqual(candidate, exact)
+        self.assertEqual(cpu["backend"], "cpu")
+        self.assertNotIn("devices", cpu)
+        self.assertEqual(gpu["backend"], "opencl", gpu)
+        self.assertGreater(gpu["primes"], 0)
+        self.assertEqual(gpu["primes"], cpu["primes"])
+        self.assertEqual(gpu["devices"]["opencl"]["name"], devices[0]["name"])
+        if "certification" in gpu:
+            self.assertEqual(cpu["certification"]["bases"], 1)
+            self.assertEqual(gpu["certification"]["bases"], 1)
 
     @unittest.skipUnless(hasattr(native._kernel(), "atlas_groebner_cpu_trace_counts"), "rebuild the modular kernel")
     def test_nested_trace_scope_and_batched_cpu_fallback(self):

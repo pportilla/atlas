@@ -1,0 +1,163 @@
+import json
+import sys
+import unittest
+from unittest.mock import patch
+
+from engine.session import new_session
+from engine.session_polynomial import coordinates
+from engine.session_algebra import (
+    algebra_request, eliminate, gcd, groebner, ideal, intersection, membership, normal_form, polynomial,
+)
+
+
+class AlgebraSessionTests(unittest.TestCase):
+    def test_gcd_reuses_polynomial_space_and_normalization_order(self):
+        x, y = coordinates("x", "y")
+        f = x + 2*y**2
+        lex = gcd(f, 0, order="lex")
+        graded = gcd(f, 0)
+        self.assertEqual(lex.polynomial, f)
+        self.assertEqual(graded.polynomial, f/2)
+        self.assertEqual(gcd(lex, x*f).order, "lex")
+        with self.assertRaisesRegex(ValueError, "explicit monomial order"):
+            gcd(lex, graded)
+        self.assertEqual(gcd(lex, graded, order="lex"), f)
+        other_x, _ = coordinates("x", "y")
+        with self.assertRaisesRegex(ValueError, "different coordinate spaces"):
+            gcd(other_x, f)
+        self.assertEqual(gcd(0, 0).variables, ())
+        self.assertEqual(gcd(0, 3, variables=[x,y]).variables, ("x", "y"))
+
+    def test_reuse_basis_and_polynomial_in_original_coordinates(self):
+        from engine.algebra import calculate_algebra
+
+        x, y = coordinates("x", "y")
+        I = ideal(x**2-1, y-x, order="lex")
+        basis = groebner(I, compute="cpu")
+        # Even a Python caller editing the exported JSON must not be able to
+        # substitute arbitrary generators into the trusted-basis worker path.
+        basis.record["result"]["generators"][:] = ["1"]
+        with patch("engine.algebra.calculate_algebra", wraps=calculate_algebra) as dispatch:
+            remainder = normal_form(x**2 + y/2, basis, compute="cpu")
+            self.assertTrue(dispatch.call_args.kwargs["known_basis"])
+        self.assertEqual(remainder.polynomial, 1 + y/2)
+        self.assertEqual(remainder + x, x + 1 + y/2)
+        self.assertEqual(ideal(remainder).order, "lex")
+        self.assertEqual(normal_form(remainder, ideal(y), compute="cpu"), 1)
+        self.assertFalse(membership(remainder, basis, compute="cpu"))
+        self.assertTrue(membership(y**2 - 1, basis, compute="cpu"))
+        self.assertEqual(json.loads(remainder.json), remainder.record)
+
+    def test_exact_large_result_reused_without_changing_the_session_literal_limit(self):
+        x = coordinates("x")
+        I = ideal(x - 2)
+        r = normal_form(x**20000, I, compute="cpu")
+        self.assertEqual(r, 2**20000)
+        self.assertEqual(normal_form(r, I, compute="cpu"), r)
+
+    def test_same_spelling_in_different_spaces_is_rejected(self):
+        x, y = coordinates("x", "y")
+        a, b = coordinates("x", "y")
+        I = ideal(x + y)
+        with self.assertRaisesRegex(ValueError, "different coordinate spaces"):
+            normal_form(a + b, I)
+        with self.assertRaisesRegex(ValueError, "different coordinate spaces"):
+            ideal(x, b)
+        with self.assertRaisesRegex(ValueError, "different monomial orders"):
+            intersection(I, ideal(x, order="lex"))
+        with self.assertRaisesRegex(ValueError, "declared order"):
+            ideal(0, variables=(y, x))
+
+    def test_elimination_supplies_surviving_coordinates_and_scalar_field(self):
+        x, y = coordinates("x", "y")
+        I = ideal(x**2 - 1, y - x, order="lex")
+        projected = eliminate(I, x, compute="cpu")
+        t, = projected.coordinates
+        self.assertEqual(projected.variables, ("y",))
+        self.assertTrue(membership(t**2 - 1, projected, compute="cpu"))
+        again = eliminate(I, x, compute="cpu")
+        self.assertEqual(projected.generators, again.generators)
+        constants = eliminate(projected, t, compute="cpu")
+        self.assertEqual(constants.variables, ())
+        self.assertEqual(normal_form(3, constants, compute="cpu"), 3)
+
+    def test_scalar_generators_keep_the_ambient_variables(self):
+        session = new_session(None)
+        list(session.run("""
+x, y = coordinates("x", "y", coeffs=QQ)
+Z = ideal(variables=(x,y))
+U = ideal(1, variables=(x,y))
+d = dimension(Z, compute="cpu")
+r = normal_form(2/3, U, compute="cpu")
+"""))
+        self.assertEqual(session.variables["d"].value, 2)
+        self.assertEqual(session.variables["r"], 0)
+        self.assertEqual(session.variables["r"].variables, ("x", "y"))
+
+    def test_replay_handles_variable_names_reserved_by_the_session(self):
+        request = dict(operation="normal-form", ring=dict(variables=["if"], order="lex"),
+                       operands=dict(ideal=[], polynomial="if+1/2"), compute="cpu")
+        result = algebra_request(json.dumps(request))
+        coordinate, = result.coordinates
+        self.assertEqual(2 * (result - coordinate), 1)
+        self.assertEqual(str(result), "if+1/2")
+        self.assertEqual(result.execution["requested"], "cpu")
+
+    def test_quoted_polynomial_uses_original_or_projected_coordinates(self):
+        session = new_session(None)
+        list(session.run("""
+a, b = coordinates("if", "y", coeffs=QQ)
+p = polynomial("if-y", variables=[a,b])
+I = ideal(p, b^2-1)
+J = eliminate(I, a)
+t, = J.coordinates
+q = polynomial("y/2", variables=t)
+r = normal_form(q, J)
+c = polynomial("2/3", variables=[])
+"""))
+        values = session.variables
+        self.assertEqual(values["p"], values["a"] - values["b"])
+        self.assertEqual(values["r"], values["t"] / 2)
+        self.assertEqual(values["c"].variables, ())
+        self.assertEqual(str(values["c"]), "2/3")
+        with self.assertRaisesRegex(ValueError, "declared order"):
+            list(session.run('p = polynomial("y", variables=[b,a])'))
+
+    def test_distinct_ordinary_literals_reuse_coordinates_without_a_worker(self):
+        x, y = coordinates("x", "y")
+        with patch("engine.worker_process.run_worker", side_effect=AssertionError("unexpected worker")):
+            for n in range(1, 9):
+                self.assertEqual(polynomial(f"x+{n}*y", variables=(x, y)), x + n*y)
+
+    def test_worker_preserves_large_decimal_and_monomial_literals(self):
+        from engine.worker_process import run_worker
+
+        x = coordinates("x")
+        get_limit = getattr(sys, "get_int_max_str_digits", lambda: None)
+        previous_limit = get_limit()
+        digits = "9" * 5001
+        with patch("engine.worker_process.run_worker", wraps=run_worker) as isolated:
+            value = polynomial(f"{digits}*x+1", variables=x)
+            monomial = polynomial("x^129+1", variables=x)
+        self.assertEqual(isolated.call_count, 2)
+        self.assertEqual(value, (10**5001-1)*x + 1)
+        self.assertEqual(monomial, x**129 + 1)
+        self.assertEqual(get_limit(), previous_limit)
+
+    def test_expansion_is_interruptible_and_another_literal_can_follow_it(self):
+        x, y = coordinates("x", "y")
+        with patch("engine.worker_process.run_worker", side_effect=KeyboardInterrupt) as isolated:
+            with patch("engine.session_algebra.parse_expression", side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    polynomial("x+y", variables=(x, y))
+                isolated.assert_not_called()
+            with self.assertRaises(KeyboardInterrupt):
+                polynomial("(x+y)^10000", variables=(x, y))
+            isolated.assert_called_once()
+            self.assertEqual(polynomial("x-y", variables=(x, y)), x-y)
+
+    def test_quoted_polynomial_rejects_invalid_token_boundaries_and_denominators(self):
+        x, y = coordinates("x", "y")
+        for source in ("x * * 2", "x^2^3", "x y", "x/y", "x/0", "x+z"):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                polynomial(source, variables=(x, y))

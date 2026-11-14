@@ -15,12 +15,15 @@ from functools import cached_property, lru_cache
 from . import native_polynomial as np
 from .reference import sp
 from .reference import QQ
+from .algebra_execution import current_execution, packed_basis, record_fallback, record_stage
 
 from .native_library import CHECK, Unavailable, _LIBRARY, _MODE, _kernel, _use_gpu
 
 # "first": the exponent of the first variable is compared before the grevlex
 # order of the others, so the first variable is eliminated.
 _ORDERS = {"grevlex": 0, "lex": 1, "first": 2, "grlex": 3}
+_MAX_VARIABLES = 32
+_MAX_DEGREE = 32767  # Native packed exponent/total-degree limit.
 
 
 def _reference_order(order):
@@ -28,7 +31,6 @@ def _reference_order(order):
         return order
     from sympy.polys.orderings import ProductOrder, grevlex, lex
     return ProductOrder((lex, lambda monomial: monomial[:1]), (grevlex, lambda monomial: monomial[1:]))
-_MAX_VARIABLES = 32
 
 
 # Generators recur from one basis to the next, and converting a SymPy
@@ -36,6 +38,41 @@ _MAX_VARIABLES = 32
 _lines = {}
 _polys = {}
 _CACHE_LIMIT = 50_000
+
+
+@lru_cache(maxsize=256)
+def _monomial_positions(gens):
+    if not all(v.is_Symbol and v.is_commutative for v in gens):
+        return None
+    positions = {v: i for i, v in enumerate(gens)}
+    return positions if len(positions) == len(gens) else None
+
+
+def _monomial_row(gens, expr):
+    """Encode a symbolic rational monomial in the declared coordinate order."""
+    positions = _monomial_positions(gens)
+    if not positions:
+        return None
+    if expr.is_Rational and expr.is_zero:
+        return ""
+    powers = [0] * len(gens)
+    coefficient = 1
+    for factor in expr.args if expr.is_Mul else (expr,):
+        if factor.is_Rational:
+            coefficient *= factor
+            continue
+        base, exponent = (factor.base, factor.exp) if factor.is_Pow else (factor, 1)
+        if factor.is_Pow and not (exponent.is_Integer and exponent.is_positive):
+            return None
+        i = positions.get(base)
+        if i is None:
+            return None
+        powers[i] += int(exponent)
+    if not coefficient:
+        return ""
+    if sum(powers) > _MAX_DEGREE:
+        return None
+    return str(coefficient) + " " + " ".join(map(str, powers))
 
 
 def _expanded_qq_line(gens, expr):
@@ -83,6 +120,10 @@ def _line(gens, expr):
                         for m,c in expr.rep.to_dict().items())
     key = (gens, expr)
     line = _lines.get(key)
+    if line is not None:
+        return line
+    if _MODE == "native":
+        line = _monomial_row(gens, expr)
     if line is None:
         if expr.is_Mul and any(factor.is_Add for factor in expr.args):
             # The kernel multiplies; expanding a product here is the slow part.
@@ -92,9 +133,9 @@ def _line(gens, expr):
                 raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.")
             terms = sp.Poly(expr, *gens, domain=QQ).as_dict(native=True)
             line = ";".join(f"{c} {' '.join(map(str, m))}" for m, c in terms.items())
-        if len(_lines) >= _CACHE_LIMIT:
-            _lines.clear()
-        _lines[key] = line
+    if len(_lines) >= _CACHE_LIMIT:
+        _lines.clear()
+    _lines[key] = line
     return line
 
 
@@ -166,29 +207,62 @@ class NativeBasis:
             except Exception:  # the interpreter is shutting down
                 pass
 
-    def _remainder(self, expr):
-        payload = (_line(self.gens, expr) + "\n").encode("ascii")
+    def _device_remainder(self, row):
+        run = current_execution()
+        if run is not None and run.replay.compute == "gpu":
+            from .gpu_normal_form import normal_form
+            return normal_form(self.gens, self.rows, row)
+        return None
+
+    def _wide_divisors_on_overflow(self):
+        if self._library.atlas_groebner_error() not in (b"Degree out of range.", b"Exponent out of range."):
+            return None
+        if self._wide is None:
+            from .wide_basis import wide_basis_from_rows
+            self._wide = wide_basis_from_rows(self.rows, self.gens, self._order)
+        return self._wide
+
+    def _cpu_remainder(self, expr, row):
+        payload = (row + "\n").encode("ascii")
         answer = self._library.atlas_groebner_reduce(self._handle, payload, len(payload))
         if not answer:
-            if self._library.atlas_groebner_error() in (b"Degree out of range.", b"Exponent out of range."):
-                from .wide_basis import wide_basis
-                if self._wide is None:
-                    self._wide = wide_basis(self.exprs, self.gens, self._order)
-                if self._wide is not None:
-                    return _line(self.gens, self._wide.reduce(expr)[1])
+            wide = self._wide_divisors_on_overflow()
+            if wide is not None:
+                return _line(self.gens, wide.reduce(expr)[1])
             raise ArithmeticError("The native normal form could not be computed.")
         try:
-            return ctypes.string_at(answer).decode("ascii")[:-1]
+            result = ctypes.string_at(answer).decode("ascii")[:-1]
         finally:
             self._library.atlas_groebner_release(answer)
+        record_stage("normal_form", "cpu", divisors=len(self.rows))
+        return result
 
     def contains(self, expr):
-        return not self._remainder(expr)
+        row = _line(self.gens, expr)
+        device = self._device_remainder(row)
+        if device is not None:
+            return not device
+        contains = getattr(self._library, "atlas_groebner_contains", None)
+        if contains is None:
+            return not self._cpu_remainder(expr, row)
+        payload = (row + "\n").encode("ascii")
+        result = contains(self._handle, payload, len(payload))
+        if result < 0:
+            wide = self._wide_divisors_on_overflow()
+            if wide is not None:
+                return wide.contains(expr)
+            raise ArithmeticError("The native membership test could not be completed.")
+        record_stage("membership", "cpu", divisors=len(self.rows))
+        return bool(result)
 
     def reduce(self, expr):
         """Return (None, remainder): the quotients are not computed."""
         from .affine_kernel import _sparse_expression
-        return None, _sparse_expression(self.gens, self._remainder(expr))
+        row = _line(self.gens, expr)
+        result = self._device_remainder(row)
+        if result is None:
+            result = self._cpu_remainder(expr, row)
+        return None, _sparse_expression(self.gens, result)
 
 
 class _Checked:
@@ -217,6 +291,16 @@ class _Checked:
         return answer
 
 
+def _wide_qq_basis(ideal, gens, order, reason):
+    from .wide_basis import wide_basis
+    basis = wide_basis(ideal, gens, order)
+    if basis is not None:
+        record_fallback(reason)
+        record_stage("groebner_basis", "cpu", algorithm="wide_block" if order == "first" else "wide",
+                     generators=len(ideal), order=order)
+    return basis
+
+
 def _native(ideal, gens, order, known):
     library = _kernel()
     if library is None or order not in _ORDERS or not gens:
@@ -225,8 +309,7 @@ def _native(ideal, gens, order, known):
         from .field_wide import wide_block_basis
         return wide_block_basis(ideal, gens, order)
     if len(gens) > _MAX_VARIABLES:
-        from .wide_basis import wide_basis
-        return wide_basis(ideal, gens, order)
+        return _wide_qq_basis(ideal, gens, order, "The basis exceeds the packed GPU variable range.")
     if np.native_ring(gens):
         lines = [np.row(gens, f) for f in ideal]
     else:
@@ -237,10 +320,10 @@ def _native(ideal, gens, order, known):
                 raise
             return None
     payload = (f"{len(gens)} {_ORDERS[order]} {known}\n" + "".join(line + "\n" for line in lines)).encode("ascii")
-    handle = library.atlas_groebner(payload, len(payload))
+    handle = packed_basis(library, payload, lines, can_homogenize=len(gens) < _MAX_VARIABLES,
+                          known=known, order=order)
     if not handle and library.atlas_groebner_error() in (b"Degree out of range.", b"Exponent out of range."):
-        from .wide_basis import wide_basis
-        return wide_basis(ideal, gens, order)
+        return _wide_qq_basis(ideal, gens, order, "The basis exceeds the packed GPU monomial range.")
     return NativeBasis(library, handle, gens, order) if handle else None
 
 

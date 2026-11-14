@@ -1,0 +1,208 @@
+{
+  "version": 2,
+  "host": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "architecture": "x86_64",
+    "system": "Linux",
+    "kernels": "71157d0ed3502ef7a9511c5f00d51b8dc5c57fab1451f2d2260e3aaa15ef8968"
+  },
+  "threads": 16,
+  "device": {
+    "backend": "opencl",
+    "index": 0,
+    "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+    "vendor": "AMD",
+    "version": "OpenCL 3.0 ",
+    "driver": "26.0.8-1ubuntu0.3"
+  },
+  "cold_start_ms": 82.00832600000001,
+  "rows": [
+    {
+      "prime": 2147483629,
+      "jobs": 26,
+      "width": 171,
+      "edges": 2558,
+      "samples": 7,
+      "cpu_ms": 0.063891,
+      "gpu_ms": 0.989161,
+      "cpu_low_ms": 0.0583405,
+      "gpu_high_ms": 1.144099
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 50,
+      "width": 275,
+      "edges": 5519,
+      "samples": 7,
+      "cpu_ms": 0.19035,
+      "gpu_ms": 0.658676,
+      "cpu_low_ms": 0.17740050000000002,
+      "gpu_high_ms": 0.7505044999999999
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 49,
+      "width": 297,
+      "edges": 7131,
+      "samples": 7,
+      "cpu_ms": 0.240405,
+      "gpu_ms": 0.4547,
+      "cpu_low_ms": 0.2343835,
+      "gpu_high_ms": 0.459339
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 25,
+      "width": 268,
+      "edges": 6796,
+      "samples": 7,
+      "cpu_ms": 0.13771,
+      "gpu_ms": 0.337768,
+      "cpu_low_ms": 0.13161850000000003,
+      "gpu_high_ms": 0.360697
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 8,
+      "width": 117,
+      "edges": 1320,
+      "samples": 7,
+      "cpu_ms": 0.03709,
+      "gpu_ms": 1.328934,
+      "cpu_low_ms": 0.0345105,
+      "gpu_high_ms": 1.3509950000000002
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 34,
+      "width": 271,
+      "edges": 5107,
+      "samples": 7,
+      "cpu_ms": 0.130146,
+      "gpu_ms": 0.767651,
+      "cpu_low_ms": 0.11126549999999999,
+      "gpu_high_ms": 0.8019270000000001
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 85,
+      "width": 537,
+      "edges": 14846,
+      "samples": 7,
+      "cpu_ms": 0.443579,
+      "gpu_ms": 0.726745,
+      "cpu_low_ms": 0.388019,
+      "gpu_high_ms": 0.7348399999999999
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 115,
+      "width": 701,
+      "edges": 24429,
+      "samples": 7,
+      "cpu_ms": 0.784043,
+      "gpu_ms": 0.880455,
+      "cpu_low_ms": 0.7652475000000001,
+      "gpu_high_ms": 0.9700394999999999
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 89,
+      "width": 730,
+      "edges": 29661,
+      "samples": 7,
+      "cpu_ms": 0.8410610000000001,
+      "gpu_ms": 1.054695,
+      "cpu_low_ms": 0.8229115,
+      "gpu_high_ms": 2.0810355
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 36,
+      "width": 634,
+      "edges": 26324,
+      "samples": 7,
+      "cpu_ms": 0.483434,
+      "gpu_ms": 0.846821,
+      "cpu_low_ms": 0.469348,
+      "gpu_high_ms": 1.232581
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 10,
+      "width": 162,
+      "edges": 2179,
+      "samples": 7,
+      "cpu_ms": 0.057558,
+      "gpu_ms": 1.403584,
+      "cpu_low_ms": 0.0547285,
+      "gpu_high_ms": 1.530129
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 47,
+      "width": 416,
+      "edges": 9714,
+      "samples": 7,
+      "cpu_ms": 0.262036,
+      "gpu_ms": 0.924649,
+      "cpu_low_ms": 0.258709,
+      "gpu_high_ms": 0.9611225
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 143,
+      "width": 952,
+      "edges": 34226,
+      "samples": 7,
+      "cpu_ms": 0.9851129999999999,
+      "gpu_ms": 1.365112,
+      "cpu_low_ms": 0.981271,
+      "gpu_high_ms": 2.9604295
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 236,
+      "width": 1547,
+      "edges": 73084,
+      "samples": 7,
+      "cpu_ms": 2.5304059999999997,
+      "gpu_ms": 5.312928,
+      "cpu_low_ms": 2.2866845000000002,
+      "gpu_high_ms": 5.451034
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 239,
+      "width": 1745,
+      "edges": 104179,
+      "samples": 7,
+      "cpu_ms": 3.9083210000000004,
+      "gpu_ms": 6.619969,
+      "cpu_low_ms": 3.6161885,
+      "gpu_high_ms": 7.065732499999999
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 146,
+      "width": 1728,
+      "edges": 117807,
+      "samples": 7,
+      "cpu_ms": 3.141651,
+      "gpu_ms": 5.825988,
+      "cpu_low_ms": 3.0061549999999997,
+      "gpu_high_ms": 6.1686665000000005
+    },
+    {
+      "prime": 2147483629,
+      "jobs": 49,
+      "width": 1499,
+      "edges": 100368,
+      "samples": 7,
+      "cpu_ms": 1.532789,
+      "gpu_ms": 3.582766,
+      "cpu_low_ms": 1.4195445,
+      "gpu_high_ms": 3.8037285
+    }
+  ]
+}

@@ -71,7 +71,8 @@ void primitive(Poly& f, fmpz* num) {
     if (num) fmpz_mul(num, num, &content.v);
 }
 
-void Engine::reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, long bound) {
+template<bool membership>
+bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, long bound) {
     const int S = R.stride;
     Poly done, next;
     size_t at = 0;  // the first term of f not yet examined
@@ -86,11 +87,23 @@ void Engine::reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, lon
     while (at < f.size()) {
         const u64* mono = f.m.data() + at * S;
         const int g = reducer(mono, bound == LONG_MAX ? LONG_MAX : bound - static_cast<long>(mono[0]));
-        if (g < 0) { settle(); continue; }
+        if (g < 0) {
+            // Later reductions produce only smaller monomials, so this term survives.
+            if constexpr (membership) return false;
+            settle();
+            continue;
+        }
         const Poly& r = G[g].p;
+        if (sugar) *sugar = std::max(*sugar, static_cast<long>(mono[0] - r.m[0]) + G[g].sugar);
+        if (r.size() == 1) {
+            // A monomial divides this term exactly over Q and contributes no tail.
+            ++at;
+            if (work_limit_ > 0) ++work_;
+            guard(f, at);
+            continue;
+        }
         u64 shift[MAX_STRIDE];
         R.divide(shift, mono, r.m.data());
-        if (sugar) *sugar = std::max(*sugar, static_cast<long>(shift[0]) + G[g].sugar);
         const fmpz* a = &f.c[at].v;
         const fmpz* b = &r.c[0].v;
         bool one;
@@ -127,6 +140,15 @@ void Engine::reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, lon
         if (num) fmpz_mul(num, num, &common.v);
     }
     f.swap(done);
+    return f.empty();
+}
+
+void Engine::reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, long bound) {
+    reduce_terms<false>(f, keep, num, den, sugar, bound);
+}
+
+bool Engine::contains(Poly& f) {
+    return reduce_terms<true>(f, 0, nullptr, nullptr, nullptr, LONG_MAX);
 }
 
 // Ordered division returns the same quotient list as multivariate division
@@ -884,6 +906,23 @@ char* atlas_groebner_reduce(void* basis, const char* input, size_t length) noexc
         set_error("Unknown failure.");
     }
     return nullptr;
+}
+
+// One query in the basis ring: 1 for a member, 0 for a nonmember, -1 on error.
+int atlas_groebner_contains(void* basis, const char* input, size_t length) noexcept {
+    try {
+        Engine* engine = static_cast<Engine*>(basis);
+        const char* at = input;
+        const char* end = input + length;
+        Poly f = parse(engine->R, at, end, nullptr);
+        if (at != end) throw std::invalid_argument("Expected one membership query.");
+        return engine->contains(f);
+    } catch (const std::exception& error) {
+        set_error(error.what());
+    } catch (...) {
+        set_error("Unknown membership failure.");
+    }
+    return -1;
 }
 
 const char* atlas_groebner_error() noexcept { return last_error.c_str(); }

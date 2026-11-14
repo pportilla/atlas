@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from .polynomial import InputError, LimitError, NonReducedError, rational_text
+from .polynomial import InputError, LimitError, NonReducedError, parse_expression, rational_text
 
 
 _WORKER = Path(__file__).resolve().parents[1] / "native" / "build" / "plane"
@@ -37,6 +37,19 @@ def resolve_plane(poly, variables, mode, *, exhaustive=False):
             raise InputError(message)
         raise LimitError(message)
     return result
+
+@lru_cache(maxsize=256)
+def ordered_roots(polynomial):
+    """Distinct exact roots of a record's rational polynomial, in (real, imaginary) order."""
+    terms = parse_expression(polynomial, ("T",))
+    rows = [[power, str(c)] for (power,), c in terms.items()]
+    done = subprocess.run([str(_WORKER)], input=json.dumps({"ordered_roots": rows, "exhaustive": True}),
+                          capture_output=True, text=True, check=True)
+    roots = json.loads(done.stdout)
+    if isinstance(roots, dict):
+        raise ValueError(roots.get("error", "The plane worker does not support ordered chart roots."))
+    return tuple(roots)
+
 
 @lru_cache(maxsize=256)
 def coefficient_field(roots, rectangles=None):

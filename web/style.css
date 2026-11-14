@@ -84,6 +84,10 @@ code { overflow-wrap: anywhere; }
 .site-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 22px 0 18px; }
 .wordmark { font-size: 15px; font-weight: 650; letter-spacing: -.005em; }
 .tagline { color: var(--muted); font-size: 13.5px; }
+.view-nav { display: flex; flex-wrap: wrap; gap: 16px; margin-inline-start: auto; font-size: 14px; }
+.view-nav a { padding: 4px 0; color: var(--muted); text-decoration: none; }
+.view-nav a:hover, .view-nav a[aria-current] { color: var(--text); text-decoration: underline; text-underline-offset: 5px; }
+.view-nav a[aria-current] { font-weight: 600; }
 
 /* The question */
 .query-main { display: flex; gap: 8px; align-items: stretch; }
@@ -91,7 +95,7 @@ code { overflow-wrap: anywhere; }
 .query-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
 .query-lhs { flex: none; padding-top: 9px; color: var(--muted); font-size: 21px; white-space: nowrap; cursor: text; }
 #polynomial::placeholder, #variables::placeholder { color: var(--faint); opacity: 1; }
-#polynomial { flex: 1; min-width: 0; min-height: 46px; max-height: 40vh; padding: 11px 0; border: 0; outline: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); }
+#resolve-form #polynomial { flex: 1; min-width: 0; min-height: 46px; max-height: 40vh; padding: 11px 0; border: 0; outline: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); }
 .primary { flex: none; align-self: flex-start; min-height: 48px; min-width: 104px; padding: 0 20px; border-radius: 8px; background: var(--text); color: var(--bg); font-weight: 600; }
 .primary:hover:not(:disabled) { opacity: .86; }
 .primary:disabled { opacity: .6; }
@@ -99,9 +103,9 @@ code { overflow-wrap: anywhere; }
 .query-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; margin-top: 12px; font-size: 13.5px; }
 .option { display: flex; align-items: center; gap: 8px; }
 .option > span { color: var(--muted); }
-#variables, #compute { height: 30px; padding: 0 8px; background: var(--field); border: 1px solid var(--rule-strong); border-radius: 6px; }
-#variables { width: 11em; font-family: var(--mono); font-size: 13px; }
-#compute { padding-right: 4px; }
+#resolve-form :is(#variables, #compute) { height: 30px; padding: 0 8px; background: var(--field); border: 1px solid var(--rule-strong); border-radius: 6px; }
+#resolve-form #variables { width: 11em; font-family: var(--mono); font-size: 13px; }
+#resolve-form #compute { padding-right: 4px; }
 .mode { display: flex; gap: 16px; }
 .mode label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .mode input, .check input { margin: 0; width: 15px; height: 15px; accent-color: var(--text); }
@@ -262,6 +266,52 @@ pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; backgrou
 .notes { display: grid; gap: 6px; padding-left: 1.2em; list-style: disc; color: var(--muted); font-size: 13.5px; }
 .prose { max-width: 50em; }
 
+/* Algebra */
+.algebra { padding-bottom: 48px; }
+.algebra-heading { padding: 17px 0 20px; border-top: 1px solid var(--rule); }
+.algebra-heading h1 { font: 500 32px/1.2 var(--math); }
+.algebra-heading p { margin-top: 4px; color: var(--muted); }
+.algebra-settings { display: grid; grid-template-columns: 1.15fr 1fr 1.4fr .7fr; gap: 16px; }
+.algebra-field { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.algebra-field > span, .algebra legend { padding: 0; font-size: 13.5px; font-weight: 600; }
+.algebra-field small { color: var(--muted); font-size: 12.5px; }
+.algebra select, .algebra input[type=text] {
+  width: 100%; min-width: 0; min-height: 40px; padding: 6px 10px;
+  background: var(--field); border: 1px solid var(--rule-strong); border-radius: 6px;
+}
+.algebra input[type=text] { font-family: var(--mono); }
+.algebra select { font-size: 14px; }
+.algebra-operands { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin-top: 22px; }
+.generator-list, .variable-choices { margin: 5px 0; }
+.operand-source, :is(#polynomial-field, #other-polynomial-field) > input, #saturation-help { margin-top: 5px; }
+.generator-list { display: grid; gap: 6px; }
+.generator-row { display: flex; gap: 6px; }
+.generator-row button { flex: none; }
+.variable-choices { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.variable-choices label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-family: var(--mono); }
+.variable-choices input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.algebra-operands > .helper, .algebra-operands > .algebra-actions { grid-column: 1 / -1; }
+.algebra-actions, .algebra-result-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.submit-algebra { align-items: flex-end; }
+.submit-algebra .algebra-field { width: min(100%, 15em); }
+.submit-algebra .primary { align-self: auto; min-height: 40px; }
+.submit-algebra small { font-weight: normal; }
+.submit-algebra #name-help { flex-basis: 100%; }
+.algebra-result-header { justify-content: space-between; }
+.algebra .stale-note { margin: 18px 0 0; }
+.algebra #result { padding: 18px 0 0; }
+.algebra h2 { font-size: 17px; font-weight: 650; }
+#result-value { margin-top: 6px; font: 18px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.algebra .export { margin-top: 12px; }
+.algebra-section { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--rule); }
+#session-items { margin: 8px 0; }
+#session-items li { padding: 6px 0; overflow-wrap: anywhere; }
+#session-items li + li { border-top: 1px solid var(--rule); }
+#session-replay .algebra-actions { margin-top: 8px; }
+.algebra pre { margin-top: 8px; }
+.algebra pre + .algebra-result-header { margin-top: 18px; }
+#copy-status:not(:empty), #session-status:not(:empty) { margin-top: 8px; }
+
 @media (max-width: 700px) {
   .page { width: calc(100% - 32px); }
   .site-header { padding-top: 16px; }
@@ -271,10 +321,18 @@ pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; backgrou
   .rows, .facts { grid-template-columns: minmax(0, 1fr); gap: 1px; }
   .rows > dd, .facts > dd { margin-bottom: 9px; }
   .chart-body { padding-left: 0; }
+  .view-nav { margin-inline-start: 0; }
+  .algebra-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .algebra-operands { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 420px) {
+  .algebra-settings { grid-template-columns: minmax(0, 1fr); }
+  .submit-algebra .algebra-field { width: 100%; }
 }
 
 @media print {
-  .query, .search-job, .export, .tools, .list-more, .more-rows, details:not([open]), .section.folded:not(:has([open])) { display: none !important; }
+  .view-nav, .query, .search-job, .export, .algebra button, .tools, .list-more, .more-rows, details:not([open]), .section.folded:not(:has([open])) { display: none !important; }
   .page { width: 100%; }
   #result { border-top: 0; margin-top: 0; }
   .clamp { max-height: none; }

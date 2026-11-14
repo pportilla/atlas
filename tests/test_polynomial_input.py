@@ -54,6 +54,41 @@ class PublicInputArithmetic(unittest.TestCase):
         names = [f"x{i}" for i in range(34)]
         self.assertEqual(parse_expression("x33", names), {(0,)*33 + (1,): 1})
 
+    def test_unbounded_flat_sum_cancels_across_many_distinct_monomials(self):
+        source = "-x^2+3*y/5"
+        for k in range(1, 514):
+            source += f"+x^{k}/3-x^{k}*y/2"
+        for k in range(513, 0, -1):
+            source += f"-x^{k}/3--x^{k}*y/2"
+        self.assertEqual(parse_expression(source, ["x", "y"]),
+                         {(2, 0): -1, (0, 1): Fraction(3, 5)})
+
+    def test_unbounded_grouped_sum_as_power_product_and_divisor(self):
+        source = "-(x-y)^2--(x+y)^2/2+(x-y+y)*(x+y-y)-x/(y+3-y)+x/3"
+        self.assertEqual(parse_expression(source, ["x", "y"]),
+                         {(2, 0): Fraction(1, 2), (1, 1): 3, (0, 2): Fraction(-1, 2)})
+
+    def test_quick_flat_sum_checks_limits_before_cancellation(self):
+        for source, budget, reason, expected in (
+                ("x+y+1-1", {"MAX_TERMS": 2}, "term", {(1, 0): 1, (0, 1): 1}),
+                ("3*x+x-x", {"MAX_BITS": 2}, "coefficient", {(1, 0): 3})):
+            with self.subTest(source=source), patch.multiple(polynomial, **budget):
+                self.assertEqual(parse_expression(source, ["x", "y"]), expected)
+                with self.assertRaisesRegex(LimitError, reason):
+                    parse_expression(source, ["x", "y"], bounded=True)
+
+    def test_exhaustive_nesting(self):
+        depth = 12_000
+        cases = (
+            ("(-" * depth + "x" + ")" * depth + "^2", {(2,): 1}),
+            ("1-(" * depth + "x" + ")" * depth, {(1,): 1}),
+            ("-" * (depth+1) + "x**2*3", {(2,): -3}),
+        )
+        for source, expected in cases:
+            self.assertEqual(parse_expression(source, ["x"]), expected)
+        with self.assertRaises(InputError):
+            parse_expression("(" * depth + "x" + ")" * (depth-1), ["x"])
+
     def test_stale_binary_and_independent_check(self):
         if native_library._MODE != "sympy":
             with patch.object(native_library, "affine_request", side_effect=native_library.Unavailable("build kernel")):
