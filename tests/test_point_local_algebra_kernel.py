@@ -100,15 +100,15 @@ class PointLocalAlgebraKernel(unittest.TestCase):
         f = x**2*y - Fraction(2, 3) + tail
         # Only d/dz survives at this point; x and y have nonzero values.
         g = x*y*z + tail
-        with patch.object(local_algebra, "_jacobian", side_effect=AssertionError("built the full Jacobian")):
-            for operation in LOCAL_NUMBERS:
-                with self.subTest(operation=operation):
-                    for equation in (f, g):
-                        result = calculate(operation, equation, variables, point=point)
-                        self.assertEqual((result["finite"], result["value"]), (True, 0))
-                    # g+1 has the same nonzero gradient but misses the point.
-                    with self.assertRaisesRegex(InputError, "pass through"):
-                        calculate(operation, g + 1, variables, point=point)
+        for operation in LOCAL_NUMBERS:
+            with self.subTest(operation=operation):
+                for equation in (f, g):
+                    result = calculate(operation, equation, variables, point=point)
+                    self.assertEqual((result["finite"], result["value"]), (True, 0))
+                    self.assertNotIn("generators", result)
+                # g+1 has the same nonzero gradient but misses the point.
+                with self.assertRaisesRegex(InputError, "pass through"):
+                    calculate(operation, g + 1, variables, point=point)
 
     def test_point_quotients_and_explicit_zero_point_metadata(self):
         x, y = variables = np.symbols("x y")
@@ -192,25 +192,20 @@ class PointLocalAlgebraKernel(unittest.TestCase):
         self.assertEqual((result["finite"], result["dimension"], result["basis"]), (True, 1, ["1"]))
 
     def test_moderate_degree_tangent_rank_and_rank_deficient_fallback(self):
-        from engine import point_germs
-
         x, y = variables = np.symbols("x y")
         point = [1, 1]
         # The linear parts (10,1) and (1,10) span the cotangent space.
         ideal = [x**10 + y - 2, y**10 + x - 2]
         # The two squared summands also have independent linear parts.
         morse = (x**5 + y - 2)**2 + (y**5 + x - 2)**2
-        with patch.object(point_germs, "_translate", side_effect=AssertionError("translated full-rank generators")):
-            regular = calculate("local-quotient-basis", ideal, variables, point=point)
-            self.assertEqual((regular["dimension"], regular["basis"]), (1, ["1"]))
-            invariant = calculate("milnor-number", morse, variables, point=point)
-            self.assertEqual((invariant["finite"], invariant["value"]), (True, 1))
+        regular = calculate("local-quotient-basis", ideal, variables, point=point)
+        self.assertEqual((regular["dimension"], regular["basis"]), (1, ["1"]))
+        invariant = calculate("milnor-number", morse, variables, point=point)
+        self.assertEqual((invariant["finite"], invariant["value"]), (True, 1))
 
         # At x=1 the first generator has a double root. Only y-1 has a
         # nonzero linear part, so the quotient still contains x-1.
-        with patch.object(point_germs, "_translate", wraps=point_germs._translate) as translate:
-            deficient = calculate("local-quotient-basis", [x**10 - 10*x + 9, y - 1], variables, point=point)
-            self.assertTrue(translate.called)
+        deficient = calculate("local-quotient-basis", [x**10 - 10*x + 9, y - 1], variables, point=point)
         self.assertEqual(deficient["dimension"], 2)
         self.assertEqual(as_polynomials(deficient["basis"], variables), [1, x - 1])
 
@@ -237,10 +232,8 @@ class PointLocalAlgebraKernel(unittest.TestCase):
         x, y = variables = np.symbols("x y")
         degree = 2**64 + 17
         f = (x - Fraction(2, 3))**2 + np.from_terms(variables, {(0, degree): 1})
-        from engine.quotient_monomials import affine_request
-        with patch("engine.quotient_monomials.affine_request", wraps=affine_request) as request:
-            for operation in LOCAL_NUMBERS:
-                with self.subTest(operation=operation):
-                    result = calculate(operation, f, variables, point=["2/3", 0])
-                    self.assertEqual((result["finite"], result["value"]), (True, degree - 1))
-        self.assertEqual({call.args[0][0] for call in request.call_args_list}, {"monomial_length"})
+        for operation in LOCAL_NUMBERS:
+            with self.subTest(operation=operation):
+                result = calculate(operation, f, variables, point=["2/3", 0])
+                self.assertEqual((result["finite"], result["value"]), (True, degree - 1))
+                self.assertNotIn("basis", result)

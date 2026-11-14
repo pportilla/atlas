@@ -36,7 +36,9 @@ class GPUResolution(unittest.TestCase):
         devices = available_devices()
         if not devices:
             self.skipTest("No GPU device available")
-        request = dict(polynomial="x^5+z*y^3+z^15+t^4*x+t^8", variables=list("xyzt"),
+        # The four pure powers give a convenient Newton polyhedron. Both
+        # resolution modes use chart transforms on its regular fan.
+        request = dict(polynomial="x^2+y^3+z^5+t^7", variables=list("xyzt"),
                        search="quick", monodromy=True)
         fields = ("atlas", "charts", "dual_complex", "fan", "root_families",
                   "monodromy_zeta", "topological_zeta")

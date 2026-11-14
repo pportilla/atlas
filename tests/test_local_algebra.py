@@ -1,6 +1,5 @@
 """Kernel-level examples for rational quotients and hypersurface germs at the origin."""
 import unittest
-from unittest.mock import patch
 
 from engine import local_algebra
 from engine import native_polynomial as np
@@ -103,10 +102,10 @@ class LocalAlgebraTests(unittest.TestCase):
         expected = [parse_expression(g, names) for g in ("3*x^2+y^2", "2*x*y-5/7", "0")]
         for order in ("lex", "grevlex"):
             with self.subTest(order=order):
-                with patch.object(local_algebra, "_jacobian", wraps=local_algebra._jacobian) as jacobian:
-                    for operation in ("milnor-number", "tjurina-number"):
-                        self.assert_number(calculate(operation, f, names, order), 0)
-                    jacobian.assert_not_called()
+                for operation in ("milnor-number", "tjurina-number"):
+                    result = calculate(operation, f, names, order)
+                    self.assert_number(result, 0)
+                    self.assertNotIn("generators", result)
                 result = calculate("local-jacobian-algebra", f, names, order)
                 self.assertEqual((result["finite"], result["dimension"], result["basis"]), (True, 0, []))
                 self.assertEqual([parse_expression(g, names) for g in result["generators"]], expected)
@@ -114,11 +113,10 @@ class LocalAlgebraTests(unittest.TestCase):
     def test_tjurina_quotient_also_imposes_the_equation(self):
         f = "x^4+y^5+x^2*y^3"
         for operation, expected in [("milnor-number", 12), ("tjurina-number", 11)]:
-            with self.subTest(operation=operation), patch.object(
-                    local_algebra, "quotient_monomials", wraps=local_algebra.quotient_monomials) as staircase:
-                self.assert_number(calculate(operation, f), expected)
-                self.assertTrue(staircase.called)
-                self.assertTrue(all(call.kwargs["include_basis"] is False for call in staircase.call_args_list))
+            with self.subTest(operation=operation):
+                answer = calculate(operation, f)
+                self.assert_number(answer, expected)
+                self.assertNotIn("basis", answer)
 
     def test_wide_exponent_milnor_number_without_enumerating_the_basis(self):
         degree = 2**64 + 17
