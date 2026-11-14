@@ -7,6 +7,7 @@ import sys
 
 _DESCRIPTIONS = {
     "gcd": "compute the monic greatest common divisor of two polynomials",
+    "factor": "factor a polynomial over QQ into monic irreducible factors",
     "ideal": "declare an ideal from ordered generators",
     "groebner": "compute a reduced Gröbner basis",
     "normal-form": "reduce a polynomial modulo an ideal",
@@ -101,6 +102,14 @@ def _show(record):
         print("Reduction:", result["reduction"])
         print("Remainder:", result["remainder"])
         print("Unit:", result["unit"])
+    elif result["type"] == "factorization":
+        product = [result["unit"]]
+        for factor in result["factors"]:
+            term = "(" + factor["polynomial"] + ")"
+            if factor["multiplicity"] != 1:
+                term += f"^{factor['multiplicity']}"
+            product.append(term)
+        print("Factorization:", " * ".join(product))
     elif result["type"] == "polynomial":
         label = "GCD" if record["operation"] == "gcd" else "Remainder"
         print(f"{label}:", result["polynomial"])

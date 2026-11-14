@@ -81,7 +81,7 @@
 }
 .algebra .math-fraction {
   display: inline-flex; flex-direction: column; min-width: .65em; margin-inline: .07em;
-  text-align: center; vertical-align: -.22em; font-size: .73em; line-height: 1.08;
+  text-align: center; vertical-align: middle; font-size: .73em; line-height: 1.08;
 }
 .algebra .math-fraction > :first-child { padding-inline: .13em; border-bottom: 1px solid currentColor; }
 .algebra .math-operator { display: inline-block; vertical-align: baseline; color: transparent; font-size: 0; }
@@ -102,11 +102,30 @@
 }
 .algebra #result-value ul { margin: 0; padding: 0; list-style: none; }
 .algebra #result-value .quotient-label { margin: .65rem 0 .12rem; font: 600 .8rem/1.4 var(--ui); color: var(--muted); }
+.algebra .factorization { width: 100%; margin-top: .8rem; border-collapse: collapse; text-align: left; }
+.algebra .factorization th { font: 600 .8rem/1.4 var(--ui); color: var(--muted); }
+.algebra .factorization td { padding: .15rem 0; border-bottom: 1px dotted var(--rule); }
+.algebra .factorization :is(th, td):last-child { padding-left: .75rem; text-align: right; }
 .algebra #quotient-description { margin-top: .4rem; }
 .algebra #result-value li + li { border-top: 1px dotted var(--rule); }
+.algebra .problem.compact {
+  padding: .85rem 1.1rem; border-top: 1px solid var(--rule);
+}
+.algebra .problem.compact #problem-title {
+  display: inline; margin: 0 .6rem 0 0; font-size: 1.45rem;
+}
+.algebra .problem.compact #problem-operation { font: 550 .78rem var(--ui); }
+.algebra .problem.compact figcaption { margin-bottom: .35rem; }
+.algebra .problem.compact .problem-equations {
+  --operator-size: 1.22rem; display: inline-flex; flex-wrap: wrap; align-items: baseline;
+  vertical-align: middle; padding: .15rem 0; gap: .4rem 1.1rem; font-size: var(--operator-size); border: 0;
+}
+.algebra .problem.compact #problem-order { margin-top: .35rem; }
 .algebra .stale-note, .algebra .error { margin: 0 0 .7rem; }
 .algebra #export { margin-top: .9rem; }
 .algebra #execution { margin: 1rem 0 .5rem; }
+.algebra #execution.facts { grid-template-columns: minmax(5rem, 7rem) minmax(0, 1fr); gap: .25rem 1rem; }
+.algebra #execution.facts dd { margin-bottom: 0; }
 .algebra .algebra-section { margin-top: 1.15rem; padding-top: .95rem; border-top: 1px solid var(--rule); }
 .algebra .algebra-result-header { display: flex; align-items: center; justify-content: space-between; gap: .35rem; flex-wrap: wrap; }
 .algebra .algebra-section h2 { font: normal 1.35rem/1.2 var(--math); }
@@ -118,4 +137,13 @@
 @media (max-width: 480px) {
   .algebra .problem { padding: 1rem .95rem; }
   .algebra .problem-equations { padding-left: .65rem; }
+}
+
+@media (min-width: 821px) and (max-height: 820px) {
+  .algebra .operation-field { margin-bottom: .85rem; }
+  .algebra .algebra-operands { gap: .65rem; }
+  .algebra .algebra-settings { gap: .65rem; margin: .75rem 0; padding-top: .75rem; }
+  .algebra .generator-list { gap: .25rem; }
+  .algebra .generator-row input, .algebra #polynomial, .algebra #other-polynomial { min-height: 2.15rem; }
+  .algebra #operation { min-height: 2.4rem; }
 }

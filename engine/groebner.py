@@ -228,7 +228,7 @@ class NativeBasis:
         if not answer:
             wide = self._wide_divisors_on_overflow()
             if wide is not None:
-                return _line(self.gens, wide.reduce(expr)[1])
+                return _line(self.gens, wide.remainder(expr))
             raise ArithmeticError("The native normal form could not be computed.")
         try:
             result = ctypes.string_at(answer).decode("ascii")[:-1]
@@ -255,14 +255,17 @@ class NativeBasis:
         record_stage("membership", "cpu", divisors=len(self.rows))
         return bool(result)
 
-    def reduce(self, expr):
-        """Return (None, remainder): the quotients are not computed."""
+    def remainder(self, expr):
         from .affine_kernel import _sparse_expression
         row = _line(self.gens, expr)
         result = self._device_remainder(row)
         if result is None:
             result = self._cpu_remainder(expr, row)
-        return None, _sparse_expression(self.gens, result)
+        return _sparse_expression(self.gens, result)
+
+    def reduce(self, expr):
+        """Return (None, remainder): the quotients are not computed."""
+        return None, self.remainder(expr)
 
 
 class _Checked:

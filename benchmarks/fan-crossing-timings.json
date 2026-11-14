@@ -1,0 +1,202 @@
+{
+  "machine": "AMD Ryzen 7 6800H, Linux",
+  "mode": "intrinsic",
+  "input": "x^2+y^19+z^37+x^3*(x+y+z)^27",
+  "compute": "cpu",
+  "monodromy": false,
+  "method": "Independent baseline and candidate snapshots, same host, alternating order within each pair, CPU affinity 14 in cold and 4 in warm. Warm runs follow one untimed solve per snapshot. Native only, Python -S with SymPy imports refused. Time includes resolve() and excludes diagnostics, imports and writing the record.",
+  "files": {
+    "engine/monomial_atlas.py": [
+      "4a9cf181061c826bd00247d174ee5019356bd663fd1b9ed6dec6c18012985f2a",
+      "ea90526fa3f621f88dc30047b8178f132d3017753e8d2b6b41ecbb63dca121ff"
+    ],
+    "engine/atlas_torus.py": [
+      "f22dbd0da386dc788eacf7b9e043b46531269d83e4bf242df5a98a9aeb0b9cc7",
+      "ccfd8ad9ccb2a75f80e6011845ab797ce8da6c3d81852063d0f88d85f27eaf87"
+    ],
+    "native/build/libgroebner.so": [
+      "271a2fdd87c4bb461356f572a7e515e6cd24aed7248f36cd2002e027e3be957f",
+      "a1ebe5e7f4dc6a320d853bc969aaeb26d17bb73dea5b21a4244de7eaa109f97e"
+    ]
+  },
+  "cold": {
+    "repeats": 7,
+    "baseline_seconds": [
+      1.65,
+      1.292,
+      1.316,
+      1.355,
+      1.269,
+      1.427,
+      1.785
+    ],
+    "candidate_seconds": [
+      0.568,
+      0.687,
+      0.562,
+      0.542,
+      0.734,
+      0.561,
+      0.832
+    ],
+    "median_seconds": [
+      1.355,
+      0.568
+    ],
+    "speedup": 2.3855633802816905
+  },
+  "warm": {
+    "repeats": 7,
+    "baseline_seconds": [
+      1.0393115720071364,
+      0.7156104389869142,
+      0.6452917349815834,
+      0.5728146800247487,
+      0.5963350639794953,
+      0.6005178849736694,
+      0.5914017430040985
+    ],
+    "candidate_seconds": [
+      0.4836830559943337,
+      0.2743302079907153,
+      0.27593237900873646,
+      0.2712527779804077,
+      0.2743008529942017,
+      0.29140804801136255,
+      0.2832725109765306
+    ],
+    "median_seconds": [
+      0.6005178849736694,
+      0.27593237900873646
+    ],
+    "speedup": 2.1763226451748023
+  },
+  "equal_digest": "8d78b43a2da1504cae7bd99cb3e5ed32e4a36412ce119efa64fc743b8517edfa",
+  "atlas_digest": "83dd1f82cdd18948e65adf7919ea2353c3ec932922808aaf90af4f3818436e7d",
+  "complex_digest": "6b206dd2ac9155f2235add551ad6f2e1173b7bb986e8db79f48798a11a579e7f",
+  "changed_non_timing_fields": [
+    "execution"
+  ],
+  "charts": 191,
+  "vertices": 40,
+  "cells": 39,
+  "baseline_trace": {
+    "_verify_charts / Unavailable: Degree out of range.": 1,
+    "section_complex / True": 1,
+    "outputs / True": 1
+  },
+  "candidate_trace": {
+    "section_complex / True": 1,
+    "_verify_charts / True": 1
+  },
+  "native_filter_calls": 191,
+  "verified_saved_replay": "all 191 saved charts, attached faces, and vertex labels match\nrejected tampered strict ideal The strict transform differs from the pullback on the chart.",
+  "limitation": "Default intrinsic only. Extra full Euler/zetas on the baseline and intermediate candidate exceeded a 180 s budget. No timing claim for zetas.",
+  "validated_outputs": "Every chart, numerical certificate and labelled incidence agreed after excluding execution timings and route counters.",
+  "independent_fresh_cli": {
+    "samples": {
+      "baseline": [
+        1.6879250190104358,
+        1.7470974609896075,
+        1.664471552008763,
+        1.6432688609929755,
+        1.7004278550157323,
+        1.6697131250111852,
+        1.6282564280263614
+      ],
+      "candidate": [
+        0.8062736179854255,
+        0.8078730730048846,
+        0.8344567310123239,
+        0.997510143002728,
+        0.7934017140069045,
+        0.7850791539822239,
+        0.756476187001681
+      ]
+    },
+    "medians": {
+      "baseline": 1.6697131250111852,
+      "candidate": 0.8062736179854255
+    },
+    "method": "Seven paired full CLI invocations, pinned to CPU 13. Seconds include process startup, computing the resolution and writing the returned record."
+  },
+  "installed_fresh_cli": {
+    "samples": {
+      "baseline": [
+        1.4317319130059332,
+        1.4448485100001562,
+        1.453696361015318,
+        1.4609878930205014,
+        1.4535672859929036,
+        1.4904390269948635,
+        1.472879073000513
+      ],
+      "candidate": [
+        0.6423275689885486,
+        0.6389164320135023,
+        0.6540771879954264,
+        0.6471461989858653,
+        0.6412950009980705,
+        0.6506437339994591,
+        0.6501960270106792
+      ]
+    },
+    "medians": {
+      "baseline": 1.453696361015318,
+      "candidate": 0.6471461989858653
+    },
+    "wall_change": 0.5548271177250019,
+    "geometry_sha256": "2b8c8cbf13d20305210ce96c5d216a9d46a16108bbe9a7e2e7823b04843fea60",
+    "cpu": 13,
+    "checks": [
+      "full CLI cold processes; restore time includes new process, worker, and full JSON serialization",
+      "geometry digest and JSON parsing by parent are outside the timed region"
+    ],
+    "native_counts": {
+      "direct_chart_jets": 191,
+      "crossings": 191,
+      "strict_terms": 325
+    },
+    "saved_replay_digest": "6b206dd2ac9155f2235add551ad6f2e1173b7bb986e8db79f48798a11a579e7f",
+    "altered_strict_equation_rejected": true
+  },
+  "secondary_warm_cpu": {
+    "input": "x^5+z*y^3+z^15+t^4*x+t^8",
+    "variables": [
+      "x",
+      "y",
+      "z",
+      "t"
+    ],
+    "mode": "intrinsic",
+    "monodromy": false,
+    "charts": 598,
+    "method": "Five alternating warm pairs on CPU 13 against the frozen pre-change implementation.",
+    "baseline_seconds": [
+      0.3829976480046753,
+      0.4322805569972843,
+      0.41929858797811903,
+      0.39184294000733644,
+      0.392098193988204
+    ],
+    "installed_seconds": [
+      0.3260860480077099,
+      0.38358288499875925,
+      0.3554471599927638,
+      0.3706054749782197,
+      0.34223474698956124
+    ],
+    "median_seconds": [
+      0.392098193988204,
+      0.3554471599927638
+    ],
+    "geometry_sha256": "97988b6098e23e96909e976053c830f74362b3061e1c262dd070d63f81fad663",
+    "geometry_fields": [
+      "charts",
+      "atlas",
+      "dual_complex",
+      "fan",
+      "root_families"
+    ]
+  }
+}

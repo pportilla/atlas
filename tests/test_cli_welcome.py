@@ -12,7 +12,7 @@ from engine.app import main
 from engine.identity_atlas import rational_factors
 from engine.plane_backend import resolve_plane
 from engine.polynomial import parse
-from engine.welcome import render_welcome
+from engine.welcome import LOGO, SMALL_LOGO, render_welcome
 from engine.welcome_curve import resolve_welcome_curve
 from engine.welcome_graph import graph_rows
 
@@ -65,11 +65,18 @@ class CliWelcomeTests(unittest.TestCase):
 
     def test_welcome_art_fits_terminal_width(self):
         example = resolve_welcome_curve(Random(0))
-        for width in (18, 24, 40, 60, 80, 120):
+        for width in range(1, 121):
             with self.subTest(width=width):
                 banner = render_welcome(width, color=False, interactive=True, example=example)
                 self.assertTrue(banner.isascii())
                 self.assertLessEqual(max(map(len, banner.splitlines())), width)
+
+    def test_compact_logo_survives_side_by_side_and_stacked_layouts(self):
+        for width in (18, 50):
+            with self.subTest(width=width):
+                output = render_welcome(width, color=False, interactive=False, example=("x*y", {}))
+                art = output.splitlines()[1:1 + len(SMALL_LOGO)]
+                self.assertEqual([row[-len(mark):] for row, mark in zip(art, SMALL_LOGO)], list(SMALL_LOGO))
 
     def launch_session(self, commands, term='xterm', no_color='1'):
         stdin, stdout, stderr = Terminal(commands), Terminal(), io.StringIO()
@@ -110,16 +117,18 @@ class CliWelcomeTests(unittest.TestCase):
     def test_each_launch_computes_once_and_uses_its_own_example(self):
         examples = [resolve_welcome_curve(Random(seed)) for seed in (0, 1)]
         with patch('engine.welcome.resolve_welcome_curve', side_effect=examples) as compute:
-            for polynomial, result in examples:
+            for polynomial, _ in examples:
                 out, err, _ = self.launch_session('quit\n')
                 self.assertIn(polynomial, out)
-                self.assertIn(max(graph_rows(result, 29), key=len), out)
+                art = out.splitlines()[1:1 + len(LOGO)]
+                self.assertEqual([row[-len(mark):] for row, mark in zip(art, LOGO)], list(LOGO))
                 self.assertEqual(err, '')
         self.assertEqual(compute.call_count, len(examples))
 
     def test_unavailable_solver_leaves_prompt_usable(self):
         with patch('engine.welcome.resolve_welcome_curve', side_effect=RuntimeError('missing worker')):
             out, _, _ = self.launch_session('help resolve\nquit\n')
+        self.assertIn(LOGO[0], out)
         self.assertIn('missing worker', out)
         self.assertIn('--vars', out)
         self.assertIn('atlas>', out)

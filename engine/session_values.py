@@ -1,4 +1,5 @@
 """Linked, read-only views of the solver's resolution record for Atlas scripts."""
+from copy import deepcopy
 from functools import cached_property
 
 from .session_polynomial import _CoordinateSpace
@@ -156,13 +157,33 @@ class Branch(_Component):
 class Resolution(_RecordView):
     _members = ("coordinates", "divisors", "charts", "branches", "divisor", "chart")
 
-    def __init__(self, record, source_space=None):
+    def __init__(self, record, source_space=None, *, _from_solver=False):
         super().__init__(record)
         self._source_space = source_space or _CoordinateSpace.named(record["variables"])
         self._charts = {c["id"]: Chart(self, c) for c in record["charts"]}
         vertices = record["dual_complex"]["vertices"]
         self._divisors = {v["id"]: Divisor(self, v) for v in vertices}
         self._branches = [Branch(self, b) for b in record.get("branches", ())]
+        if _from_solver and "topological_zeta" in record and "monodromy_zeta" in record:
+            # Freshly computed by our solver from a single certified atlas.
+            self._local_zetas = deepcopy((record["topological_zeta"], record["monodromy_zeta"]))
+
+    @cached_property
+    def _local_zetas(self):
+        # Replay both invariants on the same certified strata. In particular,
+        # archived zeta values alone are not a certificate for an imported R.
+        from .monodromy import monodromy_zeta
+        from .strata import resolution_strata
+        from .topological import topological_zeta
+        record = self._record
+        strata = resolution_strata(record)
+        if strata is None:
+            reason = ("The resolution has not been certified." if record["status"] != "resolved" else
+                      "The resolution does not certify embedded strata over the origin.")
+            missing = {"status": "unavailable", "reason": reason}
+            return missing, dict(missing)
+        monodromy = monodromy_zeta(record, strata=strata)
+        return topological_zeta(record, strata=strata, monodromy=monodromy), monodromy
 
     def __repr__(self):
         record = self._record

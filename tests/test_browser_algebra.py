@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 
+from engine.app import MAX_SECONDS
 from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
 
 
@@ -90,9 +91,11 @@ class AlgebraBrowserTests(AlgebraBrowserCase):
         response = self.submit("membership", ideal, polynomial="y")
         self.assertIs(response["result"]["value"], False)
         expect(self.page.locator("#result-value")).to_contain_text("false", ignore_case=True)
-        for polynomial, code in (("z", "invalid_request"), ("(" * 1100 + "x" + ")" * 1100, "computation_limit")):
+        # Exercise a real worker timeout independent of the parser's nesting limit.
+        for polynomial, code, timeout in (("z", "invalid_request", MAX_SECONDS), ("x", "computation_limit", 0)):
             with self.subTest(code=code):
-                response = self.submit("membership", ideal, polynomial=polynomial)
+                with patch("engine.app.MAX_SECONDS", timeout):
+                    response = self.submit("membership", ideal, polynomial=polynomial)
                 self.assertEqual(response["status"], "error")
                 self.assertEqual(response["error"]["code"], code)
                 self.assertNotIn("result", response)

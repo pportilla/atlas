@@ -14,6 +14,19 @@ FIXTURE = Path(__file__).with_name("fixtures") / "archived-newton-repair.json"
 BEFORE_OWNERSHIP = FIXTURE.with_name("newton-before-ownership.json")
 
 
+def renamed_patch(row, prefix):
+    rename = {name: f"{prefix}_{i}" for i, name in enumerate(row["coordinates"])}
+    def renamed(text):
+        return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", lambda m: rename[m[0]], text)
+    row["coordinates"] = list(rename.values())
+    row["map"] = {k: renamed(v) for k, v in row["map"].items()}
+    for key in ("ambient_ideal", "strict_transform"):
+        row[key] = list(map(renamed, row[key]))
+    for divisor in row["exceptional"]:
+        divisor["ideal"] = list(map(renamed, divisor["ideal"]))
+        divisor["equation"] = ", ".join(divisor["ideal"])
+
+
 @unittest.skipUnless(_MODE == "native", "The archived conjugate repair runs in the production kernel.")
 class ArchivedNewtonRepair(unittest.TestCase):
     def assert_triangle_with_subdivided_edges(self, boundary, dimension):
@@ -78,7 +91,10 @@ class ArchivedNewtonRepair(unittest.TestCase):
                     matrix.append([0, 0, 0, 1])
             else:
                 chart["map"] = dict(reversed(chart["map"].items()))
-        charts = atlas.from_json(list(reversed(stored)))
+        charts = atlas.from_record({"atlas": list(reversed(stored))}, None)
+        links = [c.repair_projection for c in charts if c.repair_projection]
+        self.assertEqual(len(links), 13)
+        self.assertTrue(all(str(mapping[-1]) == "t" for _, mapping in links))
         self.assert_triangle_with_subdivided_edges(atlas.boundary_complex(charts, 4, intrinsic=True), 2)
 
     def test_missing_parent_centre_cannot_certify_attachments(self):
@@ -93,9 +109,16 @@ class ArchivedNewtonRepair(unittest.TestCase):
 
     def test_incomplete_or_duplicate_cover_without_parent_hints(self):
         record = json.loads(FIXTURE.read_text())
-        stored = [{k:v for k,v in c.items() if k != "torus"} for c in record["atlas"]]
+        stored = []
+        for c in record["atlas"]:
+            row = {k:v for k,v in c.items() if k != "torus"}
+            # A local field generator may share a name with a parent
+            # coordinate. Its identity comes from distinct coordinate rings.
+            if "theta" in row["coordinates"]:
+                row = json.loads(json.dumps(row).replace("theta", "u1"))
+            stored.append(row)
         self.assert_triangle_with_subdivided_edges(atlas.boundary_complex(atlas.from_json(stored),3,True), 1)
-        for damaged in (stored[:3], stored[:3] + stored[4:], [*stored,stored[3]]):
+        for damaged in (stored[:3], stored[1:], stored[:3] + stored[4:], [*stored,stored[3]]):
             with self.subTest(size=len(damaged)):
                 boundary = atlas.boundary_complex(atlas.from_json(damaged), 3, intrinsic=True)
                 self.assertEqual(boundary["status"], "partial")
@@ -108,24 +131,19 @@ class ArchivedNewtonRepair(unittest.TestCase):
         patches = [c for c in record["charts"] if "parent" in c]
         self.assertTrue(all("region" not in c and "fibre" not in c for c in patches))
         self.assertIn("theta^2 + 2*theta + 2", patches[0]["ambient_ideal"])
+        for patch in patches:
+            del patch["parent"]
         # Coordinate names and chart IDs are display choices. Keep the
         # ordered coordinates and equations, while changing their spelling.
-        first = patches[0]
-        rename = {name: f"local_{i}" for i, name in enumerate(first["coordinates"])}
-        def renamed(text):
-            return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", lambda m: rename[m[0]], text)
-        first["id"] = "renamed_patch"
-        first["coordinates"] = list(rename.values())
-        first["map"] = {k: renamed(v) for k,v in first["map"].items()}
-        for key in ("ambient_ideal", "strict_transform"):
-            first[key] = list(map(renamed, first[key]))
-        for divisor in first["exceptional"]:
-            divisor["ideal"] = list(map(renamed, divisor["ideal"]))
-            divisor["equation"] = ", ".join(divisor["ideal"])
+        for i in range(0, len(patches), 2):
+            patches[i]["id"] = f"renamed_patch_{i}"
+            renamed_patch(patches[i], f"local_{i}")
         record["charts"] = parents + list(reversed(patches))
         charts = atlas.from_record(record, polynomial)
         self.assertIsNotNone(charts)
         self.assert_triangle_with_subdivided_edges(atlas.record_complex(record, charts), 1)
+        duplicate = dict(record, charts=[*record["charts"][:-1], patches[1]])
+        self.assertIsNone(atlas.from_record(duplicate, polynomial))
         # All the other pivots still map to the same centre. Ownership
         # reconstruction must account for the missing pivot itself.
         del record["charts"][-1]
@@ -139,6 +157,18 @@ class ArchivedNewtonRepair(unittest.TestCase):
 
 
 class ArchivedLocalCover(unittest.TestCase):
+    def test_renamed_patches_are_indexed_once(self):
+        from unittest.mock import patch
+        from engine import archived_newton
+        record = json.loads(BEFORE_OWNERSHIP.read_text())
+        patches = [row for row in record["charts"] if row.get("parent")]
+        for i, row in enumerate(patches):
+            renamed_patch(row, f"slot_{i}")
+        with patch.object(archived_newton, "_signature", wraps=archived_newton._signature) as signature:
+            charts = atlas.from_record(record, parse(record["polynomial"], record["variables"]))
+        self.assertIsNotNone(charts)
+        self.assertEqual(sum(len(call.args) == 2 for call in signature.call_args_list), len(patches))
+
     def test_projective_pivots_recover_the_archived_partition(self):
         record = json.loads(BEFORE_OWNERSHIP.read_text())
         charts = atlas.from_record(record, parse(record["polynomial"], record["variables"]))

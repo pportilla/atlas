@@ -49,7 +49,11 @@ and the charts retained by the local blowup engine use this same format.
 Projective graph charts use the relative Jacobian and Cartier ideals.
 After Newton repairs the toric parents omit the closed centres and the
 children own their inverse images. The local cover of conjugate centres
-counts all lifts of the selected points.
+counts all lifts of the selected points. For an archived repair the parent
+inverse gives coordinate fractions on each child. The kernel proves that
+these extend across the exceptional locus, agree with the saved base map,
+and recover the complete local blowup cover. Raw records predating chart
+ownership also require a match for every saved strict and exceptional ideal.
 
 Intrinsic boundaries restrict to the smooth strict transform. On each
 birational overlap, equality of generic points identifies the geometric
@@ -416,7 +420,7 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True)
     return {**answer, "cells": found, "reason": reason}
 
 
-def _intrinsic_product(charts, dimension):
+def _product_charts(charts, dimension):
     """Identify a common affine-space factor directly in the chart equations.
 
     Each retained base coordinate must be the identical free chart variable
@@ -486,10 +490,18 @@ def _intrinsic_product(charts, dimension):
                                fibre=tuple(g for g in c.fibre if g not in axes),
                                coordinates=tuple(pair for pair in c.coordinates if pair[0] not in factors),
                                torus=torus, split_cone=(), point_blowup=(), repair_projection=projection))
-    boundary = boundary_complex(reduced, dimension - len(factors), intrinsic=True)
+    return reduced, len(factors)
+
+
+def _intrinsic_product(charts, dimension):
+    product = _product_charts(charts, dimension)
+    if product is None:
+        return None
+    reduced, free = product
+    boundary = boundary_complex(reduced, dimension - free, intrinsic=True)
     if boundary["status"] != "complete":
         return None
-    return {**boundary, "vertices": [{**v, "dimension": v["dimension"] + len(factors)}
+    return {**boundary, "vertices": [{**v, "dimension": v["dimension"] + free}
                                      for v in boundary["vertices"]]}
 
 

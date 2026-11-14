@@ -2,7 +2,7 @@
 from .binomial_complex import binomial_branch_equations, binomial_complex
 from .binomial_fan import build_binomial_fan
 from .binomial_kernel import pairings, primitive_character
-from .chart_batch import transform_batch
+from .chart_batch import transform_atlas
 from .toric_backend import monomial
 from .polynomial import format_poly
 
@@ -25,19 +25,11 @@ def resolve_binomial(poly, variables, mode, compute=None):
     orders = [min(row) for row in values]
     coefficient = -poly[right] / poly[left]
     dual, divisors = binomial_complex(rays,cones,delta,coefficient,mode,orders=orders)
-    exponents = [left, right]
-    if max(map(sum, exponents))*max(map(max,rays)) <= 2**31-1:
-        transforms,batch = transform_batch(exponents,rays,cones,orders,compute=compute)
-    else:
-        powers = [(a-order,b-order) for (a,b),order in zip(values,orders)]
-        transforms = [[tuple(powers[i][j] for i in cone) for j in range(2)] for cone in cones]
-        batch = {"backend":"cpu","arithmetic":"arbitrary precision",
-                 "dimension":len(variables),"chart_term_pairs":2*len(cones)}
+    transforms,batch = transform_atlas([left,right], rays, cones, orders, values, compute)
     coords = [f"u{i+1}" for i in range(len(variables))]
     charts = []
-    for i,cone in enumerate(cones):
+    for i,(cone, (a,b)) in enumerate(zip(cones, transforms)):
         mapping = {v:monomial(coords,[rays[k][j] for k in cone]) for j,v in enumerate(variables)}
-        a,b = transforms[i]
         strict = format_poly({a:poly[left],b:poly[right]},coords)
         charts.append({"id":f"B{i+1}","coordinates":coords,"ray_indices":cone,
                        "map":mapping,"strict_transform":strict,"exceptional":divisors[i],

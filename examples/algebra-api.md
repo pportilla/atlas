@@ -89,6 +89,33 @@ The ideal operations below take an `ideal`, an array of polynomial strings. Use 
 | `saturation` | `polynomial` | Saturation by one polynomial, in `generators` |
 | `dimension` | | Krull dimension of the quotient as an integer `value`, with −1 for the empty variety |
 
+### Polynomial factorization
+
+`factor` takes one polynomial over the rationals. This example has unit `-12/5`, the factor `x-y/2` with multiplicity 2, and the factor `x^2+1` with multiplicity 1.
+
+```sh
+./atlas algebra factor --vars x,y --order lex --poly '-3/5*(2*x-y)^2*(x^2+1)'
+```
+
+Use the same calculation at the prompt or in an Atlas script. Each factor polynomial belongs to the input coordinate space.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+f = -3/5*(2*x-y)^2*(x^2+1)
+F = factor(f, order="lex")
+product = F.unit
+for term in F.factors:
+    product = product * term.polynomial^term.multiplicity
+
+print(product == f)
+```
+
+In the browser’s Algebra view, choose **Polynomial factorization** and enter the polynomial. Give the result a name to select any individual factor as the input to a later calculation. The exported session preserves that reference.
+
+For HTTP, send the operation `factor` with a single `polynomial` operand. The shell’s `--json` output and browser download both include the `ring`, the exact rational `unit` as a string, and a `factors` array. Each entry carries its `polynomial` and positive integer `multiplicity`.
+
+Each factor has leading coefficient 1 in the selected monomial order. The unit carries the sign and scale needed to recover the input. A nonzero constant returns itself as the unit and an empty factor list. Zero has no irreducible factorization and returns an input error.
+
 ### Polynomial GCD
 
 `gcd` takes two polynomial strings in the same ring. For example, this request returns `"polynomial": "x+y"` in $\mathbf Q[x,y]$.

@@ -5,101 +5,161 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Resolution Atlas</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 21h22' stroke='%23777' stroke-width='2'/%3E%3Cg fill='%23777'%3E%3Ccircle cx='5' cy='21' r='4'/%3E%3Ccircle cx='16' cy='21' r='4'/%3E%3Ccircle cx='27' cy='21' r='4'/%3E%3C/g%3E%3Cpath d='M16 21 24 9' stroke='%23777' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" href="/atlas-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/resolution.css">
+  <script src="/exact-json.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
-  <header class="site-header page">
-    <h1 class="wordmark">Resolution Atlas</h1>
-    <p class="tagline">Local resolution of hypersurface germs over <span class="m">ℚ</span></p>
-    <nav class="view-nav" aria-label="Atlas views">
-      <a href="/" aria-current="page">Resolution</a>
-      <a href="/algebra.html">Algebra</a>
-    </nav>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+  <header class="masthead">
+    <div class="page masthead-inner">
+      <a class="wordmark" href="/" aria-label="Atlas home"><img src="/atlas-mark.svg" width="36" height="36" alt="">Atlas</a>
+      <nav class="view-nav" aria-label="Atlas views">
+        <a href="/" aria-current="page">Resolution</a>
+        <a href="/algebra.html">Algebra</a>
+      </nav>
+    </div>
   </header>
 
-  <main class="page">
-    <form id="resolve-form" class="query">
-      <div class="query-main">
-        <div class="query-box">
-          <label class="query-lhs m" for="polynomial"><i>f</i> =</label>
-          <textarea id="polynomial" name="polynomial" rows="1" aria-label="Polynomial f" placeholder="y^2 - x^3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" required autofocus></textarea>
+  <main id="workspace" tabindex="-1" class="page workspace resolution">
+    <header class="view-title">
+      <h1>Resolution</h1>
+      <p>Local hypersurface germs at the origin.</p>
+      <a class="output-jump" href="#output">View output <span aria-hidden="true">↓</span></a>
+    </header>
+    <div class="workbench">
+      <div class="input-pane">
+        <form id="resolve-form" class="query">
+          <h2 class="pane-heading">Hypersurface germ</h2>
+          <label class="field" for="polynomial">
+            <span>Defining polynomial</span>
+            <textarea id="polynomial" name="polynomial" rows="2" aria-describedby="syntax-hint" spellcheck="false" autocapitalize="off" autocomplete="off" required>y^2-x^3</textarea>
+          </label>
+          <p class="helper" id="syntax-hint">Use <code>*</code> for products and <code>^</code> for powers.</p>
+          <div class="example-controls" role="group" aria-label="Load example germ">
+            <span>Load example</span>
+            <button type="button" data-example="cusp" aria-pressed="true">Cusp</button>
+            <button type="button" data-example="node" aria-pressed="false">Node</button>
+            <button type="button" data-example="tacnode" aria-pressed="false">Tacnode</button>
+          </div>
+          <label class="field" for="variables">
+            <span>Variables</span>
+            <input type="text" id="variables" name="variables" value="x, y" spellcheck="false" autocapitalize="off" autocomplete="off" required>
+          </label>
+          <p class="query-hint warn" id="name-hint" hidden></p>
+          <fieldset class="resolution-mode">
+            <legend>Resolution mode</legend>
+            <label><input type="radio" name="mode" value="embedded" checked> Embedded</label>
+            <label><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
+          </fieldset>
+          <label class="field" for="compute">
+            <span>Compute device</span>
+            <select id="compute" name="compute">
+              <option value="cpu">CPU</option>
+              <option value="auto">Auto</option>
+              <option value="gpu">GPU</option>
+            </select>
+          </label>
+          <div class="resolution-options">
+            <label><input type="checkbox" id="zeta" name="zeta" checked> Monodromy zeta function</label>
+            <label><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive search</label>
+          </div>
+          <button class="primary" id="run" type="submit"><span id="run-label">Resolve</span></button>
+          <p class="error" id="form-error" role="alert" hidden></p>
+          <details class="help">
+            <summary>Syntax and scope</summary>
+            <div class="help-body">
+              <p>Enter the left-hand side of <span class="m"><i>f</i> = 0</span> in the chosen variables with rational coefficients, as in <code>(1/2)*x^3 + y^2</code>. The germ is taken at the origin.</p>
+              <p><b>Embedded</b> resolution keeps the exceptional divisor in the ambient space. <b>Intrinsic</b> resolution records the exceptional locus on the smooth model of the hypersurface. Components are taken over the algebraic closure of <span class="m">ℚ</span>.</p>
+              <p>If the quick calculation is inconclusive, an exhaustive search continues in the background. Select <b>Exhaustive search</b> to start one directly. You can cancel it while it runs.</p>
+            </div>
+          </details>
+        </form>
+      </div>
+
+      <section id="output" class="output-pane" tabindex="-1" aria-label="Resolution output">
+        <p id="announcements" class="visually-hidden" aria-live="polite"></p>
+
+        <figure class="germ-plate" id="germ-plate" aria-labelledby="plate-title plate-equation">
+          <div class="plate-heading">
+            <h2 id="plate-title" class="pane-heading">Plane cusp</h2>
+            <p class="m" id="plate-equation"><i>y</i><sup>2</sup> = <i>x</i><sup>3</sup></p>
+          </div>
+          <svg class="curve-drawing" viewBox="0 0 560 310" role="img" aria-labelledby="curve-title" aria-describedby="plate-caption">
+            <title id="curve-title">Plane cusp in real coordinates</title>
+            <defs>
+              <clipPath id="plot-window"><rect x="16" y="12" width="528" height="286"></rect></clipPath>
+            </defs>
+            <g clip-path="url(#plot-window)">
+              <g class="plot-grid">
+                <path d="M80 12V298 M340 12V298 M470 12V298 M16 35H544 M16 95H544 M16 215H544 M16 275H544"/>
+              </g>
+              <path class="plot-axes" d="M16 155H544 M210 12V298"/>
+              <path class="plot-ticks" d="M80 151v8 M340 151v8 M470 151v8 M206 35h8 M206 95h8 M206 215h8 M206 275h8"/>
+              <g transform="translate(210 155) scale(130 -60)">
+                <path class="germ-curve" id="plate-curve" d="M2.25 -3.375 C-.75 3.375 -.75 -3.375 2.25 3.375" vector-effect="non-scaling-stroke"/>
+              </g>
+              <circle class="singular-point" cx="210" cy="155" r="4"/>
+            </g>
+            <g class="axis-ticks" text-anchor="middle">
+              <text x="80" y="174">−1</text><text x="340" y="174">1</text><text x="470" y="174">2</text>
+            </g>
+            <g class="axis-ticks" text-anchor="end">
+              <text x="200" y="39">2</text><text x="200" y="99">1</text><text x="200" y="219">−1</text><text x="200" y="279">−2</text>
+              <text x="201" y="174">0</text>
+            </g>
+            <g class="axis-labels"><text x="535" y="146">x</text><text x="220" y="24">y</text></g>
+          </svg>
+          <figcaption id="plate-caption">The real cusp is parametrized by <span class="m">(<i>t</i><sup>2</sup>, <i>t</i><sup>3</sup>)</span>.</figcaption>
+        </figure>
+        <section class="germ-preview" id="plate-empty" aria-labelledby="preview-title" hidden>
+          <h2 class="pane-heading" id="preview-title">Input germ</h2>
+          <p class="m" id="preview-equation"></p>
+          <p id="preview-coordinates" class="helper"></p>
+          <p class="helper" id="preview-note"></p>
+        </section>
+
+        <section class="search-job" id="search-job" aria-label="Exhaustive resolution search" hidden>
+          <span class="spinner" id="search-spinner" aria-hidden="true"></span>
+          <div class="search-text">
+            <strong id="search-job-state" role="status"></strong>
+            <p id="search-job-description"></p>
+          </div>
+          <div class="search-actions">
+            <button class="button" id="cancel-search" type="button" hidden>Cancel search</button>
+            <button class="button" id="view-search" type="button" hidden>View result</button>
+            <button class="button" id="dismiss-search" type="button" hidden>Dismiss</button>
+          </div>
+        </section>
+
+        <div class="placeholder" id="placeholder" hidden>
+          <p id="placeholder-text"></p>
         </div>
-        <button class="primary" id="run" type="submit"><span id="run-label">Resolve</span></button>
-      </div>
 
-      <div class="query-options">
-        <label class="option" for="variables">
-          <span>Variables</span>
-          <input type="text" id="variables" name="variables" placeholder="x, y" spellcheck="false" autocapitalize="off" autocomplete="off" required>
-        </label>
-        <fieldset class="option mode">
-          <legend class="visually-hidden">Resolution mode</legend>
-          <label title="Resolve the hypersurface together with its exceptional boundary in the ambient space."><input type="radio" name="mode" value="embedded" checked> Embedded</label>
-          <label title="Resolve the hypersurface itself and inspect the exceptional locus on its smooth model."><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
-        </fieldset>
-        <label class="option check" title="Also compute the zeta function of the local monodromy."><input type="checkbox" id="zeta" name="zeta" checked> Zeta function</label>
-        <label class="option check" title="Start a cancellable background search without the standard request-size or calculation time limit."><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive search</label>
-        <select class="option" id="compute" name="compute" aria-label="Compute device" title="Where eligible rank tests and chart transforms run. The CPU does everything else.">
-          <option value="cpu">CPU</option>
-          <option value="auto">CPU or GPU</option>
-          <option value="gpu">GPU (OpenCL)</option>
-        </select>
-      </div>
-
-      <p class="query-hint warn" id="name-hint" hidden></p>
-      <p class="error" id="form-error" role="alert" hidden></p>
-
-      <details class="help">
-        <summary>Syntax and scope</summary>
-        <div class="help-body">
-          <p>Write the left-hand side of <span class="m"><i>f</i> = 0</span> with rational coefficients, using <code>*</code> for products, <code>^</code> for powers and parentheses, as in <code>(1/2)*x^3 + y^2</code>. The germ is taken at the origin.</p>
-          <p><b>Embedded</b> resolves the hypersurface inside the ambient space; the dual complex is that of the ambient exceptional divisor. <b>Intrinsic</b> resolves the hypersurface itself; the dual complex is that of the exceptional locus on the resolved hypersurface. Components are taken over the algebraic closure of <span class="m">ℚ</span>.</p>
-          <p>The certificate is local at the origin and the resolution is not assumed to be minimal. If the quick resolver is inconclusive, an exhaustive search continues in the background until it finishes or is cancelled.</p>
-        </div>
-      </details>
-    </form>
-
-    <p id="announcements" class="visually-hidden" aria-live="polite"></p>
-
-    <section class="search-job" id="search-job" aria-label="Exhaustive resolution search" hidden>
-      <span class="spinner" id="search-spinner" aria-hidden="true"></span>
-      <div class="search-text">
-        <strong id="search-job-state" role="status"></strong>
-        <p id="search-job-description"></p>
-      </div>
-      <div class="search-actions">
-        <button class="button" id="cancel-search" type="button" hidden>Cancel search</button>
-        <button class="button" id="view-search" type="button" hidden>View result</button>
-        <button class="button" id="dismiss-search" type="button" hidden>Dismiss</button>
-      </div>
-    </section>
-
-    <div class="placeholder" id="placeholder" hidden>
-      <p id="placeholder-text"></p>
+        <article id="result" hidden>
+          <header class="result-head">
+            <p class="stale-note" id="stale" hidden>The input has changed since this result.</p>
+            <div class="result-title">
+              <h2 id="result-equation" class="m" tabindex="-1"></h2>
+              <button class="button export" type="button" id="export" disabled>Download JSON</button>
+            </div>
+            <p class="result-meta"><span id="status" class="status"></span> · <span id="result-mode"></span><span id="metrics"></span></p>
+            <p id="result-summary" hidden></p>
+            <p id="result-diagnostic" hidden></p>
+            <div id="search-offer" class="search-offer" hidden>
+              <button class="button" type="button" id="start-search" title="Search for a verified resolution without a time limit. It can be cancelled.">Start exhaustive search</button>
+            </div>
+          </header>
+          <section class="section" id="panel-complex"></section>
+          <section class="section" id="panel-zeta"></section>
+          <section class="section folded" id="panel-steps"></section>
+          <section class="section folded" id="panel-charts"></section>
+          <section class="section folded" id="panel-record"></section>
+        </article>
+      </section>
     </div>
-
-    <article id="result" hidden>
-      <header class="result-head">
-        <p class="stale-note" id="stale" hidden>The input has changed since this result.</p>
-        <div class="result-title">
-          <h2 id="result-equation" class="m"></h2>
-          <button class="button export" type="button" id="export" disabled>Download JSON</button>
-        </div>
-        <p class="result-meta"><span id="status" class="status"></span> · <span id="result-mode"></span><span id="metrics"></span></p>
-        <p id="result-summary" hidden></p>
-        <p id="result-diagnostic" hidden></p>
-        <div id="search-offer" class="search-offer" hidden>
-          <button class="button" type="button" id="start-search" title="Search for a verified resolution without a time limit. It can be cancelled.">Start exhaustive search</button>
-        </div>
-      </header>
-      <section class="section" id="panel-zeta"></section>
-      <section class="section" id="panel-complex"></section>
-      <section class="section folded" id="panel-steps"></section>
-      <section class="section folded" id="panel-charts"></section>
-      <section class="section folded" id="panel-record"></section>
-    </article>
   </main>
 </body>
 </html>

@@ -6,6 +6,8 @@ C++17, GMP, FLINT and libnormaliz handle point blowups, exact linear algebra and
 
 For a comparison of the two systems and a phased roadmap for bringing more algebra to the Atlas CLI and browser, see [Atlas and Singular](README-singular-comparison.md).
 
+Factor a polynomial over the rationals with `./atlas algebra factor --vars x --poly 'x^4-1'`, with `factor(f)` in a session, or with **Polynomial factorization** in the browser’s Algebra view. Each returns the rational unit, the irreducible factors, and their multiplicities. [Factorization examples](examples/algebra-api.md#polynomial-factorization)
+
 Use the **Algebra** view or `./atlas algebra` for global and local quotient bases, local Jacobian algebras, and Milnor and Tjurina numbers. For example, `./atlas algebra local-jacobian-algebra --vars x,y --poly 'y^2-x^3'` gives basis $1,x$ at the origin and dimension 2. [Examples for the shell, prompt and browser](examples/algebra-api.md#quotient-bases-and-local-hypersurface-invariants)
 
 Local standard bases and normal forms also accept any rational point. For example, `./atlas algebra local-normal-form --vars x,y --point '1/2,-2' --gen 'x-1/2' --gen 'y+2' --poly 'x+y'` returns $-3/2$. [Point coordinates, saved bases and local units](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
@@ -18,13 +20,11 @@ Install a C++17 compiler, Make, pkg-config, Python 3.10 or later and the develop
 make -j4
 ~~~
 
-Run `./atlas` to open a terminal session. On each launch Atlas chooses a
-random plane curve with two branches and at most two Puiseux pairs in total,
-computes its embedded resolution at the origin, and draws the dual graph on
-the welcome map. Each circle represents an exceptional curve. The two arrows
-mark the strict transforms of the branches. Run the displayed `resolve`
-command at the `atlas>` prompt to inspect that example's charts. Type
-`help resolve` to see its options or `quit` to leave.
+Run `./atlas` to open a terminal session. The welcome screen shows the
+folded Atlas logo in ASCII. Each launch also suggests a freshly resolved
+two-branch plane curve. Run the displayed `resolve` command at the `atlas>`
+prompt to inspect its charts and dual graph. Type `help resolve` to see its
+options or `quit` to leave.
 
 You can also run commands directly from your shell.
 
@@ -153,7 +153,9 @@ Quick resolution accepts at most 256 decimal digits in an integer literal, degre
 
 The exhaustive Newton fan accepts arbitrary-precision lattice coordinates. For example, `./atlas resolve 'x^4097+y^4097+z^4097' --vars x,y,z --exhaustive` certifies the embedded resolution in three charts. If the first Newton-face check exceeds its coefficient, exponent, time or Gröbner basis budget, exhaustive resolution retries with an exact rational GCD or a Gröbner basis on the torus. Fan construction still has a 35-second budget, 16,000 rays and 120,000 intermediate cone records. If this shortcut gives up, the resolver can continue searching for a certificate by other methods. [Fan construction](native/newton_fan.cpp) · [Newton-face tests](engine/newton_faces.py)
 
-Euler projection stores only occupied powers and uses arbitrary-precision exponents and fibre counts. For example, it computes the compactly supported Euler characteristic of the complex curve $x^N+y^N=1$ as $N(2-N)$ even for $N=2^{64}$. Polynomial expansion, large intermediate bases and the number of output charts can still exhaust available memory or time. [Euler projection tests](tests/test_constructible_euler.py)
+With `--compute gpu`, Newton and binomial charts can also transform exponents beyond the device's 32-bit range. Atlas splits the coordinates into 14-bit pieces, computes their dot products on the device, and verifies the reconstructed integers against the exact ray valuations. CPU and automatic mode can reuse the valuations directly. The diagonal surface of degree $2^{80}+5$ produced the same three charts on a Radeon 680M and on the CPU. [Chart arithmetic](engine/chart_batch.py) · [Device regression tests](tests/test_gpu_resolution.py)
+
+Euler projection stores only occupied powers and uses arbitrary-precision exponents and fibre counts. For example, it computes the compactly supported Euler characteristic of the complex curve $x^N+y^N=1$ as $N(2-N)$ even for $N=2^{64}$. The production solver also verifies an embedded resolution of $x^N+y^N=0$ in two charts at this degree. Some optional SymPy diagnostic checks use dense polynomials and can run out of memory on the same input. Polynomial expansion, large intermediate bases and the number of output charts remain practical limits for any run. [Euler projection tests](tests/test_constructible_euler.py) · [Plane resolution tests](tests/test_plane_exhaustive.py)
 
 ## The four-variable example
 
@@ -231,7 +233,7 @@ curl -s http://127.0.0.1:8765/api/resolve -H 'Content-Type: application/json' \
 ./atlas resolve 'x^5+z*y^3+z^15+t^4*x+t^8' --vars x,y,z,t --mode intrinsic --gpu --json
 ~~~
 
-For large requests, select **Exhaustive** in the browser or send the same JSON body to the explicit exhaustive endpoint. `POST /api/searches` starts a resolution job. Poll with `GET /api/searches/{id}` and cancel with `DELETE /api/searches/{id}`. `POST /api/algebra/exhaustive` returns the algebra result on the same connection. Both routes accept requests above the usual 32,768-byte limit. The exhaustive algebra route also lifts the ordinary 55-second calculation deadline. The algebra CLI already uses that policy. [HTTP interface](engine/app.py)
+For large requests, select **Exhaustive search** in the resolution form or **Exhaustive mode** in the algebra form. The HTTP equivalents accept the same JSON bodies as the ordinary routes. `POST /api/searches` starts a resolution job. Poll with `GET /api/searches/{id}` and cancel with `DELETE /api/searches/{id}`. `POST /api/algebra/exhaustive` returns the algebra result on the same connection. Both routes accept requests above the usual 32,768-byte limit. The exhaustive algebra route also lifts the ordinary 55-second calculation deadline. The algebra CLI already uses that policy. Resolution downloads preserve large multiplicities as exact JSON integers. Older browsers without lossless JSON support may prompt for a browser update. [HTTP interface](engine/app.py) · [Browser regression tests](tests/test_browser_exhaustive.py)
 
 Resolution defaults to CPU and rational ideal arithmetic defaults to auto. On a machine with a working Triton toolchain, the ordinary native build (`make`) is sufficient. Use `make gpu` to also build the OpenCL plugins. With `--gpu` (equivalently `--compute gpu`, or `"compute":"gpu"` over HTTP) Atlas attempts eligible work on the selected device. By default it tries Triton, then OpenCL, then the exact CPU implementation. Identity resolutions can finish entirely on the CPU. The `execution.stages` entries identify the chart and rank certificates and the actual modular replay batches from the solve and its verification workers. The primary certificate retains its original backend fields.
 

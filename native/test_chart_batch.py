@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from engine.chart_batch import _pack, transform_batch
+from engine.chart_batch import _pack, transform_atlas, transform_batch
 from engine.gpu_devices import available_devices
 from engine.native_backend import gpu_devices
 
@@ -38,6 +38,56 @@ def projections(exps, rays, cones):
 
 
 class ChartBatchTests(unittest.TestCase):
+    def test_wide_cpu_auto_and_absent_device_reuse_valuations(self):
+        exps, rays, cones = [(2**90, 5), (3, 7)], [(11, 2**75), (0, 1)], [(1, 0)]
+        values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
+        orders, expected = projections(exps, rays, cones)
+        with patch("engine.chart_batch._limb_planes", side_effect=AssertionError("unexpected packing")), \
+             patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
+             patch("engine.chart_batch.triton_device", return_value=None):
+            for policy in ("cpu", "auto", "gpu"):
+                result, stats = transform_atlas(exps, rays, cones, orders, values, policy)
+                self.assertEqual(list(result), expected)
+                self.assertEqual(stats["backend"], "cpu")
+
+    def test_wide_device_failure_discards_partial_results(self):
+        exps, rays, cones = [(2**90, 5), (3, 7)], [(11, 2**75), (0, 1)], [(1, 0)]
+        values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
+        orders, expected = projections(exps, rays, cones)
+        with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
+             patch("engine.chart_batch.triton_device", return_value={"index": 0}), \
+             patch("engine.chart_batch._accelerate", side_effect=[True, False]) as device:
+            result, stats = transform_atlas(exps, rays, cones, orders, values, "gpu")
+        self.assertEqual(list(result), expected)
+        self.assertEqual(device.call_count, 2)
+        self.assertEqual(stats["limb_batches"], 1)
+        self.assertIn("did not complete", stats["fallback_reason"])
+
+    def test_oversized_chart_count_still_uses_exact_known_valuations(self):
+        exps, rays, cones = [(2,0), (0,3)], [(1,0), (0,1)], [(1,0), (0,1)]
+        orders, expected = projections(exps, rays, cones)
+        with patch("engine.chart_batch._MAX_PAIRS", 1), patch("engine.chart_batch._limb_planes") as pack:
+            result, stats = transform_atlas(exps, rays, cones, orders, [(2,0), (0,3)], "gpu")
+        self.assertEqual(list(result), expected)
+        self.assertEqual(stats["backend"], "cpu")
+        self.assertIn("batch size", stats["fallback_reason"])
+        pack.assert_not_called()
+
+    @unittest.skipUnless(gpu_devices(), "OpenCL GPU unavailable")
+    def test_wide_eight_axis_digit_sums_on_device(self):
+        # Eight maximum digit products in one sum, with nonzero low and high
+        # limbs on both sides and a zero limb between them.
+        magnitude = 16383 + (16383 << 70)
+        exps = [(magnitude,)*8, tuple(magnitude-(i+1) for i in range(8))]
+        rays = [(magnitude,)*8, tuple(magnitude if i%2 else 0 for i in range(8))]
+        cones = [tuple(i%2 for i in range(8))]
+        values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
+        orders, expected = projections(exps, rays, cones)
+        with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="opencl", RESOLUTION_GPU_INDEX="0"):
+            result, stats = transform_atlas(exps, rays, cones, orders, values, "gpu")
+        self.assertEqual(list(result), expected)
+        self.assertEqual((stats["backend"], stats["limb_batches"]), ("opencl", 4))
+
     def test_cpu_exact(self):
         for exps, rays, cones in [example(), random_batch(3), random_batch(4), random_batch(8)]:
             orders, expected = projections(exps, rays, cones)

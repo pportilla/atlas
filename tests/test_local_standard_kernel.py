@@ -179,6 +179,25 @@ class LocalStandardKernel(unittest.TestCase):
                                     names=("x",), point=["-1/1000000007"])
         self.assertEqual(result["generators"], ["1"])
 
+    def test_project_monomial_ideal_at_mixed_point_without_expanding_wide_powers(self):
+        names, point = ("x", "y", "z"), ["2/3", "0", "-3/4"]
+        n = 2**64 + 1
+        ideal = [f"x^{n}*y^2", "z^3*y^3"]
+        query = f"x^{n}+x^{n-1}*y^2"
+        # x and z are units here. Only the y-exponents can cut out the ideal.
+        with patch.object(local_standard, "_translate", side_effect=AssertionError("unexpected translation")):
+            basis = self.calculate("local-standard-basis", ideal, names=names, point=point)
+            result = self.calculate("local-normal-form", ideal, query, names=names, point=point)
+        rows = [parse_expression(g, names) for g in basis["generators"]]
+        self.assertIn({(0, 2, 0): 1}, rows)
+        for row in rows:
+            self.assertEqual(len(row), 1)
+            ((a, b, c), coefficient), = row.items()
+            self.assertEqual((a, c, coefficient), (0, 0, 1))
+            self.assertGreaterEqual(b, 2)
+        self.assertEqual((result["reduction"], result["unit"]), ("standard", "1"))
+        self.assertEqual(parse_expression(result["remainder"], names), {(n, 0, 0): 1})
+
     def test_saved_standard_basis_at_its_point_skips_basis_computation(self):
         names, point = ("x", "y"), ["1/2", "-1/3"]
         a, b = "(x-1/2)", "(y+1/3)"

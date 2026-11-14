@@ -14,6 +14,7 @@ import ctypes
 from fractions import Fraction
 
 from . import native_library as gb
+from .monodromy import cyclotomic_exponent
 from .polynomial import InputError
 
 
@@ -193,7 +194,7 @@ def topological_zeta(record, *, polynomial=None, monodromy=None, strata=None):
         # divides an unbalanced product of the factors 1 - T^N.
         for pole in poles:
             q = Fraction(pole["value"]).denominator
-            balance = sum(factor["exponent"] for factor in monodromy["factors"] if factor["multiplicity"] % q == 0)
+            balance = cyclotomic_exponent(monodromy["factors"], q)
             pole["in_monodromy_zeta_at_origin"] = balance != 0
     return {"status": "computed", "variable": "s",
             "formula": "sum_I chi(E_I^open intersect pi^(-1)(0)) * prod_{i in I} 1/(N_i*s + nu_i)",

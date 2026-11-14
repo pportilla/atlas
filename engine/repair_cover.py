@@ -75,22 +75,26 @@ def _lifted_centre(parent, centre, children, count):
             continue
         t, = c.ambient[0].free_symbols
         minimal = c.ambient[0]
-        if t in coords or not _field_relation(t, minimal, count):
+        if not _field_relation(t, minimal, count):
             continue
+        # Parent and child coordinate names are local. A child parameter
+        # may have the same spelling as an unrelated parent coordinate.
+        parameter = t if t not in coords else api.Dummy("repair_parameter")
+        rename = {**restore, t: parameter}
         ring = (*[v for v in c.variables if v != t], *targets, t)
         graph = (*c.ambient, *c.fibre, *c.region, *(v-g for v,g in zip(targets,c.repair_projection[1])))
         for unit in _covers(c.variables, c.removed):
             inverse = api.Dummy("repair_open")
             basis = groebner((*graph, 1-inverse*unit), (inverse,*ring), order="lex")
-            image = tuple(g.xreplace(restore) for g in basis.exprs if g.free_symbols <= {*targets,t})
-            if image == (1,) or _dimension((*coords,t), image) != 0:
+            image = tuple(g.xreplace(rename) for g in basis.exprs if g.free_symbols <= {*targets,t})
+            if image == (1,) or _dimension((*coords,parameter), image) != 0:
                 continue
-            projected = groebner(image, (t,*coords), order="lex")
-            closed = tuple(g for g in projected.exprs if t not in g.free_symbols)
+            projected = groebner(image, (parameter,*coords), order="lex")
+            closed = tuple(g for g in projected.exprs if parameter not in g.free_symbols)
             if (radical_subset(coords, closed, centre) and radical_subset(coords, centre, closed)
-                    and euler_characteristic((*coords,t), image) == count):
-                fibre = tuple(g for g in image if g.free_symbols != {t})
-                return (*coords,t), (minimal,), fibre
+                    and euler_characteristic((*coords,parameter), image) == count):
+                fibre = tuple(g for g in image if g.free_symbols != {parameter})
+                return (*coords,parameter), (minimal.xreplace({t: parameter}),), fibre
     return None
 
 

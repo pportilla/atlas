@@ -64,7 +64,7 @@ class ExhaustiveHTTPTests(unittest.TestCase):
             for path, timeout in [("/api/algebra", MAX_SECONDS), ("/api/algebra/exhaustive", None)]:
                 status, _ = post(self.base + path, {})
                 self.assertEqual(status, 200)
-                self.assertIs(calculate.call_args.kwargs["timeout"], timeout)
+                self.assertEqual(calculate.call_args.kwargs["timeout"], timeout)
 
     def test_server_close_reaps_long_running_algebra(self):
         started = threading.Event()
@@ -72,7 +72,7 @@ class ExhaustiveHTTPTests(unittest.TestCase):
         start = self.server.workers.start
 
         def wait_for_shutdown(*args, **options):
-            child = start([sys.executable, "-c", "import signal; signal.pause()"], **options)
+            child = start([sys.executable, "-c", "import signal\nsignal.pause()"], **options)
             children.append(child)
             started.set()
             return child
@@ -86,7 +86,9 @@ class ExhaustiveHTTPTests(unittest.TestCase):
 
     def test_standalone_resolution_roundtrips_wide_numeric_fields(self):
         n = "9" * 4501
-        env = os.environ.copy()
+        # Exercise the production worker. Its dense diagnostic oracle cannot
+        # materialize the input degree; the two integer identities below are exact.
+        env = dict(os.environ, ATLAS_GROEBNER="native")
         env.pop("PYTHONINTMAXSTRDIGITS", None)
         process = subprocess.run([str(ROOT / "atlas"), "resolve", "x^" + n + "*y", "--vars", "x,y",
                                   "--exhaustive", "--json"], env=env, capture_output=True, text=True, timeout=15)

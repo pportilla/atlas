@@ -79,6 +79,15 @@ class AlgebraSession {
     const survivors = answer.result.ring.variables;
     const space = survivors.length ? JSON.stringify([origin, survivors]) : "QQ";
     this.objects.set(form.name, { result: answer.result, basisRef: answer.basis_ref, origin, space });
+    if (answer.result.type === "factorization") {
+      answer.result.factors.forEach(({ polynomial }, index) => {
+        const field = ".factors[" + index + "].polynomial";
+        this.objects.set(form.name + field, {
+          result: { type: "polynomial", ring: answer.result.ring, polynomial },
+          owner: form.name, field, origin, space,
+        });
+      });
+    }
   }
 
   script() {
@@ -97,8 +106,9 @@ class AlgebraSession {
       return name;
     }
     const names = new Map();
-    for (const name of this.objects.keys()) {
-      names.set(name, AlgebraSession.reserved.has(name) ? local("", "saved") : name);
+    for (const [name, saved] of this.objects) {
+      if (saved.owner) names.set(name, names.get(saved.owner) + saved.field);
+      else names.set(name, AlgebraSession.reserved.has(name) ? local("", "saved") : name);
     }
     const rings = new Map();
     const lines = [];
@@ -120,7 +130,8 @@ class AlgebraSession {
     for (const form of this.steps) {
       const { operation, operands, sources, ring } = form;
       const firstSource = Object.values(sources)[0];
-      const coords = firstSource ? names.get(firstSource) + ".coordinates" : ringCoordinates(ring);
+      const owner = firstSource && (this.objects.get(firstSource).owner || firstSource);
+      const coords = owner ? names.get(owner) + ".coordinates" : ringCoordinates(ring);
       const variableArgs = "variables=" + coords;
       const quote = JSON.stringify;
       const literal = (expr) => "polynomial(" + quote(expr) + ", " + variableArgs + ")";
@@ -143,7 +154,7 @@ class AlgebraSession {
         let args;
         if (operation === "gcd") {
           args = [poly("polynomial"), poly("other_polynomial"), "order=" + quote(ring.order)];
-        } else if (AlgebraSession.hypersurfaceOperations.has(operation)) {
+        } else if (operation === "factor" || AlgebraSession.hypersurfaceOperations.has(operation)) {
           args = [poly("polynomial"), "order=" + quote(ring.order)];
         } else {
           args = [ideal("ideal")];
@@ -169,6 +180,6 @@ AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate dimension gcd algebra_request help quit exit " +
+  "quotient saturation saturate dimension gcd factor algebra_request help quit exit " +
   "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form"
 ).split(" "));

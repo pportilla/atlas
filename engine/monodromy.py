@@ -4,6 +4,11 @@ from collections import Counter
 from .polynomial import InputError
 
 
+def cyclotomic_exponent(factors, order):
+    """Valuation at a primitive root of this order of the product of (1 - T^N)^e."""
+    return sum(row["exponent"] for row in factors if row["multiplicity"] % order == 0)
+
+
 def _quotient(factors):
     numerator, denominator = [], []
     for row in factors:

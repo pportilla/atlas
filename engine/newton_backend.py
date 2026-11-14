@@ -2,10 +2,10 @@
 from itertools import combinations
 from math import comb, prod
 
-from .chart_batch import transform_batch
+from .chart_batch import transform_atlas
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 from .newton_fan import build_fan
-from .polynomial import format_poly, LimitError
+from .polynomial import format_poly, integer_from_decimal, integer_text, LimitError
 
 
 def pairing(vector, exponent):
@@ -13,7 +13,7 @@ def pairing(vector, exponent):
 
 
 def monomial(coordinates, powers):
-    return '*'.join(name if power == 1 else f'{name}^{power}'
+    return '*'.join(name if power == 1 else f'{name}^{integer_text(power)}'
                     for name, power in zip(coordinates, powers) if power) or '1'
 
 
@@ -42,8 +42,8 @@ def _valuations(rays, exponents):
         if not hasattr(_kernel(), "atlas_valuations_abi"):
             raise Unavailable("The lattice pairing kernel is unavailable.")
         rows = affine_request(["lattice_valuations", str(len(rays[0])), str(len(rays)),
-                               *(" ".join(map(str, r)) for r in (*rays, *exponents))])
-        return [list(map(int, row.split())) for row in rows]
+                               *(" ".join(map(integer_text, r)) for r in (*rays, *exponents))])
+        return [list(map(integer_from_decimal, row.split())) for row in rows]
     return checked_native(native, lambda: [[pairing(v, e) for e in exponents] for v in rays])
 
 
@@ -206,15 +206,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
                 record['root']=proof['root_family']+f'_{k}'
             strata[subset].append(ident)
 
-    # The packed CPU and OpenCL kernels have the same signed 32-bit domain.
-    # Wider substitutions reuse the arbitrary-precision valuations above.
-    if max(map(sum,exponents))*max(map(max,rays)) <= 2**31-1:
-        powers_by_chart, batch = transform_batch(exponents,rays,cones,orders,compute=compute)
-    else:
-        powers_by_chart = ([tuple(valuations[i][j]-orders[i] for i in cone)
-                            for j in range(len(exponents))] for cone in cones)
-        batch = {'backend':'cpu','arithmetic':'arbitrary precision',
-                 'dimension':n,'chart_term_pairs':len(cones)*len(exponents)}
+    powers_by_chart, batch = transform_atlas(exponents, rays, cones, orders, valuations, compute)
     coefficients = [poly[e] for e in exponents]
     directions = list(dict.fromkeys(tuple(proof["edge"]["direction"]) for proof in faces.values()
                       if not degenerate and mode == "intrinsic" and proof["face_dimension"] == 1))

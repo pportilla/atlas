@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from fractions import Fraction
 import json
+from typing import NamedTuple
 from weakref import WeakValueDictionary
 
 from . import native_polynomial as native
@@ -137,8 +138,17 @@ class _LocalNormalForm(_PointResult):
 
 
 @dataclass(frozen=True, eq=False, repr=False)
-class _PolynomialResult(_Result, Polynomial):
+class _OrderedPolynomial(Polynomial):
     order: str
+
+    def session_attribute(self, name):
+        if name == "order":
+            return self.order
+        return super().session_attribute(name)
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _PolynomialResult(_Result, _OrderedPolynomial):
     _record: dict
     _fields = _Result._fields | {"polynomial"}
 
@@ -150,6 +160,33 @@ class _PolynomialResult(_Result, Polynomial):
     @property
     def polynomial(self):
         return self
+
+
+class _Factor(NamedTuple):
+    polynomial: Polynomial
+    multiplicity: int
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise AttributeError(f"A factor has no Atlas field {name!r}.")
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _Factorization(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    unit: Fraction
+    factors: tuple[_Factor, ...]
+    _fields = _Result._fields | {"unit", "factors"}
+
+    def __repr__(self):
+        terms = [rational_text(self.unit)]
+        for polynomial, multiplicity in self.factors:
+            power = "" if multiplicity == 1 else "^" + integer_text(multiplicity)
+            terms.append(f"({polynomial}){power}")
+        return "*".join(terms)
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -293,7 +330,7 @@ def _polynomial_inputs(values, order, variables, default_space=None):
     # Coordinate expressions carry their space; computed results also carry
     # the order used for their calculation.
     if order is None:
-        orders = {f.order for f in values if isinstance(f, _PolynomialResult)}
+        orders = {f.order for f in values if isinstance(f, _OrderedPolynomial)}
         if len(orders) > 1:
             raise ValueError("Choose an explicit monomial order for these polynomials.")
         order = next(iter(orders), "grevlex")
@@ -350,6 +387,13 @@ def _typed(record, space):
         return _QuotientBasis(space, order, record, basis)
     if kind == "polynomial":
         return _PolynomialResult(space, decode(result["polynomial"]), order, record)
+    if kind == "factorization":
+        unit = sparse_row(result["unit"])[()]
+        factors = tuple(
+            _Factor(_OrderedPolynomial(space, decode(entry["polynomial"]), order), entry["multiplicity"])
+            for entry in result["factors"]
+        )
+        return _Factorization(space, order, record, unit, factors)
     if kind in ("boolean", "integer"):
         cls = _LocalNumber if "finite" in result else _ScalarResult
         return cls(space, order, result["value"], record)
@@ -451,6 +495,11 @@ def gcd(left, right, *, order=None, variables=None, compute="auto"):
     return _calculate_polynomials("gcd", order, variables, compute, polynomial=left, other_polynomial=right)
 
 
+def factor(polynomial, *, order=None, variables=None, compute="auto"):
+    """Rational unit and monic irreducible factors in the polynomial's coordinate space."""
+    return _calculate_polynomials("factor", order, variables, compute, polynomial=polynomial)
+
+
 def local_jacobian_algebra(polynomial, *, order=None, variables=None, compute="auto"):
     return _calculate_polynomials("local-jacobian-algebra", order, variables, compute, polynomial=polynomial)
 
@@ -501,7 +550,7 @@ def local_quotient_basis(ideal, *, compute="auto"):
 
 
 def algebra_bindings():
-    return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd,
+    return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
             "normal_form": normal_form, "membership": membership,
             "local_standard_basis": local_standard_basis, "local_normal_form": local_normal_form,
             "eliminate": eliminate, "intersection": intersection, "quotient": quotient,

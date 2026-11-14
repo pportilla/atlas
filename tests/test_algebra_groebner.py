@@ -98,6 +98,34 @@ class RationalBasisHandlers(unittest.TestCase):
         self.assertEqual(algebra.normal_form(power*(y**2 + y), basis), power*(2 + y))
         self.assertTrue(algebra.ideal_membership(power*(y**2 - 2), basis))
 
+    def test_diagnostic_normal_form_only_computes_the_remainder(self):
+        from sympy.polys.rings import PolyElement
+
+        x, y = self.variables
+        # The exact quotient has 1,500 monomials and the remainder has one.
+        query, expected = x**1500, y**1500
+        for mode in ("sympy", "check"):
+            with self.subTest(mode=mode), patch.object(algebra.gb, "_MODE", mode):
+                basis = algebra.reduced_basis([x - y], self.variables, order="lex")
+                with patch.object(PolyElement, "div", side_effect=AssertionError("built quotients")):
+                    self.assertEqual(algebra.normal_form(query, basis), expected)
+
+    def test_checked_wide_block_division_verifies_quotient_lists(self):
+        x, y = self.variables
+        # A wide first-variable block supplies the full ordered quotients.
+        with patch.object(algebra.gb, "_MODE", "check"):
+            basis = algebra.reduced_basis((x - y, y**40000), self.variables, order="first")
+        checked = basis._basis
+        f = x**2 + y - 1
+        qs, remainder = checked.reduce(f)
+        self.assertEqual((qs, remainder), ([x + y, 0], y**2 + y - 1))
+        with patch.object(checked._reference, "reduce", return_value=([x - y, 0], remainder)):
+            with self.assertRaises(AssertionError):
+                checked.reduce(f)
+        with patch.object(checked._reference, "remainder", return_value=remainder + 1):
+            with self.assertRaises(AssertionError):
+                algebra.normal_form(f, basis)
+
     @unittest.skipUnless(algebra.gb._MODE == "native" and hasattr(_kernel(), "atlas_wide_remainder_abi"),
                          "requires native arbitrary-precision sparse remainders")
     def test_wide_binomial_basis_and_trusted_restore(self):

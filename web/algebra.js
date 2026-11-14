@@ -6,6 +6,7 @@ const operation = byId("operation");
 const polynomial = byId("polynomial");
 const polynomialLabels = {
   gcd: "First polynomial",
+  factor: "Polynomial to factor",
   "normal-form": "Polynomial to reduce",
   "local-normal-form": "Polynomial to reduce",
   membership: "Polynomial to test",
@@ -14,7 +15,7 @@ const polynomialLabels = {
   "milnor-number": "Hypersurface polynomial f with f(0) = 0",
   "tjurina-number": "Hypersurface polynomial f with f(0) = 0",
 };
-const polynomialInputs = { gcd: "(x+y)*(x+1)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
+const polynomialInputs = { gcd: "(x+y)*(x+1)", factor: "-3/2*(x-y)^2*(x+y)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
 const quotientDescriptions = {
   "quotient-basis": "Find a monomial basis of the quotient by I over ℚ, including points away from the origin.",
   "local-quotient-basis": "Find a monomial basis of the quotient by I after localizing at the origin, where all coordinates are zero.",
@@ -100,7 +101,7 @@ function updateOperation() {
   }
   byId("saturation-help").hidden = activeOperation !== "saturation";
   const needsTwoPolynomials = activeOperation === "gcd";
-  const needsFirstIdeal = !needsTwoPolynomials && !AlgebraSession.hypersurfaceOperations.has(activeOperation);
+  const needsFirstIdeal = !needsTwoPolynomials && activeOperation !== "factor" && !AlgebraSession.hypersurfaceOperations.has(activeOperation);
   showOperandGroup("first-ideal", needsFirstIdeal);
   showOperandGroup("other-polynomial-field", needsTwoPolynomials);
   byId("gcd-help").hidden = !needsTwoPolynomials;
@@ -152,9 +153,10 @@ function updateSources() {
     const select = byId(source);
     const previous = select.value;
     select.replaceChildren(select.options[0]);
-    for (const [name, { result }] of session.objects) {
+    for (const [name, { result, owner }] of session.objects) {
       if (!kinds.includes(result.type)) continue;
       let kind = result.type;
+      if (owner) kind = result.polynomial;
       if (kind === "local-jacobian-algebra") kind = "Jacobian ideal (partial derivatives)";
       if (kind === "local-standard-basis") kind = "local standard basis " + scopeText(result);
       const option = new Option(name + " · " + kind + " · " + ringText(result.ring), name);
@@ -213,6 +215,7 @@ function readRequest() {
 function markChanges() {
   const current = readRequest();
   byId("stale").hidden = !submitted || running || JSON.stringify(current) === JSON.stringify(submitted);
+  byId("algebra-problem").classList.toggle("compact", Boolean(submitted) && !running && byId("stale").hidden);
   showProblem(current);
 }
 
@@ -241,6 +244,7 @@ for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-so
 form.addEventListener("input", markChanges);
 form.addEventListener("change", markChanges);
 const resultTitles = {
+  factor: "Polynomial factorization",
   gcd: "Monic polynomial GCD",
   ideal: "Ideal",
   groebner: "Reduced Gröbner basis",
@@ -302,6 +306,7 @@ function expressionText(source) {
 }
 
 const problemNotation = {
+  factor: "factor(<i>f</i>)",
   "normal-form": "NF<sub>I</sub>(<i>f</i>)",
   groebner: "GB(<i>I</i>)",
   membership: "<i>f</i> ∈ <i>I</i> ?",
@@ -389,6 +394,29 @@ function showQuotient(value, result) {
   }
 }
 
+function showFactorization(value, result) {
+  value.replaceChildren(mathSpan("h3", "quotient-label", "Rational unit"), expressionText(result.unit));
+  if (!result.factors.length) {
+    value.append(mathSpan("p", "helper", "This constant has no irreducible factors."));
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "factorization";
+  const header = table.createTHead().insertRow();
+  for (const title of ["Irreducible factor", "Multiplicity"]) {
+    const column = mathSpan("th", "", title);
+    column.scope = "col";
+    header.append(column);
+  }
+  const rows = table.createTBody();
+  for (const { polynomial, multiplicity } of result.factors) {
+    const row = rows.insertRow();
+    row.insertCell().append(expressionText(polynomial));
+    row.insertCell().textContent = String(multiplicity);
+  }
+  value.append(table);
+}
+
 function scopeText(result) {
   if (result.scope === "origin") return "at the origin";
   if (result.scope === "global") return "global quotient";
@@ -436,6 +464,9 @@ function showResult(record) {
       break;
     case "polynomial":
       value.replaceChildren(expressionText(result.polynomial));
+      break;
+    case "factorization":
+      showFactorization(value, result);
       break;
     case "local-normal-form":
       showLocalNormalForm(value, result);

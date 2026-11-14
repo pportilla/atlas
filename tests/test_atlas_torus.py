@@ -74,6 +74,23 @@ class TorusChartCertification(unittest.TestCase):
         self.assertEqual(first, scaled)
         self.assertNotEqual(first, different)
 
+    def test_same_orbit_sections_do_not_certify_a_changed_strict_equation(self):
+        from engine.monomial_atlas import fan_outputs
+        from engine.native_library import _MODE
+        from engine.strata import InvalidChart
+        original = atlas.to_json(self.charts)
+        self.assertIsNotNone(torus_complex(self.charts, 3, True))
+        chart = original[-1]
+        strict = next(c for c in chart["components"] if c["id"] == "strict")
+        # The added term and its first derivatives vanish on every boundary
+        # hyperplane. All orbit restrictions agree with the original chart.
+        strict["ideal"][0] += "+(" + "*".join(chart["coordinates"]) + ")^2"
+        self.assertIsNone(torus_complex(atlas.from_json(original), 3, True))
+        if _MODE != "sympy":
+            with self.assertRaises(InvalidChart):
+                fan_outputs(dict(variables=self.names, atlas=original),
+                            parse("x^2+y^3+z^5", self.names), intrinsic=True)
+
     def test_root_indices_match_on_all_split_incident_curves(self):
         result = resolve({"variables": self.names, "polynomial": "2*x^2+3*y^4-z^7+x*y*z^4",
                           "mode": "intrinsic"})

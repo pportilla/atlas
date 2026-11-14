@@ -62,7 +62,7 @@ Atlas now computes the same local algebra directly. Run `./atlas algebra local-j
 
 ## Phased roadmap
 
-Phases 1 and 2 have working public examples. Phase 3 includes polynomial GCD, finite quotient bases and the first local hypersurface invariants over the rationals.
+Phases 1 and 2 have working public examples. Phase 3 includes polynomial GCD and factorization, finite quotient bases and the first local hypersurface invariants over the rationals.
 
 ### Phase 1. Expose rational ideal arithmetic
 
@@ -101,7 +101,9 @@ Quotient bases are available both globally and at the origin. The local Jacobian
 
 Local standard bases and normal forms are available at any rational point for the supported degree-local orders. A saved basis retains the point, and a weak normal form records the unit needed to interpret its remainder. The CLI, scripts and guided browser expose the same calculation. [Rational-point examples](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
 
-Remaining milestones include user-facing factorization, resultants, Hilbert series, multiplicities, radicals, primary decomposition, associated primes and normalization. Extend to localization at more general primes, arithmetic in user-declared quotient rings, weighted and block orders, finite fields, algebraic and transcendental extensions, integer and residue rings, and approximate domains. [Singular core algorithms](https://www.singular.uni-kl.de/Manual/4-4/sing_33.htm) · [Commutative algebra libraries](https://www.singular.uni-kl.de/Manual/4-4/sing_1249.htm)
+Polynomial factorization over $\mathbb Q$ returns the rational unit and the monic irreducible factors with their multiplicities. Individual factors can be reused in their original coordinates. The Phase 3 example $x^2+1$ is irreducible over $\mathbb Q$. The $\mathbb Q(i)$ case awaits user-declared extension fields. [Factorization examples](examples/algebra-api.md#polynomial-factorization)
+
+Remaining milestones include resultants, Hilbert series, multiplicities, radicals, primary decomposition, associated primes and normalization. Extend to localization at more general primes, arithmetic in user-declared quotient rings, weighted and block orders, finite fields, algebraic and transcendental extensions, integer and residue rings, and approximate domains. [Singular core algorithms](https://www.singular.uni-kl.de/Manual/4-4/sing_33.htm) · [Commutative algebra libraries](https://www.singular.uni-kl.de/Manual/4-4/sing_1249.htm)
 
 ### Phase 4. Support modules, maps and homological algebra
 

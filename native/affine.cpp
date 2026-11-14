@@ -233,6 +233,56 @@ void emit(std::string& text, const Polynomial& f) {
     text += '\n';
 }
 
+// The squarefree supports generate the radical of the owned monomial ideal.
+// A term in its square is a multiple of a pair of supports A,B: every
+// exponent on A|B is positive, and every exponent on A&B is at least two.
+// Its value and first derivatives therefore vanish everywhere on that locus.
+Polynomial crossing_jet(const Polynomial& strict, const std::string& supports) {
+    const auto& ring = strict.ring;
+    if (ring.n >= 64) throw Limit("Too many axes for a monomial support mask.");
+    std::istringstream input(supports);
+    std::vector<uint64_t> masks;
+    for (uint64_t m; input >> m;) {
+        if (m >> ring.n) throw std::invalid_argument("Invalid owned monomial support.");
+        if (std::none_of(masks.begin(), masks.end(), [m](uint64_t a){ return (a & m) == a; })) {
+            masks.erase(std::remove_if(masks.begin(), masks.end(), [m](uint64_t a){ return (a & m) == m; }),
+                        masks.end());
+            masks.push_back(m);
+        }
+    }
+    if (!input.eof() || masks.empty()) throw std::invalid_argument("Expected owned monomial supports.");
+    std::vector<std::pair<uint64_t,uint64_t>> square;
+    for (size_t i = 0; i < masks.size(); ++i)
+        for (size_t j = i; j < masks.size(); ++j)
+            square.emplace_back(masks[i] | masks[j], masks[i] & masks[j]);
+
+    Polynomial jet(ring);
+    std::vector<Z> powers(ring.n);
+    std::vector<fmpz*> exponents;
+    for (auto& e : powers) exponents.push_back(&e.v);
+    Z coefficient;
+    for (slong i = 0; i < strict.p->zpoly->length; ++i) {
+        fmpq_mpoly_get_term_exp_fmpz(exponents.data(), strict.p, i, ring.ctx);
+        uint64_t positive = 0, repeated = 0;
+        for (int j = 0; j < ring.n; ++j) {
+            if (!fmpz_is_zero(exponents[j])) {
+                positive |= uint64_t(1) << j;
+                if (!fmpz_is_one(exponents[j])) repeated |= uint64_t(1) << j;
+            }
+        }
+        if (std::any_of(square.begin(), square.end(), [&](const auto& divisor) {
+                return !(divisor.first & ~positive) && !(divisor.second & ~repeated);
+            })) continue;
+        fmpz_mpoly_get_term_coeff_fmpz(&coefficient.v, strict.p->zpoly, i, ring.ctx->zctx);
+        fmpz_mpoly_push_term_fmpz_fmpz(jet.p->zpoly, &coefficient.v, exponents.data(), ring.ctx->zctx);
+    }
+    // Filtering preserves order and distinctness. Restore rational content
+    // even if the remaining integer coefficients acquire a common factor.
+    fmpq_set(jet.p->content, strict.p->content);
+    fmpq_mpoly_reduce(jet.p, ring.ctx);
+    return jet;
+}
+
 // Saved record grammar, matching polynomial.parse_expression. No evaluation
 // of identifiers, calls or general rational functions is permitted.
 struct InputBudget {
@@ -1065,6 +1115,7 @@ std::string affine(std::istream& in) {
         }
     }
     emit(result, strict);
+    if (in.peek() != std::char_traits<char>::eof()) emit(result, crossing_jet(strict, line(in)));
     return result;
 }
 }  // namespace
@@ -1076,6 +1127,7 @@ extern "C" int atlas_geometric_factors_abi() noexcept { return 1; }
 extern "C" int atlas_wide_abi() noexcept { return 1; }
 extern "C" int atlas_wide_dimension_abi() noexcept { return 1; }
 extern "C" int atlas_jet_abi() noexcept { return 1; }
+extern "C" int atlas_crossing_jet_abi() noexcept { return 1; }
 extern "C" int atlas_residual_abi() noexcept { return 1; }
 
 extern "C" char* atlas_affine(const char* input, size_t length) noexcept {

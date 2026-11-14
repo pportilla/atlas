@@ -28,11 +28,14 @@ class ReducedBasis:
     exprs: tuple
     _basis: object
 
-    def reduce(self, polynomial):
+    def remainder(self, polynomial):
         polynomial = _operand(polynomial, self.gens)
         if not self.gens:  # The only ideals in QQ are (0) and (1).
-            return None, np.S.Zero if self.exprs else polynomial
-        return None, self._basis.reduce(polynomial)[1]
+            return np.S.Zero if self.exprs else polynomial
+        return self._basis.remainder(polynomial)
+
+    def reduce(self, polynomial):
+        return None, self.remainder(polynomial)
 
     def contains(self, polynomial):
         polynomial = _operand(polynomial, self.gens)
@@ -42,41 +45,40 @@ class ReducedBasis:
 
 
 class _SymbolicBasis:
-    """Adapt the optional comparison modes back into the same native coordinates."""
+    """Independent sparse QQ basis and division in optional diagnostic modes."""
     def __init__(self, generators, variables, order, trusted):
+        from sympy.polys.groebnertools import groebner
+        from sympy.polys.rings import ring
         self.variables = variables
-        self.symbols = tuple(sp.Dummy(variable.name) for variable in variables)
-        self.order = gb._reference_order(order)
-        expressions = tuple(self._symbolic(f) for f in generators)
-        if trusted:
-            # A serialized basis was already checked. Divide by its rows directly.
-            self._basis = None
-            self.divisors = expressions
-            self.exprs = list(generators)
-        else:
-            self._basis = gb.groebner(expressions, self.symbols, order=order)
-            self.exprs = tuple(self._native(f) for f in self._basis.exprs)
+        symbols = tuple(sp.Dummy(variable.name) for variable in variables)
+        self.ring, *_ = ring(symbols, sp.QQ, order=gb._reference_order(order))
+        rows = [self._symbolic(f) for f in generators if f]
+        self.divisors = rows if trusted else groebner(rows, self.ring)
+        self.exprs = [self._native(f) for f in self.divisors]
 
     def _symbolic(self, polynomial):
-        return sp.Poly.from_dict(np.terms(self.variables, polynomial),
-                                 *self.symbols, domain=sp.QQ).as_expr()
+        return self.ring.from_dict(np.terms(self.variables, polynomial))
 
     def _native(self, polynomial):
-        terms = sp.Poly(polynomial, *self.symbols, domain=sp.QQ).as_dict()
-        return np.from_terms(self.variables, terms)
+        return np.from_terms(self.variables, {e: sp.QQ.to_sympy(c) for e, c in polynomial.items()})
 
     def reduce(self, polynomial):
-        f = self._symbolic(polynomial)
-        if self._basis is None:
-            _, remainder = sp.reduced(f, self.divisors, *self.symbols, domain=sp.QQ, order=self.order)
-        else:
-            _, remainder = self._basis.reduce(f)
-        return None, self._native(remainder)
+        quotients, remainder = self._symbolic(polynomial).div(self.divisors)
+        return [self._native(q) for q in quotients], self._native(remainder)
+
+    def remainder(self, polynomial):
+        return self._native(self._symbolic(polynomial).rem(self.divisors))
 
     def contains(self, polynomial):
-        if self._basis is None:
-            return not self.reduce(polynomial)[1]
-        return self._basis.contains(self._symbolic(polynomial))
+        return not self._symbolic(polynomial).rem(self.divisors)
+
+
+class _CheckedRationalBasis(gb._Checked):
+    def remainder(self, polynomial):
+        answer = self._native.remainder(polynomial)
+        if answer != self._reference.remainder(polynomial):
+            raise AssertionError("The native normal form differs from SymPy's.")
+        return answer
 
 
 def _restore_native(generators, variables, order):
@@ -104,12 +106,16 @@ def _make_basis(generators, variables, order, *, trusted):
     generators = tuple(_operand(f, variables) for f in generators)
     if not variables:
         return ReducedBasis((), order, (np.S.One,) if any(generators) else (), None)
-    if trusted and gb._MODE != "sympy":
-        basis = _restore_native(generators, variables, order)
-        if gb._MODE == "check":
-            basis = gb._Checked(basis, _SymbolicBasis(generators, variables, order, trusted=True))
-    elif gb._MODE in ("sympy", "check"):
+    if gb._MODE == "sympy":
         basis = _SymbolicBasis(generators, variables, order, trusted)
+    elif gb._MODE == "check":
+        basis = (_restore_native(generators, variables, order) if trusted
+                 else gb._native(generators, variables, order, known=0))
+        if basis is None:
+            raise gb.Unavailable("Rebuild the native kernel to check this rational basis.")
+        basis = _CheckedRationalBasis(basis, _SymbolicBasis(generators, variables, order, trusted))
+    elif trusted:
+        basis = _restore_native(generators, variables, order)
     else:
         basis = gb.groebner(generators, variables, order=order)
     return ReducedBasis(variables, order, tuple(basis.exprs), basis)
@@ -127,7 +133,7 @@ def basis_from_reduced(generators, variables, *, order):
 
 def normal_form(polynomial, basis):
     """The unique exact remainder in the coordinate space of the saved basis."""
-    return basis.reduce(polynomial)[1]
+    return basis.remainder(polynomial)
 
 
 def ideal_membership(polynomial, basis):

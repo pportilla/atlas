@@ -53,6 +53,10 @@ class AlgebraReplayTests(unittest.TestCase):
                           dict(ideal=[], polynomial="class+I+result"), fallback=True)
         self.check_replay(["x"], "normal-form", dict(ideal=["1"], polynomial="10^4500"), fallback=True)
 
+    def test_factor_replays_scalar_rings_and_reserved_coordinate_names(self):
+        self.check_replay([], "factor", {"polynomial": "-2/7"})
+        self.check_replay(["factor"], "factor", {"polynomial": "(factor+1)^3"}, fallback=True)
+
     def test_provably_long_lines_skip_all_polynomial_formatting(self):
         x, y = native.Symbol("x"), native.Symbol("y")
         power = (1+x+y)**25  # 351 terms

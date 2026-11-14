@@ -9,12 +9,7 @@ class WideBasis(WideBlockBasis):
     """Keep the packed QQ interface and omit quotients in the sparse ring."""
 
     def remainder(self, value):
-        if hasattr(self.library, "atlas_wide_remainder_abi"):
-            row = _expanded_row(self.gens, value)
-            answer, = _ask(self.library, "remainder", len(self.gens), self.order, False, (row, *self.rows))
-            result = self.expression(answer)
-        else:
-            result = super().remainder(value)
+        result = super().remainder(value)
         record_stage("normal_form", "cpu", divisors=len(self.rows), algorithm="wide")
         return result
 

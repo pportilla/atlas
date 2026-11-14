@@ -72,18 +72,22 @@ class WideBlockBasis:
             return [sp.Poly.from_dict(dict(_sparse_terms(row)), *self.gens, domain=sp.QQ) for row in self.output_rows]
         return [_line_polynomial(row, self.gens, self.domain) for row in self.output_rows]
 
-    def _divide(self, rows):
-        return _ask(self.library, "divide", len(self.gens), self.order, self.theta is not None, rows)
+    def _divide(self, rows, operation="divide"):
+        return _ask(self.library, operation, len(self.gens), self.order, self.theta is not None, rows)
 
-    def _division(self, expr):
+    def _division(self, expr, operation="divide"):
         f = expr if self.theta is None else lift(expr, self.gens, self.domain, self.theta)
-        return self._divide([_expanded_row(self.extended, f), *self.rows])
+        return self._divide((_expanded_row(self.extended, f), *self.rows), operation)
+
+    def _remainder_row(self, expr):
+        operation = "remainder" if hasattr(self.library, "atlas_wide_remainder_abi") else "divide"
+        return self._division(expr, operation)[-1]
 
     def remainder(self, expr):
-        return self.expression(self._division(expr)[-1])
+        return self.expression(self._remainder_row(expr))
 
     def contains(self, expr):
-        return not self._division(expr)[-1]
+        return not self._remainder_row(expr)
 
     def reduce(self, expr):
         *quotients, remainder = self._division(expr)

@@ -18,6 +18,21 @@ def _translate(variables, shifts, polynomials):
     return tuple(f.xreplace(mapping) for f in polynomials)
 
 
+def _project_monomials(variables, point, generators):
+    # x_i is a unit at p when p_i != 0. On the remaining axes the original
+    # and centered coordinates agree. Translation on the unit axes therefore
+    # commutes with deleting every term in this projected monomial ideal.
+    heads = set()
+    for g in generators:
+        head, = np.terms(variables, g)
+        heads.add(tuple(0 if p else e for p, e in zip(point, head)))
+    minimal = []
+    for head in sorted(heads, key=lambda e: (sum(e), e)):
+        if not any(all(a <= b for a, b in zip(h, head)) for h in minimal):
+            minimal.append(head)
+    return tuple(np.from_terms(variables, {h: 1}) for h in minimal)
+
+
 def _nonzero_at_point(variables, point, f):
     # Drop terms killed by zero coordinates. A single surviving term is
     # nonzero without ever expanding a power of a nonzero rational number.
@@ -121,18 +136,30 @@ def handle(operation, ring, operands, *, known_basis=False):
     result = {"type": operation, "ring": ring, "scope": "point", "point": point}
     generators = tuple(g for f in operands["ideal"] if (g := np.coerce(f)))
     query = np.coerce(operands["polynomial"]) if normal else None
+    projected = None
     with cpu_stage("inspect_point_ideal", generators=len(generators)):
         if normal and (not query or not generators):
             result.update(reduction="standard", unit="1",
                           remainder=format_poly(np.terms(variables, query), names))
             return result
-        if any(g.is_number for g in generators) or (any(shifts) and
+        if any(shifts) and generators and all(len(g._terms) == 1 for g in generators):
+            projected = _project_monomials(variables, shifts, generators)
+        if any(g.is_number for g in generators) or projected == (np.S.One,) or (
+                projected is None and any(shifts) and
                 any(_nonzero_at_point(variables, shifts, g) for g in generators)):
             if normal:
                 result.update(reduction="standard", unit="1", remainder="0")
             else:
                 result["generators"] = ["1"]
             return result
+    if projected is not None:
+        if normal:
+            with cpu_stage("local_normal_form", divisors=len(projected)):
+                _, remainder, reduction = weak_normal_form(variables, projected, query, ring["order"])
+            result.update(unit="1", reduction=reduction, remainder=format_poly(np.terms(variables, remainder), names))
+        else:
+            result["generators"] = [format_poly(np.terms(variables, f), names) for f in projected]
+        return result
     with cpu_stage("center_at_point", variables=len(names)):
         centered = _translate(variables, shifts, generators)
     if normal and known_basis:

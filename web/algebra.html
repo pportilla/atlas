@@ -24,7 +24,7 @@
     </div>
   </header>
 
-  <main id="workspace" class="page workspace algebra">
+  <main id="workspace" tabindex="-1" class="page workspace algebra">
     <header class="view-title">
       <h1>Algebra</h1>
       <p>Polynomial and ideal arithmetic over ℚ.</p>
@@ -47,6 +47,7 @@
                 <option value="saturation">Saturation</option>
                 <option value="dimension">Krull dimension</option>
                 <option value="gcd">Polynomial GCD</option>
+                <option value="factor">Polynomial factorization</option>
                 <option value="quotient-basis">Quotient basis (global)</option>
                 <optgroup label="Local algebra at the origin">
                   <option value="local-quotient-basis">Quotient basis at the origin</option>
@@ -134,10 +135,10 @@
           </div>
           <div class="algebra-settings">
             <label class="field algebra-field" for="variables">
-              <span>Ordered variables</span>
+              <span title="Comma-separated, highest first. Leave empty for ℚ.">Ordered variables</span>
               <input id="variables" name="variables" type="text" value="x, y" aria-describedby="variables-help"
                      spellcheck="false" autocomplete="off" autocapitalize="off">
-              <small id="variables-help">Highest first. Leave empty for ℚ.</small>
+              <small id="variables-help" class="visually-hidden">Comma-separated, highest first. Leave empty for ℚ.</small>
             </label>
             <label class="field algebra-field" for="order">
               <span id="order-label">Monomial order</span>
@@ -158,13 +159,13 @@
             <label class="field algebra-field" for="result-name">
               <span>Save result as</span>
               <input id="result-name" name="result-name" type="text" placeholder="Optional name" spellcheck="false"
-                       autocomplete="off" autocapitalize="off">
-              </label>
+                     autocomplete="off" autocapitalize="off">
+            </label>
           </div>
           <div class="algebra-actions submit-algebra">
             <button class="primary" id="run" type="submit">Compute</button>
-              <label class="option check" title="Allow requests over 32 KiB and calculations longer than 55 seconds."><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive mode</label>
-              <p class="helper" id="pending" role="status"></p>
+            <label class="option check" title="Allow requests over 32 KiB and calculations longer than 55 seconds."><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive mode</label>
+            <p class="helper" id="pending" role="status"></p>
           </div>
         </form>
       </div>

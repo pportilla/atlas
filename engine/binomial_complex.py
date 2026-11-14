@@ -27,12 +27,6 @@ def _equation(coordinates, values, coefficient):
     return left + ("-" if coefficient > 0 else "+") + term
 
 
-def _root_equation(coordinates, values, root):
-    left = _monomial(coordinates, (max(0,q) for q in values))
-    right = _monomial(coordinates, (max(0,-q) for q in values))
-    return f"{left}-{root}" if right=="1" else f"{left}-{root}*{right}"
-
-
 def binomial_branch_equations(rays, cone, delta, coefficient, *, values=None):
     """Geometric strict branch equations for a nonprimitive terminal chart.
 
@@ -50,9 +44,14 @@ def binomial_branch_equations(rays, cone, delta, coefficient, *, values=None):
     if min(values)<0<max(values):
         raise ValueError("A split terminal binomial chart must have a unit monomial.")
     coordinates = [f"u{i+1}" for i in range(len(delta))]
-    return [{"root":f"alpha1_{j}","root_index":j,
-             "equation":_root_equation(coordinates,values,f"alpha1_{j}")}
-            for j in range(1,d+1)]
+    left = _monomial(coordinates, (max(0, q) for q in values))
+    right = _monomial(coordinates, (max(0, -q) for q in values))
+    suffix = "" if right == "1" else f"*{right}"
+    branches = []
+    for j in range(1, d+1):
+        root = f"alpha1_{j}"
+        branches.append({"root": root, "root_index": j, "equation": f"{left}-{root}{suffix}"})
+    return branches
 
 
 def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=None, orders=None):

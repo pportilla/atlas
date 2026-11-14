@@ -23,6 +23,7 @@ def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
                             'reason':'The search has not certified an atlas yet.','vertices':[],'cells':[]}}
     if request.get('monodromy') is True:
         result['monodromy_zeta'] = {'status':'unavailable', 'reason':'The resolution has not been certified.'}
+        result['topological_zeta'] = dict(result['monodromy_zeta'])
     return result
 
 
@@ -199,7 +200,12 @@ def _resolve_polynomial(p, request, start):
     try:
         if len(variables)==2 and singular:
             from .plane_backend import resolve_plane
-            r = resolve_plane(p,variables,mode,exhaustive=exhaustive)
+            try:
+                r = resolve_plane(p,variables,mode,exhaustive=exhaustive)
+            except LimitError as error:
+                if not exhaustive:
+                    raise
+                diagnostic['plane_limit']=str(error)
         elif not native_range and not singular:
             coords=[f'u{i+1}' for i in range(len(variables))]
             r={'status':'resolved','engine':'jacobian-at-origin','steps':[],
@@ -220,10 +226,10 @@ def _resolve_polynomial(p, request, start):
             if r is None and len(variables)==3:
                 from .toric_backend import resolve_toric
                 r = resolve_toric(p,variables,mode,compute=compute)
-        if r is None and len(p)==2 and 2 <= len(variables) <= 8:
+        if r is None and len(p)==2 and 2 <= len(variables) <= 8 and 'plane_limit' not in diagnostic:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
-        if r is None and (native_range or exhaustive and singular and 3 <= len(variables) <= 8):
+        if r is None and (native_range or exhaustive and singular and 2 <= len(variables) <= 8):
             from .newton_backend import resolve_newton
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,

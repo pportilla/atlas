@@ -151,8 +151,14 @@ def torus_complex(charts, dimension, intrinsic):
     return section_complex((_chart_terms(c, dimension, linear) for c in charts), dimension, intrinsic)
 
 
-def section_complex(chart_terms, dimension, intrinsic):
-    """Orbit sections of a verified regular cover with its maps in the common torus."""
+def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
+    """Orbit sections of a verified regular cover with its maps in the common torus.
+
+    With a common source, the caller has derived every strict equation from
+    one polynomial in the same verified frame by dividing its pullback by
+    a monomial. Those equations already agree up to a unit on the dense
+    torus. Independently supplied charts require this equality test.
+    """
     chart_terms = tuple(chart_terms)
     if any(details is None for details in chart_terms):
         return None
@@ -166,13 +172,14 @@ def section_complex(chart_terms, dimension, intrinsic):
     global_equation = None
     for details in chart_terms:
         rays, boundary, terms = details
-        try:
-            original = _normalized(canonical_laurent_terms(rays, dict(terms)))
-        except ArithmeticError:
-            return None
-        if global_equation is not None and original != global_equation:
-            return None
-        global_equation = original
+        if not common_source:
+            try:
+                original = _normalized(canonical_laurent_terms(rays, dict(terms)))
+            except ArithmeticError:
+                return None
+            if global_equation is not None and original != global_equation:
+                return None
+            global_equation = original
         for at, name in boundary.items():
             if name in rays_by_label and rays_by_label[name] != rays[at]:
                 return None

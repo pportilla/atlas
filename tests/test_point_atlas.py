@@ -17,6 +17,45 @@ from engine.strata import InvalidChart
 
 @unittest.skipIf(native_library._MODE == "sympy", "The sparse chart verifier is disabled in pure reference mode.")
 class PointAtlas(unittest.TestCase):
+    def test_owned_crossing_keeps_the_linear_normal_term(self):
+        from engine.monomial_atlas import fan_outputs
+        names = ["x", "y"]
+        record = dict(variables=names, fan={"rays": [[1,0], [0,1], [1,1]]}, charts=[
+            dict(ray_indices=[2,1], coordinates=["u","v"], map={"x": "u", "y": "u*v"}),
+            dict(ray_indices=[0,2], coordinates=["u","v"], map={"x": "u*v", "y": "v"}),
+        ])
+        def verify(f, intrinsic):
+            return fan_outputs(record, parse(f, names, bounded=False),
+                               complex=False, intrinsic=intrinsic, integrals=False)
+
+        # On u=0 both strict equations restrict to v². Their derivatives
+        # distinguish a smooth branch tangent to the exceptional divisor
+        # from a singular branch. The discarded term exceeds packed degree.
+        smooth = "y^2+x^3+x^65540"
+        with self.assertRaisesRegex(InvalidChart, "Normal crossings fail"):
+            verify(smooth, False)
+        with self.assertRaisesRegex(InvalidChart, "strict transform is singular"):
+            verify("y^2+x^4+x^65540", True)
+        charts, _ = verify(smooth, True)
+        strict = charts[0]["components"][-1]["ideal"]
+        self.assertEqual(strict, ["u^65538+v^2+u"])
+
+    def test_mixed_monomial_jet_over_a_field(self):
+        if not hasattr(native_library._library(), "atlas_crossing_jet_abi"):
+            self.skipTest("Requires the native chart crossing jet.")
+        from engine.polynomial import sparse_row
+        base = ["chart", "u v w t", "x y z a", "u", "v", "w", "t", "t^2+1"]
+        # J=(uv,vw). Neither generator squared divides uv²w, but their
+        # product does. The coefficient parameter is free in the jet, as
+        # is every power of u alone, including a beyond-word-size power.
+        power = 2**65
+        f = f"x^{power}/3+a*y*z/2+x*y+x*y^2*z+x^2*y^2+y^2*z^2"
+        rows = native_library.affine_request([*base, f, "", "3 6"])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sparse_row(rows[0]), parse(f, ["x","y","z","a"], bounded=False))
+        self.assertEqual(sparse_row(rows[1]), parse(f"x^{power}/3+a*y*z/2+x*y",
+                                                   ["x","y","z","a"], bounded=False))
+
     def test_surface_sections_on_toric_orbits_and_inside_the_torus(self):
         from engine.monomial_atlas import fan_outputs
         names = list("xyz")

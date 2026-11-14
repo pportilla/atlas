@@ -7,6 +7,7 @@ import sys
 import unittest
 
 from engine.plane_backend import resolve_plane
+from engine.native_library import _MODE
 from engine.polynomial import LimitError, NonReducedError, parse
 from engine.resolve import resolve
 
@@ -87,6 +88,15 @@ class ExhaustivePlane(unittest.TestCase):
         output = json.loads(process.stdout)
         self.assertEqual(output["kind"],"limit")
         self.assertIn("signed FLINT word",output["error"])
+
+    @unittest.skipUnless(_MODE == "native", "The optional dense plane-chart oracle cannot represent this degree.")
+    def test_public_resolution_hands_wide_plane_degree_to_newton(self):
+        n = 2**64
+        result = solve(f"x^{n}+y^{n}")
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(result["engine"], "newton-polyhedron")
+        self.assertEqual(len(result["charts"]), 2)
+        self.assertEqual(result["dual_complex"]["vertices"][0]["ambient_order"], n)
 
 
 if __name__=="__main__":

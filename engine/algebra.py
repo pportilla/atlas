@@ -20,6 +20,7 @@ POINT_OPERATIONS = {
 }
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
+    "factor": ("polynomial",),
     "ideal": ("ideal",),
     "groebner": ("ideal",),
     "normal-form": ("ideal", "polynomial"),
@@ -138,7 +139,7 @@ def dispatch(data, *, known_basis=False):
             if known_basis:
                 basis = handler.basis_from_reduced(operands["ideal"], variables, order=ring["order"])
                 result_operands = dict(operands, ideal=basis)
-        elif operation == "gcd":
+        elif operation in ("gcd", "factor"):
             from . import algebra_polynomial as handler
         elif operation in QUOTIENT_ALGEBRA_OPERANDS:
             from . import local_algebra as handler

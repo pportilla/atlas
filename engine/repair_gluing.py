@@ -10,6 +10,7 @@ child over one centre with the unmodified copy of a different centre.
 """
 from dataclasses import replace
 from functools import lru_cache
+from math import lcm
 
 from .affine_kernel import decode, pullbacks
 from .atlas_finite import _extend_chart, _field_mark, _integer_polynomial
@@ -58,7 +59,7 @@ def _birational_parameters(chart, mapping):
 @lru_cache(maxsize=4096)
 def _reduced_fraction(chart, a, b):
     """Cancel in the field polynomial ring. Its UFD then gives the regular locus."""
-    from .affine_kernel import _ring, _request, _sparse_expression, rational_factor_rows
+    from .affine_kernel import _ring, _request, _sparse_expression, _sparse_terms
     from .atlas_finite import _power_domain
     from .field_factors import factors
     from .field_polynomial import lift, polynomial
@@ -95,17 +96,32 @@ def _reduced_fraction(chart, a, b):
     if _MODE == "sympy":
         return sp.cancel(a/b).as_numer_denom()
     ring = _ring(coords)
-    for row,power,_ in rational_factor_rows(coords,b)[1]:
-        divisor = ring.text(_sparse_expression(coords,row))
-        for _ in range(power):
-            qa,ra = _request(["wide_division",ring.header,"lex",ring.text(a),divisor])
-            if ra:
-                break
-            qb,rb = _request(["wide_division",ring.header,"lex",ring.text(b),divisor])
-            if rb:
-                raise ArithmeticError("A denominator factor did not divide over the rationals.")
-            a,b = _sparse_expression(coords,qa),_sparse_expression(coords,qb)
-    return a,b
+    header = [ring.header, "lex"]
+    row, = _request(["polynomial_gcd", *header, ring.text(a), ring.text(b)])
+    gcd = _sparse_expression(coords, row)
+    reduced = a,b
+    if gcd != 1:
+        # The previous factorization divided by positive-leading primitive
+        # integer factors. For a monic gcd, clearing its coefficient
+        # denominators gives exactly their primitive product (Gauss's lemma).
+        scale = lcm(*(c.denominator for _, c in _sparse_terms(row)))
+        divisor = ring.text(scale*gcd)
+        def cofactor(f):
+            quotient, remainder = _request(["wide_division", *header, ring.text(f), divisor])
+            if remainder:
+                raise ArithmeticError("The transition gcd did not divide over the rationals.")
+            return _sparse_expression(coords, quotient)
+        reduced = cofactor(a), cofactor(b)
+    if _MODE == "check":
+        from sympy.polys.rings import ring as symbolic_ring
+        from .affine_kernel import sparse_terms
+        reference, *_ = symbolic_ring(tuple(sp.Dummy(v.name) for v in coords), sp.QQ)
+        left, right = [reference.from_dict(dict(sparse_terms(coords, f))) for f in (a,b)]
+        _, primitive = left.gcd(right).monic().clear_denoms()
+        for f, answer in zip((left, right), reduced):
+            if f.exquo(primitive) != reference.from_dict(dict(sparse_terms(coords, answer))):
+                raise AssertionError("The transition cofactors differ from the rational reference.")
+    return reduced
 
 
 def _transition_substitution(source, coordinates, fractions, coefficient=None):

@@ -33,16 +33,6 @@ function svgElement(tag, attrs, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
-function readRecord(text) {
-  return JSON.parse(text, (_key, value, context) => {
-    if (typeof value !== "number" || Number.isSafeInteger(value)) return value;
-    if (context) return /^-?\d+$/.test(context.source) ? BigInt(context.source) : value;
-    if (!Number.isFinite(value) || Number.isInteger(value)) {
-      throw new Error("This result needs a browser that supports exact JSON integers.");
-    }
-    return value;
-  });
-}
 function recordJSON(value, space) {
   return JSON.stringify(value, (_key, field) => typeof field === "bigint" ? JSON.rawJSON(String(field)) : field, space);
 }
@@ -1350,6 +1340,7 @@ function showComputation(data, request) {
 function showResult(data, request) {
   lastResult = data;
   lastRequest = request;
+  previewRequested = false;
   selected = null;
   selectionViews.length = 0;
   $("placeholder").hidden = true;
@@ -1391,6 +1382,93 @@ function showResult(data, request) {
 }
 
 /* ---------- The input ---------- */
+
+// These three reference curves have exact SVG paths in mathematical coordinates.
+// For the cusp the cubic Bézier is (t², t³) for −3/2 ≤ t ≤ 3/2.
+const planeExamples = {
+  cusp: {
+    polynomial: "y^2-x^3", equation: "y^2=x^3", title: "Plane cusp",
+    path: "M2.25 -3.375 C-.75 3.375 -.75 -3.375 2.25 3.375",
+    caption: () => ["The real cusp is parametrized by ", typeset("(t^2,t^3)"), "."],
+  },
+  node: {
+    polynomial: "y^2-x^2", equation: "y^2=x^2", title: "Ordinary node",
+    path: "M-3 -3L3 3 M-3 3L3 -3",
+    caption: () => ["Two real branches, ", typeset("y=x"), " and ", typeset("y=-x"), ", cross transversely at the origin."],
+  },
+  tacnode: {
+    polynomial: "y^2-x^4", equation: "y^2=x^4", title: "Tacnode",
+    path: "M-2 4Q0 -4 2 4 M-2 -4Q0 4 2 -4",
+    caption: () => ["The branches ", typeset("y=x^2"), " and ", typeset("y=-x^2"), " share a tangent at the origin."],
+  },
+};
+const exampleButtons = form.querySelectorAll("[data-example]");
+let drawnExample = null;
+let previewRequested = false;
+
+function showInputGerm(request) {
+  const equation = $("preview-equation");
+  const coordinates = $("preview-coordinates");
+  const empty = !request.polynomial;
+  $("preview-title").textContent = empty ? "Enter a germ" : "Input germ";
+  equation.hidden = coordinates.hidden = empty;
+  if (empty) {
+    $("preview-note").textContent = "Enter a polynomial or choose an example.";
+    return;
+  }
+  // Preview only a bounded prefix of the source. Exhaustive requests can be
+  // large; truncation applies only here, never to the submitted polynomial.
+  const limit = 400;
+  const truncated = request.polynomial.length > limit;
+  if (truncated) equation.replaceChildren(el("code", "", request.polynomial.slice(0, limit) + "…"));
+  else equation.replaceChildren(typeset(request.polynomial, " = 0"));
+  const names = request.variables.slice(0, 12).map((name) => name.length > 32 ? name.slice(0, 32) + "…" : name);
+  if (request.variables.length > names.length) names.push("…");
+  coordinates.textContent = names.length ? "Coordinates (" + names.join(", ") + ")" : "Enter the coordinate variables.";
+  $("preview-note").textContent = (truncated ? "Showing the first " + limit + " characters. " : "")
+    + "Resolve to inspect the dual complex and charts.";
+}
+
+function updatePlate() {
+  const request = getRequest();
+  const polynomial = request.polynomial.length <= 100 ? request.polynomial.replace(/\s+/g, "") : null;
+  const plane = request.variables.length === 2 && request.variables.includes("x") && request.variables.includes("y");
+  const key = plane && Object.keys(planeExamples).find((name) => planeExamples[name].polynomial === polynomial);
+  for (const button of exampleButtons) button.setAttribute("aria-pressed", String(button.dataset.example === key));
+  const available = !busy && !activeSearch();
+  const show = Boolean(key) && available && (previewRequested || !lastRequest || lastRequest.polynomial !== request.polynomial);
+  $("germ-plate").hidden = !show;
+  $("plate-empty").hidden = !available || show || Boolean(lastResult) || !$("form-error").hidden;
+  if (!$("plate-empty").hidden) showInputGerm(request);
+  if (!show || key === drawnExample) return;
+  const curve = planeExamples[key];
+  $("plate-title").textContent = curve.title;
+  $("plate-equation").replaceChildren(typeset(curve.equation));
+  $("curve-title").textContent = curve.title + " in real coordinates";
+  $("plate-curve").setAttribute("d", curve.path);
+  $("plate-caption").replaceChildren(...curve.caption());
+  drawnExample = key;
+}
+
+for (const button of exampleButtons) button.addEventListener("click", () => {
+  previewRequested = true;
+  $("polynomial").value = planeExamples[button.dataset.example].polynomial;
+  $("variables").value = "x, y";
+  variablesFollow = true;
+  fitInput();
+  updateInput();
+});
+
+// Section navigation should preserve the current report's shareable URL.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest(".skip-link, .output-jump");
+  if (!link || !link.hash || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  const target = $(link.hash.slice(1));
+  if (!target) return;
+  event.preventDefault();
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "start" });
+});
 
 function getRequest() {
   return {
@@ -1449,6 +1527,7 @@ function updateInput() {
   $("form-error").hidden = true;
   updateStale();
   updateSearchOffer();
+  updatePlate();
 }
 
 $("polynomial").addEventListener("input", () => {
@@ -1522,9 +1601,10 @@ window.addEventListener("hashchange", () => {
 function waiting(text) {
   $("placeholder-text").textContent = text;
   $("placeholder").hidden = Boolean(lastResult) || !text;
+  updatePlate();
 }
 
-async function resolveGerm() {
+async function resolveGerm(followResult = false) {
   if (busy) return;
   const request = getRequest();
   $("form-error").hidden = true;
@@ -1577,6 +1657,10 @@ async function resolveGerm() {
     } else {
       showResult(data, request);
       writeAddress(request);
+      if (followResult && sameGerm(request, getRequest()) && matchMedia("(max-width: 820px)").matches) {
+        $("result-equation").focus({ preventScroll: true });
+        $("result").scrollIntoView({ block: "start" });
+      }
     }
   } catch (error) {
     $("form-error").textContent = error instanceof TypeError ? "Could not reach the local resolution server." : error.message;
@@ -1591,11 +1675,12 @@ async function resolveGerm() {
     $("result").removeAttribute("aria-busy");
     updateStale();
     updateSearchOffer();
+    updatePlate();
   }
 }
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  resolveGerm();
+  resolveGerm(true);
 });
 $("export").addEventListener("click", () => {
   if (!lastResult) return;
@@ -1661,6 +1746,7 @@ function renderSearch(job) {
   $("search-job").hidden = !job;
   updateStale();
   updateSearchOffer();
+  updatePlate();
   if (!job) return;
   const states = { running: "Searching for a verified resolution", cancelling: "Cancelling search",
     completed: "Search complete", failed: "Search stopped", cancelled: "Search cancelled" };
@@ -1707,7 +1793,7 @@ function pollSearch(delay = 1200) {
       pollSearch();
     } catch (error) {
       if (token !== searchTransition) return;
-      if (error.status === 404) {
+      if (error.status === 404 || error.name === "ExactIntegerError") {
         renderSearch({ ...searchJob, state: "failed", error: error.message });
         return;
       }

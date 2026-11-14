@@ -7,7 +7,6 @@ matching all recorded patches bijectively, by equations in their coordinate
 rings. The replay uses the finite parameter and its relation from the
 archive, which need not be the parameter a new Newton run would choose.
 """
-from collections import defaultdict
 from dataclasses import replace
 import re
 
@@ -95,19 +94,31 @@ def _replay_centre(parent_index, parent, centre, step, rows):
             return None
         expected[signature] = patch
     patches = []
+    axes_by_arity = {}
+    candidates_by_signature = {}
+    generic_by_key = {}
     for row in rows:
         signature = _saved_signature(row, api)
         if signature not in expected:
             # Early files could rename patch variables. The coordinate list
             # proposes an identification by position, then quotient-ring
             # equality tests every equation in that presentation.
-            axes = tuple(api.Dummy("patch_coordinate") for _ in row["coordinates"])
-            generic = _saved_signature(row, api, axes)
-            matches = [key for key, p in expected.items() if len(p.variables) == len(axes)
-                       and _signature(p, axes) == generic]
+            arity = len(row["coordinates"])
+            if arity not in axes_by_arity:
+                axes = tuple(api.Dummy("patch_coordinate") for _ in range(arity))
+                axes_by_arity[arity] = axes
+                for key, patch in expected.items():
+                    if len(patch.variables) == arity:
+                        generic = _signature(patch, axes)
+                        generic_by_key[key] = generic
+                        candidates_by_signature.setdefault(generic, set()).add(key)
+            generic = _saved_signature(row, api, axes_by_arity[arity])
+            matches = candidates_by_signature.get(generic, ())
             if len(matches) != 1:
                 return None
             signature, = matches
+        if signature in generic_by_key:
+            candidates_by_signature[generic_by_key.pop(signature)].remove(signature)
         patch = expected.pop(signature)
         patches.append(patch)
     return closed, patches
@@ -140,34 +151,37 @@ def archived_repair_charts(record, toric_charts):
     steps = {(s["chart"], s["id"]): s for s in repair_steps}
     if len(repair_steps) != len(steps):
         return None
-    groups = defaultdict(list)
+    # Some archives have no parent name on a patch. A new exceptional
+    # divisor proposes the local run, whose full equations must still
+    # reproduce the patch. An ambiguous proposal cannot prove ownership.
+    labels = {key: {s["id"] for s in step["centers"]} for key, step in steps.items()}
+    groups = {}
     for row in raw:
-        if not all(k in row for k in ("parent", "coordinates", "ambient_ideal",
+        if not all(k in row for k in ("coordinates", "ambient_ideal",
                                       "map", "exceptional", "strict_transform")):
             return None
-        groups[row["parent"]].append(row)
+        divisors = {d["id"] for d in row["exceptional"]}
+        matches = [key for key, ids in labels.items() if ids & divisors
+                   and ("parent" not in row or row["parent"] == key[0])]
+        if len(matches) != 1:
+            return None
+        groups.setdefault(matches[0], []).append(row)
     root_charts, patches = [], []
     for i, (item, parent) in enumerate(zip(parents, toric_charts)):
         removed = []
         for centre in item.get("blown_up", ()):
             key = item["id"], centre["id"]
             step = steps.pop(key, None)
-            if step is None or item["id"] not in groups:
+            rows = groups.pop(key, None)
+            if step is None or not rows:
                 return None
-            # A new exceptional divisor is local to this centre. Reading
-            # its name narrows the candidates independently of chart IDs.
-            # The complete divisor ideals and maps are verified on replay.
-            labels = {s["id"] for s in step["centers"]}
-            rows = [row for row in groups[item["id"]] if any(d["id"] in labels for d in row["exceptional"])]
             result = _replay_centre(i, parent, centre, step, rows)
             if result is None:
                 return None
             closed, local = result
             if any(not empty_locus(parent.variables, (*ideal, *closed)) for ideal in removed):
                 return None
-            for row in rows:
-                groups[item["id"]].remove(row)
             removed.append(closed)
             patches.extend(local)
         root_charts.append(replace(parent, removed=(*parent.removed, *removed)))
-    return None if any(groups.values()) or steps else [*root_charts, *patches]
+    return None if groups or steps else [*root_charts, *patches]

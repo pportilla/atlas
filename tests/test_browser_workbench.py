@@ -49,6 +49,11 @@ class WorkbenchBrowserTests(AlgebraBrowserCase):
             page.goto(self.url + "/#" + link)
         self.assertEqual(reopened.value.json()["mode"], "intrinsic")
         expect(page.locator("#result-mode")).to_contain_text("intrinsic", ignore_case=True)
+        page.set_viewport_size({"width": 320, "height": 780})
+        record_url = page.url
+        page.locator('a[href="#output"]').press("Enter")
+        expect(page.locator("#output")).to_be_focused()
+        self.assertEqual(page.url, record_url)
         self.assertEqual(len(calculations), 2)
 
     def test_algebra_preview_updates_without_replacing_last_answer(self):

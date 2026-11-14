@@ -9,6 +9,35 @@ from engine.repair_gluing import repair_charts
 
 
 class ArchivedParentOverlaps(unittest.TestCase):
+    def test_rational_transition_cofactors_and_units(self):
+        from engine.affine_kernel import sparse_terms
+        from engine.groebner import _MODE
+        from engine.repair_gluing import _reduced_fraction, transition_on_field_sheet
+        api = runtime_expressions()
+        x, y = coords = api.symbols("x y")
+        chart = Chart(coords, (), (), (), (), (), ())
+        zero, one = api.S.Zero, api.S.One
+        self.assertEqual(_reduced_fraction(chart, zero, x), (zero, one))
+        with self.assertRaisesRegex(ArithmeticError, "denominator"):
+            _reduced_fraction(chart, zero, zero)
+        self.assertEqual(_reduced_fraction(chart, x, 3*one), (x, 3*one))
+        # A nonmonic primitive gcd and an enormous common monomial. Clearing
+        # the monic gcd's denominators keeps both original rational units.
+        factor = x**(2**64+7 if _MODE == "native" else 70) * (6*x+4*y+3)
+        a, b = api.Rational(2,3)*(y+1), -api.Rational(5,7)*(y-1)
+        for common in (one, factor):
+            numerator, denominator = _reduced_fraction(chart, a*common, b*common)
+            if _MODE == "sympy":
+                self.assertEqual(api.expand(numerator*b-denominator*a), 0)
+            else:
+                self.assertEqual(sparse_terms(coords, numerator-a), ())
+                self.assertEqual(sparse_terms(coords, denominator-b), ())
+        # The exceptional factor cancels in v=B/A. The two charts share
+        # their entire fibre under (x,y) -> (x,y+x).
+        move, holes = transition_on_field_sheet(chart, chart, (x,x*(y+x)), (x,x*y))
+        self.assertEqual(holes, ())
+        self.assertEqual(sparse_terms(coords, move(y)-y-x), ())
+
     def test_projective_pivots_have_complete_disjoint_ownership(self):
         from engine.repair_cover import verify_repair_cover
         api = runtime_expressions()

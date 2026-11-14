@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 from engine.app import AtlasServer
+from engine.polynomial import integer_from_decimal
 from tests.test_cli_session import ROOT, run_prompt, run_script
 from tests.test_http import QuietHandler
 
@@ -55,7 +56,7 @@ class AlgebraInterfaceTests(unittest.TestCase):
         except HTTPError as error:
             response = error
         with response:
-            return response.status, json.load(response)
+            return response.status, json.load(response, parse_int=integer_from_decimal)
 
     def shell(self, *args):
         return subprocess.run([str(ROOT / "atlas"), *args],
@@ -114,6 +115,41 @@ class AlgebraInterfaceTests(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertEqual(error["status"], "error")
                 self.assertTrue(error["error"]["message"])
+
+    def test_factorization_through_shell_prompt_script_and_http(self):
+        operand = {"polynomial": "-3/5*(2*x-y)^2*(x^2+1)"}
+        status, record = self.post(dict(operation="factor", ring=RING, operands=operand))
+        self.assertEqual(status, 200, record)
+        result = record["result"]
+        self.assertEqual((result["type"], result["unit"], result["ring"]),
+                         ("factorization", "-12/5", RING))
+        self.assertCountEqual(result["factors"], [
+            {"polynomial": "x-1/2*y", "multiplicity": 2},
+            {"polynomial": "x^2+1", "multiplicity": 1},
+        ])
+
+        command = shlex.split(record["replay"]["command"])[1:]
+        code, output, error = run_prompt(shlex.join(command) + "\nquit\n")
+        self.assertEqual((code, error), (0, ""))
+        self.assertEqual(json.loads(output.removeprefix("atlas> ").split("atlas>")[0])["result"], result)
+        for run in (self.shell(*command), run_script(record["replay"]["script"])):
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)["result"], result)
+        command.remove("--json")
+        display = self.shell(*command)
+        self.assertEqual(display.returncode, 0, display.stderr)
+        for term in ("-12/5", "(x-1/2*y)^2", "(x^2+1)"):
+            self.assertIn(term, display.stdout)
+
+        status, error = self.post(dict(operation="factor", ring=RING, operands={"polynomial": "x-x"}))
+        self.assertEqual((status, error["error"]["code"]), (400, "invalid_request"))
+        self.assertNotIn("result", error)
+
+    def test_http_preserves_a_factor_multiplicity_beyond_the_decimal_limit(self):
+        source = "x^" + "9" * 4501
+        status, record = self.post(dict(operation="factor", ring=RING, operands={"polynomial": source}))
+        self.assertEqual(status, 200, record.get("error"))
+        self.assertEqual(record["result"]["factors"], [{"polynomial": "x", "multiplicity": 10**4501 - 1}])
 
     def test_gcd_replays_both_polynomials_through_shell_prompt_and_script(self):
         operands = {"polynomial": "(2*x+y)*(x+1)", "other_polynomial": "-(2*x+y)*(y-1)"}
