@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Resolution Atlas</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 21h22' stroke='%23777' stroke-width='2'/%3E%3Cg fill='%23777'%3E%3Ccircle cx='5' cy='21' r='4'/%3E%3Ccircle cx='16' cy='21' r='4'/%3E%3Ccircle cx='27' cy='21' r='4'/%3E%3C/g%3E%3Cpath d='M16 21 24 9' stroke='%23777' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header page">
+    <h1 class="wordmark">Resolution Atlas</h1>
+    <p class="tagline">Local resolution of hypersurface germs over <span class="m">ℚ</span></p>
+  </header>
+
+  <main class="page">
+    <form id="resolve-form" class="query">
+      <div class="query-main">
+        <div class="query-box">
+          <label class="query-lhs m" for="polynomial"><i>f</i> =</label>
+          <textarea id="polynomial" name="polynomial" rows="1" aria-label="Polynomial f" placeholder="y^2 - x^3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" required autofocus></textarea>
+        </div>
+        <button class="primary" id="run" type="submit"><span id="run-label">Resolve</span></button>
+      </div>
+
+      <div class="query-options">
+        <label class="option" for="variables">
+          <span>Variables</span>
+          <input type="text" id="variables" name="variables" placeholder="x, y" spellcheck="false" autocapitalize="off" autocomplete="off" required>
+        </label>
+        <fieldset class="option mode">
+          <legend class="visually-hidden">Resolution mode</legend>
+          <label title="Resolve the hypersurface together with its exceptional boundary in the ambient space."><input type="radio" name="mode" value="embedded" checked> Embedded</label>
+          <label title="Resolve the hypersurface itself and inspect the exceptional locus on its smooth model."><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
+        </fieldset>
+        <label class="option check" title="Also compute the zeta function of the local monodromy."><input type="checkbox" id="zeta" name="zeta" checked> Zeta function</label>
+        <select class="option" id="compute" name="compute" aria-label="Compute device" title="Where eligible rank tests and chart transforms run. The CPU does everything else.">
+          <option value="cpu">CPU</option>
+          <option value="auto">CPU or GPU</option>
+          <option value="gpu">GPU (OpenCL)</option>
+        </select>
+      </div>
+
+      <p class="query-hint warn" id="name-hint" hidden></p>
+      <p class="error" id="form-error" role="alert" hidden></p>
+
+      <details class="help">
+        <summary>Syntax and scope</summary>
+        <div class="help-body">
+          <p>Write the left-hand side of <span class="m"><i>f</i> = 0</span> with rational coefficients, using <code>*</code> for products, <code>^</code> for powers and parentheses, as in <code>(1/2)*x^3 + y^2</code>. The germ is taken at the origin.</p>
+          <p><b>Embedded</b> resolves the hypersurface inside the ambient space; the dual complex is that of the ambient exceptional divisor. <b>Intrinsic</b> resolves the hypersurface itself; the dual complex is that of the exceptional locus on the resolved hypersurface. Components are taken over the algebraic closure of <span class="m">ℚ</span>.</p>
+          <p>The certificate is local at the origin and the resolution is not assumed to be minimal. If the quick resolver is inconclusive, an exhaustive search continues in the background until it finishes or is cancelled.</p>
+        </div>
+      </details>
+    </form>
+
+    <p id="announcements" class="visually-hidden" aria-live="polite"></p>
+
+    <section class="search-job" id="search-job" aria-label="Exhaustive resolution search" hidden>
+      <span class="spinner" id="search-spinner" aria-hidden="true"></span>
+      <div class="search-text">
+        <strong id="search-job-state" role="status"></strong>
+        <p id="search-job-description"></p>
+      </div>
+      <div class="search-actions">
+        <button class="button" id="cancel-search" type="button" hidden>Cancel search</button>
+        <button class="button" id="view-search" type="button" hidden>View result</button>
+        <button class="button" id="dismiss-search" type="button" hidden>Dismiss</button>
+      </div>
+    </section>
+
+    <div class="placeholder" id="placeholder" hidden>
+      <p id="placeholder-text"></p>
+    </div>
+
+    <article id="result" hidden>
+      <header class="result-head">
+        <p class="stale-note" id="stale" hidden>The input has changed since this result.</p>
+        <div class="result-title">
+          <h2 id="result-equation" class="m"></h2>
+          <button class="button export" type="button" id="export" disabled>Download JSON</button>
+        </div>
+        <p class="result-meta"><span id="status" class="status"></span> · <span id="result-mode"></span><span id="metrics"></span></p>
+        <p id="result-summary" hidden></p>
+        <p id="result-diagnostic" hidden></p>
+        <div id="search-offer" class="search-offer" hidden>
+          <button class="button" type="button" id="start-search" title="Search for a verified resolution without a time limit. It can be cancelled.">Start exhaustive search</button>
+        </div>
+      </header>
+      <section class="section" id="panel-zeta"></section>
+      <section class="section" id="panel-complex"></section>
+      <section class="section folded" id="panel-steps"></section>
+      <section class="section folded" id="panel-charts"></section>
+      <section class="section folded" id="panel-record"></section>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,131 @@
+{
+  "input": {
+    "polynomial": "x^2+y^19+z^37+x^3*(x+y+z)^27",
+    "variables": [
+      "x",
+      "y",
+      "z"
+    ],
+    "mode": "intrinsic"
+  },
+  "devices": [
+    {
+      "index": 0,
+      "name": "Intel(R) Iris(R) Xe Graphics",
+      "vendor": "Intel(R) Corporation",
+      "version": "OpenCL 3.0 NEO ",
+      "driver": "26.35.39758"
+    }
+  ],
+  "platform": "Linux-6.18.55-1-MANJARO-x86_64-with-glibc2.44",
+  "repeats": 7,
+  "samples": {
+    "cpu": [
+      {
+        "native_transform_ms": 0.33731900111888535,
+        "batch_ms": 8.285292999062221,
+        "solve_ms": 94.10220600148023,
+        "cli_ms": 226.7282160009927
+      },
+      {
+        "native_transform_ms": 0.26095199973497074,
+        "batch_ms": 6.44587699935073,
+        "solve_ms": 93.01179700014472,
+        "cli_ms": 222.46658599942748
+      },
+      {
+        "native_transform_ms": 0.3092799997830298,
+        "batch_ms": 10.681158000807045,
+        "solve_ms": 98.42325400131813,
+        "cli_ms": 232.1002190001309
+      },
+      {
+        "native_transform_ms": 0.29973199889354873,
+        "batch_ms": 7.131878999643959,
+        "solve_ms": 93.45128499990096,
+        "cli_ms": 242.93098300040583
+      },
+      {
+        "native_transform_ms": 0.2760520001174882,
+        "batch_ms": 9.978295000109938,
+        "solve_ms": 96.81894200002716,
+        "cli_ms": 231.1365420009679
+      },
+      {
+        "native_transform_ms": 0.6645729990850668,
+        "batch_ms": 12.841022000429803,
+        "solve_ms": 99.28959500030032,
+        "cli_ms": 243.67666599937365
+      },
+      {
+        "native_transform_ms": 0.5743210003856802,
+        "batch_ms": 11.115383000287693,
+        "solve_ms": 105.93591700126126,
+        "cli_ms": 228.6983109988796
+      }
+    ],
+    "opencl": [
+      {
+        "native_transform_ms": 1.558289000968216,
+        "batch_ms": 19.845353999699,
+        "solve_ms": 110.11438700006693,
+        "cli_ms": 251.9766060013353
+      },
+      {
+        "native_transform_ms": 1.4495340001303703,
+        "batch_ms": 13.327995000508963,
+        "solve_ms": 102.27803999987373,
+        "cli_ms": 280.17192399966007
+      },
+      {
+        "native_transform_ms": 1.307529999394319,
+        "batch_ms": 12.089511001249775,
+        "solve_ms": 105.03120700013824,
+        "cli_ms": 256.59521000125096
+      },
+      {
+        "native_transform_ms": 1.4010430004418595,
+        "batch_ms": 11.034400999051286,
+        "solve_ms": 102.60415200173156,
+        "cli_ms": 240.72689300010097
+      },
+      {
+        "native_transform_ms": 0.9639159998187097,
+        "batch_ms": 7.274071998836007,
+        "solve_ms": 95.0503080002818,
+        "cli_ms": 275.3284970003733
+      },
+      {
+        "native_transform_ms": 1.4611999995395308,
+        "batch_ms": 12.046889998600818,
+        "solve_ms": 99.80008399907092,
+        "cli_ms": 271.63531400037755
+      },
+      {
+        "native_transform_ms": 0.8860920006554807,
+        "batch_ms": 7.464074999006698,
+        "solve_ms": 95.1522079994902,
+        "cli_ms": 254.66303099892684
+      }
+    ]
+  },
+  "geometry_sha256": "5f7cac43814192715b809ef59cdcbf082f23e3d8cf59d15a3e277e07eb094ae3",
+  "charts": 191,
+  "chart_term_pairs": 78119,
+  "vertices": 40,
+  "cells": 39,
+  "median_ms": {
+    "cpu": {
+      "native_transform_ms": 0.3092799997830298,
+      "batch_ms": 9.978295000109938,
+      "solve_ms": 96.81894200002716,
+      "cli_ms": 231.1365420009679
+    },
+    "opencl": {
+      "native_transform_ms": 1.4010430004418595,
+      "batch_ms": 12.046889998600818,
+      "solve_ms": 102.27803999987373,
+      "cli_ms": 256.59521000125096
+    }
+  }
+}

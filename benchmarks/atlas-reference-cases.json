@@ -1,0 +1,465 @@
+{
+  "measured_at_utc": "2026-11-12T10:53:08+00:00",
+  "hardware": {
+    "cpu": "13th Gen Intel(R) Core(TM) i7-1355U",
+    "os": "Linux-6.18.55-1-MANJARO-x86_64-with-glibc2.44",
+    "python": "3.14.7"
+  },
+  "method": "One untimed warm-up per case/backend, then fresh CLI + worker for every measured run including complete JSON output. No cache flush. Cases interleaved, alternating order. Local germ at the origin. Published timings were obtained separately on other hardware.",
+  "repeats": 5,
+  "published_references": {
+    "a6": {
+      "source": "Singular tutorial, Resolution of singularities",
+      "url": "https://www.singular.uni-kl.de/ftp/pub/Math/Singular/doc/tutor.pdf",
+      "reported_result": "Six genus-zero exceptional curves of self-intersection -2 in a path."
+    },
+    "binomial": {
+      "source": "Blanco and Fr\u00fchbis-Kr\u00fcger (2011), section 5, Table 1, fourth row",
+      "url": "https://arxiv.org/pdf/1109.1655#page=10",
+      "hardware": "Intel Core i3-330M at 2.13 GHz, 4 GB memory",
+      "reported_result": {
+        "resolve": {
+          "time": ">7200 s",
+          "final_charts": null
+        },
+        "resbinomial": {
+          "time": "9 s",
+          "final_charts": 240
+        }
+      }
+    }
+  },
+  "atlas": {
+    "a6/cpu": {
+      "input": "x^7+y^2-z^2",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mode": "intrinsic",
+      "search": "quick",
+      "compute": "cpu",
+      "status": "resolved",
+      "engine": "native-a-series",
+      "dual_status": "complete",
+      "charts": 7,
+      "vertices": 6,
+      "cells_by_dimension": {
+        "1": 5
+      },
+      "geometry_sha256": "0da4c183c7af56a3385d670a58c217c6c75467f73cac8a6a47d61743f0187307",
+      "samples": [
+        {
+          "fresh_cli_ms": 124.1,
+          "solver_ms": 1.86,
+          "json_bytes": 11476
+        },
+        {
+          "fresh_cli_ms": 104.303,
+          "solver_ms": 1.496,
+          "json_bytes": 11477
+        },
+        {
+          "fresh_cli_ms": 99.663,
+          "solver_ms": 1.495,
+          "json_bytes": 11477
+        },
+        {
+          "fresh_cli_ms": 106.188,
+          "solver_ms": 1.504,
+          "json_bytes": 11477
+        },
+        {
+          "fresh_cli_ms": 117.672,
+          "solver_ms": 1.607,
+          "json_bytes": 11477
+        }
+      ],
+      "median_fresh_cli_ms": 106.188,
+      "median_solver_ms": 1.504
+    },
+    "binomial/cpu": {
+      "input": "x*y^2*z^3-t^6",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "embedded",
+      "search": "quick",
+      "compute": "cpu",
+      "status": "resolved",
+      "engine": "binomial-coordinate-blowups",
+      "dual_status": "complete",
+      "charts": 12,
+      "vertices": 8,
+      "cells_by_dimension": {
+        "1": 15,
+        "2": 8
+      },
+      "geometry_sha256": "8f069c20314dab55c2a4a81327c92046d77ca553f9553dcaa612b0e30440bd15",
+      "chart_batch": {
+        "backend": "cpu",
+        "dimension": 4,
+        "chart_term_pairs": 24
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 159.674,
+          "solver_ms": 4.509,
+          "json_bytes": 30734,
+          "native_batch_ms": 0.011
+        },
+        {
+          "fresh_cli_ms": 137.323,
+          "solver_ms": 3.379,
+          "json_bytes": 30734,
+          "native_batch_ms": 0.008
+        },
+        {
+          "fresh_cli_ms": 104.498,
+          "solver_ms": 3.297,
+          "json_bytes": 30734,
+          "native_batch_ms": 0.011
+        },
+        {
+          "fresh_cli_ms": 108.393,
+          "solver_ms": 3.315,
+          "json_bytes": 30734,
+          "native_batch_ms": 0.009
+        },
+        {
+          "fresh_cli_ms": 126.595,
+          "solver_ms": 3.376,
+          "json_bytes": 30731,
+          "native_batch_ms": 0.008
+        }
+      ],
+      "median_fresh_cli_ms": 126.595,
+      "median_solver_ms": 3.376
+    },
+    "binomial_intrinsic/cpu": {
+      "input": "x*y^2*z^3-t^6",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "intrinsic",
+      "search": "quick",
+      "compute": "cpu",
+      "status": "resolved",
+      "engine": "binomial-coordinate-blowups",
+      "dual_status": "complete",
+      "charts": 12,
+      "vertices": 7,
+      "cells_by_dimension": {
+        "1": 12,
+        "2": 6
+      },
+      "geometry_sha256": "1bdf89eec695a08e77e89646f1f80e7edca9ce519f5ce4872f4503cc9ecdda54",
+      "chart_batch": {
+        "backend": "cpu",
+        "dimension": 4,
+        "chart_term_pairs": 24
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 115.455,
+          "solver_ms": 4.417,
+          "json_bytes": 29448,
+          "native_batch_ms": 0.012
+        },
+        {
+          "fresh_cli_ms": 120.976,
+          "solver_ms": 4.242,
+          "json_bytes": 29448,
+          "native_batch_ms": 0.016
+        },
+        {
+          "fresh_cli_ms": 130.848,
+          "solver_ms": 3.424,
+          "json_bytes": 29448,
+          "native_batch_ms": 0.009
+        },
+        {
+          "fresh_cli_ms": 120.044,
+          "solver_ms": 3.747,
+          "json_bytes": 29448,
+          "native_batch_ms": 0.009
+        },
+        {
+          "fresh_cli_ms": 109.094,
+          "solver_ms": 3.384,
+          "json_bytes": 29448,
+          "native_batch_ms": 0.008
+        }
+      ],
+      "median_fresh_cli_ms": 120.044,
+      "median_solver_ms": 3.747
+    },
+    "target_intrinsic/cpu": {
+      "input": "x^5+z*y^3+z^15+t^4*x+t^8",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "intrinsic",
+      "search": "quick",
+      "compute": "cpu",
+      "status": "resolved",
+      "engine": "newton-polyhedron",
+      "dual_status": "complete",
+      "charts": 598,
+      "vertices": 99,
+      "cells_by_dimension": {
+        "1": 251,
+        "2": 153
+      },
+      "geometry_sha256": "9094d70e371b02b51295291abec3cf69f87a0385031b8ee5f5ed3137c2c1a583",
+      "chart_batch": {
+        "backend": "cpu",
+        "dimension": 4,
+        "chart_term_pairs": 12558
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 199.788,
+          "solver_ms": 60.456,
+          "json_bytes": 1006417,
+          "native_batch_ms": 0.088
+        },
+        {
+          "fresh_cli_ms": 201.501,
+          "solver_ms": 61.21,
+          "json_bytes": 1006417,
+          "native_batch_ms": 0.082
+        },
+        {
+          "fresh_cli_ms": 190.847,
+          "solver_ms": 60.346,
+          "json_bytes": 1006418,
+          "native_batch_ms": 0.088
+        },
+        {
+          "fresh_cli_ms": 185.809,
+          "solver_ms": 62.201,
+          "json_bytes": 1006417,
+          "native_batch_ms": 0.099
+        },
+        {
+          "fresh_cli_ms": 186.044,
+          "solver_ms": 53.973,
+          "json_bytes": 1006418,
+          "native_batch_ms": 0.077
+        }
+      ],
+      "median_fresh_cli_ms": 190.847,
+      "median_solver_ms": 60.456
+    },
+    "target_embedded/cpu": {
+      "input": "x^5+z*y^3+z^15+t^4*x+t^8",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "embedded",
+      "search": "quick",
+      "compute": "cpu",
+      "status": "resolved",
+      "engine": "newton-polyhedron",
+      "dual_status": "complete",
+      "charts": 598,
+      "vertices": 169,
+      "cells_by_dimension": {
+        "1": 593,
+        "2": 720,
+        "3": 295
+      },
+      "geometry_sha256": "c1091dcad6a0815ca88a0cdf444246d62c50ea91c0c9085b87b7f5b1f1d41acc",
+      "chart_batch": {
+        "backend": "cpu",
+        "dimension": 4,
+        "chart_term_pairs": 12558
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 171.36,
+          "solver_ms": 52.024,
+          "json_bytes": 1216148,
+          "native_batch_ms": 0.08
+        },
+        {
+          "fresh_cli_ms": 179.517,
+          "solver_ms": 50.107,
+          "json_bytes": 1216148,
+          "native_batch_ms": 0.081
+        },
+        {
+          "fresh_cli_ms": 190.473,
+          "solver_ms": 52.681,
+          "json_bytes": 1216148,
+          "native_batch_ms": 0.078
+        },
+        {
+          "fresh_cli_ms": 196.83,
+          "solver_ms": 53.164,
+          "json_bytes": 1216147,
+          "native_batch_ms": 0.08
+        },
+        {
+          "fresh_cli_ms": 212.823,
+          "solver_ms": 72.807,
+          "json_bytes": 1216148,
+          "native_batch_ms": 0.087
+        }
+      ],
+      "median_fresh_cli_ms": 190.473,
+      "median_solver_ms": 52.681
+    },
+    "target_intrinsic/gpu": {
+      "input": "x^5+z*y^3+z^15+t^4*x+t^8",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "intrinsic",
+      "search": "quick",
+      "compute": "gpu",
+      "status": "resolved",
+      "engine": "newton-polyhedron",
+      "dual_status": "complete",
+      "charts": 598,
+      "vertices": 99,
+      "cells_by_dimension": {
+        "1": 251,
+        "2": 153
+      },
+      "geometry_sha256": "9094d70e371b02b51295291abec3cf69f87a0385031b8ee5f5ed3137c2c1a583",
+      "chart_batch": {
+        "backend": "opencl",
+        "dimension": 4,
+        "chart_term_pairs": 12558
+      },
+      "device": {
+        "index": 0,
+        "name": "Intel(R) Iris(R) Xe Graphics",
+        "vendor": "Intel(R) Corporation",
+        "version": "OpenCL 3.0 NEO ",
+        "driver": "26.35.39758"
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 205.998,
+          "solver_ms": 82.606,
+          "json_bytes": 1006645,
+          "native_batch_ms": 11.622
+        },
+        {
+          "fresh_cli_ms": 212.665,
+          "solver_ms": 67.964,
+          "json_bytes": 1006645,
+          "native_batch_ms": 11.998
+        },
+        {
+          "fresh_cli_ms": 258.59,
+          "solver_ms": 117.158,
+          "json_bytes": 1006646,
+          "native_batch_ms": 12.709
+        },
+        {
+          "fresh_cli_ms": 277.334,
+          "solver_ms": 84.268,
+          "json_bytes": 1006645,
+          "native_batch_ms": 12.02
+        },
+        {
+          "fresh_cli_ms": 227.175,
+          "solver_ms": 79.482,
+          "json_bytes": 1006645,
+          "native_batch_ms": 12.23
+        }
+      ],
+      "median_fresh_cli_ms": 227.175,
+      "median_solver_ms": 82.606
+    },
+    "target_embedded/gpu": {
+      "input": "x^5+z*y^3+z^15+t^4*x+t^8",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mode": "embedded",
+      "search": "quick",
+      "compute": "gpu",
+      "status": "resolved",
+      "engine": "newton-polyhedron",
+      "dual_status": "complete",
+      "charts": 598,
+      "vertices": 169,
+      "cells_by_dimension": {
+        "1": 593,
+        "2": 720,
+        "3": 295
+      },
+      "geometry_sha256": "c1091dcad6a0815ca88a0cdf444246d62c50ea91c0c9085b87b7f5b1f1d41acc",
+      "chart_batch": {
+        "backend": "opencl",
+        "dimension": 4,
+        "chart_term_pairs": 12558
+      },
+      "device": {
+        "index": 0,
+        "name": "Intel(R) Iris(R) Xe Graphics",
+        "vendor": "Intel(R) Corporation",
+        "version": "OpenCL 3.0 NEO ",
+        "driver": "26.35.39758"
+      },
+      "samples": [
+        {
+          "fresh_cli_ms": 220.353,
+          "solver_ms": 84.818,
+          "json_bytes": 1216375,
+          "native_batch_ms": 17.959
+        },
+        {
+          "fresh_cli_ms": 192.688,
+          "solver_ms": 63.647,
+          "json_bytes": 1216374,
+          "native_batch_ms": 12.049
+        },
+        {
+          "fresh_cli_ms": 306.489,
+          "solver_ms": 83.086,
+          "json_bytes": 1216375,
+          "native_batch_ms": 14.6
+        },
+        {
+          "fresh_cli_ms": 259.251,
+          "solver_ms": 85.266,
+          "json_bytes": 1216375,
+          "native_batch_ms": 13.464
+        },
+        {
+          "fresh_cli_ms": 212.203,
+          "solver_ms": 62.741,
+          "json_bytes": 1216374,
+          "native_batch_ms": 11.421
+        }
+      ],
+      "median_fresh_cli_ms": 220.353,
+      "median_solver_ms": 83.086
+    }
+  }
+}
