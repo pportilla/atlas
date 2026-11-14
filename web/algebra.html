@@ -8,6 +8,7 @@
   <link rel="icon" href="/atlas-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/algebra.css">
+  <script src="/exact-json.js" defer></script>
   <script src="/algebra-session.js" defer></script>
   <script src="/algebra.js" defer></script>
 </head>
@@ -46,10 +47,31 @@
                 <option value="saturation">Saturation</option>
                 <option value="dimension">Krull dimension</option>
                 <option value="gcd">Polynomial GCD</option>
+                <option value="quotient-basis">Quotient basis (global)</option>
+                <optgroup label="Local algebra at the origin">
+                  <option value="local-quotient-basis">Quotient basis at the origin</option>
+                  <option value="local-jacobian-algebra">Jacobian algebra at the origin</option>
+                  <option value="milnor-number">Milnor number at the origin</option>
+                  <option value="tjurina-number">Tjurina number at the origin</option>
+                </optgroup>
+                <optgroup label="Local algebra at a rational point">
+                  <option value="local-standard-basis">Local standard basis</option>
+                  <option value="local-normal-form">Local normal form</option>
+                </optgroup>
               </select>
             </label>
+            <p class="helper" id="quotient-description" hidden></p>
           </div>
           <div class="algebra-operands">
+            <fieldset id="local-point-field" hidden disabled>
+              <legend>Local point</legend>
+              <label class="field algebra-field" for="local-point">
+                <span id="point-label">Point coordinates</span>
+                <input id="local-point" name="point" type="text" placeholder="Origin" aria-describedby="point-help"
+                       autocomplete="off" autocapitalize="off" spellcheck="false">
+              </label>
+              <p class="helper" id="point-help">Enter comma-separated integers or fractions. Leave blank for the origin.</p>
+            </fieldset>
             <fieldset id="first-ideal">
               <legend>Ideal <i>I</i></legend>
               <label class="field algebra-field operand-source" id="ideal-source-field" for="ideal-source" hidden>
@@ -118,7 +140,7 @@
               <small id="variables-help">Highest first. Leave empty for ℚ.</small>
             </label>
             <label class="field algebra-field" for="order">
-              <span>Monomial order</span>
+              <span id="order-label">Monomial order</span>
               <select id="order" name="order">
                 <option value="lex">Lexicographic</option>
                 <option value="grevlex">Graded reverse lexicographic</option>

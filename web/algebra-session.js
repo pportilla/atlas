@@ -31,6 +31,17 @@ class AlgebraSession {
         throw new Error("These objects have different coordinate spaces. Choose objects from the same declaration or elimination.");
       }
       owner = saved.space;
+      if (saved.result.type === "local-standard-basis") {
+        if (key !== "ideal" || form.operation !== "local-normal-form") {
+          throw new Error("Choose a local standard basis as the ideal for a local normal form.");
+        }
+        const point = operands.point ?? form.ring.variables.map(() => "0");
+        if (!AlgebraSession.samePoint(point, saved.result.point)) {
+          throw new Error("“" + name + "” was computed at (" + saved.result.point.join(", ") +
+            "). Enter that point, or choose generators for a different point.");
+        }
+        operands.point = saved.result.point;
+      }
       if (key === "ideal" && saved.result.type === "basis" && ["normal-form", "membership"].includes(form.operation)) {
         if (!saved.basisRef) throw new Error("Compute and save this basis again to obtain a reference from the server.");
         delete operands.ideal;
@@ -42,7 +53,22 @@ class AlgebraSession {
     return { operation: form.operation, ring: form.ring, operands, compute: form.compute };
   }
 
+  // Compare an entered rational to the server's normalized coordinates exactly.
+  // The wire format accepts a signed numerator and an optional signed denominator.
+  static samePoint(input, normalized) {
+    return input.length === normalized.length && input.every((coordinate, i) => {
+      const match = /^([+-]?[0-9]+)(?:\/([+-]?[0-9]+))?$/.exec(coordinate);
+      if (!match) return false;
+      const denominator = BigInt(match[2] ?? "1");
+      const [numerator, divisor = "1"] = normalized[i].split("/");
+      return denominator !== 0n && BigInt(match[1]) * BigInt(divisor) === BigInt(numerator) * denominator;
+    });
+  }
+
   record(form, answer) {
+    if (answer.result.scope === "point") {
+      form = { ...form, operands: { ...form.operands, point: answer.result.point } };
+    }
     this.steps.push(form);
     if (!form.name) return;
 
@@ -102,7 +128,7 @@ class AlgebraSession {
       const ideal = (key) => {
         if (!sources[key]) return rawIdeal(operands[key]);
         const saved = names.get(sources[key]);
-        if (operation === "ideal") {
+        if (operation === "ideal" || this.objects.get(sources[key]).result.type === "local-jacobian-algebra") {
           return "ideal(" + saved + ".generators, " + variableArgs + ", order=" + quote(ring.order) + ")";
         }
         return saved;
@@ -117,12 +143,15 @@ class AlgebraSession {
         let args;
         if (operation === "gcd") {
           args = [poly("polynomial"), poly("other_polynomial"), "order=" + quote(ring.order)];
+        } else if (AlgebraSession.hypersurfaceOperations.has(operation)) {
+          args = [poly("polynomial"), "order=" + quote(ring.order)];
         } else {
           args = [ideal("ideal")];
-          if (operation === "normal-form" || operation === "membership") args.unshift(poly("polynomial"));
+          if (["normal-form", "local-normal-form", "membership"].includes(operation)) args.unshift(poly("polynomial"));
           else if (operation === "saturation") args.push(poly("polynomial"));
           else if (operation === "quotient" || operation === "intersection") args.push(ideal("other_ideal"));
           else if (operation === "eliminate") args.push(...operands.variables.map(v => quote(v)));
+          if (AlgebraSession.pointOperations.has(operation)) args.push("point=" + quote(operands.point));
         }
         args.push("compute=" + quote(form.compute));
         expression = operation.replaceAll("-", "_") + "(" + args.join(", ") + ")";
@@ -134,9 +163,12 @@ class AlgebraSession {
   }
 }
 
+AlgebraSession.hypersurfaceOperations = new Set(["local-jacobian-algebra", "milnor-number", "tjurina-number"]);
+AlgebraSession.pointOperations = new Set(["local-standard-basis", "local-normal-form"]);
 AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate dimension gcd algebra_request help quit exit"
+  "quotient saturation saturate dimension gcd algebra_request help quit exit " +
+  "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form"
 ).split(" "));

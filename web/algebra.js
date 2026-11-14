@@ -7,10 +7,23 @@ const polynomial = byId("polynomial");
 const polynomialLabels = {
   gcd: "First polynomial",
   "normal-form": "Polynomial to reduce",
+  "local-normal-form": "Polynomial to reduce",
   membership: "Polynomial to test",
   saturation: "Saturating polynomial f",
+  "local-jacobian-algebra": "Hypersurface polynomial f with f(0) = 0",
+  "milnor-number": "Hypersurface polynomial f with f(0) = 0",
+  "tjurina-number": "Hypersurface polynomial f with f(0) = 0",
 };
-const polynomialInputs = { gcd: "(x+y)*(x+1)", "normal-form": polynomial.value, membership: "y^2-1", saturation: "x" };
+const polynomialInputs = { gcd: "(x+y)*(x+1)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
+const quotientDescriptions = {
+  "quotient-basis": "Find a monomial basis of the quotient by I over ℚ, including points away from the origin.",
+  "local-quotient-basis": "Find a monomial basis of the quotient by I after localizing at the origin, where all coordinates are zero.",
+  "local-jacobian-algebra": "In the local ring at the origin, take the quotient by the partial derivatives of f.",
+  "milnor-number": "Compute the dimension over ℚ of the local quotient by the partial derivatives of f.",
+  "tjurina-number": "Compute the dimension over ℚ of the local quotient by f and its partial derivatives.",
+  "local-standard-basis": "Compute a standard basis of the ideal in the local ring at the chosen point.",
+  "local-normal-form": "Reduce f modulo the ideal in the local ring at the chosen point.",
+};
 const session = new AlgebraSession();
 let activeOperation = operation.value;
 let running = false;
@@ -76,20 +89,29 @@ function updateEliminationChoices() {
 }
 
 function updateOperation() {
-  if (activeOperation in polynomialLabels) polynomialInputs[activeOperation] = polynomial.value;
+  const polynomialInput = (op) => AlgebraSession.hypersurfaceOperations.has(op) ? "hypersurface" : op;
+  if (activeOperation in polynomialLabels) polynomialInputs[polynomialInput(activeOperation)] = polynomial.value;
   activeOperation = operation.value;
   const needsPolynomial = activeOperation in polynomialLabels;
   showOperandGroup("polynomial-field", needsPolynomial);
   if (needsPolynomial) {
     byId("polynomial-label").textContent = polynomialLabels[activeOperation];
-    polynomial.value = polynomialInputs[activeOperation];
+    polynomial.value = polynomialInputs[polynomialInput(activeOperation)];
   }
   byId("saturation-help").hidden = activeOperation !== "saturation";
   const needsTwoPolynomials = activeOperation === "gcd";
-  showOperandGroup("first-ideal", !needsTwoPolynomials);
+  const needsFirstIdeal = !needsTwoPolynomials && !AlgebraSession.hypersurfaceOperations.has(activeOperation);
+  showOperandGroup("first-ideal", needsFirstIdeal);
   showOperandGroup("other-polynomial-field", needsTwoPolynomials);
   byId("gcd-help").hidden = !needsTwoPolynomials;
-  byId("zero-ideal-help").hidden = needsTwoPolynomials;
+  byId("zero-ideal-help").hidden = !needsFirstIdeal;
+  const description = byId("quotient-description");
+  description.textContent = quotientDescriptions[activeOperation] || "";
+  description.hidden = !description.textContent;
+  if (description.hidden) operation.removeAttribute("aria-describedby");
+  else operation.setAttribute("aria-describedby", description.id);
+  byId("order-label").textContent = usesLocalOrder(activeOperation) ? "Local order tie-breaker" : "Monomial order";
+  showOperandGroup("local-point-field", AlgebraSession.pointOperations.has(activeOperation));
   const needsIdeal = ["intersection", "quotient"].includes(activeOperation);
   showOperandGroup("second-ideal", needsIdeal);
   if (needsIdeal) {
@@ -103,6 +125,11 @@ function updateOperation() {
   markChanges();
 }
 
+function usesLocalOrder(operation) {
+  return operation === "local-quotient-basis" || AlgebraSession.hypersurfaceOperations.has(operation) ||
+    AlgebraSession.pointOperations.has(operation);
+}
+
 function inputRing() {
   return { field: "QQ", variables: variables(), order: byId("order").value };
 }
@@ -114,9 +141,11 @@ function ringText(ring) {
 
 function updateSources() {
   const ring = inputRing();
+  byId("point-label").textContent = ring.variables.length ? "Coordinates (" + ring.variables.join(", ") + ")" : "Point in zero coordinates";
+  const ideals = ["ideal", "basis", "local-jacobian-algebra"];
   for (const [source, group, kinds] of [
-    ["ideal-source", "first-ideal-inputs", ["ideal", "basis"]],
-    ["second-ideal-source", "second-ideal-inputs", ["ideal", "basis"]],
+    ["ideal-source", "first-ideal-inputs", operation.value === "local-normal-form" ? [...ideals, "local-standard-basis"] : ideals],
+    ["second-ideal-source", "second-ideal-inputs", ideals],
     ["polynomial-source", "polynomial", ["polynomial"]],
     ["other-polynomial-source", "other-polynomial", ["polynomial"]],
   ]) {
@@ -125,7 +154,10 @@ function updateSources() {
     select.replaceChildren(select.options[0]);
     for (const [name, { result }] of session.objects) {
       if (!kinds.includes(result.type)) continue;
-      const option = new Option(name + " · " + result.type + " · " + ringText(result.ring), name);
+      let kind = result.type;
+      if (kind === "local-jacobian-algebra") kind = "Jacobian ideal (partial derivatives)";
+      if (kind === "local-standard-basis") kind = "local standard basis " + scopeText(result);
+      const option = new Option(name + " · " + kind + " · " + ringText(result.ring), name);
       option.disabled = !AlgebraSession.sameRing(result.ring, ring);
       select.add(option);
       // Preserve the selection on a ring edit. Submission then explains the
@@ -164,6 +196,10 @@ function readRequest() {
   if (operation.value === "eliminate") {
     operands.variables = Array.from(byId("eliminate").querySelectorAll("input:checked"), (input) => input.value);
   }
+  if (AlgebraSession.pointOperations.has(operation.value)) {
+    const point = byId("local-point").value.trim();
+    if (point) operands.point = point.split(",").map(value => value.trim());
+  }
   return {
     operation: operation.value,
     ring: inputRing(),
@@ -195,6 +231,10 @@ for (const [group, button, defaults] of [
 operation.addEventListener("change", updateOperation);
 byId("variables").addEventListener("input", updateEliminationChoices);
 byId("variables").addEventListener("input", updateSources);
+byId("ideal-source").addEventListener("change", () => {
+  const saved = session.objects.get(byId("ideal-source").value);
+  if (saved?.result.type === "local-standard-basis") byId("local-point").value = saved.result.point.join(", ");
+});
 for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-source", "other-polynomial-source"]) {
   byId(id).addEventListener("change", updateSources);
 }
@@ -211,6 +251,13 @@ const resultTitles = {
   quotient: "Ideal quotient",
   saturation: "Saturation",
   dimension: "Krull dimension",
+  "quotient-basis": "Quotient basis",
+  "local-quotient-basis": "Local quotient basis",
+  "local-jacobian-algebra": "Local Jacobian algebra",
+  "milnor-number": "Milnor number",
+  "tjurina-number": "Tjurina number",
+  "local-standard-basis": "Local standard basis",
+  "local-normal-form": "Local normal form",
 };
 
 // Preserve every source token in the DOM while setting powers, fractions and
@@ -264,6 +311,13 @@ const problemNotation = {
   intersection: "<i>I</i> ∩ <i>J</i>",
   dimension: "dim(<i>R</i>/<i>I</i>)",
   gcd: "gcd(<i>f</i>, <i>g</i>)",
+  "quotient-basis": "<i>R</i>/<i>I</i>",
+  "local-quotient-basis": "<i>R</i><sub>0</sub>/<i>I R</i><sub>0</sub>",
+  "local-jacobian-algebra": "<i>R</i><sub>0</sub>/J(<i>f</i>)",
+  "milnor-number": "μ<sub>0</sub>(<i>f</i>)",
+  "tjurina-number": "τ<sub>0</sub>(<i>f</i>)",
+  "local-standard-basis": "SB<sub><i>p</i></sub>(<i>I</i>)",
+  "local-normal-form": "NF<sub><i>I,p</i></sub>(<i>f</i>)",
 };
 
 function showProblem(request) {
@@ -272,7 +326,11 @@ function showProblem(request) {
   function operand(label, key) {
     const row = mathSpan("div", "equation-row");
     const rhs = mathSpan("div", "equation-rhs");
-    if (sources[key]) rhs.append(mathSpan("i", "", sources[key]));
+    if (sources[key]) {
+      const name = sources[key];
+      rhs.append(mathSpan("i", "", name));
+      if (session.objects.get(name).result.type === "local-jacobian-algebra") rhs.append(".generators");
+    }
     else if (Array.isArray(operands[key])) {
       const polynomials = operands[key];
       const preview = polynomials.slice(0, 4);
@@ -301,22 +359,70 @@ function showProblem(request) {
   if ("other_polynomial" in operands || sources.other_polynomial) operand("g", "other_polynomial");
   if ("ideal" in operands || sources.ideal) operand("I", "ideal");
   if ("other_ideal" in operands || sources.other_ideal) operand("J", "other_ideal");
+  if (AlgebraSession.pointOperations.has(operation)) {
+    const point = operands.point ?? ring.variables.map(() => "0");
+    const row = mathSpan("div", "equation-row");
+    row.append(mathSpan("i", "equation-label", "p"), mathSpan("span", "equals", "="),
+      mathSpan("span", "equation-rhs", "(" + point.join(", ") + ")"));
+    rows.append(row);
+  }
   byId("problem-ring").textContent = "R = " + ringText(ring).split(" · ")[0];
-  const order = byId("order").selectedOptions[0].textContent + " order";
+  const selected = byId("order").selectedOptions[0].textContent;
+  const order = usesLocalOrder(operation) ? "Lowest total degree first · " + selected.toLowerCase() + " tie-breaker" : selected + " order";
   byId("problem-order").textContent = ring.variables.length > 1 ? order + " · " + ring.variables.join(" > ") : order;
 }
 
 updateEliminationChoices();
 updateOperation();
 
+function showQuotient(value, result) {
+  value.replaceChildren();
+  function entry(label, content) {
+    value.append(mathSpan("h3", "quotient-label", label), content);
+  }
+  entry("Dimension over ℚ", result.finite ? String(result.dimension) : "Infinite");
+  if (result.finite) {
+    entry("Monomial basis", result.basis.length ? expressionText(result.basis.join(", ")) : "∅ (empty basis)");
+  }
+  if (result.type === "local-jacobian-algebra") {
+    entry("Jacobian ideal generators", result.generators.length ? expressionText(result.generators.join(", ")) : "(0)");
+  }
+}
+
+function scopeText(result) {
+  if (result.scope === "origin") return "at the origin";
+  if (result.scope === "global") return "global quotient";
+  if (result.scope === "point") {
+    const coordinates = result.ring.variables.map((name, i) => name + " = " + result.point[i]);
+    return "at (" + coordinates.join(", ") + ")";
+  }
+  return "";
+}
+
+function showLocalNormalForm(value, result) {
+  const kind = result.reduction === "weak" ? "Weak normal form" : "Standard normal form";
+  value.replaceChildren(mathSpan("h3", "quotient-label", kind));
+  if (result.unit === "1") {
+    value.append(expressionText(result.remainder));
+  } else {
+    const fraction = mathSpan("span", "math-fraction local-representative");
+    fraction.append(expressionText(result.remainder), mathSpan("span", "fraction-bar", " / "), expressionText(result.unit));
+    value.append(fraction, mathSpan("p", "helper", "This fraction represents f modulo I. Its numerator is the remainder and its denominator is a unit with value 1 at this point."));
+  }
+  if (result.reduction === "weak") {
+    value.append(mathSpan("p", "helper", "The leading monomial of a nonzero remainder is irreducible. Later terms can still be reducible."));
+  }
+}
+
 function showResult(record) {
   const { result } = record;
   const value = byId("result-value");
   switch (result.type) {
     case "basis":
+    case "local-standard-basis":
     case "ideal":
       if (!result.generators.length) {
-        value.textContent = result.type === "basis" ? "∅ (empty basis)" : "(0)";
+        value.textContent = result.type === "ideal" ? "(0)" : "∅ (empty basis)";
       } else {
         const list = document.createElement("ul");
         list.setAttribute("aria-label", "Generators");
@@ -331,15 +437,22 @@ function showResult(record) {
     case "polynomial":
       value.replaceChildren(expressionText(result.polynomial));
       break;
+    case "local-normal-form":
+      showLocalNormalForm(value, result);
+      break;
+    case "quotient-basis":
+    case "local-jacobian-algebra":
+      showQuotient(value, result);
+      break;
     case "boolean":
     case "integer":
-      value.textContent = String(result.value);
+      value.textContent = result.finite === false ? "Infinite" : String(result.value);
       break;
     default:
       throw new Error("The service returned an unknown result type.");
   }
 
-  const ringName = ringText(result.ring);
+  const ringName = [ringText(result.ring), scopeText(result)].filter(Boolean).join(" · ");
   byId("result-ring").textContent = ringName;
   byId("result-title").textContent = [submitted.name, resultTitles[record.operation]].filter(Boolean).join(" · ");
   byId("result").hidden = false;
@@ -407,7 +520,7 @@ function showSession(name, result) {
     const item = document.createElement("li");
     const label = document.createElement("strong");
     label.textContent = name;
-    item.append(label, " · " + result.type + " · " + ringText(result.ring));
+    item.append(label, " · " + [result.type, ringText(result.ring), scopeText(result)].filter(Boolean).join(" · "));
     byId("session-items").append(item);
     updateSources();
   }
@@ -444,7 +557,12 @@ form.addEventListener("submit", async (event) => {
     });
     const body = await response.text();
     let record;
-    try { record = JSON.parse(body); } catch {
+    try { record = readRecord(body); } catch (error) {
+      if (error.name === "ExactIntegerError") {
+        responseText = body;
+        byId("export").hidden = false;
+        throw error;
+      }
       throw new Error("The algebra service returned an unreadable response (HTTP " + response.status + ").");
     }
     if (record.status === "ok" || record.status === "error") {

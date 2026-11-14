@@ -6,6 +6,10 @@ C++17, GMP, FLINT and libnormaliz handle point blowups, exact linear algebra and
 
 For a comparison of the two systems and a phased roadmap for bringing more algebra to the Atlas CLI and browser, see [Atlas and Singular](README-singular-comparison.md).
 
+Use the **Algebra** view or `./atlas algebra` for global and local quotient bases, local Jacobian algebras, and Milnor and Tjurina numbers. For example, `./atlas algebra local-jacobian-algebra --vars x,y --poly 'y^2-x^3'` gives basis $1,x$ at the origin and dimension 2. [Examples for the shell, prompt and browser](examples/algebra-api.md#quotient-bases-and-local-hypersurface-invariants)
+
+Local standard bases and normal forms also accept any rational point. For example, `./atlas algebra local-normal-form --vars x,y --point '1/2,-2' --gen 'x-1/2' --gen 'y+2' --poly 'x+y'` returns $-3/2$. [Point coordinates, saved bases and local units](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
+
 ## Build and run
 
 Install a C++17 compiler, Make, pkg-config, Python 3.10 or later and the development libraries for GMP (including gmpxx), FLINT, JsonCpp and libnormaliz. The project was tested on Linux with FLINT 3.6, SymPy 1.14 and Python 3.14. The optional OpenCL plugins need OpenCL headers, a loader and a compatible device driver. The Triton path uses a GPU-enabled PyTorch installation and a matching Triton compiler in the Python environment that runs Atlas.

@@ -61,13 +61,15 @@ class Handler(BaseHTTPRequestHandler):
         except (ConnectionError,BrokenPipeError): pass
 
     def obj(self,code,data):
-        self.send(code,json.dumps(data,ensure_ascii=False).encode(),'application/json; charset=utf-8')
+        from .exact_json import result_json
+        self.send(code,result_json(data).encode(),'application/json; charset=utf-8')
 
     def do_GET(self):
         path=urlsplit(self.path).path
         static={'/':('index.html','text/html'),'/index.html':('index.html','text/html'),
                 '/algebra.html':('algebra.html','text/html'),'/algebra.js':('algebra.js','text/javascript'),
                 '/algebra-session.js':('algebra-session.js','text/javascript'),
+                '/exact-json.js':('exact-json.js','text/javascript'),
                 '/resolution.css':('resolution.css','text/css'),'/algebra.css':('algebra.css','text/css'),
                 '/atlas-mark.svg':('atlas-mark.svg','image/svg+xml'),
                 '/style.css':('style.css','text/css'),'/app.js':('app.js','text/javascript')}
@@ -111,7 +113,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not chunk:
                     return reject(400, 'Incomplete request body.')
                 body.extend(chunk)
-            data = json.loads(body)
+            if algebra:
+                from .polynomial import integer_from_decimal
+                data = json.loads(body, parse_int=integer_from_decimal)
+            else:
+                data = json.loads(body)
             del body
         except (ValueError,OSError,RecursionError): return reject(400, 'Invalid JSON request.')
         except MemoryError: return reject(503, 'Insufficient memory to read the request.', 'worker_unavailable')

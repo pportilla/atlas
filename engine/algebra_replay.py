@@ -38,6 +38,8 @@ def _command(request):
                 args.extend([flag, value])
     if "variables" in operands:
         args.extend(["--eliminate", ",".join(operands["variables"])])
+    if "point" in operands:
+        args.extend(["--point", ",".join(operands["point"])])
     args.append("--json")
     return shlex.join(args)
 
@@ -77,10 +79,10 @@ def _script(request, prepared):
         lines.append(f"{var} = ideal({', '.join(args)})")
     op = request["operation"]
     args = ["I"]
-    if op == "gcd":
-        args = [str(prepared["polynomial"]), str(prepared["other_polynomial"]),
-                f"variables=[{variables}]", f"order={request['ring']['order']!r}"]
-    elif op in ("normal-form", "membership"):
+    if "ideal" not in prepared:
+        args = [str(prepared[key]) for key in ("polynomial", "other_polynomial") if key in prepared]
+        args.extend([f"variables=[{variables}]", f"order={request['ring']['order']!r}"])
+    elif op in ("normal-form", "membership", "local-normal-form"):
         args.insert(0, str(prepared["polynomial"]))
     elif op == "saturation":
         args.append(str(prepared["polynomial"]))
@@ -88,6 +90,8 @@ def _script(request, prepared):
         args.append("J")
     elif op == "eliminate":
         args.extend(prepared["variables"])
+    if "point" in prepared:
+        args.append(f"point={prepared['point']!r}")
     args.append(f"compute={request['compute']!r}")
     lines.append(f"result = {op.replace('-', '_')}({', '.join(args)})")
     # Long, expanded polynomials are easier to replay from their input strings.

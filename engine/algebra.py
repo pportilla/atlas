@@ -3,9 +3,21 @@ import re
 from subprocess import TimeoutExpired
 
 from .algebra_replay import make_replay
-from .polynomial import InputError, parse_expression
+from .polynomial import InputError, integer_text, parse_expression
+from .rational_point import normalize_point
 
 
+QUOTIENT_ALGEBRA_OPERANDS = {
+    "quotient-basis": ("ideal",),
+    "local-quotient-basis": ("ideal",),
+    "local-jacobian-algebra": ("polynomial",),
+    "milnor-number": ("polynomial",),
+    "tjurina-number": ("polynomial",),
+}
+POINT_OPERATIONS = {
+    "local-standard-basis": ("ideal",),
+    "local-normal-form": ("ideal", "polynomial"),
+}
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "ideal": ("ideal",),
@@ -17,6 +29,8 @@ OPERATION_OPERANDS = {
     "quotient": ("ideal", "other_ideal"),
     "saturation": ("ideal", "polynomial"),
     "dimension": ("ideal",),
+    **QUOTIENT_ALGEBRA_OPERANDS,
+    **POINT_OPERATIONS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
 
@@ -66,7 +80,11 @@ def _request(data):
         raise InputError("Unsupported monomial order. Choose lex or grevlex.")
 
     operands = data["operands"]
-    _fields(operands, "operands", OPERATION_OPERANDS[operation])
+    point_operation = operation in POINT_OPERATIONS
+    _fields(operands, "operands", OPERATION_OPERANDS[operation], ("point",) if point_operation else ())
+    if point_operation:
+        point = normalize_point(operands["point"], len(names)) if "point" in operands else ["0"] * len(names)
+        operands = dict(operands, point=point)
     for key in ("ideal", "other_ideal"):
         if key in operands and (not isinstance(operands[key], list)
                                 or not all(isinstance(f, str) for f in operands[key])):
@@ -114,6 +132,7 @@ def dispatch(data, *, known_basis=False):
             if key in operands:
                 operands[key] = parse(operands[key])
         result_operands = operands
+        handler_options = {}
         if operation in BASIS_OPERATIONS:
             from . import algebra_groebner as handler
             if known_basis:
@@ -121,9 +140,15 @@ def dispatch(data, *, known_basis=False):
                 result_operands = dict(operands, ideal=basis)
         elif operation == "gcd":
             from . import algebra_polynomial as handler
+        elif operation in QUOTIENT_ALGEBRA_OPERANDS:
+            from . import local_algebra as handler
+        elif operation in POINT_OPERATIONS:
+            from . import local_standard as handler
+            if known_basis and operation == "local-normal-form":
+                handler_options["known_basis"] = True
         else:
             from . import algebra_ideals as handler
-        result = handler.handle(operation, ring, result_operands)
+        result = handler.handle(operation, ring, result_operands, **handler_options)
         observed = execution.report()
     return {"status": "ok", "operation": operation, "result": result,
             "execution": observed, "replay": make_replay(request, operands)}
@@ -137,6 +162,12 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None):
     if known_basis:
         args.append("--known-basis")
     try:
+        # Encode point integers in their equivalent string form before the
+        # worker transport calls json.dumps under the host's decimal digit limit.
+        operands = request.get("operands") if isinstance(request, dict) else None
+        if isinstance(operands, dict) and isinstance(operands.get("point"), list):
+            point = [integer_text(v) if type(v) is int else v for v in operands["point"]]
+            request = dict(request, operands=dict(operands, point=point))
         return run_worker(args, request, timeout, owner=owner)
     except (TypeError, ValueError, RecursionError):
         return 400, error_record("invalid_request", "Send a JSON algebra request.")

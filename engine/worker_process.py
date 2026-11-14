@@ -7,6 +7,8 @@ import subprocess
 import sys
 import threading
 
+from .polynomial import integer_from_decimal
+
 
 def _kill_group(child):
     try:
@@ -64,7 +66,8 @@ def run_worker(module_args, data, timeout, *, owner=None):
     if child.returncode:
         raise RuntimeError("Computation worker stopped unexpectedly.")
     try:
-        status, record = json.loads(out)
+        # Worker output can contain computed dimensions with thousands of digits.
+        status, record = json.loads(out, parse_int=integer_from_decimal)
     except (TypeError, ValueError) as exc:
         raise RuntimeError("Computation worker returned an invalid response.") from exc
     if type(status) is not int or not isinstance(record, dict):

@@ -29,16 +29,6 @@ def _opencl_witnesses(terms, basis, index):
     return out
 
 
-def _exponents(term, variables):
-    coefficient, *powers = term.split()
-    if not coefficient or len(powers) != variables:
-        raise ValueError("Expected a sparse monomial")
-    vector = tuple(map(int, powers))
-    if any(p < 0 for p in vector) or sum(vector) > 32767:
-        raise ValueError("Outside the packed rational monomial range")
-    return vector
-
-
 def _certify(terms, basis, witnesses):
     """Check every proposed deletion, and every retained term's irreducibility."""
     if len(terms) != len(witnesses):
@@ -64,26 +54,21 @@ def _certify(terms, basis, witnesses):
             raise ArithmeticError("Host rejected a monomial divisibility witness")
 
 
-def normal_form(gens, basis_rows, row):
-    """Return a verified sparse remainder, or None to use ordinary exact division."""
-    scope = current_replay_scope()
-    if scope is None or scope.compute != "gpu" or not row or not basis_rows:
-        return None
-    if "*" in row or any(not head or ";" in head or "*" in head for head in basis_rows):
-        return None
-    variables = len(gens)
-    size = 1 + row.count(";")
+def _eligible(variables, terms, divisors):
     # Tiny reductions are cheaper on the CPU. Bound the worst-case search and
     # the size of the term/witness buffers, even for very sparse basis inputs.
-    if (not 1 <= variables <= 32 or not 64 <= size <= 65536 or
-            variables * size * len(basis_rows) > 1 << 24):
+    return (1 <= variables <= 32 and 64 <= terms <= 65536 and divisors > 0
+            and variables * terms * divisors <= 1 << 24)
+
+
+def monomial_witnesses(variables, terms, basis):
+    """Return verified divisor indices (-1 for retained terms), or None for CPU fallback."""
+    scope = current_replay_scope()
+    if scope is None or scope.compute != "gpu" or not _eligible(variables, len(terms), len(basis)):
         return None
     started = perf_counter_ns()
-    chunks = row.split(";")
-    try:
-        terms = [_exponents(chunk, variables) for chunk in chunks]
-        basis = [_exponents(head, variables) for head in basis_rows]
-    except ValueError:
+    if any(len(row) != variables or sum(row) > 32767 or any(p < 0 for p in row)
+           for row in chain(terms, basis)):
         return None
 
     from .algebra_execution import record_fallback, record_stage
@@ -108,9 +93,30 @@ def normal_form(gens, basis_rows, row):
         except Exception as error:
             record_fallback(f"{backend} monomial normal form: {error}")
             continue
-        kept = [chunk for chunk, witness in zip(chunks, witnesses) if witness == -1]
         record_stage("monomial_normal_form", backend, device=scope.record_device(backend, device),
-                     terms=size, divisors=len(basis), removed=size - len(kept),
+                     terms=len(terms), divisors=len(basis), removed=sum(w >= 0 for w in witnesses),
                      host_verified=True, verify_ns=verify_ns, elapsed_ns=perf_counter_ns() - started)
-        return ";".join(kept)
+        return witnesses
     return None
+
+
+def normal_form(gens, basis_rows, row):
+    """Return a verified sparse remainder, or None to use ordinary exact division."""
+    scope = current_replay_scope()
+    if scope is None or scope.compute != "gpu" or not row or not basis_rows:
+        return None
+    if "*" in row or any(not head or ";" in head or "*" in head for head in basis_rows):
+        return None
+    variables = len(gens)
+    if not _eligible(variables, 1 + row.count(";"), len(basis_rows)):
+        return None
+    chunks = row.split(";")
+    try:
+        terms = [tuple(map(int, chunk.split()[1:])) for chunk in chunks]
+        basis = [tuple(map(int, head.split()[1:])) for head in basis_rows]
+    except ValueError:
+        return None
+    witnesses = monomial_witnesses(variables, terms, basis)
+    if witnesses is None:
+        return None
+    return ";".join(chunk for chunk, witness in zip(chunks, witnesses) if witness == -1)

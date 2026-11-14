@@ -101,6 +101,8 @@
   font: normal var(--operator-size)/1.4 var(--math);
 }
 .algebra #result-value ul { margin: 0; padding: 0; list-style: none; }
+.algebra #result-value .quotient-label { margin: .65rem 0 .12rem; font: 600 .8rem/1.4 var(--ui); color: var(--muted); }
+.algebra #quotient-description { margin-top: .4rem; }
 .algebra #result-value li + li { border-top: 1px dotted var(--rule); }
 .algebra .stale-note, .algebra .error { margin: 0 0 .7rem; }
 .algebra #export { margin-top: .9rem; }

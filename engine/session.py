@@ -22,6 +22,27 @@ HELP = """Define coordinates and keep the results of calculations:
   total = C.pullback(f)
   total.multiplicity(E.equation_in(C))   # 6
 
+  I = ideal(x^2*(x-1), y)
+  quotient_basis(I).dimension            # 3, including the point (1, 0)
+  local_quotient_basis(I).dimension      # 2 at the origin
+  B = local_standard_basis(I, point=(1, 0))
+  h = local_normal_form(x-1, B)          # uses the point saved in B
+  h.remainder == 0                       # x-1 belongs to I locally at (1, 0)
+
+For a local normal form h of g, h.unit equals 1 at the chosen point, and
+h.unit*g agrees with h.remainder modulo the localized ideal. When h.reduction
+is "standard", every remainder term is reduced. When it is "weak", a nonzero
+remainder has a reduced local leading term.
+
+  A = local_jacobian_algebra(f)
+  A.generators                           # partial derivatives in coordinate order
+  A.basis                                # monomials in the original coordinates
+  milnor_number(f).value                 # 2 at the origin
+  tjurina_number(f).value                # 2 at the origin
+
+For an infinite-dimensional quotient, .finite is False and both .basis and
+.dimension are None. For an infinite Milnor or Tjurina number, .value is None.
+
 Inspect R.charts and R.branches, or use print(...) for explicit output.
 Run the same expressions in a file with ./atlas run FILE.atlas."""
 

@@ -16,6 +16,13 @@ _DESCRIPTIONS = {
     "quotient": "compute the quotient of two ideals",
     "saturation": "saturate an ideal by a polynomial",
     "dimension": "compute the Krull dimension of the quotient ring",
+    "quotient-basis": "compute a vector space basis of the global quotient algebra over QQ",
+    "local-quotient-basis": "compute a vector space basis of the quotient algebra at the origin",
+    "local-standard-basis": "compute a standard basis of an ideal at a rational point",
+    "local-normal-form": "reduce a polynomial modulo an ideal at a rational point",
+    "local-jacobian-algebra": "compute the Jacobian generators and quotient basis at the origin",
+    "milnor-number": "compute the dimension over QQ of the Jacobian algebra at the origin",
+    "tjurina-number": "compute the quotient dimension over QQ by f and its partial derivatives at the origin",
 }
 
 
@@ -26,7 +33,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--poly", "--other-poly")
+                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--poly", "--other-poly", "--point")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -36,21 +43,23 @@ class _OperandParser(argparse.ArgumentParser):
         return super().parse_known_args(args, namespace)
 
 
-def _names(value):
+def _comma_list(value):
     return [name.strip() for name in value.split(",")] if value.strip() else []
 
 
 def register_parser(subparsers):
-    from .algebra import OPERATION_OPERANDS
+    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS
 
     command = subparsers.add_parser("algebra", help="compute with polynomials and ideals over QQ")
     operations = command.add_subparsers(dest="operation", required=True, parser_class=_OperandParser)
     for name, keys in OPERATION_OPERANDS.items():
         parser = operations.add_parser(name, help=_DESCRIPTIONS[name], description=_DESCRIPTIONS[name])
-        parser.add_argument("--vars", type=_names, required=True, metavar="x,y",
+        parser.add_argument("--vars", type=_comma_list, required=True, metavar="x,y",
                             help="ordered variables, highest priority first")
         parser.add_argument("--field", metavar="QQ", help="coefficient field (default: QQ)")
-        parser.add_argument("--order", metavar="{lex,grevlex}", help="monomial order (default: grevlex)")
+        order_help = ("tie-breaker among terms of lowest degree in translated coordinates (default: grevlex)"
+                      if name in POINT_OPERATIONS else "monomial order (default: grevlex)")
+        parser.add_argument("--order", metavar="{lex,grevlex}", help=order_help)
         if "ideal" in keys:
             parser.add_argument("--gen", dest="ideal", action="append", default=[], metavar="POLY",
                                 help="ideal generator (repeatable; omit for the zero ideal)")
@@ -64,8 +73,11 @@ def register_parser(subparsers):
             parser.add_argument("--other-gen", dest="other_ideal", action="append", default=[],
                                 metavar="POLY", help="second ideal generator (repeatable; omit for zero)")
         if "variables" in keys:
-            parser.add_argument("--eliminate", dest="variables", type=_names, metavar="x[,y,...]",
+            parser.add_argument("--eliminate", dest="variables", type=_comma_list, metavar="x[,y,...]",
                                 required=True, help="variables to eliminate, separated by commas")
+        if name in POINT_OPERATIONS:
+            parser.add_argument("--point", type=_comma_list, metavar="q1,q2,...",
+                                help="rational coordinates in --vars order (default: origin)")
         compute = parser.add_mutually_exclusive_group()
         compute.add_argument("--compute", metavar="{cpu,auto,gpu}", help="execution mode (default: auto)")
         compute.add_argument("--gpu", dest="compute", action="store_const", const="gpu",
@@ -79,13 +91,31 @@ def _show(record):
     names = ", ".join(ring["variables"])
     ring_name = f"{ring['field']}[{names}]" if names else ring["field"]
     print(f"{ring_name}   {ring['order']}")
-    if result["type"] in ("basis", "ideal"):
+    if "scope" in result:
+        print("Scope:", result["scope"])
+    if "point" in result:
+        print("Point: (" + ", ".join(result["point"]) + ")")
+    if result["type"] in ("basis", "ideal", "local-standard-basis"):
         print("Generators:", ", ".join(result["generators"]) or "(zero ideal)")
+    elif result["type"] == "local-normal-form":
+        print("Reduction:", result["reduction"])
+        print("Remainder:", result["remainder"])
+        print("Unit:", result["unit"])
     elif result["type"] == "polynomial":
         label = "GCD" if record["operation"] == "gcd" else "Remainder"
         print(f"{label}:", result["polynomial"])
     elif result["type"] == "boolean":
         print("Member:", "yes" if result["value"] else "no")
+    elif result["type"] in ("quotient-basis", "local-jacobian-algebra"):
+        if result["type"] == "local-jacobian-algebra":
+            print("Jacobian generators:", ", ".join(result["generators"]) or "(none)")
+        print(f"Vector space dimension over {ring['field']}:",
+              result["dimension"] if result["finite"] else "infinite")
+        if result["finite"]:
+            print("Basis:", ", ".join(result["basis"]) or "(empty)")
+    elif record["operation"] in ("milnor-number", "tjurina-number"):
+        label = "Milnor number" if record["operation"] == "milnor-number" else "Tjurina number"
+        print(f"{label}:", result["value"] if result["finite"] else "infinite")
     else:
         print("Dimension:", result["value"])
     execution = record["execution"]
@@ -107,6 +137,8 @@ def run(args):
         "ring": ring,
         "operands": {key: getattr(args, key) for key in OPERATION_OPERANDS[args.operation]},
     }
+    if getattr(args, "point", None) is not None:
+        request["operands"]["point"] = args.point
     if args.compute is not None:
         request["compute"] = args.compute
     try:
