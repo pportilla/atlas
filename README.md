@@ -35,8 +35,9 @@ make -j4
 ~~~
 
 Run `./atlas` to open a terminal session. Beneath the ATLAS wordmark are the
-version and contact details. The folded map shows the dual graph of the cusp
-`y^2 = x^3`, with an arrow for the strict transform.
+version and contact details. The three folds show the cusp, its tangency to
+the exceptional divisor after the first blowup, and the final resolution graph
+with an arrow for the strict transform.
 Type `help resolve` for resolution options or `quit` to leave.
 
 You can also run commands directly from your shell.

@@ -69,21 +69,26 @@ class CliWelcomeTests(unittest.TestCase):
                 output = render_welcome(width, color=False, interactive=False)
                 self.assert_logo(output, SMALL_LOGO)
 
-    def test_paper_map_has_three_divisors_and_the_strict_transform(self):
+    def test_map_folds_show_the_cusp_first_blowup_and_resolution_as_drawings(self):
         for logo in (LOGO, SMALL_LOGO):
             with self.subTest(logo=logo):
-                drawing = '\n'.join(logo)
+                panels = [line[1:-1].split(':') for line in logo if line.count(':') == 2]
+                sketch, blowup, graph = zip(*panels)
+                self.assertIn('/', ''.join(sketch))
+                self.assertIn('\\', ''.join(sketch))
+                self.assertNotRegex(''.join(logo).replace('o', ''), r'[A-Za-z0-9=]')
+                self.assertTrue(any(re.search(r'\\_+/', row) for row in blowup))
+                drawing = '\n'.join(graph)
                 self.assertEqual(drawing.count('o'), 3)
                 self.assertEqual(drawing.count('^'), 1)
-                self.assertNotRegex(drawing, r'[0-9A-Z<>v]')
-                row = next(i for i, line in enumerate(logo) if 'o' in line)
-                chain = re.search(r'o-+o-+o', logo[row])
+                row = next(i for i, line in enumerate(graph) if 'o' in line)
+                chain = re.search(r'o-+o-+o', graph[row])
                 self.assertIsNotNone(chain)
-                column = logo[row].index('o', chain.start() + 1)
-                tip = next(i for i, line in enumerate(logo) if '^' in line)
+                column = graph[row].index('o', chain.start() + 1)
+                tip = next(i for i, line in enumerate(graph) if '^' in line)
                 self.assertLess(tip, row)
-                self.assertEqual(logo[tip].index('^'), column)
-                self.assertTrue(all(line[column] == '|' for line in logo[tip + 1:row]))
+                self.assertEqual(graph[tip].index('^'), column)
+                self.assertTrue(all(line[column] == '|' for line in graph[tip + 1:row]))
 
     def launch_session(self, commands, term='xterm', no_color='1'):
         stdin, stdout, stderr = Terminal(commands), Terminal(), io.StringIO()
