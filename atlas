@@ -1,4 +1,20 @@
-#!/usr/bin/env python3
+#!/bin/sh
+""":"
+# Execute the native point-local commands before starting an interpreter.
+# The same file remains a Python entry point for explicit interpreter callers.
+case "$0" in
+    */*) atlas_dir=${0%/*} ;;
+    *) atlas_dir=. ;;
+esac
+case "$1/$2" in
+    algebra/local-standard-basis|algebra/local-normal-form)
+        if [ "${ATLAS_GROEBNER-native}" = native ] && [ -z "${ATLAS_GROEBNER_GPU-}" ] &&
+           [ -x "$atlas_dir/native/build/local_algebra" ]; then
+            exec "$atlas_dir/native/build/local_algebra" "$0" "$@"
+        fi ;;
+esac
+exec python3 "$0" "$@"
+":"""
 import os
 import sys
 

@@ -108,6 +108,12 @@ For the Katsura-6 ideal $K$ and an independent $z$, the following run used OpenC
 
 For $(zK):(z)$, dividing first reduced the warm median request time from 29.12 ms to 18.61 ms on this device. Eight alternating pairs of requests returned the same sequence of 41 generators. For Katsura-5 the corresponding times were 11.87 ms and 7.14 ms, with 22 generators.
 
+### Polynomial resultants over the rationals
+
+Choose one variable $t$ and take the remaining coordinates as coefficients. Atlas returns the Sylvester resultant in input order, including its rational content. For $m=\deg_t f$ and $n=\deg_t g$, interchanging two nonzero inputs multiplies the result by $(-1)^{mn}$. Removing $t$ from the recorded ring preserves the order of its other coordinates. [Public examples and boundary conventions](../examples/algebra-api.md#polynomial-resultants)
+
+For a linear input $at+b$ and $g=\sum_j c_j t^j$, the kernel computes $\sum_j c_j(-b)^j a^{n-j}$ over the occupied powers. For $ct^m$, multiplicativity gives $c^n g(0)^m$. These formulas retain polynomial leading coefficients and allow sparse exponents larger than a machine word. The general calculation uses FLINT's exact multivariate resultant over the rationals. [Kernel and Singular comparisons](../tests/test_polynomial_resultant.py)
+
 ### Monic polynomial GCD over the rationals
 
 For two polynomials $a,b$ in the same ordered ring, `gcd(a,b)` returns the greatest common divisor with leading coefficient one. The result is independent of order up to a nonzero rational scalar. For example, a common factor $2x+3y^2$ becomes $x+\tfrac32y^2$ in lex order with $x>y$, and $\tfrac23x+y^2$ in grevlex. Atlas takes $\gcd(0,0)=0$ and $\gcd(a,0)$ to be the monic associate of $a$ for $a\ne0$. [CLI, HTTP, prompt and browser examples](../examples/algebra-api.md#polynomial-gcd)

@@ -252,5 +252,32 @@
     "cpu",
     "--monodromy",
     "--json"
-  ]
+  ],
+  "installed_build": {
+    "kernel_sha256": "69e95aadad7cc4731d4f9d4b65b4e8ec89004c0a62729f164373ffaf04be4644",
+    "fresh_cli_same_core_under_concurrent_test_load": {
+      "seconds": {
+        "before": [
+          9.91519672400318,
+          9.807657713012304,
+          10.129785089025972
+        ],
+        "after": [
+          4.167146793013671,
+          4.167329208983574,
+          4.441485515999375
+        ]
+      },
+      "median_seconds": {
+        "before": 9.91519672400318,
+        "after": 4.167329208983574
+      },
+      "median_cpu_seconds": {
+        "before": 9.883613,
+        "after": 4.160235
+      }
+    },
+    "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "verification": "Full comparison on all six CLI outputs. The headless HTTP solver and native replay of its serialized chart equations reproduced the same complex, strata and both zeta records."
+  }
 }
