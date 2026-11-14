@@ -11,7 +11,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from fractions import Fraction
 from pathlib import Path
-import socket
 import subprocess
 from time import monotonic
 
@@ -42,6 +41,7 @@ class _FaceWorker:
     def query(self, payload, timeout):
         end = None if timeout is None else monotonic() + timeout
         if self.proc is None:
+            import socket
             sock, child = socket.socketpair()
             try:
                 with child:

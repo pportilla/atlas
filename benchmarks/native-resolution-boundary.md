@@ -14,6 +14,8 @@ The table reports median wall time in milliseconds over seven runs after one war
 | `x*y*z+x^4+y^4+z^4` | 9 | 115.36 | 116.80 | 151.60 | 119.56 | 501.98 |
 | `x^2+y^19+z^37+x^3*(x+y+z)^27` | 191 | 554.10 | 541.23 | — | — | >60,000 |
 
+On the inclined graph, a resident worker produced the complete record with both zetas in 8.02 ms. A separate cold-process trace attributed 49.43 ms to module imports. Deferring two imports until their optional workers start saved a median 2.18 ms per paired full CLI run over 49 pairs on two logical CPUs. [Profile and matched samples](inclined-cli-startup-ryzen-6800h.json)
+
 ## Exact comparisons
 
 - For every fresh run the driver compares every JSON field except `elapsed_ms` and `native_elapsed_ms`. It also strips the computed complex and zetas, recomputes them through the saved-record interfaces, and compares the complete replay results across versions. Fresh Newton records carry more ray and root annotations than the historical replay format. Their labelled vertices, cells and faces agree.

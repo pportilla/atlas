@@ -9,7 +9,6 @@ from functools import lru_cache
 import json
 import os
 from pathlib import Path
-import queue
 import subprocess
 import sys
 import threading
@@ -434,6 +433,7 @@ class _Worker:
 
     def ask(self, payload, seconds):
         """The answer line; '' when the worker failed and None when time ran out."""
+        import queue
         reply = queue.SimpleQueue()
 
         def exchange():
