@@ -42,7 +42,15 @@ HELP = """Define coordinates and keep the results of calculations:
   x1, = q.coordinates                    # x in the surviving ring QQ[x]
   q == 4-x1                              # True
 
+  S = hilbert_series(ideal(x^2, y^3))    # (1-t^2)*(1-t^3)/(1-t)^2
+  S.numerator[1].degree                  # 2
+  S.dimension, S.multiplicity            # (0, 6)
+
   I = ideal(x^2*(x-1), y)
+  J = radical(I)                         # the ideal of the two reduced points
+  membership(x*(x-1), J).value           # True
+  e = multiplicity(I)                    # total dimension of QQ[x,y]/I over QQ
+  e.value, e.finite                      # (3, True)
   quotient_basis(I).dimension            # 3, including the point (1, 0)
   local_quotient_basis(I).dimension      # 2 at the origin
   B = local_standard_basis(I, point=(1, 0))
@@ -71,8 +79,29 @@ default to the origin. Pass rational coordinates in ring order to select a point
   g = y^2 - (x-1/2)^3
   milnor_number(g, point=(1/2, 0)).value # 2 at the translated cusp
 
-For an infinite-dimensional quotient, .finite is False and both .basis and
-.dimension are None. For an infinite Milnor or Tjurina number, .value is None.
+  B = local_standard_basis(ideal(g), point=(1/2, 0))
+  C = tangent_cone(B)
+  dx, dy = C.coordinates                 # displacements from (1/2, 0)
+  C.generators[0] == dy^2                # True, the tangent cone is a double line
+  S = tangent_cone_hilbert_series(C)     # graded at the cone vertex
+  for term in S.numerator: print(term.degree, term.coefficient)
+  S.denominator_power                    # 2, giving (1-t^2)/(1-t)^2
+
+Both tangent cone functions accept an ideal with point= or a local standard
+basis with its saved point. The loop prints each degree and its signed
+coefficient in ascending degree order, here 0 1 followed by 2 -1.
+
+  embedding_dimension(B).value           # 2 at the cusp, using B's saved point
+  V = zariski_tangent_space(ideal(y-(x-1/2)^2), point=(1/2, 0))
+  dx, dy = V.coordinates
+  V.equations[0] == dy                   # True, the parabola's tangent is dy = 0
+  V.basis                                 # one direction (1, 0)
+
+Both functions also accept C to compute at the tangent cone's vertex.
+
+For an infinite-dimensional quotient, quotient_basis(I) has .finite = False
+and .basis = .dimension = None. The multiplicity(I) result has .finite = False
+and .value = None. For an infinite Milnor or Tjurina number, .value is None.
 
 Inspect R.charts and R.branches, or use print(...) for explicit output.
 Run the same expressions in a file with ./atlas run FILE.atlas."""

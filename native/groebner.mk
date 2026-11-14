@@ -3,19 +3,35 @@ CXXFLAGS ?= -O3 -std=c++17 -Wall -Wextra -Wpedantic
 ifeq ($(shell uname -s),Darwin)
   GROEBNER_LIB := build/libgroebner.dylib
   GROEBNER_SHARED := -dynamiclib
+  GROEBNER_ID := -Wl,-install_name,@rpath/$(notdir $(GROEBNER_LIB))
+  LOCAL_RPATH := -Wl,-rpath,@loader_path
 else
   GROEBNER_LIB := build/libgroebner.so
   GROEBNER_SHARED := -shared
+  LOCAL_RPATH := -Wl,-rpath,'$$ORIGIN'
 endif
 
 .PHONY: all
-all: $(GROEBNER_LIB)
+all: $(GROEBNER_LIB) build/local_algebra
 
-$(GROEBNER_LIB): trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp groebner.hpp
-	mkdir -p build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) -fPIC $(GROEBNER_SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
+LOCAL_SOURCES := local_cli.cpp
+build/local_algebra: $(LOCAL_SOURCES) local_io.hpp local_basis.hpp local_division.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(LOCAL_SOURCES) -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
-$(GROEBNER_LIB): trace_screen.inc trace_rows.inc groebner_verify.hpp trace_levels.hpp
+KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp \
+  field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp \
+  monomial_quotient.cpp point_geometry.cpp polynomial_factors.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp
+KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
+
+build/kernel/%.o: %.cpp
+	@mkdir -p build/kernel
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) -fPIC -MMD -MP -c $< -o $@
+
+-include $(KERNEL_OBJECTS:.o=.d)
+
+$(GROEBNER_LIB): $(KERNEL_OBJECTS)
+	$(CXX) $(GROEBNER_SHARED) $(GROEBNER_ID) $^ -o $@.tmp $(LDFLAGS) $(shell pkg-config --libs flint jsoncpp) -lgmpxx -lgmp -pthread
+	mv $@.tmp $@
 
 .PHONY: test-verify
 test-verify: build/test_groebner_verify

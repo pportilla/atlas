@@ -27,7 +27,7 @@ def _text(expr):
     return str(expr).replace("**", "^")
 
 
-def resolve_origin(poly, variables, mode, seconds=120):
+def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, tangent_only=False):
     """The record of the resolution, or None when the rule gives no answer in
     the time allowed. `poly` maps exponents to rational coefficients of the
     reduced equation.
@@ -35,11 +35,14 @@ def resolve_origin(poly, variables, mode, seconds=120):
     The computation runs in a process of its own, which is stopped when the
     time is over: a single step of it can take long, and the time is only
     looked at between steps."""
-    request = json.dumps({"terms": [[list(exponents), str(c)] for exponents, c in poly.items()],
-                          "variables": list(variables), "mode": mode, "seconds": seconds})
+    from .polynomial import rational_text
+    request = json.dumps({"terms": [[list(exponents), rational_text(c)] for exponents, c in poly.items()],
+                          "variables": list(variables), "mode": mode, "seconds": seconds,
+                          "defer_outputs": defer_outputs, "tangent_only": tangent_only})
     try:
         done = subprocess.run([sys.executable, "-m", "engine.origin_backend"], input=request, text=True,
-                              capture_output=True, cwd=Path(__file__).resolve().parents[1], timeout=seconds + 2)
+                              capture_output=True, cwd=Path(__file__).resolve().parents[1],
+                              timeout=None if seconds is None else seconds + 2)
     except subprocess.TimeoutExpired:
         return None
     if done.returncode != 0 or not done.stdout.strip():
@@ -47,7 +50,7 @@ def resolve_origin(poly, variables, mode, seconds=120):
     return json.loads(done.stdout)
 
 
-def _resolve(poly, variables, mode, seconds):
+def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False):
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
     from . import native_library
@@ -57,30 +60,47 @@ def _resolve(poly, variables, mode, seconds):
     if native_library._MODE == "native" and native_library._kernel() is not None:
         from . import native_polynomial
         symbols = tuple(map(native_polynomial.Symbol, names))
-        equation = native_polynomial.from_terms(symbols, poly)
+        polynomial = native_polynomial.from_terms
     else:
         import sympy as sp
         from .atlas import _polynomial
         symbols = tuple(map(sp.Symbol, names))
-        equation = _polynomial(poly, symbols)
+        polynomial = lambda ring, terms: _polynomial(terms, ring)
+    equation = polynomial(symbols, poly)
+    if tangent_only:
+        from .repeated_tangent import _power_support
+        degree = min(map(sum, poly))
+        cone = {e: c for e, c in poly.items() if sum(e) == degree}
+        try:
+            _power_support(symbols, polynomial(symbols, cone))
+        except GiveUp:
+            return None
     # The rule is for a reduced equation: a repeated factor is left to the
     # treatment of divisors with multiplicities.
     from .affine_kernel import rational_factor_rows
     if any(power > 1 for _, power, _ in rational_factor_rows(symbols, equation)[1]):
         return None
+    rules = ("complete", "direct")
+    if len(symbols) >= 4:
+        rules = ("tangent",) if tangent_only else ("tangent", *rules)
     try:
         data, strata, charts, centres = acampo_over(symbols, [("strict", 1, 1, (equation,))], symbols,
-                                                    dimension=len(symbols), deadline=monotonic() + seconds)
+                                                    dimension=len(symbols), rules=rules,
+                                                    deadline=None if seconds is None else monotonic() + seconds,
+                                                    budget=None if seconds is None else 400,
+                                                    count_strata=not defer_outputs)
     except GiveUp:
         return None
     if not centres:
         return None  # normal crossings at the origin already: other engines describe that case
     rows, listed = records({"data": data, "strata": strata})
     births = [centre["id"] for centre in centres]
-    try:
-        found, reason = dual_cells(cells(charts, len(symbols)), births.index)
-    except GiveUp as error:
-        found, reason = None, str(error)
+    found, reason = None, "Incidence is computed from the final charts."
+    if not defer_outputs:
+        try:
+            found, reason = dual_cells(cells(charts, len(symbols)), births.index)
+        except GiveUp as error:
+            reason = str(error)
     final = []
     for k, chart in enumerate(charts, 1):
         divisors = [(label, m, [_text(g) for g in ideal]) for label, m, _, ideal in chart.components]
@@ -98,7 +118,12 @@ def _resolve(poly, variables, mode, seconds):
     steps = [{"id": centre["id"], "type": "blowup", "center": centre["kind"], "rule": centre["rule"],
               **({"invariant": centre["invariant"]} if "invariant" in centre else {}),
               "components": centre["components"]} for centre in centres]
-    created = [row for row in rows if row["component"] != "strict"]
+    if defer_outputs:
+        orders = {label: order for chart in charts for label, order, _, _ in chart.components}
+        created = [{"id": label, "ambient_order": orders[label]} for label in births if label in orders]
+    else:
+        created = [{"id": row["component"], "ambient_order": row["multiplicity"]}
+                   for row in rows if row["component"] != "strict"]
     points = sum(1 for centre in centres if centre["dimension"] == 0)
     curves = sum(1 for centre in centres if centre["dimension"] == 1)
     kinds = ", ".join(text for text in (f"{points} at points" if points else "", f"{curves} along curves" if curves else "",
@@ -114,23 +139,26 @@ def _resolve(poly, variables, mode, seconds):
             "convention": "Ambient exceptional divisor over the origin over Qbar.",
             **({} if found is not None else
                {"reason": reason + " The divisors created by the blowups are listed as vertices without their incidences."}),
-            "vertices": [{"id": row["component"], "ambient_order": row["multiplicity"]} for row in created],
+            "vertices": created,
             "cells": found or [],
         },
         "certificate": {
-            "method": "blowups with smooth centres chosen by the invariant of Bierstone and Milman and, once the strict "
-                      "transform is smooth, by the traces of the divisors on it; certified by ideal calculations",
+            "method": "Blowups with smooth centres; certified by ideal calculations. Centre rule: " +
+                      ", ".join(dict.fromkeys(step["rule"] for step in steps)),
             "description": "Every centre is smooth and lies over the origin or meets its fibre. In every final chart the "
                            "total transform has normal crossings at all points over the origin, by the Jacobian criterion; "
                            "hence it has normal crossings over a neighbourhood of the origin.",
-            "numerical_data": rows, "strata": listed,
+            **({} if defer_outputs else {"numerical_data": rows, "strata": listed}),
         },
     }
 
 
 
 if __name__ == "__main__":
+    if hasattr(sys, "set_int_max_str_digits"):
+        sys.set_int_max_str_digits(0)
     asked = json.load(sys.stdin)
     answer = _resolve({tuple(exponents): Fraction(c) for exponents, c in asked["terms"]}, asked["variables"],
-                      asked["mode"], asked["seconds"])
+                      asked["mode"], asked["seconds"], defer_outputs=asked.get("defer_outputs", False),
+                      tangent_only=asked.get("tangent_only", False))
     print(json.dumps(answer))

@@ -12,7 +12,7 @@ from engine.app import main
 from engine.identity_atlas import rational_factors
 from engine.plane_backend import resolve_plane
 from engine.polynomial import parse
-from engine.welcome import LOGO, SMALL_LOGO, render_welcome
+from engine.welcome import LOGO, SMALL_LOGO, atlas_version, render_welcome
 from engine.welcome_curve import resolve_welcome_curve
 from engine.welcome_graph import graph_rows
 
@@ -49,6 +49,11 @@ def divisors_on_arrow_path(rows):
 
 
 class CliWelcomeTests(unittest.TestCase):
+    def assert_logo(self, output, logo):
+        rows = output.splitlines()
+        start = next(i for i, line in enumerate(rows) if line.endswith(logo[0]))
+        self.assertEqual([row[-len(mark):] for row, mark in zip(rows[start:], logo)], list(logo))
+
     def test_bare_launch_with_redirected_streams(self):
         env = dict(os.environ, TERM='xterm', COLUMNS='80')
         env.pop('NO_COLOR', None)
@@ -58,10 +63,20 @@ class CliWelcomeTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, '')
+        first, second, *_ = result.stdout.strip().splitlines()
+        self.assertEqual(first, 'Atlas version ' + atlas_version())
+        self.assertIn('Developer: pportilla <p.portilla@upm.es>', second)
         self.assertIn('Welcome to Atlas', result.stdout)
-        self.assertIn('./atlas resolve', result.stdout)
+        self.assertNotIn('Try ', result.stdout)
+        self.assertNotIn('./atlas resolve', result.stdout)
         self.assertNotIn('atlas>', result.stdout)
         self.assertNotIn('\x1b', result.stdout)
+
+    def test_version_falls_back_for_a_source_download(self):
+        with patch('engine.welcome.Path.exists', return_value=False), \
+                patch('engine.welcome.subprocess.check_output') as git:
+            self.assertEqual(atlas_version(), 'development')
+        git.assert_not_called()
 
     def test_welcome_art_fits_terminal_width(self):
         example = resolve_welcome_curve(Random(0))
@@ -75,8 +90,7 @@ class CliWelcomeTests(unittest.TestCase):
         for width in (18, 50):
             with self.subTest(width=width):
                 output = render_welcome(width, color=False, interactive=False, example=("x*y", {}))
-                art = output.splitlines()[1:1 + len(SMALL_LOGO)]
-                self.assertEqual([row[-len(mark):] for row, mark in zip(art, SMALL_LOGO)], list(SMALL_LOGO))
+                self.assert_logo(output, SMALL_LOGO)
 
     def launch_session(self, commands, term='xterm', no_color='1'):
         stdin, stdout, stderr = Terminal(commands), Terminal(), io.StringIO()
@@ -120,8 +134,8 @@ class CliWelcomeTests(unittest.TestCase):
             for polynomial, _ in examples:
                 out, err, _ = self.launch_session('quit\n')
                 self.assertIn(polynomial, out)
-                art = out.splitlines()[1:1 + len(LOGO)]
-                self.assertEqual([row[-len(mark):] for row, mark in zip(art, LOGO)], list(LOGO))
+                self.assertNotIn('Try ', out)
+                self.assert_logo(out, LOGO)
                 self.assertEqual(err, '')
         self.assertEqual(compute.call_count, len(examples))
 

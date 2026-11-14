@@ -6,15 +6,25 @@ C++17, GMP, FLINT and libnormaliz handle point blowups, exact linear algebra and
 
 For a comparison of the two systems and a phased roadmap for bringing more algebra to the Atlas CLI and browser, see [Atlas and Singular](README-singular-comparison.md).
 
+Use `radical(I)` to compute the radical of a polynomial ideal over the rationals. For example, `./atlas algebra radical --vars x,y --gen y --gen 'y-x^2'` returns the ideal $(x,y)$ of the reduced point at the origin. [CLI, prompt, script and browser examples](examples/algebra-api.md#radicals-of-polynomial-ideals)
+
 Factor a polynomial over the rationals with `./atlas algebra factor --vars x --poly 'x^4-1'`, with `factor(f)` in a session, or with **Polynomial factorization** in the browser’s Algebra view. Each returns the rational unit, the irreducible factors, and their multiplicities. [Factorization examples](examples/algebra-api.md#polynomial-factorization)
 
 Compute a polynomial resultant by choosing the variable to eliminate. For example, `resultant(t^2-x, t^3-y, t)` returns `-x^3+y^2` in the surviving coordinates $(x,y)$. [CLI, script and browser examples](examples/algebra-api.md#polynomial-resultants)
+
+Compute the Hilbert series of a homogeneous quotient over the rationals with `hilbert_series(I)` at the prompt or in a script, `./atlas algebra hilbert-series` at the shell, or **Hilbert series** in the browser. For $I=(x^2,y^3)$ in two variables, the graded pieces have dimensions $1,2,2,1$, giving a quotient of length 6. [Hilbert series examples](examples/algebra-api.md#hilbert-series-of-homogeneous-quotients)
+
+Use `multiplicity(I)` to count all points of a finite quotient over the rationals with their multiplicities. For example, `./atlas algebra multiplicity --vars x,y --gen 'x^2*(x-1)' --gen y` gives 3. The double point at the origin contributes 2 and the simple point at $(1,0)$ contributes 1. [CLI, prompt, script and browser examples](examples/algebra-api.md#multiplicity-of-finite-colength-quotients)
 
 Use the **Algebra** view or `./atlas algebra` for global quotient bases and for local quotient bases, Jacobian algebras, and Milnor and Tjurina numbers at any rational point. For example, `./atlas algebra local-jacobian-algebra --vars x,y --point '1/2,0' --poly 'y^2-(x-1/2)^3'` gives dimension 2 and basis $1,x-1/2$. Omitting the point computes at the origin. [Examples for the shell, prompt and browser](examples/algebra-api.md#quotient-bases-and-local-hypersurface-invariants)
 
 Local standard bases and normal forms also accept any rational point. For example, `./atlas algebra local-normal-form --vars x,y --point '1/2,-2' --gen 'x-1/2' --gen 'y+2' --poly 'x+y'` returns $-3/2$. [Point coordinates, saved bases and local units](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
 
 The **Hilbert–Samuel function** and **Hilbert–Samuel multiplicity** operations apply to any ideal at a rational point. For the cusp $y^2=(x-1/2)^3$, the local lengths in degrees 0, 1 and 2 are 1, 3 and 5 at $(1/2,0)$ and 1, 2 and 3 at the smooth point $(3/2,1)$. The multiplicities are 2 and 1 respectively. [CLI and browser examples](examples/algebra-api.md#hilbert-samuel-functions)
+
+Use `tangent-cone` for the homogeneous equations in tangent directions and `tangent-cone-hilbert-series` for the full graded series. On the same cusp at $(1/2,0)$ the cone is the doubled line $(\Delta y)^2=0$, with series $(1+t)/(1-t)$. Both operations accept ideals with any number of generators. [Tangent cones in the CLI, prompt and browser](examples/algebra-api.md#tangent-cones-and-their-hilbert-series)
+
+Use `zariski-tangent-space` for the linear equations and a basis of tangent directions, or `embedding-dimension` for the dimension alone. At the cusp the Zariski tangent space fills the plane. At a smooth point on the same curve it is a line. [Examples at both points](examples/algebra-api.md#zariski-tangent-spaces-and-embedding-dimensions)
 
 ## Build and run
 
@@ -25,10 +35,8 @@ make -j4
 ~~~
 
 Run `./atlas` to open a terminal session. The welcome screen shows the
-folded Atlas logo in ASCII. Each launch also suggests a freshly resolved
-two-branch plane curve. Run the displayed `resolve` command at the `atlas>`
-prompt to inspect its charts and dual graph. Type `help resolve` to see its
-options or `quit` to leave.
+Atlas version, developer contact, folded map logo and a freshly resolved
+two-branch plane curve. Type `help resolve` for resolution options or `quit` to leave.
 
 You can also run commands directly from your shell.
 
@@ -47,6 +55,9 @@ The local interface is available at <http://127.0.0.1:8765>. CLI exit code 0 mea
 
 At `atlas>`, define a polynomial in its own coordinates and give the resolution
 a name. Assignment is quiet. Enter a name or a field to inspect its value.
+The two rows at the top of an interactive terminal show the rings and variables
+currently in use. Enter `:workspace` for the full list when the header fills up.
+The same command works in terminals that cannot pin the header.
 
 ~~~text
 atlas> x, y = coordinates("x", "y")
@@ -147,7 +158,7 @@ The CLI and Python API continue searching by default until they certify a resolu
 
 Embedded mode also resolves effective divisors with repeated components. It resolves the reduced support, then computes the original strict-transform ideal and the multiplicities of the pullback along each exceptional prime. For example, the exceptional multiplicities for `(y^2-x^3)^2` are 4, 6 and 12. Intrinsic resolution requires a reduced germ. A repeated global factor that is a unit at the origin poses no restriction.
 
-The default exhaustive mode accepts rational polynomials in any finite positive number of variables and removes the quick parser and wall-clock limits. After the structured algorithms it enumerates finitely generated blowup ideals over the rationals and proposed geometric boundary ideals over number fields. Each candidate receives repeated attempts with increasing verification time and algebraic effort. Under idealized unbounded resources there is a finite certificate for a reduced hypersurface in characteristic zero. Embedded desingularization exists over the base field, a sequence of blowups over affine space can be presented as one blowup of an ideal, and its finitely many geometric stratum components are defined over a finite extension. These facts justify the search space. Priority candidates include the Jacobian locus, coordinate centers and successive blowups along repeated rational tangents. The integer enumeration can take impractically long even on a small polynomial. Ctrl-C stops an exhaustive CLI calculation. [Bierstone and Milman](https://arxiv.org/abs/alg-geom/9709028) · [Composition of blowups, Stacks Project](https://stacks.math.columbia.edu/tag/080B)
+The default exhaustive mode accepts rational polynomials in any finite positive number of variables and removes the quick parser and wall-clock limits. After the structured algorithms it enumerates finitely generated blowup ideals over the rationals and proposed geometric boundary ideals over number fields. In three to eight variables a second worker also builds charts by successive smooth blowups starting at the origin. This worker can carry a long computation through to completion. For a repeated smooth projective tangent hypersurface in four or more variables it tries the reduced tangent section as a centre. The first worker to produce a resolution supplies the charts for the usual atlas checks. Each enumerated candidate receives repeated attempts with increasing verification time and algebraic effort. Under idealized unbounded resources there is a finite certificate for a reduced hypersurface in characteristic zero. Embedded desingularization exists over the base field, a sequence of blowups over affine space can be presented as one blowup of an ideal, and its finitely many geometric stratum components are defined over a finite extension. These facts justify the search space. Priority candidates include the Jacobian locus, coordinate centers and successive blowups along repeated rational tangents. The integer enumeration can take impractically long even on a small polynomial. Ctrl-C stops an exhaustive CLI calculation. [Bierstone and Milman](https://arxiv.org/abs/alg-geom/9709028) · [Composition of blowups, Stacks Project](https://stacks.math.columbia.edu/tag/080B)
 
 ### Coefficient and exponent sizes
 

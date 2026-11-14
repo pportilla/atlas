@@ -3,12 +3,16 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <queue>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
 
 extern "C" {
 void* atlas_groebner(const char*, size_t) noexcept;
+void* atlas_groebner_modular(const char*, size_t, long*, double*) noexcept;
+char* atlas_wide_block(const char*, size_t) noexcept;
+void atlas_groebner_release(char*) noexcept;
 const char* atlas_groebner_text(const void*) noexcept;
 const char* atlas_groebner_error() noexcept;
 void atlas_groebner_free(void*) noexcept;
@@ -17,22 +21,18 @@ void atlas_groebner_free(void*) noexcept;
 namespace atlas::local {
 namespace {
 
-unsigned long degree(const Powers& e) {
-    unsigned long d = 0;
-    for (auto power : e) {
-        if (power > std::numeric_limits<unsigned long>::max() - d)
-            throw std::overflow_error("Local monomial degree exceeds the native range.");
-        d += power;
-    }
+mpz_class degree(const Powers& e) {
+    mpz_class d = 0;
+    for (const auto& power : e) d += power;
     return d;
 }
 
 bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<unsigned long>());
+    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
 }
 
-unsigned long max_degree(const Polynomial& f) {
-    unsigned long d = 0;
+mpz_class max_degree(const Polynomial& f) {
+    mpz_class d = 0;
     for (const auto& term : f) d = std::max(d, degree(term.first));
     return d;
 }
@@ -91,7 +91,7 @@ Basis minimal_rows(const Basis& rows, const Heads& heads, const std::vector<std:
         if (std::any_of(minimal.begin(), minimal.end(), [&](const auto& h) { return divides(h, head); }))
             continue;
         minimal.push_back(head);
-        std::pair<unsigned long, size_t> best_cost;
+        std::pair<mpz_class, size_t> best_cost;
         SortKey best_key;
         Polynomial best;
         for (auto i : groups.at(head)) {
@@ -116,7 +116,7 @@ Basis minimal_rows(const Basis& rows, const Heads& heads, const std::vector<std:
 
 // In a homogeneous lift t^(d-|e|)*x^e the largest t exponent selects the
 // smallest local degree. Within a t degree the global tie order applies.
-Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift) {
+Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift, bool prefer_modular) {
     const auto width = variables + static_cast<size_t>(lift);
     const int order = lex ? 1 : (lift ? 2 : 0);
     std::ostringstream input;
@@ -129,20 +129,28 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift) {
             first = false;
             input << c.get_str();
             if (lift) input << ' ' << top - degree(e);
-            for (auto power : e) input << ' ' << power;
+            for (const auto& power : e) input << ' ' << power;
         }
         input << '\n';
     }
     auto request = input.str();
-    std::unique_ptr<void, decltype(&atlas_groebner_free)> basis(
-        atlas_groebner(request.data(), request.size()), atlas_groebner_free);
-    if (!basis) {
-        std::string error = atlas_groebner_error();
-        if (error.find("out of range") != std::string::npos || error == "Unsupported number of variables.")
-            throw std::overflow_error(error);
-        throw std::runtime_error(error);
+    std::unique_ptr<void, decltype(&atlas_groebner_free)> basis(nullptr, atlas_groebner_free);
+    if (prefer_modular)
+        basis.reset(atlas_groebner_modular(request.data(), request.size(), nullptr, nullptr));
+    if (!basis) basis.reset(atlas_groebner(request.data(), request.size()));
+    std::string result;
+    if (basis) result = atlas_groebner_text(basis.get());
+    else {
+        const std::string error = atlas_groebner_error();
+        if (error.find("out of range") == std::string::npos && error != "Unsupported number of variables.")
+            throw std::runtime_error(error);
+        auto wide = "basis " + request;
+        std::unique_ptr<char, decltype(&atlas_groebner_release)> reply(
+            atlas_wide_block(wide.data(), wide.size()), atlas_groebner_release);
+        if (!reply) throw std::runtime_error(atlas_groebner_error());
+        result = reply.get();
     }
-    std::istringstream output(atlas_groebner_text(basis.get()));
+    std::istringstream output(result);
     Basis projected;
     for (std::string line; std::getline(output, line);) {
         if (line.empty()) continue;
@@ -151,7 +159,7 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift) {
         for (std::string term; std::getline(terms, term, ';');) {
             std::istringstream fields(term);
             std::string q;
-            unsigned long homogenizer;
+            mpz_class homogenizer;
             if (!(fields >> q) || (lift && !(fields >> homogenizer)))
                 throw std::runtime_error("Malformed coefficient in native standard basis.");
             Powers e(variables);
@@ -171,7 +179,7 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift) {
 
 Powers local_head(const Polynomial& polynomial, bool lex) {
     const Powers* head = nullptr;
-    unsigned long lowest = 0;
+    mpz_class lowest = 0;
     for (const auto& [e, c] : polynomial) {
         if (c == 0) continue;
         auto d = degree(e);
@@ -185,7 +193,7 @@ Powers local_head(const Polynomial& polynomial, bool lex) {
     return *head;
 }
 
-Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex) {
+Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex, bool prefer_modular) {
     Basis rows;
     const Powers origin(names.size(), 0);
     const Basis unit = {Polynomial{{origin, 1}}};
@@ -215,7 +223,7 @@ Basis standard_basis(const Basis& generators, const std::vector<std::string>& na
             if (!divides(heads[i], term.first)) { associates = false; break; }
     if (associates) return minimal_rows(rows, heads, names);
 
-    Basis certified = global_basis(rows, names.size(), lex, !homogeneous);
+    Basis certified = global_basis(rows, names.size(), lex, !homogeneous, prefer_modular);
     Heads certified_heads = local_heads(certified, lex);
     for (const auto& h : certified_heads)
         if (h == origin) return unit;
@@ -225,6 +233,184 @@ Basis standard_basis(const Basis& generators, const std::vector<std::string>& na
         if (std::none_of(heads.begin(), heads.end(), [&](const auto& m) { return divides(m, h); }))
             return minimal_rows(certified, certified_heads, names);
     return minimal_rows(rows, heads, names);
+}
+
+namespace {
+
+// At fixed degree in two variables, lex and grevlex both prefer the
+// monomial with the smaller second exponent. The keys add on monomial
+// multiplication, and increase in local reduction order.
+constexpr unsigned jet_stride = 128;
+constexpr unsigned jet_degree_limit = 40;
+static_assert(2 * jet_degree_limit < jet_stride);
+using Jet = std::map<unsigned, mpq_class>;
+
+bool jet_divides(unsigned a, unsigned b) {
+    const auto ay = a % jet_stride, by = b % jet_stride;
+    return ay <= by && a / jet_stride - ay <= b / jet_stride - by;
+}
+
+unsigned jet_lcm(unsigned a, unsigned b) {
+    const unsigned y = std::max(a % jet_stride, b % jet_stride);
+    const unsigned x = std::max(a / jet_stride - a % jet_stride, b / jet_stride - b % jet_stride);
+    return (x + y) * jet_stride + y;
+}
+
+// In the plane the staircase corners occur just before each change of
+// required y power. Return the first degree covered by the whole head ideal.
+unsigned staircase_bound(const std::vector<unsigned>& heads) {
+    std::vector<std::pair<unsigned, unsigned>> corners;
+    for (auto h : heads) {
+        const auto y = h % jet_stride;
+        corners.emplace_back(h / jet_stride - y, y);
+    }
+    std::sort(corners.begin(), corners.end());
+    if (corners.empty() || corners.front().first != 0) return 0;
+    auto last_y = corners.front().second;
+    unsigned bound = 0;
+    for (const auto& [x, y] : corners) {
+        if (y >= last_y) continue;
+        bound = std::max(bound, x + last_y - 1);
+        last_y = y;
+    }
+    return last_y == 0 ? bound : 0;
+}
+
+void add_jet_multiple(Jet& row, const Jet& reducer, unsigned shift, const mpq_class& scale, unsigned end) {
+    for (const auto& [k, c] : reducer) {
+        const unsigned m = k + shift;
+        if (m >= end) break;
+        mpq_class v = scale * c;
+        auto [it, added] = row.try_emplace(m, std::move(v));
+        if (!added) {
+            it->second += v;
+            if (!it->second) row.erase(it);
+        }
+    }
+}
+
+struct JetPair {
+    unsigned lcm;
+    size_t a, b;
+    bool operator<(const JetPair& other) const { return lcm > other.lcm; }
+};
+
+std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
+    unsigned end = (cap + 1) * jet_stride;
+    std::vector<Jet> rows;
+    std::vector<unsigned> heads;
+    std::priority_queue<JetPair> pairs;
+    size_t work = 0;
+    auto insert = [&](Jet row) {
+        // Ordinary local leading reduction terminates modulo m^(cap+1).
+        // Stop once the head cannot be reduced; each accepted row then
+        // enlarges the monomial ideal of the previous leading terms.
+        while (!row.empty()) {
+            unsigned h = row.begin()->first;
+            size_t i = 0;
+            while (i < heads.size() && !jet_divides(heads[i], h)) ++i;
+            if (i == heads.size()) break;
+            work += rows[i].size();
+            if (work > 120000) return false;
+            const mpq_class c = -row.begin()->second;
+            add_jet_multiple(row, rows[i], h - heads[i], c, end);
+        }
+        if (row.empty()) return true;
+        const unsigned h = row.begin()->first;
+        const mpq_class c = row.begin()->second;
+        if (c != 1)
+            for (auto& term : row) term.second /= c;
+        for (size_t i = 0; i < heads.size(); ++i) {
+            unsigned lcm = jet_lcm(h, heads[i]);
+            if (lcm < end && lcm != h + heads[i])
+                pairs.push({lcm, i, heads.size()});
+        }
+        heads.push_back(h);
+        rows.push_back(std::move(row));
+        if (h / jet_stride == h % jet_stride || h % jet_stride == 0) {
+            // Already known heads come from I modulo m^(cap+1), even before
+            // all S pairs have been examined. As soon as they cover degree B,
+            // Nakayama certifies m^B inside I and higher tails may be dropped.
+            const unsigned b = staircase_bound(heads);
+            if (b && b <= cap) end = std::min(end, (b + 1) * jet_stride);
+        }
+        return true;
+    };
+    for (const auto& f : generators) {
+        Jet row;
+        for (const auto& [m, c] : f) {
+            const auto key = degree(m).get_ui() * jet_stride + m[1].get_ui();
+            if (key < end && c != 0) row.emplace(key, c);
+        }
+        if (!insert(std::move(row))) return std::nullopt;
+    }
+    while (!pairs.empty()) {
+        const auto pair = pairs.top();
+        pairs.pop();
+        if (pair.lcm >= end) break;
+        // The two strictly smaller lcms give a standard representation of
+        // this S pair by the Buchberger chain criterion.
+        bool redundant = std::any_of(heads.begin(), heads.end(), [&](unsigned h) {
+            return jet_divides(h, pair.lcm) && jet_lcm(h, heads[pair.a]) != pair.lcm
+                && jet_lcm(h, heads[pair.b]) != pair.lcm;
+        });
+        if (redundant) continue;
+        Jet s;
+        add_jet_multiple(s, rows[pair.a], pair.lcm - heads[pair.a], 1, end);
+        add_jet_multiple(s, rows[pair.b], pair.lcm - heads[pair.b], -1, end);
+        if (!insert(std::move(s))) return std::nullopt;
+    }
+    // If all degree-cap monomials are initial terms, m^cap is contained in
+    // I + m^(cap+1). Nakayama then gives m^cap inside I locally. Truncated
+    // rows now lift to elements of I itself and the finite-jet head ideal is
+    // the full local head ideal. Otherwise use the ordinary exact basis.
+    unsigned bound = staircase_bound(heads);
+    if (!bound || bound > cap) return std::nullopt;
+    Basis result;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        if (std::any_of(heads.begin(), heads.end(),
+                [&](unsigned h) { return h != heads[i] && jet_divides(h, heads[i]); }))
+            continue;
+        Polynomial p;
+        for (const auto& [k, c] : rows[i]) {
+            if (k != heads[i] && k / jet_stride >= bound) break;
+            p.emplace(Powers{k / jet_stride - k % jet_stride, k % jet_stride}, c);
+        }
+        result.push_back(std::move(p));
+    }
+    return result;
+}
+
+}
+
+std::optional<Basis> finite_standard_basis(const Basis& generators, const std::vector<std::string>& names, bool) {
+    if (names.size() != 2 || generators.size() != 2) return std::nullopt;
+    unsigned long highest = 0;
+    bool inhomogeneous = false;
+    bool common_x = true, common_y = true;
+    for (const auto& row : generators) {
+        if (row.size() < 2) return std::nullopt;
+        unsigned long low = std::numeric_limits<unsigned long>::max(), high = 0;
+        for (const auto& term : row) {
+            if (term.first.size() != names.size()) throw std::invalid_argument("Wrong width for a local polynomial.");
+            if (term.second == 0) return std::nullopt;
+            common_x &= term.first[0] != 0;
+            common_y &= term.first[1] != 0;
+            const auto d = degree(term.first);
+            if (d > jet_degree_limit) return std::nullopt;
+            low = std::min(low, d.get_ui());
+            high = std::max(high, d.get_ui());
+        }
+        if (low < 4) return std::nullopt;
+        inhomogeneous |= high != low;
+        highest = std::max(highest, high);
+    }
+    // Homogeneous systems and low-order transverse inputs are inexpensive
+    // in the ordinary kernel. Reserve the finite jet for high tangencies.
+    if (!inhomogeneous || common_x || common_y) return std::nullopt;
+    const auto a = local_head(generators[0], true), b = local_head(generators[1], true);
+    if (!divides(a, b) && !divides(b, a)) return std::nullopt;
+    return plane_jet_basis(generators, 2 * highest);
 }
 
 }

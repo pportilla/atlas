@@ -11,6 +11,35 @@ from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, f
 
 
 class AffineMaps(unittest.TestCase):
+    def test_fan_chart_equation_text_matches_the_exact_sparse_row(self):
+        from engine.native_library import affine_request
+        from engine.polynomial import format_poly, sparse_row
+
+        charts = ["1 0", "0 1", "1 2", "1 0", "1 1", "1 2"]
+        equations = [
+            ("-y^6+x^3*y^3/3-x*y^5+x+y-5/3",
+             ["1/3*u^3*v^3-u*v^5-v^6+u+v-5/3",
+              "1/3*u^3*v^6-u*v^6-v^6+u*v+v-5/3"]),
+            ("-3/7", ["-3/7", "-3/7"]),
+        ]
+        # The exponents and the rational coefficient exceed the Python
+        # decimal limit. A graded degree tie still uses chart-variable order.
+        wide = "1" + "0" * 4500
+        previous = "9" * 4500
+        equations.append((f"-y^{wide}+{wide}/3*x^{wide}+x",
+                          [f"{wide}/3*u^{wide}-v^{wide}+u",
+                           f"{wide}/3*u^{wide}*v^{previous}-v^{previous}+u"]))
+        for equation, expected_texts in equations:
+            with self.subTest(equation=equation[:28]):
+                rows = affine_request(["fan_charts", "x y", "u v", equation, *charts])
+                self.assertEqual(len(rows), 8)
+                for i, expected in enumerate(expected_texts):
+                    header, text, sparse, _ = rows[i*4:i*4+4]
+                    terms = sparse_row(sparse)
+                    self.assertEqual(text, format_poly(terms, ("u", "v")))
+                    self.assertEqual(header.split()[0], str(int(any(any(e) for e in terms))))
+                    self.assertEqual(text, expected)
+
     def test_native_factor_multiplicities_are_exact_decimal_integers(self):
         from engine.native_library import affine_request
 

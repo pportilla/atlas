@@ -34,6 +34,13 @@ def _plane(result):
             for v in vertices]
 
 
+def projective_complement_euler(dimension, degree):
+    """Euler characteristic of P^(dimension-1) minus a smooth degree-d hypersurface."""
+    # Gauss–Bonnet gives the coefficient of h^(dimension−1) in
+    # (1+h)^dimension/(1+degree*h) for the complement.
+    return (1 - (1-degree)**dimension) // degree
+
+
 def _ordinary(result):
     steps = result["steps"]
     if len(steps) != 1 or steps[0].get("type") != "point blowup":
@@ -43,10 +50,7 @@ def _ordinary(result):
     dimension = len(result["tangent_coordinates"])
     if not degree or dimension < 2:
         return None
-    # The exceptional fiber is P^(n−1) and the strict support meets it in
-    # its smooth projective tangent hypersurface H_d. Gauss–Bonnet gives
-    # χ(P^(n−1) \ H_d) as the coefficient of h^(n−1) in (1+h)^n/(1+dh).
-    chi = (1-(1-degree)**dimension)//degree
+    chi = projective_complement_euler(dimension, degree)
     return [{"component":step["exceptional"], "multiplicity":result["multiplicity"],
              "euler_characteristic":chi, "projective_dimension":dimension-1,
              "tangent_degree":degree}]

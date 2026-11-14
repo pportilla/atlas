@@ -162,6 +162,16 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
             families[family]=definition
             proof['root_family']=family
         faces[mask]=proof
+    repair = None
+    if degenerate:
+        from .groebner import CHECK
+        from .newton_repair import strata as repair_strata
+
+        # Repair uses the fan and adapted equation. A failed trial has no
+        # atlas to return, so test its singular orbits before expanding charts.
+        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=CHECK)
+        if repair is None or not repair['repairs']:
+            return None
     coords=[f'u{i+1}' for i in range(n)]
     # Each intersection of exceptional components has an open dense torus
     # stratum. Transversality excludes components contained in its boundary.
@@ -253,18 +263,14 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
                 'chart_batch':batch,'linear_map_to_input':matrix,'face_coordinates':variables,
                 'adapted_polynomial':format_poly(poly,variables),'compact_faces':list(faces.values()),
                 'description':'The map is an isomorphism off the origin. All compact faces are nondegenerate and every maximal cone has lattice determinant one. The strict transform is smooth and transverse to the toric strata in a neighborhood of the fiber over the origin.'}}
-    return _blow_up_failures(result,poly,variables,mode,fan,deadline,original,defer_outputs) if degenerate else result
+    return _blow_up_failures(result,variables,mode,original,defer_outputs,repair) if degenerate else result
 
 
-def _blow_up_failures(result, poly, variables, mode, fan, deadline, original, defer_outputs):
-    """Complete a Newton modification with degenerate faces by blowing up the
-    points of the fiber over the origin where normal crossings fail."""
-    from .newton_repair import patch_record, records, strata
+def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
+    """Attach the verified local blowups to their parent Newton charts."""
+    from .newton_repair import patch_record, records
     from .groebner import CHECK
-    answer = strata(poly,variables,fan,deadline=deadline,count_strata=CHECK)
-    if answer is None or not answer['repairs']:
-        return None
-    repairs = answer['repairs']
+    repairs = repair['repairs']
     parents = {chart['id']:(i,chart) for i,chart in enumerate(result['charts'])}
     blowups = sum(len(r['blowups']) for r in repairs)
     points = sum(r['points'] for r in repairs)
@@ -294,7 +300,7 @@ def _blow_up_failures(result, poly, variables, mode, fan, deadline, original, de
         'Some compact face is degenerate: on the fiber over the origin the total transform has normal crossings except at the listed points, '
         'which are blown up until it has. Normal crossings are verified in every final chart.')
     if CHECK:
-        proof['numerical_data'], proof['strata'] = records(answer)
+        proof['numerical_data'], proof['strata'] = records(repair)
     return result
 
 

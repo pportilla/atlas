@@ -7,6 +7,26 @@ from native.test_opencl import reference_rank
 
 
 class TritonRank(unittest.TestCase):
+    def test_rectangular_row_basis_skips_free_columns(self):
+        interpreter = os.getenv("TRITON_INTERPRET") == "1"
+        device = {"torch_device": "cpu"} if interpreter else triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0)))
+        if device is None:
+            self.skipTest("No Triton GPU")
+        import numpy as np
+        from engine.gpu_rank import independent_rows
+
+        prime = 1000000007
+        for matrix in ([[0, 1, 2, 0, 4], [0, 2, 4, 0, 8], [0, 1, 2, 0, 5]],
+                       [[0, 0, 0, 1]], [[0, 0], [0, 0]], [[0, 1], [1, 0], [2, 1]]):
+            with self.subTest(matrix=matrix):
+                data = np.array(matrix, dtype=np.uint32)
+                ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+                ids = independent_rows(ptr, *data.shape, prime, device)
+                rank = reference_rank(matrix, prime)
+                self.assertEqual(len(set(ids)), rank)
+                self.assertEqual(reference_rank([matrix[i] for i in ids], prime) if ids else 0, rank)
+                self.assertEqual(data.tolist(), matrix)
+
     def test_witnesses(self):
         interpreter = os.getenv("TRITON_INTERPRET") == "1"
         device = triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0))) if not interpreter else None

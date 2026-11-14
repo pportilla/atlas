@@ -311,8 +311,9 @@ def read_expression(line):
     return line
 
 
-def run_session(parser):
+def run_session(parser, panel):
     from .session import HELP, SessionError, new_session
+    from .session_panel import print_workspace
     from .session_transcript import SessionTranscript
     session = new_session(calculate_resolution)
     transcript = SessionTranscript()
@@ -323,9 +324,10 @@ def run_session(parser):
 
     # Derive shell-command names from argparse so newly registered subcommands
     # are available here. An opening parenthesis selects function-call syntax.
-    shell_names = {*parser.command_names, ":save", "help", "quit", "exit", "-h", "--help"}
+    shell_names = {*parser.command_names, ":save", ":workspace", "help", "quit", "exit", "-h", "--help"}
     while True:
         try:
+            panel.refresh(session.variables)
             line = input('atlas> ')
             words = line.split(maxsplit=1)
             if not words:
@@ -356,6 +358,9 @@ def run_session(parser):
                 continue
             if argv in (['quit'], ['exit']):
                 return 0
+            if argv == [':workspace']:
+                print_workspace(session.variables)
+                continue
             if argv[0] == ':save':
                 if len(argv) != 2:
                     print('Usage: :save FILE.atlas', file=sys.stderr)
@@ -372,6 +377,7 @@ def run_session(parser):
             if argv == ['help']:
                 parser.print_help()
                 print('\n' + HELP)
+                print('\nShow every ring and variable with :workspace.')
                 print('\nSave this session with :save FILE.atlas.')
                 print('\nType help COMMAND for its options or quit to leave Atlas.')
                 continue
@@ -406,8 +412,10 @@ def main(*, unlimited_decimals=False):
 
     from .welcome import print_welcome
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
-    print_welcome(interactive=interactive)
     if interactive:
-        with session_decimals(unlimited_decimals):
-            return run_session(parser)
+        from .session_panel import SessionPanel
+        with session_decimals(unlimited_decimals), SessionPanel(sys.stdout) as panel:
+            print_welcome(interactive=True)
+            return run_session(parser, panel)
+    print_welcome(interactive=False)
     return 0

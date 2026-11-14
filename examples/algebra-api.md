@@ -84,10 +84,34 @@ The ideal operations below take an `ideal`, an array of polynomial strings. Use 
 | `normal-form` | `polynomial` | Exact remainder, in `polynomial` |
 | `membership` | `polynomial` | Boolean `value` |
 | `eliminate` | `variables`, an array of names to remove | Ideal, in the surviving variables |
+| `radical` | | Radical ideal, given by its reduced Gröbner basis in the original ring and order |
 | `intersection` | `other_ideal`, an array of polynomials | Ideal, in `generators` |
 | `quotient` | `other_ideal` | Ideal quotient, in `generators` |
 | `saturation` | `polynomial` | Saturation by one polynomial, in `generators` |
 | `dimension` | | Krull dimension of the quotient as an integer `value`, with −1 for the empty variety |
+| `hilbert-series` | | Sparse numerator, ambient denominator power, dimension and multiplicity of a homogeneous quotient |
+
+### Radicals of polynomial ideals
+
+The radical $\sqrt I$ consists of the polynomials $f$ for which $f^n\in I$ for some positive integer $n$. For example, take $I=(y, y-x^2)$. Both generators are linear in $y$, but their difference gives $x^2\in I$. The radical is $(x,y)$.
+
+```sh
+./atlas algebra radical --vars x,y --gen y --gen 'y-x^2'
+```
+
+Use the same function at the prompt and in scripts. Its result is an ideal with generators in the input coordinate space.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal(y, y-x^2)
+J = radical(I)
+print(membership(x, I).value)  # False
+print(membership(x, J).value)  # True
+```
+
+In the browser’s **Algebra** view, choose **Ideal radical** and enter the generators or select a saved global ideal or basis. Give the result a name to reuse it for membership or another ideal operation. For HTTP, send `operation: "radical"` and `operands.ideal`. The result’s `generators` array contains the reduced Gröbner basis in the requested order.
+
+The operation also applies to positive-dimensional and mixed-dimensional ideals. For example, $\sqrt{(x^2,xy)}=(x)$ is the line $x=0$. Over $\mathbb Q$, $\sqrt{((x^2+1)^2)}=(x^2+1)$, even though the equation has no rational root. The zero and unit ideals return `[]` and `["1"]`, respectively.
 
 ### Polynomial factorization
 
@@ -176,6 +200,7 @@ For an ideal $I$ of $R=\mathbb Q[x_1,\ldots,x_n]$, choose the global quotient to
 | Operation | HTTP operand | Returned mathematical object |
 | --- | --- | --- |
 | `quotient-basis` | `ideal` | Monomial basis of $R/I$ and its dimension over $\mathbb Q$, when finite |
+| `multiplicity` | `ideal` | Total multiplicity $\dim_{\mathbb Q}(R/I)$ when the ideal has finite colength |
 | `local-quotient-basis` | `ideal` | Monomial basis of $O/IO$ and its dimension over $\mathbb Q$, when finite |
 | `local-jacobian-algebra` | `polynomial` | Partial derivatives presenting $O/J(f)$, and its basis and dimension when finite |
 | `milnor-number` | `polynomial` | $\mu=\dim_{\mathbb Q} O/J(f)$ |
@@ -231,6 +256,54 @@ For HTTP requests, supply `operands.point` as an ordered array of exact integers
 
 In the browser's **Algebra** view, select the operation, declare all variables, and enter the generators or equation. For a local calculation, enter the rational point in the displayed coordinate order or leave it blank for the origin. The result can be reproduced by the equivalent shell command or exported script. Select **GPU** or pass `--compute gpu` to request eligible device work. The execution record identifies the stages that ran and any CPU fallback.
 
+### Multiplicity of finite-colength quotients
+
+For a finite-dimensional quotient $R/I$ over $\mathbb Q$, its total multiplicity is its vector-space dimension over $\mathbb Q$. For example, $(x^2(x-1),y)$ has a double point at $(0,0)$ and a simple point at $(1,0)$, giving multiplicity 3.
+
+```sh
+./atlas algebra multiplicity --vars x,y --gen 'x^2*(x-1)' --gen y
+```
+
+At the prompt or in a script, read the integer from the result’s `.value` field. A saved global Gröbner basis can also supply the ideal.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal(x^2*(x-1), y)
+M = multiplicity(I)
+print(M.finite, M.value)           # True 3
+print(multiplicity(groebner(I)))   # 3
+```
+
+In the browser’s **Algebra** view, choose **Quotient multiplicity**, enter the generators or select a saved ideal or global basis, and choose **Compute**. The exported script and command reproduce the same value.
+
+The count includes points with extension residue fields. For instance, $\mathbb Q[x]/((x^2+1)^2)$ has dimension 4. The unit ideal gives multiplicity 0. A positive-dimensional quotient has infinite colength, returned as `finite: false` and `value: null`. The HTTP operation `multiplicity` takes `operands.ideal` and returns the same global result as the shell’s `--json` option.
+
+### Hilbert series of homogeneous quotients
+
+Give every variable degree one. For a homogeneous ideal $I$ in $S=\mathbb Q[x_1,\ldots,x_n]$, the coefficient of $t^d$ in the Hilbert series is the dimension of the degree-$d$ part of $S/I$ over $\mathbb Q$.
+
+```sh
+./atlas algebra hilbert-series --vars x,y --gen 'x^2' --gen 'y^3'
+```
+
+This gives $(1-t^2-t^3+t^5)/(1-t)^2 = 1+2t+2t^2+t^3$. The quotient has Krull dimension 0 and multiplicity 6. At the prompt or in an Atlas script, the function returns a value whose fields can be read directly.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal(x^2, y^3)
+H = hilbert_series(I)
+print(H)
+print(H.dimension, H.multiplicity)  # 0 6
+print(H.numerator[1])              # {'degree': 2, 'coefficient': -1}
+print(H.denominator_power)         # 2
+```
+
+In the browser’s **Algebra** view, choose **Hilbert series**, enter the variables and generators or select a saved ideal or global Gröbner basis, then choose **Compute**. The shell command and exported script reproduce the result.
+
+The HTTP operation `hilbert-series` takes `operands.ideal`. Both the response and the shell’s `--json` output give the nonzero signed numerator terms in ascending degree over the common denominator $(1-t)^n$, before cancellation. For the zero ideal the series is $1/(1-t)^n$. The unit ideal gives series zero, an empty numerator, dimension $-1$ and multiplicity 0.
+
+Homogeneity is a property of the ideal. For example, $(x+y^2,y^2)=(x,y^2)$ is accepted even with the first set of generators. The ideal $(x+y^2)$ alone gives a homogeneity error.
+
 <a id="hilbert-samuel-functions"></a>
 
 ### Hilbert–Samuel functions and multiplicities
@@ -259,9 +332,68 @@ print(hilbert_samuel_multiplicity(I, point=(3/2,1)).value)  # 1
 
 Both functions also accept a saved local standard basis and use its recorded point. The HTTP operations take `operands.ideal` and optional `operands.point`. The function additionally accepts `operands.degrees`, an array of nonnegative integers or exact decimal strings. Its result contains `degrees`, `values`, `graded_values`, `dimension` and `multiplicity`. An explicit empty list returns the dimension and multiplicity with empty value lists. The multiplicity operation returns `dimension` and the integer `value`. Choose **GPU** or pass `--compute gpu` for eligible Gröbner steps. [Computation and Singular checks](../native/KERNEL.md#hilbert-samuel-computation)
 
+### Tangent cones and their Hilbert series
+
+For an ideal $I$ and a rational point $p$, let $A$ be its local quotient ring and $\mathfrak m$ its maximal ideal. The tangent cone is the affine scheme with coordinate ring $\operatorname{gr}_{\mathfrak m}(A)$. Atlas gives its homogeneous defining equations in **direction coordinates** $\Delta x_i=x_i-p_i$. Its Hilbert series is $\sum_{n\geq0}\dim_{\mathbb Q}(\mathfrak m^n/\mathfrak m^{n+1})t^n$. The coefficients agree with the `graded_values` of the Hilbert–Samuel function.
+
+```sh
+./atlas algebra tangent-cone --vars x,y --gen '(y-2)^2-(x-1/2)^3' --point '1/2,2'
+./atlas algebra tangent-cone-hilbert-series --vars x,y --gen '(y-2)^2-(x-1/2)^3' --point '1/2,2'
+```
+
+| Point on the same curve | Equation in tangent directions | Graded series | Multiplicity |
+| --- | --- | --- | ---: |
+| $(1/2,2)$, cusp | $(\Delta y)^2=0$ | $(1-t^2)/(1-t)^2$ | 2 |
+| $(3/2,3)$, smooth point | $3\Delta x-2\Delta y=0$ | $(1-t)/(1-t)^2$ | 1 |
+
+In the **Algebra** view, choose **Tangent cone** or **Tangent cone Hilbert series**, enter the ideal generators and point, and choose **Compute**. A blank point selects the origin. Name a cone to use it as the input to a series calculation at its vertex. Enter these statements at the Atlas prompt, or save them as `cusp.atlas` and run `./atlas run cusp.atlas`.
+
+```atlas
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal((y-2)^2-(x-1/2)^3)
+C = tangent_cone(I, point=(1/2,2))
+print(C.generators, C.multiplicity)
+S = tangent_cone_hilbert_series(C)
+print(S.numerator, S.denominator_power)
+```
+
+The cone's `generators` use the declared variable names in a separate tangent-coordinate space. In the example the serialized generator is `y^2`, where `y` denotes $\Delta y$. When a saved cone supplies the ideal, its vertex is zero in those coordinates. Both operations also accept a saved local standard basis in the original space at its certified point.
+
+For HTTP, post `operation` equal to `tangent-cone` or `tangent-cone-hilbert-series` with `operands.ideal` and optional `operands.point`. Both results include the local dimension and multiplicity. The cone records `coordinate_system: "tangent"`. The series returns the nonzero signed coefficients of its numerator as ordered `{degree, coefficient}` pairs and `denominator_power` for the denominator $(1-t)^r$, where $r$ is the number of input variables. At a point outside the support, the cone ideal is $(1)$ and the series is zero. [Kernel and verification](../native/KERNEL.md#tangent-cones-and-graded-hilbert-series)
+
+### Zariski tangent spaces and embedding dimensions
+
+For $X=V(I)$ and a rational point $p$ on $X$, a tangent direction $v$ satisfies $df_p(v)=0$ for every generator $f$ of $I$. Atlas returns the independent linear equations and a basis of their solution space in the declared variable order. The embedding dimension is the dimension of this vector space. These operations preserve the scheme structure. For example, $I=(x^2)$ and $I=(x)$ in $\mathbb Q[x]$ have embedding dimensions 1 and 0 at the origin.
+
+```sh
+./atlas algebra zariski-tangent-space --vars x,y --gen '(y-2)^2-(x-1/2)^3' --point '3/2,3'
+./atlas algebra embedding-dimension --vars x,y --gen '(y-2)^2-(x-1/2)^3' --point '1/2,2'
+```
+
+| Point on the same curve | Tangent equation | Basis in $(\Delta x,\Delta y)$ | Embedding dimension |
+| --- | --- | --- | ---: |
+| $(1/2,2)$, cusp | No linear constraints | $(1,0),(0,1)$ | 2 |
+| $(3/2,3)$, smooth | $\Delta x-\tfrac{2}{3}\Delta y=0$ | $(2/3,1)$ | 1 |
+
+At the cusp the tangent cone has equation $(\Delta y)^2=0$. Its quadratic term contributes no linear equation to the Zariski tangent space.
+
+In the **Algebra** view choose **Zariski tangent space** or **Embedding dimension**, enter the ideal and the point, and choose **Compute**. Omitting the point selects the origin. All the generators must vanish at the chosen point. The tangent-space calculation labels its direction coordinates and gives the basis vectors in that order. Select **GPU** or pass `--compute gpu` to request modular Jacobian row reduction with exact host verification.
+
+```atlas
+x, y = coordinates("x", "y", coeffs=QQ)
+I = ideal((y-2)^2-(x-1/2)^3)
+V = zariski_tangent_space(I, point=(3/2,3))
+print(V.equations, V.basis, V.dimension)
+print(embedding_dimension(I, point=(1/2,2)).value)
+```
+
+Both functions accept a saved local standard basis at its recorded point or a saved tangent cone at its vertex. In a tangent-space result, `V.coordinates` are directions in their own coordinate space and `V.basis` contains exact rationals. For HTTP, send `operands.ideal` and optional `operands.point`. Both results report `ambient_dimension` and `jacobian_rank`. The tangent-space result carries `dimension`, `equations` and `basis`, with vector entries encoded as rational strings. The embedding-dimension result carries the integer `value`. [Kernel and verification](../native/KERNEL.md#zariski-tangent-spaces)
+
 ### Local standard bases and normal forms at a rational point
 
 `local-standard-basis` computes a standard basis of an ideal in the local ring at a rational point $p$. `local-normal-form` reduces a polynomial in that ring. Omit the point to use the origin. Supply its coordinates in the declared variable order as exact integers or fractions. Atlas compares the lowest-degree terms in $x_i-p_i$ first and breaks ties using the selected lex or grevlex order. Returned polynomials use the original variable names and coordinates.
+
+`make groebner` builds the native executable for these two shell commands. The normal `./atlas algebra` invocation uses it for supported CPU work. With `--json`, `execution.implementation` is `native-cli` when that executable computed the answer. Explicit GPU requests and eligible automatic GPU profiles use the shared device dispatcher.
 
 For example, the ideal below has support at $(1/2,-2)$ and $(2,-2)$. At the first point $x-2$ is a unit, so $x=1/2$ and the normal form of $x+y$ is $-3/2$. Repeating the reduction at the second point gives zero.
 
@@ -318,8 +450,8 @@ For HTTP, start `./atlas serve` and POST the example request to `http://127.0.0.
 ## Reuse a basis over HTTP
 
 A successful `groebner` response can include an opaque top-level `basis_ref`.
-Pass it in place of `operands.ideal` for a subsequent `normal-form` or
-`membership` calculation in the same ring. The field, variable order, and
+Pass it in place of `operands.ideal` for a subsequent `normal-form`, `membership` or
+`multiplicity` calculation in the same ring. The field, variable order, and
 monomial order must match. Each request still selects its own compute device.
 
 ```json

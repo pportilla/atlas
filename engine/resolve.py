@@ -127,19 +127,24 @@ def _resolve(request, proofs):
             charts = atlas.from_record(record, p, native=_MODE not in ("check", "sympy"))
             if charts is None:
                 raise RuntimeError("The resolution engine did not supply its chart ownership data.")
+            factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
             try:
-                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_monodromy)
+                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_monodromy,
+                                       factor_fibre=factor_fibre)
             except GiveUp:
                 if not intrinsic or not wants_monodromy:
                     raise
                 # A smooth strict transform can need a further embedded resolution.
-                output = atlas.outputs(charts, len(variables), intrinsic=True, integrals=False)
+                output = atlas.outputs(charts, len(variables), intrinsic=True, integrals=False,
+                                       factor_fibre=factor_fibre)
             record["atlas"] = atlas.to_json(charts)
             record["dual_complex"] = atlas.record_complex(record, charts, output["dual_complex"])
         record.setdefault("certificate", {})["atlas_verification"] = (
             "Strict transform on the owned origin fibre" if intrinsic and "strata" not in output
             else "Embedded normal crossings on the owned origin fibre")
         if "strata" in output:
+            if record.get("engine") == "canonical-blowups":
+                record["certificate"].update(numerical_data=output["numerical_data"], strata=output["strata"])
             return resolution_strata(record, p, computed=output)
 
     proofs.append(('primary', result.get('certificate', {})))
@@ -234,17 +239,19 @@ def _resolve_polynomial(p, request, start):
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
                                defer_outputs=True)
-        few = len(variables) == 3
-        if r is None and native_range and singular and (few or exhaustive and len(variables) > 3):
-            # No hypothesis on the Newton polyhedron: blowups with the centres
-            # of the complete rule, started at the origin. Bounded, so that
-            # the search below still gets its turn. Above three variables
-            # only the invariant is available, and it is slow: a quick
-            # request does not wait for it.
-            from .origin_backend import resolve_origin
-            r = resolve_origin(p,variables,mode,seconds=(60 if exhaustive else 15) if few else 20)
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
+    if r is None and singular and exhaustive and 3 <= len(variables) <= 8:
+        from .exhaustive_resolution import search as exhaustive_search
+        r = exhaustive_search(p, variables, mode)
+    elif r is None and native_range and singular and len(variables) == 3:
+        from .origin_backend import resolve_origin
+        r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True)
+    elif r is None and native_range and singular and len(variables) >= 4:
+        # The repeated tangent rule has five specified centres. Let a quick
+        # request try those without entering the open-ended invariant search.
+        from .origin_backend import resolve_origin
+        r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True)
     if r is None:
         from .general_resolution import search
         r = search(p,variables,mode,exhaustive=exhaustive)

@@ -8,17 +8,11 @@
 namespace atlas::local {
 namespace {
 
-using Exponent = unsigned long;
-
-Exponent checked_add(Exponent a, Exponent b) {
-    if (b > std::numeric_limits<Exponent>::max() - a)
-        throw std::overflow_error("local division exponent overflow");
-    return a + b;
-}
+using Exponent = mpz_class;
 
 Exponent degree(const Powers& powers) {
     Exponent sum = 0;
-    for (auto e : powers) sum = checked_add(sum, e);
+    for (const auto& e : powers) sum += e;
     return sum;
 }
 
@@ -58,7 +52,7 @@ std::optional<Exponent> finite_cutoff(const std::vector<Powers>& heads, std::siz
     }
     if (std::find(bounds.begin(), bounds.end(), 0UL) != bounds.end()) return std::nullopt;
     Exponent cutoff = 1;
-    for (auto b : bounds) cutoff = checked_add(cutoff, b - 1);
+    for (auto b : bounds) cutoff += b - 1;
     return cutoff;
 }
 
@@ -75,31 +69,34 @@ void subtract_multiple(Polynomial& p, const Polynomial& row, const Powers& shift
     for (const auto& [m, c] : row) {
         Powers shifted = m;
         for (std::size_t i = 0; i < shifted.size(); ++i)
-            shifted[i] = checked_add(shifted[i], shift[i]);
+            shifted[i] += shift[i];
         if (!cutoff || degree(shifted) < *cutoff) accumulate(p, std::move(shifted), -factor * c);
     }
 }
 
 mpq_class rational_power(const mpq_class& q, Exponent n) {
     if (!n || q == 1) return 1;
-    if (q == -1) return (n % 2) ? -1 : 1;
+    if (q == -1) return mpz_odd_p(n.get_mpz_t()) ? -1 : 1;
+    if (!n.fits_ulong_p()) throw std::overflow_error("Rational power exceeds addressable memory.");
     mpq_class result;
-    mpz_pow_ui(mpq_numref(result.get_mpq_t()), mpq_numref(q.get_mpq_t()), n);
-    mpz_pow_ui(mpq_denref(result.get_mpq_t()), mpq_denref(q.get_mpq_t()), n);
+    mpz_pow_ui(mpq_numref(result.get_mpq_t()), mpq_numref(q.get_mpq_t()), n.get_ui());
+    mpz_pow_ui(mpq_denref(result.get_mpq_t()), mpq_denref(q.get_mpq_t()), n.get_ui());
     return result;
 }
 
 // Jump along repeated reductions by a homogeneous binomial. For x-y
 // this sends x^n to y^n without constructing any intermediate monomials.
-void reduce_homogeneous_binomial(Polynomial& pending, const Powers& m, const Reducer& r) {
+void reduce_homogeneous_binomial(Polynomial& pending, const Powers& m, const Reducer& r,
+                                 const std::vector<Reducer>& reducers) {
     auto tail = r.row.begin();
     if (tail->first == r.head) ++tail;
     const auto& t = tail->first;
-    Exponent count = std::numeric_limits<Exponent>::max();
+    Exponent count = 0;
     for (std::size_t i = 0; i < t.size(); ++i) {
         if (t[i] < r.head[i]) {
             Exponent stride = r.head[i] - t[i];
-            count = std::min(count, (m[i] - r.head[i]) / stride + 1);
+            const Exponent steps = (m[i] - r.head[i]) / stride + 1;
+            if (!count || steps < count) count = steps;
         }
     }
     Powers end = m;
@@ -107,14 +104,17 @@ void reduce_homogeneous_binomial(Polynomial& pending, const Powers& m, const Red
         if (t[i] <= r.head[i]) end[i] -= count * (r.head[i] - t[i]);
         else {
             Exponent stride = t[i] - r.head[i];
-            if (count > (std::numeric_limits<Exponent>::max() - m[i]) / stride)
-                throw std::overflow_error("local binomial exponent overflow");
             end[i] += count * stride;
         }
     }
+    auto source = pending.extract(m);
+    // In (x-2*y, y), the terminal monomial of x^N is already zero;
+    // the intermediate coefficient 2^N need never be materialized.
+    if (std::any_of(reducers.begin(), reducers.end(), [&](const Reducer& other) {
+            return other.row.size() == 1 && divides(other.head, end);
+        })) return;
     const mpq_class ratio = -tail->second / r.row.at(r.head);
-    mpq_class coefficient = pending.at(m) * rational_power(ratio, count);
-    pending.erase(m);
+    mpq_class coefficient = source.mapped() * rational_power(ratio, count);
     accumulate(pending, std::move(end), coefficient);
 }
 
@@ -125,14 +125,13 @@ mpq_class center_coefficient(mpq_class c, const Powers& m, const std::vector<mpq
     for (std::size_t i = 0; i < m.size(); ++i) {
         if (!m[i] || point[i] == 0) continue;
         mpq_class mag = abs(point[i]);
-        if (point[i] < 0 && m[i] % 2) c = -c;
+        if (point[i] < 0 && mpz_odd_p(m[i].get_mpz_t())) c = -c;
         if (mag > 1) exponents[mag] += m[i];
         if (mag < 1) exponents[1 / mag] -= m[i];
     }
     for (const auto& [q, n] : exponents) {
         mpz_class magnitude = abs(n);
-        if (!magnitude.fits_ulong_p()) throw std::overflow_error("Taylor coefficient exponent overflow");
-        mpq_class power = rational_power(q, magnitude.get_ui());
+        mpq_class power = rational_power(q, magnitude);
         if (n < 0) c /= power;
         else c *= power;
     }
@@ -168,7 +167,7 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
     }
     const bool homogeneous = std::all_of(reducers.begin(), reducers.end(),
                                           [](const Reducer& r) { return !r.ecart; });
-    const auto cutoff = homogeneous ? std::nullopt : finite_cutoff(heads, width);
+    const auto cutoff = finite_cutoff(heads, width);
     const bool full = homogeneous || cutoff.has_value();
     Polynomial pending;
     for (const auto& [m, c] : centered) {
@@ -195,7 +194,7 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
             continue;
         }
         if (homogeneous && reducers[choice].row.size() == 2) {
-            reduce_homogeneous_binomial(pending, head, reducers[choice]);
+            reduce_homogeneous_binomial(pending, head, reducers[choice], reducers);
             continue;
         }
         if (!full && reducers[choice].ecart > 0) {
@@ -229,9 +228,10 @@ std::optional<Polynomial> finite_query_jet(const Basis& basis, const Polynomial&
     mpz_class full = 0, retained = 0;
     for (const auto& [m, c] : original) {
         mpz_class box = 1, truncated_box = 1;
-        Exponent fixed_degree = 0, axes = 0;
+        Exponent fixed_degree = 0;
+        unsigned long axes = 0;
         for (std::size_t i = 0; i < m.size(); ++i) {
-            if (point[i] == 0) fixed_degree = checked_add(fixed_degree, m[i]);
+            if (point[i] == 0) fixed_degree += m[i];
             else if (m[i]) {
                 box *= mpz_class(m[i]) + 1;
                 ++axes;

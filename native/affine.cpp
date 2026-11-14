@@ -1,5 +1,6 @@
 // Pullbacks, Jacobians and transitions of affine charts over Q. See KERNEL.md §9.5.
 #include "groebner.hpp"
+#include "polynomial_factors.hpp"
 #include <flint/mpoly.h>
 #include <flint/fmpq_mpoly.h>
 #include <flint/fmpq_mpoly_factor.h>
@@ -12,6 +13,8 @@
 
 namespace atlas {
 std::string fan_cover(std::istream& in);
+std::string monomial_quotient(std::istream&, const std::string&);
+namespace local { std::string operations(std::istream&, const std::string&); }
 std::string centre_weights(std::istream& in, const std::string& operation);
 namespace {
 
@@ -154,9 +157,9 @@ struct Variables {
         if (n <= MAX_VARIABLES) packed.init(n, 1);
         fmpq_mpoly_ctx_init(ctx, n, ordering);
     }
-    explicit Variables(int n) : n(n) {
+    explicit Variables(int n, ordering_t ordering = ORD_LEX) : n(n) {
         packed.init(n, 1);
-        fmpq_mpoly_ctx_init(ctx, n, ORD_LEX);
+        fmpq_mpoly_ctx_init(ctx, n, ordering);
     }
     ~Variables() { fmpq_mpoly_ctx_clear(ctx); }
     Variables(const Variables&) = delete;
@@ -233,6 +236,22 @@ void emit(std::string& text, const Polynomial& f) {
     text += '\n';
 }
 
+std::string equation_text(const Polynomial& equation, std::vector<const char*>& names) {
+    char* raw = fmpq_mpoly_get_str_pretty(equation.p, names.data(), equation.ring.ctx);
+    std::string text(raw);
+    flint_free(raw);
+    text.erase(std::remove(text.begin(), text.end(), ' '), text.end());
+    return text;
+}
+
+// The public order is descending total degree, then lexicographic order.
+std::string chart_equation_text(const Polynomial& strict, const Variables& graded,
+                                const std::vector<slong>& axes, std::vector<const char*>& names) {
+    Polynomial equation(graded);
+    fmpq_mpoly_compose_fmpq_mpoly_gen(equation.p, strict.p, axes.data(), strict.ring.ctx, graded.ctx);
+    return equation_text(equation, names);
+}
+
 // The squarefree supports generate the radical of the owned monomial ideal.
 // A term in its square is a multiple of a pair of supports A,B: every
 // exponent on A|B is positive, and every exponent on A&B is at least two.
@@ -281,6 +300,106 @@ Polynomial crossing_jet(const Polynomial& strict, const std::string& supports) {
     fmpq_set(jet.p->content, strict.p->content);
     fmpq_mpoly_reduce(jet.p, ring.ctx);
     return jet;
+}
+
+// For a regular cone R and a character a, the pullback exponent is R*a.
+// Distinct characters stay distinct. On an exceptional ray r the minimum
+// pairing is the order, and nu is sum(r) by the logarithmic volume form.
+std::string fan_charts(std::istream& in, bool projections) {
+    Variables base(line(in));
+    Variables chart(line(in));
+    const int n = base.n;
+    if (n != chart.n || n > 8) throw std::invalid_argument("Expected fan charts of dimension at most eight.");
+    const auto source = read(in, base);
+    const slong terms = fmpq_mpoly_length(source.p, base.ctx);
+    if (!terms) throw std::invalid_argument("Expected a nonzero fan equation.");
+    Variables graded(n, ORD_DEGLEX);
+    std::vector<slong> axes(n);
+    for (int j = 0; j < n; ++j) axes[j] = j;
+    std::vector<std::vector<Z>> linear;
+    if (projections) {
+        for (int i = 0; i < n; ++i) {
+            std::istringstream row(line(in));
+            std::string entry;
+            linear.emplace_back(n);
+            for (auto& c : linear.back()) {
+                if (!(row >> entry) || fmpz_set_str(&c.v, entry.c_str(), 10))
+                    throw std::invalid_argument("Expected an integral fan frame.");
+            }
+            if (row >> entry) throw std::invalid_argument("Wrong fan frame row length.");
+        }
+    }
+    IntegerMatrix support(n, terms), rays(n, n), values(n, terms);
+    std::vector<fmpz*> exponent(n);
+    for (slong k = 0; k < terms; ++k) {
+        for (int j = 0; j < n; ++j) exponent[j] = fmpz_mat_entry(support.matrix, j, k);
+        fmpq_mpoly_get_term_exp_fmpz(exponent.data(), source.p, k, base.ctx);
+    }
+    std::string result;
+    while (in.peek() != std::char_traits<char>::eof()) {
+        std::vector<Z> nu(n);
+        for (int i = 0; i < n; ++i) {
+            std::istringstream row(line(in));
+            std::string entry;
+            for (int j = 0; j < n; ++j) {
+                auto r = fmpz_mat_entry(rays.matrix, i, j);
+                if (!(row >> entry) || fmpz_set_str(r, entry.c_str(), 10) || fmpz_sgn(r) < 0)
+                    throw std::invalid_argument("Expected a nonnegative fan ray.");
+                fmpz_add(&nu[i].v, &nu[i].v, r);
+            }
+            if (row >> entry) throw std::invalid_argument("Wrong fan ray length.");
+        }
+        Z det;
+        fmpz_mat_det(&det.v, rays.matrix);
+        if (!fmpz_is_pm1(&det.v)) throw std::invalid_argument("Expected a regular fan cone.");
+        fmpz_mat_mul(values.matrix, rays.matrix, support.matrix);
+        std::string orders;
+        for (int i = 0; i < n; ++i) {
+            if (fmpz_is_one(&nu[i].v)) continue;  // A standard axis is not exceptional.
+            Z minimum;
+            fmpz_set(&minimum.v, fmpz_mat_entry(values.matrix, i, 0));
+            for (slong k = 1; k < terms; ++k) {
+                const auto value = fmpz_mat_entry(values.matrix, i, k);
+                if (fmpz_cmp(value, &minimum.v) < 0) fmpz_set(&minimum.v, value);
+            }
+            for (const fmpz* value : {&minimum.v, &nu[i].v}) {
+                char* decimal = fmpz_get_str(nullptr, 10, value);
+                orders += ' ';
+                orders += decimal;
+                flint_free(decimal);
+            }
+            for (slong k = 0; k < terms; ++k) {
+                auto v = fmpz_mat_entry(values.matrix, i, k);
+                fmpz_sub(v, v, &minimum.v);
+            }
+        }
+        Polynomial strict(chart);
+        for (slong k = 0; k < terms; ++k) {
+            for (int j = 0; j < n; ++j) exponent[j] = fmpz_mat_entry(values.matrix, j, k);
+            fmpz_mpoly_push_term_fmpz_fmpz(strict.p->zpoly, source.p->zpoly->coeffs + k,
+                                           exponent.data(), chart.ctx->zctx);
+        }
+        fmpz_mpoly_sort_terms(strict.p->zpoly, chart.ctx->zctx);
+        fmpq_set(strict.p->content, source.p->content);
+        fmpq_mpoly_reduce(strict.p, chart.ctx);
+        result += fmpq_mpoly_is_fmpq(strict.p, chart.ctx) ? '0' : '1';
+        result += orders + "\n" + chart_equation_text(strict, graded, axes, chart.pointers) + "\n";
+        emit(result, strict);
+        emit(result, crossing_jet(strict, line(in)));
+        // Projection i is sum_j L_ij u^(R[:,j]). Regularity makes the
+        // columns distinct, so only nonzero frame entries need a term.
+        for (const auto& row : linear) {
+            Polynomial projection(graded);
+            for (int j = 0; j < n; ++j) {
+                if (fmpz_is_zero(&row[j].v)) continue;
+                for (int k = 0; k < n; ++k) exponent[k] = fmpz_mat_entry(rays.matrix, k, j);
+                fmpq_mpoly_push_term_fmpz_fmpz(projection.p, &row[j].v, exponent.data(), graded.ctx);
+            }
+            fmpq_mpoly_sort_terms(projection.p, graded.ctx);
+            result += equation_text(projection, chart.pointers) + "\n";
+        }
+    }
+    return result;
 }
 
 // Saved record grammar, matching polynomial.parse_expression. No evaluation
@@ -549,6 +668,24 @@ Polynomial coordinate_residual(const Polynomial& f, const std::vector<int>& vari
     return residual;
 }
 
+// In characteristic zero, gcd(f, all partials of f) removes exactly one
+// copy of each prime factor of f. The quotient is its monic squarefree part.
+Polynomial squarefree_part(const Polynomial& f) {
+    const auto& chart = f.ring;
+    Polynomial common(chart), derivative(chart), result(chart);
+    if (fmpq_mpoly_is_zero(f.p, chart.ctx))
+        throw std::invalid_argument("Expected a nonzero polynomial for its squarefree part.");
+    fmpq_mpoly_set(common.p, f.p, chart.ctx);
+    for (int j = 0; j < chart.n && !fmpq_mpoly_is_fmpq(common.p, chart.ctx); ++j) {
+        fmpq_mpoly_derivative(derivative.p, f.p, j, chart.ctx);
+        if (!fmpq_mpoly_gcd(result.p, common.p, derivative.p, chart.ctx)) throw Limit("A polynomial gcd failed.");
+        fmpq_mpoly_swap(result.p, common.p, chart.ctx);
+    }
+    if (!fmpq_mpoly_divides(result.p, f.p, common.p, chart.ctx)) throw Limit("Inexact squarefree quotient.");
+    fmpq_mpoly_make_monic(result.p, result.p, chart.ctx);
+    return result;
+}
+
 Polynomial pole(const Variables& chart, const std::vector<Polynomial>& fractions) {
     Polynomial product(chart), gcd(chart), a(chart), b(chart);
     fmpq_mpoly_one(product.p, chart.ctx);
@@ -559,16 +696,7 @@ Polynomial pole(const Variables& chart, const std::vector<Polynomial>& fractions
             throw Limit("A transition denominator could not be reduced.");
         fmpq_mpoly_mul(product.p, product.p, b.p, chart.ctx);
     }
-    // Remove repeated prime factors, in characteristic zero.
-    fmpq_mpoly_set(gcd.p, product.p, chart.ctx);
-    for (int j = 0; j < chart.n && !fmpq_mpoly_is_fmpq(gcd.p, chart.ctx); ++j) {
-        fmpq_mpoly_derivative(a.p, product.p, j, chart.ctx);
-        if (!fmpq_mpoly_gcd(b.p, gcd.p, a.p, chart.ctx)) throw Limit("A polynomial gcd failed.");
-        fmpq_mpoly_swap(b.p, gcd.p, chart.ctx);
-    }
-    if (!fmpq_mpoly_divides(b.p, product.p, gcd.p, chart.ctx)) throw Limit("Inexact squarefree quotient.");
-    fmpq_mpoly_make_monic(b.p, b.p, chart.ctx);
-    return b;
+    return squarefree_part(product);
 }
 
 // Eliminate all chart variables except u_k, ordered last among the chart
@@ -657,7 +785,7 @@ bool primitive_vertices(const Polynomial& f) {
 
 // Primitive rational factors and their orders. Use integral primitive
 // representatives so archived branch labels retain their previous ordering.
-std::string factorization(const Polynomial& f, bool geometric) {
+std::string factorization(const Polynomial& f, const std::string& operation) {
     const auto ctx = f.ring.ctx;
     struct Factors {
         fmpq_mpoly_factor_t value;
@@ -665,15 +793,20 @@ std::string factorization(const Polynomial& f, bool geometric) {
         explicit Factors(const fmpq_mpoly_ctx_struct* c) : ctx(c) { fmpq_mpoly_factor_init(value, c); }
         ~Factors() { fmpq_mpoly_factor_clear(value, ctx); }
     } factors(ctx);
-    if (!fmpq_mpoly_factor(factors.value, f.p, ctx) || !fmpq_mpoly_factor_make_integral(factors.value, ctx))
+    std::string result;
+    if (operation == "ordered_factorization") {
+        result = ordered_factors(factors.value, f.p, ctx);
+        result += '\n';
+    } else if (!fmpq_mpoly_factor(factors.value, f.p, ctx) ||
+               !fmpq_mpoly_factor_make_integral(factors.value, ctx)) {
         throw Limit("Rational factorization did not finish.");
+    }
     Polynomial constant(f.ring);
     fmpq_t coefficient;
     fmpq_init(coefficient);
     fmpq_mpoly_factor_get_constant_fmpq(coefficient, factors.value, ctx);
     fmpq_mpoly_set_fmpq(constant.p, coefficient, ctx);
     fmpq_clear(coefficient);
-    std::string result;
     emit(result, constant);
     for (slong i = 0; i < fmpq_mpoly_factor_length(factors.value, ctx); ++i) {
         Polynomial factor(f.ring);
@@ -681,7 +814,7 @@ std::string factorization(const Polynomial& f, bool geometric) {
         char* multiplicity = fmpz_get_str(nullptr, 10, factors.value->exp + i);
         result += multiplicity;
         flint_free(multiplicity);
-        if (geometric) result += primitive_vertices(factor) ? " 1" : " 0";
+        if (operation == "geometric_factors") result += primitive_vertices(factor) ? " 1" : " 0";
         result += '\n';
         emit(result, factor);
     }
@@ -865,6 +998,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
     const auto names = line(in), order = line(in);
     if (order != "lex" && order != "grevlex") throw std::invalid_argument("Unknown monomial order.");
     Variables ring(names, order == "lex" ? ORD_LEX : ORD_DEGREVLEX);
+    if (operation == "ordered_factorization") return factorization(read(in, ring), operation);
     std::string out;
     if (operation == "polynomial_gcd" || operation == "gcd_from_lcm") {
         const auto a = read(in, ring), b = read(in, ring);
@@ -952,9 +1086,14 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
 
 std::string affine(std::istream& in) {
     const auto operation = line(in);
+    if (operation.rfind("local_", 0) == 0) return local::operations(in, operation);
+    if (operation.rfind("monomial_", 0) == 0) return monomial_quotient(in, operation);
     if (operation == "bm_residual" || operation == "bm_requirements" || operation == "bm_values")
         return centre_weights(in, operation);
     if (operation == "fan_cover") return fan_cover(in);
+    if (operation == "fan_charts" || operation == "fan_charts_with_projection")
+        return fan_charts(in, operation == "fan_charts_with_projection");
+    if (operation == "ordered_factorization") return ordered_polynomials(in, operation);
     if (operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
         operation == "wide_basis" || operation == "wide_division" ||
         operation == "wide_dimension" || operation == "basis_dimension")
@@ -963,6 +1102,20 @@ std::string affine(std::istream& in) {
         operation == "lattice_dimension" || operation == "lattice_pivots")
         return lattice(in, operation);
     Variables chart(line(in));
+    if (operation == "squarefree_part") {
+        std::string result;
+        emit(result, squarefree_part(read(in, chart)));
+        return result;
+    }
+    if (operation == "factor_multiplicity") {
+        const slong axes = std::stol(line(in));
+        const auto value = read(in, chart), divisor = read(in, chart);
+        std::vector<Polynomial> basis;
+        while (in.peek() != std::char_traits<char>::eof()) basis.push_back(read(in, chart));
+        std::vector<fmpq_mpoly_struct*> rows;
+        for (auto& row : basis) rows.push_back(row.p);
+        return factor_multiplicity(value.p, divisor.p, axes, rows, chart.ctx) + "\n";
+    }
     if (operation == "resultant") {
         const slong v = std::stol(line(in));
         if (v < 0 || v >= chart.n) throw std::invalid_argument("Invalid resultant variable.");
@@ -972,7 +1125,7 @@ std::string affine(std::istream& in) {
         return result;
     }
     if (operation == "factor" || operation == "geometric_factors")
-        return factorization(read(in, chart), operation == "geometric_factors");
+        return factorization(read(in, chart), operation);
     if (operation == "decode" || operation == "parse_input") {
         std::string result;
         emit(result, RecordParser(line(in), chart).run());
@@ -1186,6 +1339,8 @@ extern "C" int atlas_wide_abi() noexcept { return 1; }
 extern "C" int atlas_wide_dimension_abi() noexcept { return 1; }
 extern "C" int atlas_jet_abi() noexcept { return 1; }
 extern "C" int atlas_crossing_jet_abi() noexcept { return 1; }
+extern "C" int atlas_fan_charts_abi() noexcept { return 1; }
+extern "C" int atlas_fan_projection_abi() noexcept { return 1; }
 extern "C" int atlas_residual_abi() noexcept { return 1; }
 
 extern "C" char* atlas_affine(const char* input, size_t length) noexcept {

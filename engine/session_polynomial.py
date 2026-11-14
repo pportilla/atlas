@@ -130,40 +130,23 @@ class Polynomial:
             raise ValueError("The zero polynomial has no finite factor multiplicity.")
 
         variables = self._space.polynomial_generators
-        divisor_terms = native.terms(variables, divisor)
-        axes = len(self._space.generators)
-        monomials = {term[:axes] for term in divisor_terms}
-        if len(monomials) == 1:
-            # A monomial times a nonzero field scalar divides term by term.
-            powers = next(iter(monomials))
-            terms = native.terms(variables, self._value)
-            return min(term[i] // power for i, power in enumerate(powers) if power
-                       for term in terms)
-
-        from .affine_kernel import _request, _ring, _sparse_expression
+        from .affine_kernel import _request, _ring
+        from .polynomial import integer_from_decimal
 
         ring = _ring(variables)
-        divisors = [ring.text(divisor)]
-        if self.coeffs is not QQ and divisor.has(self.coeffs.parameter):
+        request = ["factor_multiplicity", ring.header, str(len(self._space.generators)),
+                   ring.text(self._value), ring.text(divisor)]
+        result, = _request(request)
+        if result == "field_basis":
             from .wide_basis import wide_basis
 
-            # With the coefficient parameter last, the reduced rational lex
-            # basis consists of the monic field factor followed by its modulus.
+            # With the coefficient parameter last, the rational lex basis is
+            # the monic field divisor followed by its defining relation.
             basis = wide_basis((divisor, self.coeffs.minimal_polynomial), variables, "lex")
             if basis is None:
                 raise ArithmeticError("The native coefficient-field division kernel is unavailable.")
-            divisors = [ring.text(row) for row in basis.exprs]
-        value = self._value
-        order = 0
-        while value.has(*self._space.generators):
-            quotient, *_, remainder = _request(["wide_division", ring.header, "lex", ring.text(value), *divisors])
-            if remainder:
-                break
-            value = _sparse_expression(variables, quotient)
-            if self.coeffs is not QQ:
-                value = self.coeffs.reduce(value, variables)
-            order += 1
-        return order
+            result, = _request([*request, *(ring.text(row) for row in basis.exprs)])
+        return integer_from_decimal(result)
 
     def __pos__(self):
         return self

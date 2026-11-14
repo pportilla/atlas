@@ -74,6 +74,31 @@ class TorusChartCertification(unittest.TestCase):
         self.assertEqual(first, scaled)
         self.assertNotEqual(first, different)
 
+    def test_fan_uses_original_equation_across_differently_named_charts(self):
+        from engine.monomial_atlas import fan_outputs
+        from engine.native_library import _MODE
+        from engine.strata import InvalidChart
+        if _MODE == "sympy":
+            self.skipTest("This test exercises the native fan verifier.")
+        variables = ["x", "y"]
+        record = {
+            "variables": variables, "fan": {"rays": [[1, 0], [0, 1], [1, 1]]},
+            "certificate": {"linear_map_to_input": [[1, -1], [1, 1]], "adapted_polynomial": "1"},
+            "charts": [
+                {"coordinates": ["u", "v"], "map": {"x": "(u-1)*v", "y": "u*v+v"}, "ray_indices": [0, 2]},
+                {"coordinates": ["p", "q"], "map": {"x": "p-p*q", "y": "p+p*q"}, "ray_indices": [2, 1]},
+            ],
+        }
+        polynomial = parse("x^2-y^2", variables)
+        charts, proved = fan_outputs(record, polynomial)
+        self.assertEqual([c["components"][-1]["ideal"] for c in charts], [["-4*u"], ["-4*q"]])
+        self.assertEqual(proved["numerical_data"][0], {"component": "E1", "multiplicity": 2, "nu": 2})
+        saved = {"variables": variables, "atlas": json.loads(json.dumps(charts))}
+        self.assertEqual(fan_outputs(saved, polynomial)[1], proved)
+        saved["atlas"][1]["map"]["x"] += "+1"
+        with self.assertRaises(InvalidChart):
+            fan_outputs(saved, polynomial)
+
     def test_same_orbit_sections_do_not_certify_a_changed_strict_equation(self):
         from engine.monomial_atlas import fan_outputs
         from engine.native_library import _MODE
@@ -90,6 +115,72 @@ class TorusChartCertification(unittest.TestCase):
             with self.assertRaises(InvalidChart):
                 fan_outputs(dict(variables=self.names, atlas=original),
                             parse("x^2+y^3+z^5", self.names), intrinsic=True)
+
+    def test_projection_terms_follow_chart_order_and_certify_the_whole_map(self):
+        from engine.monomial_atlas import fan_outputs
+        from engine.native_library import _MODE
+        from engine.strata import InvalidChart
+        if _MODE == "sympy":
+            self.skipTest("This test exercises the native fan verifier.")
+
+        # The three charts of the blowup of the origin. The two degree-two
+        # terms tie on total degree in every chart. Coordinate order differs
+        # from alphabetical order, and the supplied expressions are factored.
+        names = ["zeta", "alpha", "mu"]
+        variables = ["x", "y", "z"]
+        linear = [[-1, 2, -3], [0, -1, 1], [0, 0, 1]]
+        prescribed = [
+            ([3, 1, 2], ["zeta*(2*alpha-3*mu-1)", "zeta*(mu-alpha)", "zeta*mu"]),
+            ([0, 3, 2], ["alpha*(2-zeta-3*mu)", "alpha*(mu-1)", "alpha*mu"]),
+            ([0, 1, 3], ["(4*alpha-2*zeta-6)*mu/2", "(1-alpha)*mu", "mu"]),
+        ]
+        record = {
+            "variables": variables,
+            "fan": {"rays": [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]]},
+            "certificate": {"linear_map_to_input": linear},
+            "charts": [{"coordinates": names, "map": dict(zip(variables, images)), "ray_indices": cone}
+                       for cone, images in prescribed],
+        }
+        expected = [
+            ["2*zeta*alpha-3*zeta*mu-zeta", "-zeta*alpha+zeta*mu", "zeta*mu"],
+            ["-zeta*alpha-3*alpha*mu+2*alpha", "alpha*mu-alpha", "alpha*mu"],
+            ["-zeta*mu+2*alpha*mu-3*mu", "-alpha*mu+mu", "mu"],
+        ]
+        polynomial = parse("z", variables)
+        charts, proved = fan_outputs(record, polynomial)
+        for chart, images in zip(charts, expected):
+            self.assertEqual(chart["map"], dict(zip(variables, images)))
+            self.assertEqual(chart["fibre"], images)
+
+        saved = {"variables": variables, "atlas": deepcopy(charts)}
+        for chart, (_, images) in zip(saved["atlas"], prescribed):
+            chart["map"] = dict(zip(variables, images))
+        replay, found = fan_outputs(saved, polynomial)
+        self.assertEqual(found, proved)
+        self.assertEqual(replay, saved["atlas"])
+
+        # This perturbation and its first derivatives vanish on the whole
+        # origin fibre of this chart, but the projection on the chart differs.
+        saved["atlas"][1]["map"]["x"] += "+alpha^2"
+        with self.assertRaises(InvalidChart):
+            fan_outputs(saved, polynomial)
+
+    def test_shared_face_is_checked_once_and_coordinate_faces_stay_distinct(self):
+        from unittest.mock import patch
+        from engine.atlas_torus import section_complex
+
+        # Blow up the origin of the plane curve x+y=0. Its strict transform
+        # meets the open exceptional orbit but neither torus fixed point.
+        x, y, ray = (1, 0), (0, 1), (1, 1)
+        charts = (((ray, y), {0: "E"}, (((0, 0), 1), ((0, 1), 1))),
+                  ((x, ray), {1: "E"}, (((0, 0), 1), ((1, 0), 1))))
+        with patch("engine.atlas_torus._orbit", wraps=_orbit) as orbit:
+            expected = section_complex(charts, 2, True)
+            self.assertEqual(orbit.call_count, 4)
+            orbit.reset_mock()
+            self.assertEqual(section_complex(charts, 2, True, common_source=True), expected)
+            self.assertEqual(orbit.call_count, 3)
+        self.assertEqual(expected["vertices"], [{"id": "E", "dimension": 0}])
 
     def test_root_indices_match_on_all_split_incident_curves(self):
         result = resolve({"variables": self.names, "polynomial": "2*x^2+3*y^4-z^7+x*y*z^4",

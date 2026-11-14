@@ -115,9 +115,17 @@ void append_factor(Factors& factors,Poly factor,Exp power) {
     }
 }
 
-vector<Num> ordered_roots(const vector<pair<Exp,Num>>& terms) {
+struct Root {
+    Num value;
+    bool simple;
+};
+
+vector<Root> ordered_roots(const vector<pair<Exp,Num>>& terms) {
     if(terms.empty()) throw invalid_argument("The zero polynomial does not define a finite root family.");
-    if(terms.size()==1) return terms[0].first ? vector<Num>{Num(0)} : vector<Num>{};
+    if(terms.size()==1) {
+        Exp power=terms[0].first;
+        return power ? vector<Root>{{Num(0),power==1}} : vector<Root>{};
+    }
     gr_ctx_t ctx; gr_ctx_init_complex_qqbar(ctx);
     gr_poly_t p; gr_poly_init(p,ctx);
     int status=0;
@@ -129,20 +137,21 @@ vector<Num> ordered_roots(const vector<pair<Exp,Num>>& terms) {
     gr_vec_t roots; gr_vec_init(roots,0,ctx);
     fmpz_vec_t mult; fmpz_vec_init(mult,0);
     if(!status) status=gr_poly_roots(roots,mult,p,0,ctx);
-    vector<Num> out;
+    vector<Root> out;
     if(!status) for(slong i=0;i<gr_vec_length(roots,ctx);++i){
         Num r; qqbar_set(r.n,static_cast<qqbar_srcptr>(gr_vec_entry_ptr(roots,i,ctx)));
-        out.push_back(r);
+        out.push_back({move(r),fmpz_is_one(fmpz_vec_entry_srcptr(mult,i))!=0});
     }
     fmpz_vec_clear(mult); gr_vec_clear(roots,ctx); gr_poly_clear(p,ctx); gr_ctx_clear(ctx);
     if(status) throw Fail("The exact algebraic root computation did not finish.");
-    sort(out.begin(),out.end(),[](const Num& a,const Num& b){
-        int s=qqbar_cmp_re(a.n,b.n);return s<0 || (!s && qqbar_cmp_im(a.n,b.n)<0);
+    sort(out.begin(),out.end(),[](const Root& a,const Root& b){
+        int s=qqbar_cmp_re(a.value.n,b.value.n);
+        return s<0 || (!s && qqbar_cmp_im(a.value.n,b.value.n)<0);
     });
     return out;
 }
 
-vector<Num> directions(const Poly& f,Exp m) {
+vector<Root> directions(const Poly& f,Exp m) {
     vector<pair<Exp,Num>> terms;
     for(const auto& [k,c]:f) if(add_powers(k.first,k.second)==m) terms.emplace_back(k.second,c);
     return ordered_roots(terms);
@@ -165,7 +174,8 @@ J ordered_root_labels(const J& rows) {
         if(!c.zero()) terms.emplace_back(row[0].asInt64(),c);
     }
     J result=arr();
-    for(const auto& root:ordered_roots(terms)) {
+    for(const auto& entry:ordered_roots(terms)) {
+        const Num& root=entry.value;
         if(qqbar_is_rational(root.n)) {
             fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q,root.n);
             result.append(taken(fmpq_get_str(nullptr,10,q))); fmpq_clear(q);
@@ -297,14 +307,22 @@ struct Resolver {
         }
         struct Child {int i; Num a; Poly f; Axes ax; Coord pt;};
         vector<Child> pending;
-        auto scan=[&](int i,const Num& a){
+        auto scan=[&](int i,const Num& a,bool simple){
             Coord pt{};pt[1-i]=a;
-            Poly h=shift(g[i],1-i,a);
             auto ax1=axes[i];if(!a.zero()) ax1[1-i]=0;
             fiber_points[i].append(point(pt));
             bool overlap=(i==0 && !a.zero());
             Coord other{};if(overlap){other[0]=inverse(a);fiber_points[1].append(point(other));}
-            if(finished(h,ax1)){
+            // A simple root of the restriction to the new exceptional line
+            // gives a smooth transverse branch. At an embedded corner the
+            // strict branch and the two exceptional axes form a triple point.
+            bool terminal=simple && (!embedded || !ax1[1-i]);
+            Poly h;
+            if(!terminal){
+                h=shift(g[i],1-i,a);
+                terminal=finished(h,ax1);
+            }
+            if(terminal){
                 if(branches.size()==numeric_limits<Json::ArrayIndex>::max())
                     throw Fail("The branch count exceeds the output representation.");
                 J branch;branch["id"]="P"+to_string(static_cast<size_t>(branches.size())+1);
@@ -328,8 +346,10 @@ struct Resolver {
             if(overlap)cs[1]["exclude_points"].append(point(other));
             pending.push_back({i,a,std::move(h),ax1,pt});
         };
-        for(auto& a:directions(f,m)) scan(0,a);
-        if(!f.count({0,m})) scan(1,Num(0)); // unique point missing from the u-chart
+        for(const auto& root:directions(f,m)) scan(0,root.value,root.simple);
+        // At infinity the tangent polynomial is f_m(u,1); its linear
+        // coefficient is the coefficient of x*y^(m-1).
+        if(!f.count({0,m})) scan(1,Num(0),f.count({1,m-1}));
         for(auto& c:cs) charts.append(move(c));
         for(auto it=pending.rbegin();it!=pending.rend();++it){
             auto& child=*it;

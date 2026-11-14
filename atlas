@@ -9,6 +9,7 @@ esac
 case "$1/$2" in
     algebra/local-standard-basis|algebra/local-normal-form)
         if [ "${ATLAS_GROEBNER-native}" = native ] && [ -z "${ATLAS_GROEBNER_GPU-}" ] &&
+           [ -z "${PYTHONINTMAXSTRDIGITS-}" ] &&
            [ -x "$atlas_dir/native/build/local_algebra" ]; then
             exec "$atlas_dir/native/build/local_algebra" "$0" "$@"
         fi ;;

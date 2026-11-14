@@ -222,6 +222,34 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         pieces = [((0,"strict"),(x,)),((1,"strict"),(y,))]
         self.assertEqual(len(_prime_groups(charts,pieces,overlap,transition)),2)
 
+    def test_glued_prime_representatives_on_full_and_partial_overlaps(self):
+        from engine.atlas_gluing import _prime_groups
+        from engine.chart_expressions import runtime_expressions
+        x, left, right = runtime_expressions().symbols("x left right")
+        chart = Chart((x,), (), (), (), (), (("x", x),), ())
+        for removed in ((), ((x,),)):
+            with self.subTest(removed=removed):
+                charts = [chart, chart, replace(chart, removed=removed), chart]
+                pieces = [((i, "strict"), (prime,)) for i, prime in enumerate((x, x, x-1, x))]
+                comparisons = []
+
+                def overlap(i,j):
+                    comparisons.append((i,j))
+                    a, b = {x: left}, {x: right}
+                    holes = tuple(tuple(g.xreplace(swap) for g in hole)
+                                  for k, swap in ((i, a), (j, b)) for hole in charts[k].removed)
+                    return (left, right), a, b, (left-right,), holes
+
+                def transition(i,j):
+                    if (i,j) == (0,3):
+                        # Only the restriction of the identity to D(x) is
+                        # available; it supplies no comparison at x=0.
+                        return (lambda f, basis: basis.reduce(f)[1]), ((x,),)
+
+                groups = _prime_groups(charts, pieces, overlap, transition)
+                self.assertEqual([{i for i,_ in group} for group in groups], [{0,1,3}, {2}])
+                self.assertEqual(comparisons, [(0,1), (0,2), (1,3), (2,3)])
+
     def test_only_the_retained_complement_counts_and_separate_embeddings_glue(self):
         names = list("xy")
         for text in ("y^2-x^3", "(y^2-2*x^4)^2-x^11"):

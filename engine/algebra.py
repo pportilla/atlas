@@ -21,8 +21,17 @@ HILBERT_SAMUEL_OPERANDS = {
     "hilbert-samuel-function": ("ideal",),
     "hilbert-samuel-multiplicity": ("ideal",),
 }
+TANGENT_CONE_OPERANDS = {
+    "tangent-cone": ("ideal",),
+    "tangent-cone-hilbert-series": ("ideal",),
+}
+TANGENT_SPACE_OPERANDS = {
+    "zariski-tangent-space": ("ideal",),
+    "embedding-dimension": ("ideal",),
+}
 POINT_OPERATIONS = (LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
-                    | HILBERT_SAMUEL_OPERANDS.keys())
+                    | HILBERT_SAMUEL_OPERANDS.keys() | TANGENT_CONE_OPERANDS.keys()
+                    | TANGENT_SPACE_OPERANDS.keys())
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "resultant": ("polynomial", "other_polynomial", "variables"),
@@ -32,14 +41,19 @@ OPERATION_OPERANDS = {
     "normal-form": ("ideal", "polynomial"),
     "membership": ("ideal", "polynomial"),
     "eliminate": ("ideal", "variables"),
+    "radical": ("ideal",),
     "intersection": ("ideal", "other_ideal"),
     "quotient": ("ideal", "other_ideal"),
     "saturation": ("ideal", "polynomial"),
     "dimension": ("ideal",),
     "quotient-basis": ("ideal",),
+    "multiplicity": ("ideal",),
+    "hilbert-series": ("ideal",),
     **LOCAL_QUOTIENT_OPERANDS,
     **LOCAL_STANDARD_OPERANDS,
     **HILBERT_SAMUEL_OPERANDS,
+    **TANGENT_CONE_OPERANDS,
+    **TANGENT_SPACE_OPERANDS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
 
@@ -171,14 +185,22 @@ def dispatch(data, *, known_basis=False):
                 result_operands = dict(operands, ideal=basis)
         elif operation in ("gcd", "factor", "resultant"):
             from . import algebra_polynomial as handler
-        elif operation == "quotient-basis" or operation in LOCAL_QUOTIENT_OPERANDS:
+        elif operation in ("quotient-basis", "multiplicity") or operation in LOCAL_QUOTIENT_OPERANDS:
             from . import local_algebra as handler
+            if known_basis and operation == "multiplicity":
+                handler_options["known_basis"] = True
         elif operation in LOCAL_STANDARD_OPERANDS:
             from . import local_standard as handler
             if known_basis and operation == "local-normal-form":
                 handler_options["known_basis"] = True
         elif operation in HILBERT_SAMUEL_OPERANDS:
             from . import hilbert_samuel as handler
+        elif operation == "hilbert-series":
+            from . import hilbert_series as handler
+        elif operation in TANGENT_CONE_OPERANDS:
+            from . import tangent_cone as handler
+        elif operation in TANGENT_SPACE_OPERANDS:
+            from . import zariski_tangent as handler
         else:
             from . import algebra_ideals as handler
         result = handler.handle(operation, ring, result_operands, **handler_options)

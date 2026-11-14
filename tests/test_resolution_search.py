@@ -5,7 +5,8 @@ import sympy as s
 
 from engine.blowup_ideal import blowup_charts, verify_snc
 from engine.general_resolution import verify_candidate
-from engine.resolution_search import decode_candidate, priority_candidates, scheduled_candidates
+from engine.resolution_search import (_code_trials, _first_code, decode_candidate,
+                                      priority_candidates, scheduled_candidates)
 
 
 def natural(n):
@@ -93,16 +94,33 @@ class SearchTests(unittest.TestCase):
                          sequence([term(1,(0,2)),term(-1,(1,0))],1)],1)
         boundary=sequence([sequence([sequence([term(1,(0,1,2,0),0),
                                                term(1,(1,0,0,2),1)],1)],1)])
-        candidate=decode_candidate((x,y), as_code(field+center+boundary))
+        code = as_code(field+center+boundary)
+        candidate=decode_candidate((x,y), code)
         self.assertEqual(candidate.center,(x,y*y-x))
         self.assertEqual(candidate.domain.ext.minpoly.degree(),2)
         u,v=candidate.projective
         self.assertEqual(candidate.boundary,((y*u*u+candidate.primitive*x*v*v,),))
+        trials = _code_trials((x,y), code-96, code+32)
+        self.assertIn(candidate.source, [c.source for c, _ in trials if c is not None])
         # Failure of homogeneity is an invalid projective certificate.
         mixed=sequence([sequence([sequence([term(1,(0,1,2,0),0),
                                             term(1,(1,0,0,1),1)],1)],1)])
         self.assertIsNone(decode_candidate((x,y),as_code(field+center+mixed)))
         self.assertIsNone(decode_candidate((x,y),0))
+
+    def test_prefix_skipping_preserves_every_valid_code(self):
+        variables = s.symbols("x y z t u")
+        for count in (1, 2, 5):
+            with self.subTest(variables=count):
+                ring = variables[:count]
+                stop = 12000
+                brute = [code for code in range(stop) if decode_candidate(ring, code) is not None]
+                first = _first_code(ring)
+                self.assertEqual(first, brute[0])
+                trials = list(_code_trials(ring, first, stop))
+                self.assertEqual([c.source for c, _ in trials if c is not None],
+                                 [f"integer code {code:#x}" for code in brute])
+                self.assertLess(len(trials), stop-first)
 
     def test_scheduling_revisits_even_when_new_codes_are_invalid(self):
         x,y=s.symbols("x y")
@@ -111,6 +129,12 @@ class SearchTests(unittest.TestCase):
         self.assertGreater(len(budgets),1)
         self.assertGreater(max(budgets),min(budgets))
         self.assertTrue(all(isinstance(b,int) and b>=1 for _,b in first))
+        # Newly decoded certificates advance while timeouts on earlier
+        # certificates still receive successively larger proof budgets.
+        fresh = [c.source for c,b in first if b == 1 and c.source.startswith("integer code")]
+        self.assertGreaterEqual(len(fresh), 2)
+        self.assertEqual(len(fresh), len(set(fresh)))
+        self.assertGreater(max(b for c,b in first if c.source == fresh[0]), 1)
 
 
 if __name__ == "__main__":

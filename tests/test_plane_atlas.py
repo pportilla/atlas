@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from engine import native_library
-from engine.plane_atlas import plane_outputs
+from engine.monomial_atlas import _row
+from engine.plane_atlas import _plane_strata, plane_outputs
 from engine.polynomial import parse
 from engine.resolve import resolve
 from engine.strata import InvalidChart, rational_chart_outputs
@@ -17,6 +18,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipIf(native_library._MODE == "sympy", "The sparse plane chart verifier uses the native kernel.")
 class RationalPlaneAtlas(unittest.TestCase):
+    def test_removed_marked_points_contribute_to_their_own_strata(self):
+        # Each of the two sheets t=±sqrt(2) contains a line with marked
+        # points at 0, t, -t. Remove 0, t, one ordinary point and one point
+        # off the line. The point -t survives on each sheet.
+        coords = ("u", "v", "t")
+        def rows(*eqs):
+            return [_row(eq, coords) for eq in eqs]
+        base = rows("t^2-2", "u")
+        divisors = [rows("u"), rows("v"), rows("(v-t)*(v+t)")]
+        removed = [rows("u", "v-t"), rows("u", "v"), rows("u", "v-3"), rows("u-1", "v-3")]
+        self.assertEqual(_plane_strata(3, base, divisors, removed), {(0,): -6, (0, 2): 2})
+
     def test_cusp_import_guard_fresh_saved_and_companion(self):
         code = """
 import sys

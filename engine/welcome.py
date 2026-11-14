@@ -1,6 +1,6 @@
 """The cartographic wordmark shown when opening Atlas from a terminal."""
 import os
-import shlex
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -52,6 +52,19 @@ SMALL_LOGO = (
 )
 
 
+def atlas_version():
+    root = Path(__file__).resolve().parents[1]
+    if (root / ".git").exists():
+        try:
+            return subprocess.check_output(
+                ["git", "describe", "--tags", "--always", "HEAD"], cwd=root,
+                stderr=subprocess.DEVNULL, text=True, timeout=1,
+            ).strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return "development"
+
+
 def render_welcome(columns, *, color, interactive, example=None):
     margin = "  " if columns >= 24 else ""
     width = max(1, columns - len(margin))
@@ -63,6 +76,10 @@ def render_welcome(columns, *, color, interactive, example=None):
     def paragraph(text, code=None):
         for row in textwrap.wrap(text, width, break_on_hyphens=False):
             lines.append(ink(row, code))
+
+    paragraph(f"Atlas version {atlas_version()}", "1")
+    paragraph("Developer: pportilla <p.portilla@upm.es>")
+    lines.append("")
 
     # Pick the largest pair that fits on one line, in terminal character cells.
     layout = next(((mark, title) for mark in (LOGO, SMALL_LOGO)
@@ -92,13 +109,7 @@ def render_welcome(columns, *, color, interactive, example=None):
     except (ArithmeticError, OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         paragraph("Startup resolution unavailable. " + str(exc))
     else:
-        command = shlex.join(["resolve", polynomial, "--vars", "x,y"])
-        if not interactive:
-            command = "./atlas " + command
-        if len("Try  " + command) <= width:
-            lines.append("Try  " + ink(command, "36"))
-        else:
-            paragraph(command, "36")
+        paragraph("Resolved curve  " + polynomial, "36")
     paragraph("Type help for commands or quit to leave." if interactive
               else "Run ./atlas --help for all commands.")
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"

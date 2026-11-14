@@ -1,4 +1,4 @@
-"""Phase 1 ideal handlers for validated rational algebra requests."""
+"""Ideal operations for validated rational algebra requests."""
 
 from . import ideal_operations as ideals
 from . import native_polynomial as polynomial
@@ -28,6 +28,9 @@ def handle(operation, ring, operands):
     if operation == "eliminate":
         removed = tuple(map(polynomial.Symbol, operands["variables"]))
         result = ideals.eliminate(variables, generators, removed, **options)
+    elif operation == "radical":
+        from .ideal_radical import radical
+        result = radical(variables, generators, **options)
     elif operation == "intersection":
         result = ideals.intersection(variables, generators, operands["other_ideal"], **options)
     elif operation == "quotient":

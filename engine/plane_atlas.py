@@ -199,6 +199,18 @@ def _cover(record, saved):
     return source, centres, removed, field, coefficients
 
 
+def _plane_strata(n, base, ideals, removed):
+    if len(removed) <= 1:
+        return strata_rows(n, base, ideals, removed)
+    # The cover removes distinct points. Over a marked field each point is
+    # a section, and distinct sections stay disjoint on every conjugate sheet.
+    # Subtract each point in its own divisor stratum on the specified base.
+    counts = Counter(strata_rows(n, base, ideals, ()))
+    for point in removed:
+        counts.subtract(strata_rows(n, [*base, *point], ideals, ()))
+    return {subset: chi for subset, chi in counts.items() if chi}
+
+
 def _crosses(n, ambient, ideals, owned, removed):
     for _, _, bad in crossings_rows(n, 2, ambient, ideals, owned, ()):
         if not removed:
@@ -207,7 +219,7 @@ def _crosses(n, ambient, ideals, owned, removed):
         # bad locus. A zero-dimensional locus is counted by its Euler number.
         if int(native_library.ideal_request(f"dimension {n}", bad)[0]) > 0:
             return True
-        if strata_rows(n, bad, [()], removed).get((0,), 0):
+        if _plane_strata(n, bad, [()], removed).get((0,), 0):
             return True
     return False
 
@@ -325,7 +337,7 @@ def _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals):
                 raise InvalidChart("The embedded plane transform fails normal crossings.")
             embedded = False
         if integrals or complex:
-            for subset, total in strata_rows(n, [*ambient, *owned], ideals, cuts).items():
+            for subset, total in _plane_strata(n, [*ambient, *owned], ideals, cuts).items():
                 chi, remainder = divmod(total, degree)
                 if remainder:
                     raise ArithmeticError("Conjugate plane strata disagree about the Euler characteristic.")

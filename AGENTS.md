@@ -1,5 +1,17 @@
 # Atlas mathematical operations
 
+Implement every new mathematical computation in C++ under `native/`. This
+rule covers arithmetic, invariants, geometric predicates, algorithmic
+shortcuts, certificate verification, and fallbacks. Every production entry
+point (prompt, script, CLI, HTTP, worker, and saved-record replay) must call
+the same native computation. A missing native operation must be implemented
+in C++ before exposing it.
+
+Use Python for orchestration, input validation, transport, presentation, and
+tests. Independent Python reference calculations belong in tests. When
+migrating an operation, remove its superseded Python implementation and
+exercise the public entry points, including wide exponents and coefficients.
+
 Expose new user-facing mathematical computations as functions that return
 structured values. Register them in the shared session in `engine/session.py`
 so the same function, fields, and arguments work at the prompt and in scripts.

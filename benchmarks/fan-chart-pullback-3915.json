@@ -1,0 +1,628 @@
+{
+  "input": "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+  "cli": [
+    "./atlas",
+    "resolve",
+    "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+    "--vars",
+    "x,y,z,t,u",
+    "--mode",
+    "embedded",
+    "--quick",
+    "--compute",
+    "cpu",
+    "--monodromy",
+    "--json"
+  ],
+  "host": "AMD Ryzen 7 6800H",
+  "cpu": 14,
+  "method": "Alternating before and after snapshots on the same pinned CPU. CLI times include startup, complete public computation, full JSON formatting and pipe transfer. Warm API times cover a full resolve after one warm-up in each of two long-lived interpreters. JSON validation is outside the measured interval. Wall times use a monotonic clock. CLI CPU times include child processes. SymPy import blocked in each worker. For every pair all mathematical records, including ordered facets and boundary maps, match exactly.",
+  "fresh_cli": {
+    "seconds": {
+      "before": [
+        2.624442741012899,
+        3.885542051983066,
+        3.9782203889917582,
+        2.501029593986459,
+        2.889425855013542
+      ],
+      "after": [
+        2.0103250939864665,
+        2.5779075270111207,
+        2.041748246003408,
+        2.3751448930124752,
+        1.9601376830250956
+      ]
+    },
+    "median_seconds": {
+      "before": 2.889425855013542,
+      "after": 2.041748246003408
+    },
+    "process_cpu_seconds": {
+      "before": [
+        2.589835,
+        3.851783,
+        3.933928,
+        2.492798999999998,
+        2.882308000000002
+      ],
+      "after": [
+        1.9896950000000002,
+        2.5677139999999996,
+        1.9599609999999998,
+        2.1144239999999996,
+        1.953006000000002
+      ]
+    },
+    "median_cpu_seconds": {
+      "before": 2.882308000000002,
+      "after": 1.9896950000000002
+    },
+    "median_pair_speedup": 1.474093314993194,
+    "median_pair_seconds_saved": 0.9292881719884463
+  },
+  "warm_api": {
+    "seconds": {
+      "before": [
+        2.270296739996411,
+        2.1890650530112907,
+        2.191681922005955,
+        2.1418457140098326,
+        2.399816294986522
+      ],
+      "after": [
+        1.0200023949728347,
+        1.0712658109841868,
+        1.2988285600149538,
+        1.1538101299956907,
+        1.2828087020025123
+      ]
+    },
+    "median_seconds": {
+      "before": 2.191681922005955,
+      "after": 1.1538101299956907
+    },
+    "process_cpu_seconds": {
+      "before": [
+        2.2202991809999997,
+        2.146467265,
+        2.1596940479999995,
+        2.100337646,
+        2.3468101299999997
+      ],
+      "after": [
+        0.9868217490000002,
+        1.038878436,
+        1.260315683,
+        1.1061940340000005,
+        1.2507509570000002
+      ]
+    },
+    "median_cpu_seconds": {
+      "before": 2.1596940479999995,
+      "after": 1.1061940340000005
+    },
+    "median_pair_speedup": 1.8707514933756832,
+    "median_pair_seconds_saved": 1.1170075929840095
+  },
+  "phase_method": "Separate full CLI run per snapshot. Timers on native chart requests, strict decode, crossing and stratum calls are disjoint. Remaining fan work is the inclusive fan timer minus these four nested durations.",
+  "phase_profile": {
+    "before": {
+      "timed_cli_wall_seconds": 4.175398741004756,
+      "nonoverlapping_seconds": {
+        "newton_producer": 0.4958121600211598,
+        "fan_crossings": 0.1436881575791631,
+        "fan_strata": 0.13067517432500608,
+        "fan_remaining": 0.9344600327895023,
+        "zeta_reduction": 0.10496478399727494,
+        "rest_of_solve": 0.057550246972823516,
+        "worker_sending_record_json": 0.16111638600705191,
+        "cli_reading_worker_json": 0.25532161101000383,
+        "cli_pretty_json": 0.12193834700156003,
+        "native_chart": 0.9918355411209632,
+        "strict_decoding": 0.3993324901966844,
+        "process_startup_imports_transfers_and_other_cli": 0.3787038099835627
+      },
+      "calls": {
+        "newton": 1,
+        "native_chart": 3915,
+        "strict_decoding": 3915,
+        "crossings": 3915,
+        "strata": 3915,
+        "fan": 1,
+        "zeta": 1,
+        "solve": 1,
+        "worker_encode": 1,
+        "outer_decode": 1,
+        "cli_pretty": 1
+      }
+    },
+    "after": {
+      "timed_cli_wall_seconds": 2.6733076110249385,
+      "nonoverlapping_seconds": {
+        "newton_producer": 0.5970662870095111,
+        "fan_crossings": 0.11985015057143755,
+        "fan_strata": 0.10773241252172738,
+        "fan_remaining": 0.7543068178347312,
+        "zeta_reduction": 0.13961023098090664,
+        "rest_of_solve": 0.07853666902519763,
+        "worker_sending_record_json": 0.08909791399491951,
+        "cli_reading_worker_json": 0.18661270799930207,
+        "cli_pretty_json": 0.10897268500411883,
+        "native_chart": 0.13303548406111076,
+        "strict_decoding": 0.0,
+        "process_startup_imports_transfers_and_other_cli": 0.3584862520219758
+      },
+      "calls": {
+        "newton": 1,
+        "native_chart": 63,
+        "crossings": 3915,
+        "strata": 3915,
+        "fan": 1,
+        "zeta": 1,
+        "solve": 1,
+        "worker_encode": 1,
+        "outer_decode": 1,
+        "cli_pretty": 1
+      }
+    }
+  },
+  "verified": {
+    "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "charts": 3915,
+    "vertices": 565,
+    "cells": 9972,
+    "components": 566,
+    "strata": 3860,
+    "sha256_by_key": {
+      "charts": "4215ee4e048be5a34fdd65e07c93fd83d249a27db760d9acd583c9c10bd9fb87",
+      "atlas": "729fd8f41b7383d5fdddbf559420edffa5bc8eb71d03ffdf7fd335686ee8cf2e",
+      "dual_complex": "ffd5c754a2ad594cf05ad8f826c9fbc9d9f7cb7284b47ae790f7f9eb1ddc6421",
+      "monodromy_zeta": "00e75cbee4d5c4503924f8e9531793b66b102aa3fecaaf2ad89895ee2939c47f",
+      "topological_zeta": "a25cab6aba92ec31ab62107f0710dff5e007d702ae9afbc28f01896d1d185505"
+    },
+    "replay": {
+      "digest": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+      "charts": 3915,
+      "vertices": 565,
+      "cells_by_dimension": {
+        "1": 2501,
+        "2": 4008,
+        "3": 2767,
+        "4": 696
+      },
+      "strata": 3860,
+      "checks": "Fresh native replay from serialized chart maps and original polynomial; full labelled complex, ordered facets, incidence with every codimension-one subface, Euler characteristic one, all 3,860 strata and both complete recomputed zeta records."
+    },
+    "eight_control_solves": {
+      "embedded x^5+z*y^3+z^15+t^4*x+t^8": [
+        "complete",
+        598,
+        169,
+        1608,
+        "d2beb03eeca05a8f27fc76bb824f3ee96ca2ba272c60ae84234e8dbf912e850e"
+      ],
+      "intrinsic x^5+z*y^3+z^15+t^4*x+t^8": [
+        "complete",
+        598,
+        99,
+        404,
+        "162785b7f3987daf084b0c530cb328e3d8604aa33aa9aa7aebaa54cbe481d2b7"
+      ],
+      "embedded x^2+y^3+z^3+t^6+y*z*t^2": [
+        "complete",
+        14,
+        4,
+        5,
+        "c4f352b03bc2fd56cd7f313f6d80b881e3303bd0270d0501850f194ff70c156c"
+      ],
+      "intrinsic x^2+y^3+z^3+t^6+y*z*t^2": [
+        "complete",
+        14,
+        4,
+        3,
+        "880da2d01a15bcd5544227b071260d264ec6324ad270733b545956b1014fa817"
+      ],
+      "embedded x^3*y^6-z^2*t^2*u^4": [
+        "complete",
+        87,
+        31,
+        692,
+        "f11a0a66b3ff175b89fff84ec7212686fb7fc6095678616dbe7389ffbede433b"
+      ],
+      "intrinsic x^3*y^6-z^2*t^2*u^4": [
+        "complete",
+        87,
+        15,
+        104,
+        "474cbd40186e4a1ea771acb93084521d34c587b67e823a178befd88d93eb1fae"
+      ],
+      "embedded (x+y)^2+z^3+x^3": [
+        "complete",
+        15,
+        6,
+        17,
+        "2d14049a7ae8b5548e81faab199a49d95682d022709d296480d98b90894adaa5"
+      ],
+      "intrinsic (x+y)^2+z^3+x^3": [
+        "partial",
+        15,
+        2,
+        0,
+        "846ed30f4a0a41143feacb845ba3e4393c6fbbc517c0c9a2dab644c0588283de"
+      ]
+    },
+    "installed_http_replay": {
+      "kernel_sha256": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409",
+      "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+      "cells_by_dimension": {
+        "1": 2501,
+        "2": 4008,
+        "3": 2767,
+        "4": 696
+      }
+    }
+  },
+  "fan_verification": {
+    "method": "Five alternating fresh-interpreter paired resolves on logical CPU 4. Only fan_outputs, crossings_rows and strata_rows were timed for the broad medians. The next three separate alternating fresh pairs added disjoint source checkpoints on the same CPU. All enabled both zetas, blocked site packages, used PYTHONHASHSEED=77 and verified canonical mathematical hashes. All representative profile stages shown are from the middle remaining-time invocation by version. Absolute timings vary with concurrent host load.",
+    "versions": {
+      "baseline": {
+        "native/build/libgroebner.so": "7d4936cb91ef5c1622d112acc123f51999d1997c4d3339d3b77eb37ddc1fc042",
+        "engine/monomial_atlas.py": "c9c7e5b9fc23576bb0465e65b47a19bad29af59e001a5b9531fb4d4387c69fc0"
+      },
+      "final": {
+        "native/build/libgroebner.so": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409",
+        "engine/monomial_atlas.py": "912e3299e2b51e8b7e2b89ce673f6976fcf2534aa6f777b988e30f752aaa7316"
+      }
+    },
+    "verified_math_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "broad_remaining_seconds": {
+      "wall": {
+        "baseline": {
+          "samples": [
+            2.462407423,
+            2.2964424969999992,
+            1.8804868209999996,
+            1.7709755200000006,
+            1.690104002
+          ],
+          "median": 1.8804868209999996
+        },
+        "final": {
+          "samples": [
+            1.1476217450000006,
+            1.0638405070000003,
+            0.7887323190000005,
+            0.6619460530000001,
+            0.6342057130000001
+          ],
+          "median": 0.7887323190000005
+        }
+      },
+      "cpu": {
+        "baseline": {
+          "samples": [
+            2.3522961159999998,
+            2.319994672999999,
+            1.8966509120000001,
+            1.7661056490000002,
+            1.6979593440000003
+          ],
+          "median": 1.8966509120000001
+        },
+        "final": {
+          "samples": [
+            1.0508712839999996,
+            1.0008791320000001,
+            0.7903546130000002,
+            0.6728989429999997,
+            0.6489619449999999
+          ],
+          "median": 0.7903546130000002
+        }
+      }
+    },
+    "final_detailed_profiles": {
+      "baseline": {
+        "remaining_samples": [
+          1.720681124,
+          2.324834644,
+          1.666437144
+        ],
+        "representative": {
+          "fan": 1.907208075,
+          "crossings": 0.094273303,
+          "strata": 0.092253648,
+          "remaining": 1.720681124,
+          "breakdown": {
+            "fan_cover": 0.083502702,
+            "projection": 0.133627576,
+            "region": 0.042962133,
+            "components": 0.046690742,
+            "face_collection": 0.036711794,
+            "owned_and_ideals": 0.071088707,
+            "complex_assembly": 0.094035674,
+            "numerical_and_strata_records": 0.029811844,
+            "public_records": 0.014303986,
+            "native_chart_and_binding": 0.731370559,
+            "decode_strict_or_header": 0.318916452,
+            "coordinate_validation_and_chart_keys": 0.040798509,
+            "prepare_native_request_and_indices": 0.041074037,
+            "other_including_euler_accumulation_and_iteration": 0.035786408999999963
+          }
+        }
+      },
+      "final": {
+        "remaining_samples": [
+          0.697886808,
+          1.1029743289999998,
+          0.6449653259999999
+        ],
+        "representative": {
+          "fan": 0.855485586,
+          "crossings": 0.078420339,
+          "strata": 0.079178439,
+          "remaining": 0.697886808,
+          "breakdown": {
+            "fan_cover": 0.095001159,
+            "projection": 0.123635798,
+            "region": 0.03906283,
+            "components": 0.038101374,
+            "face_collection": 0.029092289,
+            "owned_and_ideals": 0.078338013,
+            "complex_assembly": 0.048016235,
+            "numerical_and_strata_records": 0.008526697,
+            "public_records": 0.010369028,
+            "native_chart_and_binding": 0.103680841,
+            "decode_strict_or_header": 0.010245804,
+            "coordinate_validation_and_chart_keys": 0.025278137,
+            "prepare_native_request_and_indices": 0.047312213,
+            "other_including_euler_accumulation_and_iteration": 0.04122639000000006
+          }
+        }
+      }
+    },
+    "chart_calls": {
+      "before": 3915,
+      "after": 62,
+      "one_time_linear_pullback_after": 1,
+      "strict_equation_python_decodes_before": 3915,
+      "strict_equation_python_decodes_after": 0,
+      "crossings_before_and_after": 3915,
+      "strata_before_and_after": 3915
+    },
+    "native_candidate_inner": {
+      "method": "One separately instrumented native kernel with steady_clock on logical CPU14. Three public resolves, containing 3915 cone computations in 62 batches each. Python integration version 3e3af33c, candidate native source identical to final. Representative sample median by total native batch time; concurrent processes shared the machine.",
+      "native_chart_seconds_samples": [
+        0.228617143,
+        0.176873186,
+        0.256236801
+      ],
+      "representative": {
+        "native_chart_seconds": 0.228617143,
+        "nonoverlapping_breakdown": {
+          "source_support": 0.00150994,
+          "read_rays_and_log_orders": 0.013777507,
+          "regularity": 0.009230543,
+          "matrix_pairings_and_minimum_orders": 0.013698509,
+          "build_strict_polynomial": 0.019216378,
+          "format_strict_and_order_text": 0.106084823,
+          "emit_sparse_strict": 0.029720508,
+          "jet_and_emit_sparse_jet": 0.019694152,
+          "entry_teardown_binding_other": 0.015684783000000008
+        }
+      }
+    }
+  },
+  "baseline_native_profile": {
+    "method": "Each sample is a full public resolve() in a fresh interpreter with site packages disabled. Three source-instrumented samples alternated with three coarse boundary-only samples. perf_counter_ns checkpoints partition the fan loop; the remaining seconds exclude elapsed time in crossings_rows and strata_rows. Three independent samples instrumented native affine.cpp with steady_clock checkpoints on full native chart calls. No debugger, sampling hooks or synthetic inputs. All listed costs within one representative column are disjoint. Absolute times vary with the host. The previous full CLI residual was 1.3812 seconds.",
+    "cpu": "Ryzen 7 6800H, logical CPU 14, native mode, PYTHONHASHSEED=77",
+    "chart_seconds_samples": [
+      0.509256613,
+      0.509043689,
+      0.512843621
+    ],
+    "representative": {
+      "native_chart_seconds": 0.509256613,
+      "nonoverlapping_breakdown": {
+        "read_base_and_chart_map": 0.047744835,
+        "read_modulus_and_source": 0.015135216,
+        "compose_pullback": 0.030722749,
+        "jacobian_determinant": 0.330061641,
+        "reduce_and_extract_divisor_orders": 0.023755871,
+        "emit_strict_row": 0.013801536,
+        "crossing_jet": 0.008546899,
+        "emit_jet_row": 0.00218882,
+        "entry_teardown_binding_other": 0.037299046
+      }
+    },
+    "original_residual_breakdown": {
+      "fan_seconds": 1.380110998,
+      "crossings_seconds": 0.070792321,
+      "strata_seconds": 0.068097524,
+      "remaining_seconds": 1.241221153,
+      "nonoverlapping_breakdown": {
+        "native_chart": 0.537859576,
+        "decode_strict": 0.235616764,
+        "projection": 0.100085932,
+        "region": 0.032574004,
+        "fan_cover": 0.055283299,
+        "owned_and_ideals": 0.052975082,
+        "components": 0.034769332,
+        "coordinates": 0.031299048,
+        "native_chart_request_setup": 0.03096307,
+        "complex_assembly": 0.04192421,
+        "face_collection": 0.026842739,
+        "numerical_and_strata_records": 0.022629914,
+        "public_records": 0.011085412,
+        "other_including_dispatch_and_euler_accumulation": 0.027312770999999847
+      }
+    }
+  },
+  "profiled_versions": {
+    "baseline_commit": "9dda5a30068bc22ed45c010b85e3edb8ed766a3f",
+    "baseline_manifest_sha256": "b8880b32c1d422f136a3019c74e6fd813b2ebe552c881ed827416dec3eb36070",
+    "baseline_kernel_sha256": "7d4936cb91ef5c1622d112acc123f51999d1997c4d3339d3b77eb37ddc1fc042",
+    "baseline_chart_verifier_sha256": "c9c7e5b9fc23576bb0465e65b47a19bad29af59e001a5b9531fb4d4387c69fc0",
+    "changed_files_sha256": {
+      "engine/monomial_atlas.py": {
+        "before": "c9c7e5b9fc23576bb0465e65b47a19bad29af59e001a5b9531fb4d4387c69fc0",
+        "after": "912e3299e2b51e8b7e2b89ce673f6976fcf2534aa6f777b988e30f752aaa7316"
+      },
+      "native/affine.cpp": {
+        "before": "4e7144be9c4816b2b5a3f4b914f750574cd99660d67c71c4db286c7dec4df449",
+        "after": "81916396330eeb72c9e4148603f34fb8451152ede02fb3984bbbf527f7adf611"
+      },
+      "native/build/libgroebner.so": {
+        "before": "7d4936cb91ef5c1622d112acc123f51999d1997c4d3339d3b77eb37ddc1fc042",
+        "after": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409"
+      }
+    }
+  },
+  "before_final_memory_cleanup": {
+    "fresh_cli": {
+      "median_seconds": {
+        "before": 4.232691090001026,
+        "after": 2.534309647977352
+      },
+      "seconds": {
+        "before": [
+          5.6633689729787875,
+          4.1808049750106875,
+          4.79327927500708,
+          2.916932819993235,
+          4.232691090001026
+        ],
+        "after": [
+          4.443811069999356,
+          2.534309647977352,
+          2.5285864640027285,
+          1.9123957160045393,
+          3.3673762929975055
+        ]
+      },
+      "median_cpu_seconds": {
+        "before": 3.391372999999998,
+        "after": 2.172545000000003
+      },
+      "process_cpu_seconds": {
+        "before": [
+          2.98282,
+          3.761526999999999,
+          3.8506610000000006,
+          2.8468470000000003,
+          3.391372999999998
+        ],
+        "after": [
+          2.2015990000000003,
+          2.197737,
+          2.1666849999999993,
+          1.8963350000000005,
+          2.172545000000003
+        ]
+      },
+      "median_pair_speedup": 1.5252768010207733,
+      "pair_speedups": [
+        1.2744396383574446,
+        1.6496819867088512,
+        1.895635899046681,
+        1.5252768010207733,
+        1.256970032960959
+      ],
+      "median_pair_seconds_saved": 1.2195579029794317
+    },
+    "warm_api": {
+      "median_seconds": {
+        "before": 2.535150619019987,
+        "after": 1.3137247739941813
+      },
+      "seconds": {
+        "before": [
+          2.535150619019987,
+          2.78897545899963,
+          2.9180534489860293,
+          2.3284836809907574,
+          2.2336026090197265
+        ],
+        "after": [
+          1.4069017340079881,
+          1.234903515985934,
+          1.3137247739941813,
+          1.2132261359947734,
+          1.4058324409998022
+        ]
+      },
+      "median_cpu_seconds": {
+        "before": 2.3841655630000003,
+        "after": 1.2438896449999994
+      },
+      "process_cpu_seconds": {
+        "before": [
+          2.3841655630000003,
+          2.659450874999999,
+          2.7626710590000005,
+          2.2865605360000014,
+          2.195908897999999
+        ],
+        "after": [
+          1.326961035,
+          1.179767322,
+          1.2438896449999994,
+          1.1621053880000005,
+          1.3544595409999998
+        ]
+      },
+      "median_pair_speedup": 1.9192495215094745,
+      "pair_speedups": [
+        1.8019386555149366,
+        2.2584561651141963,
+        2.221206075085369,
+        1.9192495215094745,
+        1.5888114001916398
+      ],
+      "median_pair_seconds_saved": 1.128248885011999
+    },
+    "affinity_selection": {
+      "cpu": 14,
+      "proportion_busy_each_sibling_pair": {
+        "0": 0.4074,
+        "2": 0.5405,
+        "4": 0.5302,
+        "6": 0.5436,
+        "8": 0.4234,
+        "10": 0.5424,
+        "12": 0.5204,
+        "14": 0.2095
+      },
+      "method": "Before timing either snapshot, select the physical core with the least combined utilization of its two logical CPUs in a 1.5 s /proc/stat sample. Both versions use the even-numbered logical CPU on that physical core.",
+      "load_during_series": "Shared Ryzen laptop. System 1-min load average reached 12.94 during the fresh CLI pairs while two independent multi-core jobs and full regression suites ran. All five fresh and warm pairs were retained in acquisition order."
+    }
+  },
+  "versions": {
+    "baseline_commit": "9dda5a30068bc22ed45c010b85e3edb8ed766a3f",
+    "baseline_kernel_sha256": "7d4936cb91ef5c1622d112acc123f51999d1997c4d3339d3b77eb37ddc1fc042",
+    "kernel_sha256": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409",
+    "chart_verifier_sha256": "610f86c411cb2f8f85af9fab60b9693a76c052d25fb454539ebe6209d56813aa"
+  },
+  "final_check": "The final verifier releases the decoded common source terms before yielding any chart. The phase profiles were collected before this memory cleanup. The following fresh and warm series time the final verifier on the same core.",
+  "regression_checks": {
+    "native": {
+      "run": 689,
+      "skipped": 45,
+      "failures": 0
+    },
+    "comparison": {
+      "run": 689,
+      "skipped": 73,
+      "failures": 1,
+      "failure": "Five-variable binomial quick worker exceeded 55 seconds in comparison mode. Unbounded comparison verified both order-12 poles and reproduced the baseline charts, atlas, complex and both zetas.",
+      "unbounded_sha256": "f11a0a66b3ff175b89fff84ec7212686fb7fc6095678616dbe7389ffbede433b"
+    },
+    "milnor": {
+      "comparable": 18,
+      "disagreements": 0,
+      "nonisolated": 1,
+      "quick_budget": 1
+    }
+  }
+}

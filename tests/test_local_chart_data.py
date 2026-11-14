@@ -71,6 +71,18 @@ class LocalGraphChart(unittest.TestCase):
         self.assertEqual(_strict_ideal((x, y, z), (z-x*y,), x, (x*y, x**2*z, z-x*y)),
                          (1, (y, z)))
 
+    def test_principal_graph_transform_divides_in_the_chart_ring(self):
+        from engine.local_blowups import _generators
+        x, y, z = sp.symbols("x y z")
+        variables = (x, y, z)
+        pivot = x**2+1
+        ambient = (z-pivot*y,)
+        order, (after,) = _strict_ideal(variables, ambient, pivot, (z**3 + pivot**4,))
+        self.assertEqual(order, 3)
+        self.assertTrue(ideal_subset(variables, (after-(y**3+pivot),), ambient))
+        self.assertEqual(len(_generators(variables, ambient, (after,))), 1)
+        self.assertEqual(_generators(variables, ambient, ambient), ())
+
     def test_a_zero_map_coordinate_and_empty_removed_ideal_survive(self):
         x, y = sp.symbols("x y")
         chart = Chart((x, y), (y,), (("strict", 1, 1, (x+y,)),), (x, y), (y,),

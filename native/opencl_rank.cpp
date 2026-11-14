@@ -61,6 +61,47 @@ kernel void eliminate(global uint *a, global const int *pivots,
     uint entry=a[i*cols+j];
     a[i*cols+j]=entry>=delta ? entry-delta : entry+prime-delta;
 }
+// A rectangular Jacobian can have free columns anywhere. Keep the original
+// row indices of a modular row basis, skipping columns with no pivot.
+kernel void row_pivot(global uint *a, global int *ids, global int *state,
+                      int rows, int cols, int col, uint prime) {
+    local int chosen, r;
+    local uint inverse;
+    if (get_local_id(0)==0) {
+        r=state[0];
+        chosen=r;
+        while (chosen<rows && !a[chosen*cols+col]) ++chosen;
+        state[1]=-1;
+        if (chosen<rows) {
+            int old=ids[chosen];
+            ids[chosen]=ids[r];
+            ids[r]=old;
+            uint base=a[chosen*cols+col];
+            inverse=1;
+            for (uint exponent=prime-2; exponent; exponent>>=1) {
+                if (exponent & 1) inverse=residue((ulong)inverse*base,prime);
+                base=residue((ulong)base*base,prime);
+            }
+            state[1]=r;
+            state[0]=r+1;
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (chosen==rows) return;
+    for (int j=col+(int)get_local_id(0); j<cols; j+=(int)get_local_size(0)) {
+        uint v=a[chosen*cols+j];
+        if (r!=chosen) a[chosen*cols+j]=a[r*cols+j];
+        a[r*cols+j]=residue((ulong)v*inverse,prime);
+    }
+}
+kernel void row_eliminate(global uint *a, global const int *state, int rows,
+                          int cols, int col, uint prime) {
+    int pivot=state[1], i=(int)get_global_id(1), j=col+1+(int)get_global_id(0);
+    if (pivot<0 || i<=pivot || i>=rows || j>=cols) return;
+    uint delta=residue((ulong)a[i*cols+col]*a[pivot*cols+j],prime);
+    uint entry=a[i*cols+j];
+    a[i*cols+j]=entry>=delta ? entry-delta : entry+prime-delta;
+}
 // One work-item computes one strict-transform exponent vector. This uses
 // signed 32-bit arithmetic with an a priori checked host bound.
 kernel void chart_terms(global const int *exponents, global const int *rays,
@@ -214,6 +255,50 @@ int gpu_rank(const uint32_t* matrix, int rows, int cols, uint32_t prime, int dev
     }
     return 1;
 }
+int gpu_row_basis(const uint32_t* matrix, int rows, int cols, uint32_t prime, int device, int* output) {
+    if (!matrix || !output || rows<1 || cols<1 || cols>512 || rows>16384 ||
+        (prime!=1000000007 && prime!=1000000009)) return -1;
+    auto& rt=runtime(device);
+    cl_int status;
+    Queue queue;
+    queue.value=clCreateCommandQueue(rt.context.value,rt.device,0,&status); check(status);
+    std::vector<int> ids(rows);
+    std::iota(ids.begin(),ids.end(),0);
+    int state[2]={0,-1};
+    auto buffer=[&](Buffer& out, size_t size, void* data) {
+        out.value=clCreateBuffer(rt.context.value,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,size,data,&status);
+        check(status);
+    };
+    Buffer a, indices, counters;
+    buffer(a,size_t(rows)*cols*sizeof(cl_uint),const_cast<uint32_t*>(matrix));
+    buffer(indices,ids.size()*sizeof(cl_int),ids.data());
+    buffer(counters,sizeof(state),state);
+    Kernel pivot, eliminate;
+    pivot.value=clCreateKernel(rt.program.value,"row_pivot",&status); check(status);
+    eliminate.value=clCreateKernel(rt.program.value,"row_eliminate",&status); check(status);
+    arg(pivot.value,0,a.value); arg(pivot.value,1,indices.value); arg(pivot.value,2,counters.value);
+    arg(pivot.value,3,rows); arg(pivot.value,4,cols); arg(pivot.value,6,prime);
+    arg(eliminate.value,0,a.value); arg(eliminate.value,1,counters.value); arg(eliminate.value,2,rows);
+    arg(eliminate.value,3,cols); arg(eliminate.value,5,prime);
+    size_t allowed=1;
+    check(clGetKernelWorkGroupInfo(pivot.value,rt.device,CL_KERNEL_WORK_GROUP_SIZE,sizeof(allowed),&allowed,nullptr));
+    const size_t group=std::min<size_t>(64,allowed);
+    for (int col=0; col<cols; ++col) {
+        arg(pivot.value,5,col);
+        check(clEnqueueNDRangeKernel(queue.value,pivot.value,1,nullptr,&group,&group,0,nullptr,nullptr));
+        if (col+1<cols && rows>1) {
+            arg(eliminate.value,4,col);
+            const size_t grid[]={size_t(cols-col-1),size_t(rows)};
+            check(clEnqueueNDRangeKernel(queue.value,eliminate.value,2,nullptr,grid,nullptr,0,nullptr,nullptr));
+        }
+    }
+    check(clEnqueueReadBuffer(queue.value,counters.value,CL_TRUE,0,sizeof(state),state,0,nullptr,nullptr));
+    if (state[0]<0 || state[0]>std::min(rows,cols)) return -1;
+    if (state[0]) check(clEnqueueReadBuffer(queue.value,indices.value,CL_TRUE,0,
+                                          state[0]*sizeof(cl_int),output,0,nullptr,nullptr));
+    return state[0];
+}
+
 int gpu_charts(const int32_t* exps,const int32_t* rays,const int32_t* cones,const int32_t* orders,
                int terms,int nrays,int charts,int dimension,int device,int32_t* out) {
     if (!exps || !rays || !cones || !orders || !out || terms<1 || charts<1 || nrays<1 ||
@@ -261,6 +346,10 @@ extern "C" int resolution_gpu_info(int index, char* text, size_t capacity) noexc
 extern "C" int resolution_gpu_rank(const uint32_t* matrix,int rows,int cols,uint32_t prime,
                                    int device,int* minor) noexcept {
     try { return gpu_rank(matrix,rows,cols,prime,device,minor); } catch (...) { return -1; }
+}
+extern "C" int resolution_gpu_row_basis(const uint32_t* matrix,int rows,int cols,uint32_t prime,
+                                        int device,int* output) noexcept {
+    try { return gpu_row_basis(matrix,rows,cols,prime,device,output); } catch (...) { return -1; }
 }
 extern "C" int resolution_gpu_charts(const int32_t* exps,const int32_t* rays,const int32_t* cones,
                                      const int32_t* orders,int terms,int nrays,int charts,

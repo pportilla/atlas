@@ -41,9 +41,9 @@ class AlgebraBasisStore:
     def calculate(self, request, timeout, *, owner=None):
         operands = request.get("operands") if isinstance(request, dict) else None
         if isinstance(operands, dict) and "basis_ref" in operands:
-            if request.get("operation") not in ("normal-form", "membership") or "ideal" in operands:
+            if request.get("operation") not in ("normal-form", "membership", "multiplicity") or "ideal" in operands:
                 return 400, error_record("invalid_request",
-                    "Use basis_ref in place of ideal for normal-form or membership.")
+                    "Use basis_ref in place of ideal for normal-form, membership or multiplicity.")
             ref = operands["basis_ref"]
             if not isinstance(ref, str) or not ref:
                 return 400, error_record("invalid_request", "basis_ref must be a nonempty string.")

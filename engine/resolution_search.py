@@ -9,8 +9,8 @@ useful general complexity bound; callers should run attempts in killable
 workers and retain the distinction between rejection, timeout and success.
 """
 from dataclasses import dataclass
-from itertools import combinations, count
-from math import isqrt, prod
+from itertools import chain, combinations, count
+from math import prod
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
@@ -220,12 +220,15 @@ class _Reader:
 
     def nat(self):
         start = self.at
-        one = self.bits.find("1", start)
+        # The leading zeroes and the value bits after the first one are
+        # equally long. Once this prefix is all zeroes, no suffix can fit
+        # a complete natural number in the remaining bit length.
+        last = start + (len(self.bits) - start + 1)//2
+        one = self.bits.find("1", start, last)
         if one < 0:
+            self.at = last
             raise _InvalidCode
         self.at = one + (one-start) + 1
-        if self.at > len(self.bits):
-            raise _InvalidCode
         return int(self.bits[one:self.at], 2) - 1
 
     def signed(self):
@@ -310,6 +313,12 @@ def decode_candidate(variables, code):
     """
     if not isinstance(code, int) or code < 0:
         raise ValueError("Candidate code must be a nonnegative integer.")
+    candidate, _ = _decode_range(variables, code)
+    return candidate
+
+
+def _decode_range(variables, code):
+    """Decode one code and advance past every suffix its prefix ruled out."""
     variables = tuple(variables)
     r = _Reader(code)
     try:
@@ -322,38 +331,49 @@ def decode_candidate(variables, code):
             ideal = tuple(_read_poly(r, homogeneous, degree, primitive, len(variables))
                           for _ in range(r.size(1)))
             components.append(ideal)
-        if r.at != len(r.bits):
-            return None
-        return ResolutionCandidate(center, u, tuple(components), domain, primitive, f"integer code {code:#x}")
+        if r.at == len(r.bits):
+            candidate = ResolutionCandidate(center, u, tuple(components), domain, primitive, f"integer code {code:#x}")
+            return candidate, code + 1
     except _InvalidCode:
-        return None
+        pass
+    # The parse failed, or finished before the end. For this fixed length
+    # all completions of the prefix that was read have the same failure.
+    # Work with code+1 because its leading sentinel determines the length.
+    unread = len(r.bits) - r.at
+    next_code = (((code + 1) >> unread) + 1) << unread
+    return None, next_code - 1
+
+
+def _first_code(variables):
+    # The two shortest payloads have a rational field, a single centre
+    # generator +1 or -1, all exponents zero, and empty boundary. Gamma
+    # code 1 is "010", the smaller of the two nonzero signed coefficients.
+    # In code+1 the leading sentinel and the three one-bit counts come first.
+    return (0b1111011 << (len(variables) + 1)) - 2
+
+
+def _code_trials(variables, first, stop=None):
+    while stop is None or first < stop:
+        candidate, first = _decode_range(variables, first)
+        yield candidate, first
 
 
 def candidates(variables, polynomial):
     """Yield the priority guesses, then all well-formed integer-code candidates."""
     variables = tuple(variables)
     yield from priority_candidates(variables, polynomial)
-    for code in count():
-        candidate = decode_candidate(variables, code)
+    for candidate, _ in _code_trials(variables, _first_code(variables)):
         if candidate is not None:
             yield candidate
-
-
-def _retry_slot(index):
-    # Triangular rows: 0; 0,1; 0,1,2; ... . Each slot reappears infinitely.
-    row = (isqrt(8*index+1)-1)//2
-    slot = index - row*(row+1)//2
-    return slot, row-slot
 
 
 def scheduled_candidates(variables, polynomial, *, initial_seconds=1):
     """Yield (candidate, finite attempt budget in seconds) with unbounded revisits.
 
-    Each integer code is discovered at its own index, independently of earlier
-    timeouts. A second triangular scan revisits each priority/code slot with
-    arbitrarily large finite timeouts. Callers may skip definite rejections.
-    An attempt budget applies to verification, not to the validity of its
-    mathematical result. Decode uses only finite exact algebraic operations.
+    Each pass revisits the finite range already discovered at its start,
+    increasing the verification allowance. Each retry (including an invalid
+    prefix) is interleaved with a discovery step. No table of all prior codes
+    is retained. Callers may skip definite rejections.
     """
     if not isinstance(initial_seconds, int) or initial_seconds < 1:
         raise ValueError("initial_seconds must be a positive integer.")
@@ -362,11 +382,15 @@ def scheduled_candidates(variables, polynomial, *, initial_seconds=1):
     for candidate in priority_candidates(variables, polynomial):
         early.append(candidate)
         yield candidate, initial_seconds
-    for code in count():
-        candidate = decode_candidate(variables, code)
-        if candidate is not None:
-            yield candidate, initial_seconds
-        slot, revisit = _retry_slot(code)
-        candidate = early[slot] if slot < len(early) else decode_candidate(variables, slot-len(early))
-        if candidate is not None:
-            yield candidate, initial_seconds * (2+revisit)
+    first = _first_code(variables)
+    frontier = first
+    discovery = _code_trials(variables, first)
+    for effort in count(2):
+        # Capture the frontier before advancing the discovery iterator.
+        revisited = _code_trials(variables, first, frontier)
+        for retry in chain(early, (candidate for candidate, _ in revisited)):
+            candidate, frontier = next(discovery)
+            if candidate is not None:
+                yield candidate, initial_seconds
+            if retry is not None:
+                yield retry, initial_seconds * effort

@@ -36,6 +36,11 @@ def _homogeneous_local_basis(variables, rows, order):
         return reduced_basis(lifted, extended, order="lex" if order == "lex" else "first")
 
 
+def _basis_heads(variables, generators, order, stage):
+    with cpu_stage(stage, generators=len(generators)):
+        return [_leading(np.terms(variables, f), order) for f in generators if f]
+
+
 def _initial_monomials(variables, generators, order, local):
     """Generate the global or local initial ideal in the original coordinates."""
     with cpu_stage("inspect_quotient_generators", generators=len(generators)):
@@ -60,8 +65,7 @@ def _initial_monomials(variables, generators, order, local):
     if not lift:
         with stage_label("quotient_basis"):
             basis = reduced_basis(generators, variables, order=order)
-        with cpu_stage("quotient_initial_monomials", generators=len(basis.exprs)):
-            return [_leading(np.terms(variables, f), order) for f in basis.exprs]
+        return _basis_heads(variables, basis.exprs, order, "quotient_initial_monomials")
 
     basis = _homogeneous_local_basis(variables, rows, order)
     # For f=sum(a_i*f_i), homogenizing the equality to a common degree gives
@@ -133,27 +137,27 @@ def _basis_text(basis, names, shifts):
     return result
 
 
-def handle(operation, ring, operands):
+def handle(operation, ring, operands, *, known_basis=False):
     """Compute validated QQ quotients, local Jacobian algebras and their lengths."""
     if ring["field"] != "QQ" or ring["order"] not in ("lex", "grevlex"):
         raise InputError("Quotient algebras require QQ and lex or grevlex order.")
     names = ring["variables"]
     variables = tuple(map(np.Symbol, names))
-    local = operation != "quotient-basis"
-    number = operation in ("milnor-number", "tjurina-number")
+    local = operation not in ("quotient-basis", "multiplicity")
+    number = operation in ("multiplicity", "milnor-number", "tjurina-number")
     result = {"ring": ring, "scope": "origin" if local else "global"}
     shifts = (0,) * len(names)
     if "point" in operands:
         if not local:
-            raise InputError("A global quotient basis does not take a point.")
+            raise InputError("A global quotient calculation does not take a point.")
         point = normalize_point(operands["point"], len(names))
         shifts = tuple(map(coordinate_fraction, point))
         result.update(scope="point", point=point)
     shifted = any(shifts)
-    if operation in ("quotient-basis", "local-quotient-basis"):
+    if operation in ("multiplicity", "quotient-basis", "local-quotient-basis"):
         generators = tuple(map(np.coerce, operands["ideal"]))
-        result["type"] = "quotient-basis"
-    elif number or operation == "local-jacobian-algebra":
+        result["type"] = "integer" if number else "quotient-basis"
+    elif operation in ("milnor-number", "tjurina-number", "local-jacobian-algebra"):
         f = np.coerce(operands["polynomial"])
         with cpu_stage("hypersurface_first_order" if number else
                        ("hypersurface_at_point" if shifted else "hypersurface_at_origin"),
@@ -184,7 +188,10 @@ def handle(operation, ring, operands):
     if shifted:
         with cpu_stage("center_at_point", variables=len(names), generators=len(generators)):
             generators = centered_ideal(variables, shifts, generators)
-    heads = _initial_monomials(variables, generators, ring["order"], local)
+    if operation == "multiplicity" and known_basis:
+        heads = _basis_heads(variables, generators, ring["order"], "restore_global_basis")
+    else:
+        heads = _initial_monomials(variables, generators, ring["order"], local)
     with cpu_stage("quotient_length" if number else "standard_monomials", generators=len(heads)):
         dimension, basis = quotient_monomials(len(variables), heads, include_basis=not number)
         result["finite"] = dimension is not None

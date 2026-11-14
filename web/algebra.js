@@ -18,8 +18,13 @@ const polynomialLabels = {
 };
 const polynomialInputs = { gcd: "(x+y)*(x+1)", resultant: "x^2-y", factor: "-3/2*(x-y)^2*(x+y)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
 const secondPolynomialInputs = { gcd: byId("other-polynomial").value, resultant: "x-1" };
+const defaultGenerators = ["x^2-1", "y-x"];
+const hilbertSeriesGenerators = ["x^2", "y^3"];
 const quotientDescriptions = {
+  radical: "Compute the ideal of polynomials f for which some positive power of f belongs to I.",
+  "hilbert-series": "Enter generators of a homogeneous ideal. Each variable has degree 1. The coefficient of tⁿ is the dimension over ℚ of the degree-n part of R/I.",
   "quotient-basis": "Find a monomial basis of the quotient by I over ℚ, including points away from the origin.",
+  multiplicity: "For an ideal of finite colength, compute the vector-space dimension of R/I over ℚ, counting all points with multiplicity.",
   "local-quotient-basis": "Find a basis of the quotient by I in coordinates centered at the chosen point p.",
   "local-jacobian-algebra": "In the local ring at p, take the quotient by the partial derivatives of f.",
   "milnor-number": "Compute the dimension over ℚ of the local quotient by the partial derivatives of f.",
@@ -28,9 +33,14 @@ const quotientDescriptions = {
   "local-normal-form": "Reduce f modulo the ideal in the local ring at the chosen point.",
   "hilbert-samuel-function": "For the local quotient A at p, compute lengths through each chosen degree and dimensions of its graded pieces. Here m is the maximal ideal of A.",
   "hilbert-samuel-multiplicity": "Compute the Hilbert–Samuel multiplicity of the local quotient A at p with respect to its maximal ideal.",
+  "tangent-cone": "Find the homogeneous equations of the tangent cone to the scheme defined by I at p.",
+  "tangent-cone-hilbert-series": "Compute the graded Hilbert series of the tangent cone. The coefficient of tⁿ is the dimension of the degree-n piece.",
+  "zariski-tangent-space": "Find the directions satisfying the linearized equations at a point p on the scheme defined by I.",
+  "embedding-dimension": "Compute the dimension of the Zariski tangent space at a point p on the scheme defined by I.",
 };
 const session = new AlgebraSession();
 let activeOperation = operation.value;
+let generatorsEdited = false;
 let running = false;
 let submitted = null;
 let responseText = null;
@@ -75,6 +85,17 @@ function labelRows(group) {
 function variables() {
   const names = byId("variables").value.trim();
   return names ? names.split(",").map((name) => name.trim()) : [];
+}
+
+function updateGeneratorExample() {
+  if (generatorsEdited || byId("ideal-source").value || variables().join(",") !== "x,y") return;
+  const graded = operation.value === "hilbert-series";
+  const previous = graded ? defaultGenerators : hilbertSeriesGenerators;
+  const example = graded ? hilbertSeriesGenerators : defaultGenerators;
+  const inputs = Array.from(byId("generators").querySelectorAll("input"));
+  if (inputs.length === previous.length && inputs.every((input, i) => input.value === previous[i])) {
+    inputs.forEach((input, i) => { input.value = example[i]; });
+  }
 }
 
 function updateEliminationChoices() {
@@ -155,8 +176,11 @@ function updateSources() {
     ? "Enter comma-separated integers or fractions. Leave blank for the origin."
     : "The unique point has no coordinates. Enter () to specify it explicitly, or leave blank for the origin.";
   const ideals = ["ideal", "basis", "local-jacobian-algebra"];
+  const firstIdealKinds = ["hilbert-series", "multiplicity", "radical"].includes(operation.value) ? ["ideal", "basis"] : [...ideals];
+  if (AlgebraSession.localBasisInputs.has(operation.value)) firstIdealKinds.push("local-standard-basis");
+  if (AlgebraSession.coneInputs.has(operation.value)) firstIdealKinds.push("tangent-cone");
   for (const [source, group, kinds] of [
-    ["ideal-source", "first-ideal-inputs", AlgebraSession.localBasisInputs.has(operation.value) ? [...ideals, "local-standard-basis"] : ideals],
+    ["ideal-source", "first-ideal-inputs", firstIdealKinds],
     ["second-ideal-source", "second-ideal-inputs", ideals],
     ["polynomial-source", "polynomial", ["polynomial"]],
     ["other-polynomial-source", "other-polynomial", ["polynomial"]],
@@ -170,6 +194,7 @@ function updateSources() {
       if (owner) kind = result.polynomial;
       if (kind === "local-jacobian-algebra") kind = "Jacobian ideal (partial derivatives)";
       if (kind === "local-standard-basis") kind = "local standard basis " + scopeText(result);
+      if (kind === "tangent-cone") kind = "tangent cone " + scopeText(result);
       const option = new Option(name + " · " + kind + " · " + ringText(result.ring), name);
       option.disabled = !AlgebraSession.sameRing(result.ring, ring);
       select.add(option);
@@ -180,6 +205,11 @@ function updateSources() {
     byId(source + "-field").hidden = select.options.length === 1;
     showOperandGroup(group, !select.value);
   }
+  if (session.objects.get(byId("ideal-source").value)?.result.type === "tangent-cone") {
+    byId("point-label").textContent = "Vertex in tangent coordinates (" + ring.variables.join(", ") + ")";
+    byId("point-help").textContent = "Leave blank for the vertex, where all tangent coordinates are zero.";
+  }
+  updateGeneratorExample();
 }
 
 function showOperandGroup(id, show) {
@@ -237,7 +267,7 @@ function markChanges() {
 }
 
 for (const [group, button, defaults] of [
-  ["generators", "add-generator", ["x^2-1", "y-x"]],
+  ["generators", "add-generator", defaultGenerators],
   ["second-generators", "add-second-generator", ["x"]],
 ]) {
   const container = byId(group);
@@ -248,6 +278,11 @@ for (const [group, button, defaults] of [
     markChanges();
   });
 }
+const firstIdealInputs = byId("first-ideal-inputs");
+firstIdealInputs.addEventListener("input", () => { generatorsEdited = true; });
+firstIdealInputs.addEventListener("click", event => {
+  if (event.target.closest("button")) generatorsEdited = true;
+});
 operation.addEventListener("change", updateOperation);
 byId("variables").addEventListener("input", updateEliminationChoices);
 byId("variables").addEventListener("input", updateSources);
@@ -257,6 +292,7 @@ byId("ideal-source").addEventListener("change", () => {
   if (["local-standard-basis", "local-jacobian-algebra"].includes(saved.result.type)) {
     byId("local-point").value = saved.result.point ? saved.result.point.join(", ") || "()" : "";
   }
+  if (saved.result.type === "tangent-cone") byId("local-point").value = "";
 });
 for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-source", "other-polynomial-source"]) {
   byId(id).addEventListener("change", updateSources);
@@ -264,6 +300,7 @@ for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-so
 form.addEventListener("input", markChanges);
 form.addEventListener("change", markChanges);
 const resultTitles = {
+  "hilbert-series": "Hilbert series",
   resultant: "Polynomial resultant",
   factor: "Polynomial factorization",
   gcd: "Monic polynomial GCD",
@@ -275,7 +312,9 @@ const resultTitles = {
   intersection: "Intersection",
   quotient: "Ideal quotient",
   saturation: "Saturation",
+  radical: "Ideal radical",
   dimension: "Krull dimension",
+  multiplicity: "Quotient multiplicity",
   "quotient-basis": "Quotient basis",
   "local-quotient-basis": "Local quotient basis",
   "local-jacobian-algebra": "Local Jacobian algebra",
@@ -285,6 +324,10 @@ const resultTitles = {
   "local-normal-form": "Local normal form",
   "hilbert-samuel-function": "Hilbert–Samuel function",
   "hilbert-samuel-multiplicity": "Hilbert–Samuel multiplicity",
+  "tangent-cone": "Tangent cone",
+  "tangent-cone-hilbert-series": "Tangent cone Hilbert series",
+  "zariski-tangent-space": "Zariski tangent space",
+  "embedding-dimension": "Embedding dimension",
 };
 
 // Preserve every source token in the DOM while setting powers, fractions and
@@ -329,6 +372,7 @@ function expressionText(source) {
 }
 
 const problemNotation = {
+  "hilbert-series": "H<sub><i>R/I</i></sub>(<i>t</i>)",
   factor: "factor(<i>f</i>)",
   "normal-form": "NF<sub>I</sub>(<i>f</i>)",
   groebner: "GB(<i>I</i>)",
@@ -336,8 +380,10 @@ const problemNotation = {
   ideal: "⟨<i>g</i><sub>1</sub>, …, <i>g</i><sub>m</sub>⟩",
   quotient: "<i>I</i> : <i>J</i>",
   saturation: "<i>I</i> : <i>f</i><sup>∞</sup>",
+  radical: "√<i>I</i>",
   intersection: "<i>I</i> ∩ <i>J</i>",
   dimension: "dim(<i>R</i>/<i>I</i>)",
+  multiplicity: "dim<sub>ℚ</sub>(<i>R</i>/<i>I</i>)",
   gcd: "gcd(<i>f</i>, <i>g</i>)",
   "quotient-basis": "<i>R</i>/<i>I</i>",
   "local-quotient-basis": "<i>R</i><sub><i>p</i></sub>/<i>I R</i><sub><i>p</i></sub>",
@@ -348,6 +394,10 @@ const problemNotation = {
   "local-normal-form": "NF<sub><i>I,p</i></sub>(<i>f</i>)",
   "hilbert-samuel-function": "H<sub><i>A,p</i></sub>(<i>n</i>)",
   "hilbert-samuel-multiplicity": "e<sub><i>p</i></sub>(<i>A</i>)",
+  "tangent-cone": "C<sub><i>p</i></sub>(V(<i>I</i>))",
+  "tangent-cone-hilbert-series": "H<sub>gr</sub>(<i>t</i>)",
+  "zariski-tangent-space": "T<sub><i>p</i></sub>(V(<i>I</i>))",
+  "embedding-dimension": "dim T<sub><i>p</i></sub>(V(<i>I</i>))",
 };
 
 function showProblem(request) {
@@ -359,7 +409,8 @@ function showProblem(request) {
     if (sources[key]) {
       const name = sources[key];
       rhs.append(mathSpan("i", "", name));
-      if (session.objects.get(name).result.type === "local-jacobian-algebra") rhs.append(".generators");
+      const type = session.objects.get(name).result.type;
+      if (type === "local-jacobian-algebra" || type === "tangent-cone") rhs.append(".generators");
     }
     else if (Array.isArray(operands[key])) {
       const polynomials = operands[key];
@@ -460,8 +511,8 @@ function resultTable(headings) {
 
 function showHilbertSamuel(value, result) {
   const multiplicity = result.type === "integer" ? result.value : result.multiplicity;
-  value.replaceChildren(mathSpan("h3", "quotient-label", "Hilbert–Samuel multiplicity"), String(multiplicity),
-    mathSpan("h3", "quotient-label", "Krull dimension"), String(result.dimension));
+  value.replaceChildren();
+  showInvariants(value, result.dimension, multiplicity, "Hilbert–Samuel multiplicity");
   if (result.type !== "hilbert-samuel-function") return;
   if (!result.degrees.length) {
     value.append(mathSpan("p", "helper", "No degrees requested."));
@@ -474,6 +525,85 @@ function showHilbertSamuel(value, result) {
     for (const entry of [degree, result.values[i], result.graded_values[i]]) row.insertCell().textContent = String(entry);
   });
   value.append(table);
+}
+
+function showInvariants(value, dimension, multiplicity, multiplicityLabel) {
+  value.append(mathSpan("h3", "quotient-label", multiplicityLabel), String(multiplicity),
+    mathSpan("h3", "quotient-label", "Krull dimension"), String(dimension));
+}
+
+function showTangentCone(value, result) {
+  const directions = result.ring.variables.join(", ");
+  value.replaceChildren(mathSpan("h3", "quotient-label", "Homogeneous generators"),
+    expressionText(result.generators.length ? result.generators.join(", ") : "(0)"));
+  if (directions) {
+    value.append(mathSpan("p", "helper", "The variables " + directions + " denote tangent directions at the chosen point."));
+  }
+  showInvariants(value, result.dimension, result.multiplicity, "Hilbert–Samuel multiplicity");
+}
+
+function showTangentSpace(value, result) {
+  const dimension = result.type === "integer" ? result.value : result.dimension;
+  value.replaceChildren(mathSpan("h3", "quotient-label", "Embedding dimension"), String(dimension),
+    mathSpan("h3", "quotient-label", "Ambient dimension"), String(result.ambient_dimension),
+    mathSpan("h3", "quotient-label", "Jacobian rank"), String(result.jacobian_rank));
+  if (result.type === "integer") return;
+  const directions = result.ring.variables.join(", ");
+  if (directions) {
+    value.append(mathSpan("p", "helper", "Equations and vectors use tangent directions in the order (" + directions + ")."));
+  }
+  value.append(mathSpan("h3", "quotient-label", "Linear equations"));
+  if (result.equations.length) {
+    const equations = document.createElement("ul");
+    for (const equation of result.equations) {
+      const row = document.createElement("li");
+      row.append(expressionText(equation), " = 0");
+      equations.append(row);
+    }
+    value.append(equations);
+  } else {
+    value.append(mathSpan("p", "helper", "There are no linear constraints. The tangent space is the full ambient space."));
+  }
+  value.append(mathSpan("h3", "quotient-label", "Basis vectors"));
+  if (!result.basis.length) {
+    value.append("∅ (empty basis)", mathSpan("p", "helper", "The tangent space is {0}."));
+    return;
+  }
+  const table = resultTable(result.ring.variables);
+  table.setAttribute("aria-label", "Basis vectors in tangent coordinates");
+  const body = table.createTBody();
+  for (const vector of result.basis) {
+    const row = body.insertRow();
+    for (const component of vector) row.insertCell().append(expressionText(component));
+  }
+  value.append(table);
+}
+
+function showHilbertSeries(value, result) {
+  const terms = result.numerator.map(({ degree, coefficient }, index) => {
+    const n = String(degree);
+    const c = String(coefficient);
+    const negative = c.startsWith("-");
+    const magnitude = negative ? c.slice(1) : c;
+    const sign = negative ? "-" : index ? "+" : "";
+    if (n === "0") return sign + magnitude;
+    const power = n === "1" ? "t" : "t^" + n;
+    return sign + (magnitude === "1" ? "" : magnitude + "*") + power;
+  });
+  const numerator = terms.join("") || "0";
+  const exponent = String(result.denominator_power);
+  const formula = mathSpan("div", "graded-series");
+  formula.append(expressionText("H(t)"), " = ");
+  if (exponent === "0") formula.append(expressionText(numerator));
+  else {
+    const denominator = exponent === "1" ? "(1-t)" : "(1-t)^" + exponent;
+    const fraction = mathSpan("span", "math-fraction");
+    fraction.append(expressionText(numerator), mathSpan("span", "fraction-bar", " / "), expressionText(denominator));
+    formula.append(fraction);
+  }
+  value.replaceChildren(mathSpan("h3", "quotient-label", "Graded Hilbert series"), formula);
+  showInvariants(value, result.dimension, result.multiplicity,
+    result.scope === "global" ? "Multiplicity" : "Hilbert–Samuel multiplicity");
 }
 
 function scopeText(result) {
@@ -537,10 +667,23 @@ function showResult(record) {
     case "hilbert-samuel-function":
       showHilbertSamuel(value, result);
       break;
+    case "tangent-cone":
+      showTangentCone(value, result);
+      break;
+    case "zariski-tangent-space":
+      showTangentSpace(value, result);
+      break;
+    case "hilbert-series":
+    case "tangent-cone-hilbert-series":
+      showHilbertSeries(value, result);
+      break;
     case "boolean":
     case "integer":
       if (record.operation === "hilbert-samuel-multiplicity") showHilbertSamuel(value, result);
-      else value.textContent = result.finite === false ? "Infinite" : String(result.value);
+      else if (record.operation === "embedding-dimension") showTangentSpace(value, result);
+      else if (record.operation === "multiplicity" && !result.finite) {
+        value.textContent = "The ideal has infinite colength. A finite-colength multiplicity is undefined.";
+      } else value.textContent = result.finite === false ? "Infinite" : String(result.value);
       break;
     default:
       throw new Error("The service returned an unknown result type.");
@@ -561,13 +704,12 @@ function addDetail(list, label, value) {
   list.append(term, definition);
 }
 
-function showExecution(execution) {
+function showExecution(execution, operands) {
   const summary = byId("execution");
   addDetail(summary, "Requested", execution.requested);
   addDetail(summary, "Executed on", execution.device);
   if (execution.backend) addDetail(summary, "Backend", execution.backend);
-  const saved = session.objects.get(submitted.sources.ideal);
-  if (saved?.result.type === "basis" && ["normal-form", "membership"].includes(submitted.operation)) {
+  if (operands.basis_ref) {
     addDetail(summary, "Saved basis", submitted.sources.ideal + " reused");
   }
   const reasons = execution.fallback_reasons || [];
@@ -644,10 +786,11 @@ form.addEventListener("submit", async (event) => {
   try {
     session.validateName(submitted.name);
     const endpoint = byId("exhaustive").checked ? "/api/algebra/exhaustive" : "/api/algebra";
+    const request = session.request(submitted);
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(session.request(submitted)),
+      body: JSON.stringify(request),
     });
     const body = await response.text();
     let record;
@@ -662,7 +805,7 @@ form.addEventListener("submit", async (event) => {
     if (record.status === "ok" || record.status === "error") {
       responseText = body;
       byId("export").hidden = false;
-      if (record.execution) showExecution(record.execution);
+      if (record.execution) showExecution(record.execution, request.operands);
       if (record.replay) showReplay(record.replay);
     }
     if (!response.ok || record.status !== "ok") {

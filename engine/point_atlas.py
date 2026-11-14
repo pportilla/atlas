@@ -6,8 +6,8 @@ its matrix before blowing up. One common nonsingular matrix is required;
 over K=Q(theta) equality and its determinant are tested modulo the defining
 irreducible polynomial. This identifies the charts with all the standard
 opens of P^(n-1). Chart i owns the directions whose earlier coordinates
-vanish. On a marked separable coefficient cover, conjugate sheets have
-the same Euler integrals. Restricting to one divides those counts by [K:Q].
+vanish. On a marked coefficient cover, these opens describe one projective
+space for the chosen embedding.
 
 Transversality on all the owned opens proves that the section of the
 exceptional projective space is a smooth hypersurface there. For n>=3 any
@@ -17,9 +17,10 @@ and the section equations come from the verified chart pullbacks.
 """
 import re
 from . import native_library
-from .chart_kernel import crossings_rows, strata_rows
+from .chart_kernel import crossings_rows
 from .fan_geometry import split_cone
 from .monomial_atlas import _row, _same_locus, _unit
+from .monodromy_blowups import projective_complement_euler
 from .polynomial import InputError, format_poly, parse_expression, sparse_row
 from .strata import InvalidChart, records
 
@@ -131,11 +132,10 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
     n = len(base)
     fields = _field(charts, base, record.get("coefficient_field"), saved)
     field, source = fields if fields else (None, None)
-    degree = field["degree"] if field else 1
     modulus = field["minimal_polynomial"] if field else "0"
     count_vars = n + int(bool(field))
     marked = (field["generator"],) if field else ()
-    results, strata, numbers = [], {}, {}
+    results, numbers = [], {}
     common = None
     for i, item in enumerate(charts):
         coords = tuple(item["coordinates"]) if saved else (*item["coordinates"], *marked)
@@ -204,13 +204,6 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
             if intrinsic:
                 return None
             raise InvalidChart("Normal crossings fail on the owned point blowup chart.")
-        if integrals:
-            for indices, value in strata_rows(count_vars, [*ambient_rows, *owned], ideals, ()).items():
-                chi, rest = divmod(value, degree)
-                if rest:
-                    raise ArithmeticError("The conjugate chart strata disagree on their degree.")
-                key = frozenset(components[j]["id"] for j in indices)
-                strata[key] = strata.get(key, 0) + chi
         if not saved:
             results.append(dict(coordinates=list(coords), ambient_ideal=ambient, components=components,
                                 fibre=mapping, region=region, removed=[], map=dict(zip(base, mapping)),
@@ -225,6 +218,10 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
                                    "Ambient exceptional divisor") + " in the germ over the origin over Qbar."}
         answer.update(cells=[], dual_complex=boundary)
     if integrals:
+        # All projective opens have passed the crossing test. Their strict
+        # sections form a smooth hypersurface whose degree is the radial order.
+        complement = projective_complement_euler(n, numbers["E1"][0])
+        strata = {frozenset(("E1",)): complement, frozenset(("E1","strict")): n-complement}
         rows, listed = records(dict(data=numbers, strata={k:chi for k,chi in strata.items() if chi}))
         answer.update(numerical_data=rows, strata=listed)
     return charts if saved else results, answer

@@ -108,6 +108,14 @@ For the Katsura-6 ideal $K$ and an independent $z$, the following run used OpenC
 
 For $(zK):(z)$, dividing first reduced the warm median request time from 29.12 ms to 18.61 ms on this device. Eight alternating pairs of requests returned the same sequence of 41 generators. For Katsura-5 the corresponding times were 11.87 ms and 7.14 ms, with 22 generators.
 
+### Radicals of polynomial ideals over the rationals
+
+The radical operation returns the reduced Gröbner basis of $\sqrt I$ in the requested order. Atlas begins by replacing each generator with its squarefree part, which leaves the radical unchanged. For a principal ideal this already gives the answer. For a monomial ideal the operation keeps only the support of each generator. More generally, a squarefree leading ideal certifies that the current ideal is radical. Indeed, if a nonzero normal form had a power in the ideal, the corresponding power of its leading monomial would lie in the squarefree leading ideal. The leading monomial itself would then lie there, contradicting the defining property of a normal form.
+
+For the general case, choose a maximal set of coordinates $U$ satisfying $I\cap\mathbb Q[U]=0$. Each remaining coordinate $x$ satisfies a nonzero relation $p_x(U,x)\in I$, obtained by lexicographic elimination. Let $J$ be the ideal obtained by adjoining the squarefree parts of these relations. Each added polynomial has a power in $I$, so $\sqrt J=\sqrt I$. Over the rational function field $K=\mathbb Q(U)$ the relation for each $x$ is separable after removing repeated factors. The quotient over $K$ is therefore reduced by Seidenberg’s criterion. [Seidenberg’s criterion, Proposition 4](https://www.math.cit.tum.de/fileadmin/w00ccg/algebra/people/kemper/kem.radical.pdf)
+
+In a lex Gröbner basis of $J$ with the dependent variables first, let $h$ be the squarefree part of the product of the leading coefficients viewed in $\mathbb Q[U]$. Inverting $h$ makes every such coefficient a unit. Gröbner division over $K$ uses only those coefficients as denominators, so contraction of the ideal over $K$ gives $J:h^\infty$. This contraction is radical. The identity $\sqrt J=(J:h^\infty)\cap\sqrt{J+(h)}$ also recovers components lying over $h=0$. For nonconstant $h$, adjoining it strictly enlarges $J$ because $J\cap\mathbb Q[U]=0$. The ascending chain condition guarantees termination. If $h$ is constant the contraction already gives the answer. [Implementation](../engine/ideal_radical.py) · [Independent Singular comparisons](../tests/test_ideal_radical.py)
+
 ### Polynomial resultants over the rationals
 
 Choose one variable $t$ and take the remaining coordinates as coefficients. Atlas returns the Sylvester resultant in input order, including its rational content. For $m=\deg_t f$ and $n=\deg_t g$, interchanging two nonzero inputs multiplies the result by $(-1)^{mn}$. Removing $t$ from the recorded ring preserves the order of its other coordinates. [Public examples and boundary conventions](../examples/algebra-api.md#polynomial-resultants)
@@ -142,6 +150,16 @@ Before expanding a translation, Atlas can strip a common power of a coordinate t
 
 For the translate of $u^4+v^5+u^2v^3$ to $(1/2,-2/3)$, the quotient by the derivative ideal has dimension 12 and imposing the equation lowers the dimension to 11. On a Radeon 680M, each of the four point-local operations replayed two primes using OpenCL and certified its basis on the CPU. [Device regression](../tests/test_local_algebra_device.py) · [Independent Singular checks](../tests/test_point_invariants_singular.py)
 
+### Multiplicity of finite-colength quotients
+
+For a finite-colength ideal $I\subset R=\mathbb Q[x_1,\ldots,x_n]$, the degree of the affine scheme is $\dim_{\mathbb Q}(R/I)$. Equivalently, each closed point contributes its local length times the degree of its residue field over $\mathbb Q$. For either global monomial order, the monomials outside the leading ideal form a vector-space basis of $R/I$. Atlas sums the volumes of disjoint boxes of exponent vectors to obtain the count without allocating a basis element for each monomial. A saved global Gröbner basis supplies the leading monomials directly. The unit ideal leaves no standard monomials. If the leading ideal contains no power of some variable, all powers of that variable survive and the quotient has infinite colength. [Quotient operations](../engine/local_algebra.py) · [Standard monomial count](../engine/quotient_monomials.py)
+
+### Hilbert series of homogeneous quotients
+
+For a homogeneous ideal $I$ in a standard-graded polynomial ring $S$ over $\mathbb Q$, the monomials outside its leading ideal form a homogeneous vector-space basis of $S/I$. Counting them by total degree gives the Hilbert series. Atlas reads the leading powers directly for monomial ideals and homogeneous principal ideals. In the general case it computes the reduced global Gröbner basis. A homogeneous ideal admits a homogeneous reduced basis for either supported global order, since reducing homogeneous multiples preserves their degree. Uniqueness of the reduced basis makes this a test of homogeneity even when the input generators mix degrees. [Graded quotient computation](../engine/hilbert_series.py)
+
+The same disjoint-box count used for local quotients below supplies the numerator over the ambient denominator $(1-t)^{\dim S}$, the quotient dimension and its multiplicity. The numerator stores only nonzero degree–coefficient pairs. The regression tests compare the entire numerator to Singular’s `hilb(G,1)` and check dimension and multiplicity independently. [Hilbert series tests](../tests/test_hilbert_series.py)
+
 <a id="hilbert-samuel-computation"></a>
 
 ### Hilbert–Samuel functions and multiplicities of local quotients
@@ -155,6 +173,22 @@ For a sparse principal ideal, only the order of the generator at $p$ enters its 
 The device path reuses modular Gröbner replay and exact rational certification for eligible ideals. Box counting and coefficient extraction run on the host. On a Radeon 680M, each operation replayed two primes on OpenCL for a translated complete intersection of length 9. [Device regression](../tests/test_hilbert_samuel_device.py)
 
 The Singular tests translate the original ideal $J$ into a local ring, compare dimension and multiplicity with `dim(std(J))` and `mult(std(J))`, and obtain each cumulative length independently with `vdim(std(J+maxideal(n+1)))`. [Singular comparison tests](../tests/test_hilbert_samuel_singular.py) · [Singular reference manual](https://www.singular.uni-kl.de/index.php/singular.pdf)
+
+### Tangent cones and graded Hilbert series
+
+Put $X_i=x_i-p_i$. For a nonzero centered polynomial $g$, write $g^*$ for its homogeneous part of lowest total degree. If $G$ is a standard basis of the localized ideal in the degree-local order, then $(g^*:g\in G)$ presents the associated graded ideal. Indeed, the heads of $G$ generate the local leading monomial ideal. For a homogeneous initial form, division by the $g^*$ on that degree cancels the same heads and terminates because each degree has only finitely many monomials. Consequently these forms give a homogeneous Gröbner basis of the cone ideal for the chosen tie order. Taking the lowest parts of the input generators alone can miss forms obtained by cancellation. For example $I=(x+y^2,x+y^2+x^2)$ has cone ideal $(x,y^4)$ at zero. [Tangent-cone kernel](../engine/tangent_cone.py)
+
+For a principal equation with large exponents on shifted coordinates, the local order $d$ already fixes the numerator $1-t^d$ in the ambient denominator. If the equations themselves are requested, Atlas computes only the terms of degree $d$ in $f(p+X)$. The exponents on unshifted axes are fixed. On the other axes each coefficient comes from binomial coefficients times the rational powers of the coordinates. Combining those powers on coprime integer bases makes it possible to cancel a scalar common to the entire form before evaluating it. [Sparse initial form](../engine/point_initial_form.py)
+
+In any codimension the leading monomials of these homogeneous forms give the same graded dimensions as the cone. Its series uses the staircase computation above, with sparse numerator over the ambient denominator. Eligible standard-basis calculations use modular device replay and exact CPU certification. The independent oracle translates the original ideal into a local ring in Singular, checks equality of both cone ideals by reduction in both directions, and compares the full ambient numerator with Singular's first Hilbert series. [Singular tests](../tests/test_tangent_cone_singular.py) · [Singular reference manual](https://www.singular.uni-kl.de/index.php/singular.pdf)
+
+### Zariski tangent spaces
+
+For an ideal $I=(f_1,\ldots,f_s)$, first check $f_i(p)=0$ for each $i$. A vector $v$ represents the point $p+\epsilon v$ over $\mathbb Q[\epsilon]/(\epsilon^2)$ precisely when $J(p)v=0$, where $J_{ij}(p)=\partial_j f_i(p)$. The product rule gives $d(\sum_i a_i f_i)_p=\sum_i a_i(p)\,df_i(p)$, so the supplied generators suffice even when the ideal is nonreduced. The nullity equals $\dim_{\mathbb Q}\mathfrak m_p/\mathfrak m_p^2$. Atlas reads the first-order terms from the sparse input and can discard a common nonzero rational scalar from each row. The independent rows are reduced over $\mathbb Q$ in declared variable order. Assigning one free coordinate to 1 and the others to 0 gives each returned direction vector. [First-jet kernel](../engine/zariski_tangent.py) · [Stacks Project, tangent spaces](https://stacks.math.columbia.edu/tag/0B28)
+
+The optional OpenCL and Triton kernels perform pivot selection on a rectangular matrix modulo a prime. After denominators and scalar contents have been removed from each rational row, the device returns original row indices. The host checks their independence over $\mathbb Q$ and reduces the remaining rows against them to prove they span the rational row space. If the selected prime loses rank, Atlas recomputes over $\mathbb Q$. The embedding-dimension operation uses the certified rank directly. [Row reduction and certification](../engine/tangent_linear.py) · [GPU checks](../tests/test_zariski_tangent_device.py)
+
+The independent Singular tests translate the ideal to the point, compare the ideal of linear terms with the returned equations in both directions, and verify that the supplied vectors are independent and satisfy Singular's equations. They compute the embedding dimension independently as $\dim_{\mathbb Q}\mathbb Q[X]/(I(p+X)+(X)^2)-1$ at a point on the scheme. [Singular checks](../tests/test_zariski_tangent_singular.py)
 
 ### Local standard bases and normal forms at rational points
 
@@ -367,6 +401,22 @@ $\mathbf Q[\theta]/(m)$, append $\theta$ to both spaces and map it identically.
 The last row of the enlarged Jacobian makes its determinant equal to the relative
 determinant. Reducing its coefficients and the pullback modulo $m$ before reading
 their supports gives the divisorial orders over the extension.
+
+On a regular fan with a verified common invertible linear map $L$ over $\mathbf Q$,
+write $x=L y$ and $y_j=\prod_i u_i^{R_{ij}}$, where the rows of $R$ are the
+cone rays. The kernel expands the original $f(Ly)$ once. A character with exponent
+$a$ then has exponent $Ra$ in the chart. Since $\det R=\pm1$, distinct
+characters stay distinct, so the minimum of the $i$-th exponents gives $N_i$
+without cancellation. Subtracting this minimum on each exceptional coordinate
+gives the full strict transform. On the dense torus,
+$\bigwedge_j d\log y_j=\det(R)\,\bigwedge_i d\log u_i$ in the chosen order.
+Consequently the ordinary Jacobian is
+$\det(L)\det(R)\prod_i u_i^{\sum_j R_{ij}-1}$; this polynomial identity extends
+to the boundary and gives $\nu_i=\sum_j R_{ij}$. Each block of cones returns
+those integers, the exact sparse strict transform, its equation in graded
+lexicographic order and its first-order restriction on the owned fibre.
+The verifier checks each supplied projection against $L$ and the cone and uses
+the full strict equation to verify saved chart components.
 
 In the graph ideal $(\phi_i(u)-x_i)$, eliminate every chart variable except
 $u_j$ with a lexicographic Gröbner basis. If $u_j=A(x)/B(x)$ with $A,B$ coprime,

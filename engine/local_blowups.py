@@ -35,7 +35,7 @@ where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
 from dataclasses import dataclass, replace
-from itertools import combinations, islice, product
+from itertools import combinations, count, islice, product
 from time import monotonic
 
 from .chart_expressions import chart_expressions
@@ -150,6 +150,11 @@ def _dimension_reference(variables, ideal):
 
 def _generators(variables, ambient, ideal):
     """Few generators of the ideal modulo the ambient one."""
+    if not ideal:
+        return ()
+    if len(ideal) == 1:
+        remainder = groebner(ambient, variables).reduce(ideal[0])[1] if ambient else ideal[0]
+        return (remainder,) if remainder else ()
     basis = groebner((*ambient, *ideal), variables)
     from .affine_kernel import sparse_terms
     degree = {g: max(sum(m) for m, _ in sparse_terms(variables, g)) for g in basis.exprs}
@@ -587,6 +592,32 @@ def _strict_ideal(variables, ambient, pivot, generators):
     from . import kernel
     from .groebner import CHECK
     nonzero = tuple(g for g in generators if not ideal_subset(variables, (g,), ambient))
+    if ambient and len(nonzero) == 1:
+        # A graph chart is saturated by its pivot. In the chart ring p is
+        # therefore a nonzerodivisor, and (f):(p^m) has the single
+        # generator f/p^m whenever p^m divides f. Keep that generator.
+        # A Gröbner basis of the entire ideal can have many more elements.
+        residual = nonzero[0]
+        order = 0
+        exceptional = groebner((*ambient, pivot), variables)
+        if tuple(exceptional.exprs) != (1,):
+            inverse_basis = None
+            while exceptional.contains(residual):
+                if inverse_basis is None:
+                    inverse = chart_expressions(variables).Dummy("inverse_pivot")
+                    inverse_basis = groebner((*ambient, inverse*pivot - 1),
+                                             (inverse, *variables), order="first")
+                # With the inverse eliminated first, the normal form of
+                # f/p is a polynomial in the chart variables if p divides f.
+                residual = inverse_basis.reduce(inverse*residual)[1]
+                if inverse in residual.free_symbols:
+                    raise ArithmeticError("Division by the exceptional pivot left its inverse in the quotient.")
+                order += 1
+            if CHECK:
+                expected_order = _order(variables, ambient, pivot, nonzero, limit=max(64, order))
+                if expected_order != order or not ideal_subset(variables, (residual*pivot**order - nonzero[0],), ambient):
+                    raise AssertionError("The principal graph transform differs from its reference.")
+            return order, (residual,)
     native = kernel.strict_parts(variables, ambient, ((pivot,),), nonzero) if nonzero else None
     if native:
         order = min(orders[0] for orders, _ in native)
@@ -898,14 +929,16 @@ def _blown_up(current, chosen, label, stage, dimension, size, deadline, retains=
         if centre is None:
             following.append(chart)
             continue
-        children = _blow_up(chart, centre, label, stage, dimension, dimension - size, deadline)
         if not retains:
-            following.extend(children)
+            following.extend(_blow_up(chart, centre, label, stage, dimension, dimension - size, deadline))
             continue
-        for child in children:
-            new = next((ideal for name, _, _, ideal in child.components if name == label), None)
-            if new is not None:
-                following.append(replace(child, region=tuple(dict.fromkeys((*child.region, *new)))))
+        # The old charts partition the fibre. A point of the new divisor can
+        # be owned by this chart only if its image is an owned centre point.
+        if _present(chart.variables, (*chart.ambient, *chart.fibre, *chart.region, *centre), chart.removed):
+            for child in _blow_up(chart, centre, label, stage, dimension, dimension - size, deadline):
+                new = next((ideal for name, _, _, ideal in child.components if name == label), None)
+                if new is not None:
+                    following.append(replace(child, region=tuple(dict.fromkeys((*child.region, *new)))))
         centre = tuple(centre)
         older = tuple(z for z in chart.removed if not radical_subset(chart.variables, centre, (*chart.ambient, *z)))
         following.append(replace(chart, removed=(*older, centre)))
@@ -1003,15 +1036,23 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
     current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
                      tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
     centres, known = [], {}
-    for stage in range(1, rule.stages + 1):
+    stages = count(1) if budget is None and isinstance(rule, _Canonical) else range(1, rule.stages + 1)
+    for stage in stages:
         if deadline is not None and monotonic() > deadline:
             raise GiveUp("The time allowed for the blowups is over.")
         retains = getattr(rule, "retains", False)
         current = [c for c in current if _present(c.variables, (*c.ambient, *c.fibre, *c.region), c.removed)]
-        failures = [_own_failures(chart, dimension, known) if retains else _failures(chart, dimension)
-                    for chart in current]
-        if not any(inside for _, inside in failures):
+        failures = []
+        if hasattr(rule, "final_check") and rule.final_check():
+            from .repeated_tangent import certify_fibre
+            for chart in current:
+                certify_fibre(chart, dimension)
             return (*(_strata(current) if count_strata else ({}, {})), current, centres)
+        if not hasattr(rule, "needs_failures") or rule.needs_failures():
+            failures = [_own_failures(chart, dimension, known) if retains else _failures(chart, dimension)
+                        for chart in current]
+            if not any(inside for _, inside in failures):
+                return (*(_strata(current) if count_strata else ({}, {})), current, centres)
         chosen, detail = rule.choose(current, failures, dimension, deadline)
         if all(centre is None for centre in chosen):
             raise GiveUp("No centre was found.")
@@ -1044,7 +1085,8 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             raise GiveUp("A centre has parts of different dimensions.")
         size = sizes.pop()
         def blown(centres):
-            charts = _blown_up(current, centres, label, stage, dimension, size, deadline, retains)
+            keep_complement = retains or getattr(rule, "keep_complement", False)
+            charts = _blown_up(current, centres, label, stage, dimension, size, deadline, keep_complement)
             # The parts of a centre may lie in different charts: the new divisor
             # must get the same numerical data from all of them.
             if len({(n, nu) for chart in charts for name, n, nu, _ in chart.components if name == label}) > 1:
@@ -1070,7 +1112,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
                         "components": detail.get("components", through),
                         **({"invariant": detail["invariant"]} if "invariant" in detail else {})})
         current = following
-        if len(current) > budget:
+        if budget is not None and len(current) > budget:
             raise GiveUp("Too many charts.")
     raise GiveUp("Normal crossings were not reached.")
 
@@ -1096,7 +1138,11 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
     for name in rules:
-        rule = _Direct() if name == "direct" else _Canonical(components)   # "complete"
+        if name == "tangent":
+            from .repeated_tangent import RepeatedTangent
+            rule = RepeatedTangent()
+        else:
+            rule = _Direct() if name == "direct" else _Canonical(components)
         try:
             return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata)
         except GiveUp as error:
@@ -1113,7 +1159,7 @@ def _strata(charts, domain=None):
     Each chart is counted on the part where its fibre and region equations
     hold. Those among them that are coordinates are set to zero beforehand.
     """
-    from . import kernel
+    from .chart_kernel import owned_strata
     from .groebner import CHECK
     data, strata = {}, {}
     for chart in charts:
@@ -1123,9 +1169,7 @@ def _strata(charts, domain=None):
         # The kernel computes the strata of a chart (native/ideal.cpp,
         # op_strata, and native/euler.cpp); the code below answers when it
         # cannot, and with ATLAS_GROEBNER=check both must agree.
-        native = kernel.strata(chart.variables, (*chart.ambient, *chart.fibre, *chart.region),
-                               [component[3] for component in chart.components], chart.removed) \
-            if domain is None or getattr(domain, "is_QQ", False) else None
+        native = owned_strata(chart) if _MODE != "sympy" and (domain is None or getattr(domain, "is_QQ", False)) else None
         if native is not None:
             here = {frozenset(chart.components[j][0] for j in subset): chi for subset, chi in native.items()}
             if CHECK and here != _strata_here(chart, domain):

@@ -68,7 +68,8 @@ def resolution_strata(record, polynomial=None, *, computed=None):
                         if proof.get("numerical_data") and proof.get("strata") and not record.get("input_divisor"):
                             return proof["numerical_data"], proof["strata"], "Certified strata of the archived resolution"
                         return None
-                    found = atlas.outputs(charts, len(variables), complex=False)
+                    factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
+                    found = atlas.outputs(charts, len(variables), complex=False, factor_fibre=factor_fibre)
                 except GiveUp:
                     return None
     except (IndexError, KeyError, TypeError) as exc:

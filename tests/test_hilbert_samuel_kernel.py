@@ -90,8 +90,9 @@ class HilbertSamuelKernelTests(unittest.TestCase):
         # A single bounded monomial (the upper corner) is still missing.
         self.assertEqual(values[last_bounded_degree-1], (e*last_bounded_degree//2, e-1))
         self.assertEqual(values[n], (e*(n+1) - e*sum(k-1 for k in bounds)//2, e))
-        with patch.object(hs, "_numerator", side_effect=AssertionError("computed a coefficient")):
+        with patch.object(hs, "affine_request", wraps=hs.affine_request) as request:
             self.assertEqual(hs._invariants(width, heads, []), (1, e, {}))
+        self.assertEqual(request.call_args.args[0][:3], ["monomial_function", str(width), ""])
 
     def test_monomials_match_exhaustive_enumeration_in_small_rings(self):
         rng = Random(53108)

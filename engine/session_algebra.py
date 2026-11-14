@@ -11,7 +11,8 @@ from . import native_polynomial as native
 from .exact_json import result_json
 from .native_library import affine_request
 from .polynomial import LimitError, integer_text, parse_expression, rational_text, sparse_row
-from .rational_point import normalize_point
+from .rational_point import coordinate_fraction, normalize_point
+from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace
 
 
@@ -128,6 +129,51 @@ class _LocalStandardBasis(_PointResult):
         return f"Local standard basis at [{', '.join(self.point)}]: {self.generators}"
 
 
+class _TangentResult(_PointResult):
+    _fields = _PointResult._fields | {"coordinate_system", "dimension"}
+
+    @property
+    def coordinate_system(self):
+        return self._record["result"]["coordinate_system"]
+
+    @property
+    def dimension(self):
+        return self._record["result"]["dimension"]
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _TangentCone(_TangentResult):
+    generators: tuple[Polynomial, ...]
+    _fields = _TangentResult._fields | {"generators", "multiplicity"}
+
+    @property
+    def multiplicity(self):
+        return self._record["result"]["multiplicity"]
+
+    def __repr__(self):
+        return f"Tangent cone at [{', '.join(self.point)}] with generators {self.generators}"
+
+
+class _TangentDimensions:
+    @property
+    def ambient_dimension(self):
+        return self._record["result"]["ambient_dimension"]
+
+    @property
+    def jacobian_rank(self):
+        return self._record["result"]["jacobian_rank"]
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _ZariskiTangentSpace(_TangentDimensions, _TangentResult):
+    equations: tuple[Polynomial, ...]
+    basis: tuple[tuple[Fraction, ...], ...]
+    _fields = _TangentResult._fields | {"ambient_dimension", "jacobian_rank", "equations", "basis"}
+
+    def __repr__(self):
+        return f"Zariski tangent space at [{', '.join(self.point)}] of dimension {self.dimension}"
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class _LocalNormalForm(_PointResult):
     remainder: Polynomial
@@ -226,11 +272,52 @@ class _QuotientData:
         return self._record["result"]["finite"]
 
 
-class _LocalNumber(_AtPoint, _QuotientData, _ScalarResult):
-    _fields = _ScalarResult._fields | _QuotientData._fields | {"point"}
+class _QuotientNumber(_QuotientData, _ScalarResult):
+    _fields = _ScalarResult._fields | _QuotientData._fields
+    _infinite_display = "infinite colength"
 
     def __repr__(self):
-        return integer_text(self.value) if self.finite else "infinite"
+        return integer_text(self.value) if self.finite else self._infinite_display
+
+
+class _LocalNumber(_AtPoint, _QuotientNumber):
+    _fields = _QuotientNumber._fields | {"point"}
+    _infinite_display = "infinite"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _HilbertSeries(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    _fields = _Result._fields | {"scope", "numerator", "denominator_power", "dimension", "multiplicity"}
+
+    @property
+    def scope(self):
+        return self._record["result"]["scope"]
+
+    @property
+    def numerator(self):
+        return deepcopy(self._record["result"]["numerator"])
+
+    @property
+    def denominator_power(self):
+        return self._record["result"]["denominator_power"]
+
+    @property
+    def dimension(self):
+        return self._record["result"]["dimension"]
+
+    @property
+    def multiplicity(self):
+        return self._record["result"]["multiplicity"]
+
+    def __repr__(self):
+        return format_hilbert_series(self._record["result"]["numerator"], self.denominator_power)
+
+
+class _TangentConeHilbertSeries(_AtPoint, _HilbertSeries):
+    _fields = _HilbertSeries._fields | {"point"}
 
 
 class _HilbertSamuelMultiplicity(_AtPoint, _ScalarResult):
@@ -242,6 +329,10 @@ class _HilbertSamuelMultiplicity(_AtPoint, _ScalarResult):
 
     def __repr__(self):
         return integer_text(self.value)
+
+
+class _EmbeddingDimension(_TangentDimensions, _AtPoint, _ScalarResult):
+    _fields = _ScalarResult._fields | {"point", "scope", "ambient_dimension", "jacobian_rank"}
 
 
 class _HilbertSamuelFunction(_PointResult):
@@ -405,7 +496,11 @@ def ideal(*generators, order=None, variables=None):
 
 def _typed(record, space):
     result = record["result"]
-    space = _result_space(space, result["ring"]["variables"])
+    kind = result["type"]
+    names = result["ring"]["variables"]
+    # Tangent equations live in fresh displacement coordinates, even at the origin.
+    space = (_CoordinateSpace.named(names) if kind in ("tangent-cone", "zariski-tangent-space")
+             else _result_space(space, names))
     order = result["ring"]["order"]
 
     def decode(text):
@@ -419,15 +514,23 @@ def _typed(record, space):
     def polynomials(expressions):
         return tuple(Polynomial(space, decode(text)) for text in expressions)
 
-    kind = result["type"]
     if kind in ("basis", "ideal"):
         cls = _Basis if kind == "basis" else _IdealResult
         return cls(space, polynomials(result["generators"]), order, record)
     if kind == "local-standard-basis":
         return _LocalStandardBasis(space, order, record, polynomials(result["generators"]))
+    if kind == "tangent-cone":
+        return _TangentCone(space, order, record, polynomials(result["generators"]))
+    if kind == "zariski-tangent-space":
+        directions = tuple(tuple(map(coordinate_fraction, vector)) for vector in result["basis"])
+        return _ZariskiTangentSpace(space, order, record, polynomials(result["equations"]), directions)
+    if kind == "tangent-cone-hilbert-series":
+        return _TangentConeHilbertSeries(space, order, record)
     if kind == "local-normal-form":
         remainder, unit = polynomials((result["remainder"], result["unit"]))
         return _LocalNormalForm(space, order, record, remainder, unit)
+    if kind == "hilbert-series":
+        return _HilbertSeries(space, order, record)
     if kind == "hilbert-samuel-function":
         return _HilbertSamuelFunction(space, order, record)
     if kind in ("quotient-basis", "local-jacobian-algebra"):
@@ -448,7 +551,11 @@ def _typed(record, space):
     if kind in ("boolean", "integer"):
         if record["operation"] == "hilbert-samuel-multiplicity":
             return _HilbertSamuelMultiplicity(space, order, result["value"], record)
-        cls = _LocalNumber if "finite" in result else _ScalarResult
+        if record["operation"] == "embedding-dimension":
+            return _EmbeddingDimension(space, order, result["value"], record)
+        cls = _ScalarResult
+        if "finite" in result:
+            cls = _QuotientNumber if result["scope"] == "global" else _LocalNumber
         return cls(space, order, result["value"], record)
     raise ValueError(f"Unknown algebra result type {kind!r}.")
 
@@ -480,14 +587,19 @@ def _require_ideal(value):
 
 
 def _calculate(operation, left, compute, **operands):
+    accepts_cone = operation in ("tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension")
     local_basis = (isinstance(left, _LocalStandardBasis)
-                   and operation in ("local-normal-form", "local-quotient-basis",
-                                     "hilbert-samuel-function", "hilbert-samuel-multiplicity"))
-    if not local_basis:
+                   and (accepts_cone or operation in ("local-normal-form", "local-quotient-basis",
+                                                      "hilbert-samuel-function", "hilbert-samuel-multiplicity",
+                                                      "tangent-cone")))
+    cone = isinstance(left, _TangentCone) and accepts_cone
+    if not (local_basis or cone):
         left = _require_ideal(left)
     point = operands.pop("point", None)
     if point is not None:
         operands["point"] = _local_point(point, len(left.variables))
+        if cone and any(coordinate != "0" for coordinate in operands["point"]):
+            raise ValueError("The point of a saved tangent cone must be its vertex (all tangent coordinates zero).")
     if local_basis:
         saved_point = left.point
         if operands.setdefault("point", saved_point) != saved_point:
@@ -504,7 +616,7 @@ def _calculate(operation, left, compute, **operands):
     operands["ideal"] = [str(f) for f in left.generators]
     request = {"operation": operation, "ring": left.ring, "operands": operands, "compute": compute}
     known_basis = ((local_basis and operation == "local-normal-form") or
-                   (isinstance(left, _Basis) and operation in ("groebner", "normal-form", "membership")))
+                   (isinstance(left, _Basis) and operation in ("groebner", "normal-form", "membership", "multiplicity")))
     return _typed(_evaluate(request, known_basis=known_basis), left._space)
 
 
@@ -605,12 +717,27 @@ def saturation(ideal, polynomial, *, compute="auto"):
     return _calculate("saturation", ideal, compute, polynomial=polynomial)
 
 
+def radical(ideal, *, compute="auto"):
+    """The radical ideal in the input polynomial ring over QQ."""
+    return _calculate("radical", ideal, compute)
+
+
 def dimension(ideal, *, compute="auto"):
     return _calculate("dimension", ideal, compute)
 
 
 def quotient_basis(ideal, *, compute="auto"):
     return _calculate("quotient-basis", ideal, compute)
+
+
+def multiplicity(ideal, *, compute="auto"):
+    """Total dimension over QQ of a finite-colength quotient by a global ideal."""
+    return _calculate("multiplicity", ideal, compute)
+
+
+def hilbert_series(ideal, *, compute="auto"):
+    """Hilbert series of a quotient by a homogeneous ideal with the standard grading."""
+    return _calculate("hilbert-series", ideal, compute)
 
 
 def local_quotient_basis(ideal, *, point=None, compute="auto"):
@@ -633,15 +760,38 @@ def hilbert_samuel_multiplicity(ideal, *, point=None, compute="auto"):
     return _calculate("hilbert-samuel-multiplicity", ideal, compute, point=point)
 
 
+def tangent_cone(ideal, *, point=None, compute="auto"):
+    """Homogeneous tangent equations in a new ring of displacements at the point."""
+    return _calculate("tangent-cone", ideal, compute, point=point)
+
+
+def tangent_cone_hilbert_series(ideal, *, point=None, compute="auto"):
+    """Graded Hilbert series at the chosen point, or at the vertex of a saved cone."""
+    return _calculate("tangent-cone-hilbert-series", ideal, compute, point=point)
+
+
+def zariski_tangent_space(ideal, *, point=None, compute="auto"):
+    """Tangent equations in fresh displacement coordinates and a basis of rational directions."""
+    return _calculate("zariski-tangent-space", ideal, compute, point=point)
+
+
+def embedding_dimension(ideal, *, point=None, compute="auto"):
+    """Dimension of the Zariski tangent space at the chosen point."""
+    return _calculate("embedding-dimension", ideal, compute, point=point)
+
+
 def algebra_bindings():
     return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
             "resultant": resultant,
             "normal_form": normal_form, "membership": membership,
             "local_standard_basis": local_standard_basis, "local_normal_form": local_normal_form,
             "eliminate": eliminate, "intersection": intersection, "quotient": quotient,
-            "saturation": saturation, "saturate": saturation, "dimension": dimension,
+            "saturation": saturation, "saturate": saturation, "radical": radical, "dimension": dimension,
             "quotient_basis": quotient_basis, "local_quotient_basis": local_quotient_basis,
+            "multiplicity": multiplicity, "hilbert_series": hilbert_series,
             "hilbert_samuel_function": hilbert_samuel_function,
             "hilbert_samuel_multiplicity": hilbert_samuel_multiplicity,
+            "tangent_cone": tangent_cone, "tangent_cone_hilbert_series": tangent_cone_hilbert_series,
+            "zariski_tangent_space": zariski_tangent_space, "embedding_dimension": embedding_dimension,
             "local_jacobian_algebra": local_jacobian_algebra, "milnor_number": milnor_number,
             "tjurina_number": tjurina_number, "algebra_request": algebra_request}

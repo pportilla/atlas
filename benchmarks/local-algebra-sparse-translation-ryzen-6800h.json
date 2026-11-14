@@ -1,0 +1,328 @@
+{
+  "measured_date_utc": "2026-11-14",
+  "host": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "fixture": {
+    "variables": [
+      "x",
+      "y",
+      "z"
+    ],
+    "point": [
+      "2/3",
+      "-1",
+      "3/4"
+    ],
+    "order": "grevlex",
+    "generators": [
+      "(x-(2/3))^4+3*(x-(2/3))^2*(y-(-1))*(z-(3/4))+2*(y-(-1))^3*(z-(3/4))+(x-(2/3))*(y-(-1))*(z-(3/4))^2+2*(z-(3/4))^4",
+      "(y-(-1))^4-2*(x-(2/3))^3*(y-(-1))+(x-(2/3))^2*(z-(3/4))^2+3*(y-(-1))*(z-(3/4))^3",
+      "(z-(3/4))^4+2*(x-(2/3))*(y-(-1))^3+(y-(-1))^2*(z-(3/4))^2+3*(x-(2/3))^3*(z-(3/4))"
+    ],
+    "polynomial": "((x-(2/3))+2*(y-(-1))-(z-(3/4)))^9+(x-(2/3))*(y-(-1))"
+  },
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "method": {
+    "pairs_per_workload": 500,
+    "logical_cpu": 10,
+    "schedule": "Fresh CLI processes. Each repetition runs old Atlas, new Atlas and Singular. All six execution orders counterbalanced in randomized six-triple blocks, seed 501903.",
+    "atlas": "Normal ./atlas algebra command with --json, default auto. All 2000 Atlas invocations reported native-cli on CPU.",
+    "metric": "Process wall time includes launch, parsing, coordinate translation, computation, coordinate restoration and output.",
+    "confidence_intervals": "95% intervals for the median of the paired differences, resampling consecutive blocks of ten triples 10000 times, seed 18514.",
+    "translation_stages": [
+      "center_at_point",
+      "center_query_at_point",
+      "restore_point_coordinates"
+    ]
+  },
+  "sha256": {
+    "launcher": "c7a6426e68e192447670e9edebdd5a8be5c4e2d6592f03260d580cdfd2bd544f",
+    "native_cli_before": "1b10bd21888a763deae42b313e7d921c04f80b24c2110cc997a8aadad97f0e6e",
+    "native_cli_after": "d4b65fe60277ddd95baf65655d51baa5a8b497ee9b9375695e4b38163c514824",
+    "shared_groebner_library": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409"
+  },
+  "certificate": {
+    "dim": 0,
+    "length": 64,
+    "ahcount": 17,
+    "shcount": 17,
+    "a_in_I": 1,
+    "I_in_a": 1,
+    "b_in_I": 1,
+    "I_in_b": 1,
+    "ah_in_h": 1,
+    "h_in_ah": 1,
+    "sh_in_h": 1,
+    "h_in_sh": 1,
+    "atlas_unit": 1,
+    "sing_unit": 1,
+    "atlas_nf": 1,
+    "sing_nf": 1,
+    "cross": 1,
+    "atlas_zero": 1,
+    "sing_zero": 1,
+    "atlas_head": 1,
+    "sing_head": 1,
+    "atlas_standard_support": 1,
+    "atlas_trivial_unit": 1,
+    "sing_trivial_unit": 1,
+    "sing_standard_support": 1,
+    "identical_pair": 1,
+    "identical_fraction": 1,
+    "a_rows": 17,
+    "s_rows": 17
+  },
+  "operations": {
+    "local-standard-basis": {
+      "paired_comparisons": {
+        "atlas_after_vs_atlas_before": {
+          "center_at_point": {
+            "reference_median_ms": 0.225622,
+            "candidate_median_ms": 0.11532300000000001,
+            "paired_median_saving_ms": 0.11242250000000001,
+            "ci95_low_ms": 0.11065450000000002,
+            "ci95_high_ms": 0.115018475,
+            "wins": 496
+          },
+          "internal_ms": {
+            "reference_median_ms": 3.059667,
+            "candidate_median_ms": 2.5032544999999997,
+            "paired_median_saving_ms": 0.5763750000000001,
+            "ci95_low_ms": 0.5504594874999998,
+            "ci95_high_ms": 0.5997345000000001,
+            "wins": 479
+          },
+          "local_standard_basis": {
+            "reference_median_ms": 1.4629775,
+            "candidate_median_ms": 1.443365,
+            "paired_median_saving_ms": 0.016841500000000065,
+            "ci95_low_ms": 0.008726500000000081,
+            "ci95_high_ms": 0.030298000000000158,
+            "wins": 286
+          },
+          "outside_ms": {
+            "reference_median_ms": 5.4684975,
+            "candidate_median_ms": 5.524048500000001,
+            "paired_median_saving_ms": -0.018198499999999118,
+            "ci95_low_ms": -0.07152500000000117,
+            "ci95_high_ms": 0.02506300000000028,
+            "wins": 244
+          },
+          "parse_local_input": {
+            "reference_median_ms": 0.260242,
+            "candidate_median_ms": 0.25168599999999997,
+            "paired_median_saving_ms": 0.006778000000000006,
+            "ci95_low_ms": 0.004293500000000006,
+            "ci95_high_ms": 0.009718000000000004,
+            "wins": 316
+          },
+          "restore_point_coordinates": {
+            "reference_median_ms": 0.871869,
+            "candidate_median_ms": 0.43380050000000003,
+            "paired_median_saving_ms": 0.446269,
+            "ci95_low_ms": 0.43883449999999996,
+            "ci95_high_ms": 0.45473,
+            "wins": 494
+          },
+          "wall_ms": {
+            "reference_median_ms": 8.5484935,
+            "candidate_median_ms": 8.013541499999999,
+            "paired_median_saving_ms": 0.5837894999999995,
+            "ci95_low_ms": 0.5060980000000002,
+            "ci95_high_ms": 0.630954,
+            "wins": 431
+          }
+        },
+        "atlas_after_vs_singular": {
+          "internal_ms": {
+            "reference_median_ms": 2.2110000000000003,
+            "candidate_median_ms": 2.5032544999999997,
+            "paired_median_saving_ms": -0.3010789999999999,
+            "ci95_low_ms": -0.31723650000000014,
+            "ci95_high_ms": -0.2787949999999997,
+            "wins": 19
+          },
+          "outside_ms": {
+            "reference_median_ms": 8.083627,
+            "candidate_median_ms": 5.524048500000001,
+            "paired_median_saving_ms": 2.612637500000001,
+            "ci95_low_ms": 2.5575160000000006,
+            "ci95_high_ms": 2.6784670000000004,
+            "wins": 487
+          },
+          "wall_ms": {
+            "reference_median_ms": 10.2643135,
+            "candidate_median_ms": 8.013541499999999,
+            "paired_median_saving_ms": 2.322608,
+            "ci95_low_ms": 2.2395059999999996,
+            "ci95_high_ms": 2.396377,
+            "wins": 482
+          }
+        },
+        "atlas_before_vs_singular": {
+          "internal_ms": {
+            "reference_median_ms": 2.2110000000000003,
+            "candidate_median_ms": 3.059667,
+            "paired_median_saving_ms": -0.8672095,
+            "ci95_low_ms": -0.8957570000000001,
+            "ci95_high_ms": -0.8512310000000003,
+            "wins": 7
+          },
+          "outside_ms": {
+            "reference_median_ms": 8.083627,
+            "candidate_median_ms": 5.4684975,
+            "paired_median_saving_ms": 2.6472864999999994,
+            "ci95_low_ms": 2.586399,
+            "ci95_high_ms": 2.7303049999999995,
+            "wins": 494
+          },
+          "wall_ms": {
+            "reference_median_ms": 10.2643135,
+            "candidate_median_ms": 8.5484935,
+            "paired_median_saving_ms": 1.7953160000000006,
+            "ci95_low_ms": 1.6984675000000005,
+            "ci95_high_ms": 1.8480705000000004,
+            "wins": 488
+          }
+        }
+      },
+      "median_translation_stages_combined_ms": {
+        "atlas_before": 1.0997345,
+        "atlas_after": 0.5490435
+      }
+    },
+    "local-normal-form": {
+      "paired_comparisons": {
+        "atlas_after_vs_atlas_before": {
+          "center_at_point": {
+            "reference_median_ms": 0.234729,
+            "candidate_median_ms": 0.1196615,
+            "paired_median_saving_ms": 0.11606449999999999,
+            "ci95_low_ms": 0.11331400000000003,
+            "ci95_high_ms": 0.119065,
+            "wins": 495
+          },
+          "center_query_at_point": {
+            "reference_median_ms": 1.009199,
+            "candidate_median_ms": 0.690401,
+            "paired_median_saving_ms": 0.3224655,
+            "ci95_low_ms": 0.3140927375,
+            "ci95_high_ms": 0.33647200000000005,
+            "wins": 497
+          },
+          "internal_ms": {
+            "reference_median_ms": 3.5016475,
+            "candidate_median_ms": 3.037385,
+            "paired_median_saving_ms": 0.48174600000000023,
+            "ci95_low_ms": 0.4611319999999999,
+            "ci95_high_ms": 0.5108914999999998,
+            "wins": 484
+          },
+          "local_normal_form": {
+            "reference_median_ms": 0.23391250000000002,
+            "candidate_median_ms": 0.2328155,
+            "paired_median_saving_ms": 0.00046600000000002195,
+            "ci95_low_ms": -0.0010310000000000041,
+            "ci95_high_ms": 0.002149000000000026,
+            "wins": 253
+          },
+          "local_standard_basis": {
+            "reference_median_ms": 1.225528,
+            "candidate_median_ms": 1.2181895,
+            "paired_median_saving_ms": 0.0029450000000000864,
+            "ci95_low_ms": -0.005900999999999934,
+            "ci95_high_ms": 0.017943500000000112,
+            "wins": 257
+          },
+          "outside_ms": {
+            "reference_median_ms": 5.431828500000001,
+            "candidate_median_ms": 5.4245045,
+            "paired_median_saving_ms": 0.0021839999999997417,
+            "ci95_low_ms": -0.026507612499999895,
+            "ci95_high_ms": 0.035246000000001665,
+            "wins": 252
+          },
+          "parse_local_input": {
+            "reference_median_ms": 0.68755,
+            "candidate_median_ms": 0.679415,
+            "paired_median_saving_ms": 0.0048839999999999995,
+            "ci95_low_ms": 0.0003509999999999902,
+            "ci95_high_ms": 0.011340999999999934,
+            "wins": 274
+          },
+          "restore_point_coordinates": {
+            "reference_median_ms": 0.058426,
+            "candidate_median_ms": 0.027035999999999998,
+            "paired_median_saving_ms": 0.031369999999999995,
+            "ci95_low_ms": 0.030869,
+            "ci95_high_ms": 0.032281,
+            "wins": 498
+          },
+          "wall_ms": {
+            "reference_median_ms": 8.912582,
+            "candidate_median_ms": 8.439571999999998,
+            "paired_median_saving_ms": 0.48698549999999985,
+            "ci95_low_ms": 0.4238210000000002,
+            "ci95_high_ms": 0.5462539999999994,
+            "wins": 415
+          }
+        },
+        "atlas_after_vs_singular": {
+          "internal_ms": {
+            "reference_median_ms": 2.622,
+            "candidate_median_ms": 3.037385,
+            "paired_median_saving_ms": -0.42120900000000017,
+            "ci95_low_ms": -0.437322,
+            "ci95_high_ms": -0.40516300000000016,
+            "wins": 24
+          },
+          "outside_ms": {
+            "reference_median_ms": 8.030974,
+            "candidate_median_ms": 5.4245045,
+            "paired_median_saving_ms": 2.698112500000001,
+            "ci95_low_ms": 2.626893499999999,
+            "ci95_high_ms": 2.7537890000000003,
+            "wins": 490
+          },
+          "wall_ms": {
+            "reference_median_ms": 10.604652000000002,
+            "candidate_median_ms": 8.439571999999998,
+            "paired_median_saving_ms": 2.2772174999999995,
+            "ci95_low_ms": 2.1849428125000006,
+            "ci95_high_ms": 2.3441229999999997,
+            "wins": 488
+          }
+        },
+        "atlas_before_vs_singular": {
+          "internal_ms": {
+            "reference_median_ms": 2.622,
+            "candidate_median_ms": 3.5016475,
+            "paired_median_saving_ms": -0.8970429999999998,
+            "ci95_low_ms": -0.9229890000000001,
+            "ci95_high_ms": -0.8596089999999998,
+            "wins": 12
+          },
+          "outside_ms": {
+            "reference_median_ms": 8.030974,
+            "candidate_median_ms": 5.431828500000001,
+            "paired_median_saving_ms": 2.653923499999999,
+            "ci95_low_ms": 2.5842925000000005,
+            "ci95_high_ms": 2.7231579999999993,
+            "wins": 489
+          },
+          "wall_ms": {
+            "reference_median_ms": 10.604652000000002,
+            "candidate_median_ms": 8.912582,
+            "paired_median_saving_ms": 1.7770755000000005,
+            "ci95_low_ms": 1.7353064999999992,
+            "ci95_high_ms": 1.8432010000000005,
+            "wins": 479
+          }
+        }
+      },
+      "median_translation_stages_combined_ms": {
+        "atlas_before": 1.3027095,
+        "atlas_after": 0.8381255000000001
+      }
+    }
+  }
+}

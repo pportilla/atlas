@@ -17,13 +17,14 @@ supply the numerical data for fresh charts and for saved equations.
 """
 from collections import Counter
 from functools import lru_cache
-from itertools import combinations, combinations_with_replacement
+from itertools import combinations, combinations_with_replacement, groupby, islice
 import re
 
 from . import native_library
 from .chart_kernel import crossings_rows, strata_rows
 from .fan_geometry import _determinant, complete_fan, fan_cover, split_cone
-from .polynomial import InputError, format_poly, parse_expression, sparse_row, rational_text
+from .polynomial import (InputError, format_poly, integer_from_decimal, integer_text,
+                         parse_expression, rational_text, sparse_row)
 from .strata import InvalidChart, records
 
 
@@ -229,6 +230,55 @@ def _prime_branch(generator, coords, field):
     return len(primes) == 1 and primes[0][1] == 1
 
 
+def _chart_parts(charts, regions, marked, dimension):
+    for (chart, cone), excluded in zip(charts, regions):
+        coords = tuple(chart["coordinates"]) + marked
+        if (len(coords) != dimension or len(set(coords)) != dimension or any(not isinstance(v, str) or
+                not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", v) for v in coords)):
+            raise InputError("Each regular chart needs distinct coordinates.")
+        yield chart, cone, excluded, coords
+
+
+def _owned_supports(monomials, excluded):
+    masks = [sum(1 << i for i, k in enumerate(e) if k) for e in monomials]
+    masks.extend(sum(1 << j for j in face) for face in excluded)
+    return " ".join(map(str, masks))
+
+
+def _fan_chart_rows(parts, equation, term_count, base, linear):
+    """Pull back the original equation through the common linear map, then through each cone."""
+    n = len(base)
+    names = " ".join(base)
+    units = tuple(_unit(j, n) for j in range(n))
+    adapted = equation
+    if linear != units:
+        images = [format_poly(dict(zip(units, row)), base) for row in linear]
+        row, = native_library.affine_request(["pullbacks", names, names, *images, "0", adapted])
+        terms = sparse_row(row)
+        term_count = len(terms)
+        adapted = format_poly(terms, base)
+        del row, terms  # Only the adapted equation is needed while streaming chart blocks.
+    if not term_count:
+        raise InvalidChart("Expected a nonzero fan equation.")
+    # Keep only a block of chart responses in memory, even for large equations.
+    block_size = max(1, min(64, 16384 // term_count))
+    with_projection = hasattr(native_library._library(), "atlas_fan_projection_abi")
+    operation = "fan_charts_with_projection" if with_projection else "fan_charts"
+    frame = [" ".join(map(integer_text, row)) for row in linear] if with_projection else []
+    width = 4 + len(frame)
+    for coords, group in groupby(parts, key=lambda part: part[3]):
+        while block := list(islice(group, block_size)):
+            request = [operation, names, " ".join(coords), adapted, *frame]
+            for _, cone, excluded, _ in block:
+                request.extend(" ".join(map(integer_text, ray)) for ray in cone)
+                request.append(_owned_supports(zip(*cone), excluded))
+            rows = native_library.affine_request(request)
+            if len(rows) != width * len(block):
+                raise ArithmeticError("The native fan operation returned incomplete chart data.")
+            for i, part in enumerate(block):
+                yield part, rows[width*i:width*(i+1)]
+
+
 def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integrals):
     from .point_atlas import _field, _invertible, _same_ideal, monomial_matrix
     base = record["variables"]
@@ -277,11 +327,12 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             f = _product(parts)
     base_header = " ".join((*base, *marked))
     direct_jet = not named and hasattr(native_library._library(), "atlas_crossing_jet_abi")
-    for (chart, cone), excluded in zip(charts, regions):
-        coords = tuple(chart["coordinates"]) + (() if saved else marked)
-        if (len(coords) != dimension or len(set(coords)) != dimension or any(not isinstance(v, str) or
-                not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", v) for v in coords)):
-            raise InputError("Each regular chart needs distinct coordinates.")
+    parts = _chart_parts(charts, regions, () if saved else marked, dimension)
+    if not split and direct_jet and reduced is None and hasattr(native_library._library(), "atlas_fan_charts_abi"):
+        verified = _fan_chart_rows(parts, f, len(polynomial), base, linear)
+    else:
+        verified = ((part, None) for part in parts)
+    for (chart, cone, excluded, coords), fan_rows in verified:
         monomials = tuple(zip(*cone))
         if set(chart["map"]) != set(base):
             raise InvalidChart("The projection map differs from its monomial chart.")
@@ -296,7 +347,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                     raise InvalidChart("The common linear coordinates of the fan are singular.")
                 linear = matrix
         else:
-            projection = tuple(format_poly(dict(zip(monomials, row)), coords) for row in linear)
+            projection = (fan_rows[4:] if fan_rows is not None and len(fan_rows) > 4 else
+                          tuple(format_poly(dict(zip(monomials, row)), coords) for row in linear))
             # Most producers already use the canonical text of the verified
             # projection. Compare other spellings in the polynomial ring.
             if any(actual != expected and _row(actual, coords) != _row(expected, coords)
@@ -305,19 +357,24 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         region = [format_poly({tuple(int(j in face) for j in range(n)): 1}, coords)
                   for face in excluded]
         exceptional = [j for j, ray in enumerate(cone) if ray not in axes]
-        chart_header = ["chart", " ".join(coords), base_header, *projection, *marked, modulus]
-        indices = " ".join(map(str, exceptional))
-        jet_request = []
-        if direct_jet:
-            supports = [sum(1 << i for i, k in enumerate(e) if k) for e in monomials]
-            supports.extend(sum(1 << j for j in face) for face in excluded)
-            jet_request = [" ".join(map(str, supports))]
-        rows = native_library.affine_request([*chart_header, f, indices, *(jet_request if reduced is None else ())])
-        strict_rows = rows if reduced is None else native_library.affine_request(
-            [*chart_header, reduced, indices, *jet_request])
-        strict_row = strict_rows[-2] if direct_jet else strict_rows[-1]
-        strict, strict_text = _chart_equation(strict_row, coords)
-        has_strict = any(any(e[:n]) for e in strict)
+        if fan_rows is not None:
+            header, strict_text, strict_row, jet = fan_rows[:4]
+            numbers = iter(map(integer_from_decimal, header.split()))
+            has_strict = bool(next(numbers))
+            orders = zip(numbers, numbers, strict=True)
+            strict = sparse_row(strict_row) if complex and intrinsic else None
+        else:
+            chart_header = ["chart", " ".join(coords), base_header, *projection, *marked, modulus]
+            indices = " ".join(map(str, exceptional))
+            jet_request = [_owned_supports(monomials, excluded)] if direct_jet else []
+            rows = native_library.affine_request([*chart_header, f, indices, *(jet_request if reduced is None else ())])
+            strict_rows = rows if reduced is None else native_library.affine_request(
+                [*chart_header, reduced, indices, *jet_request])
+            strict_row = strict_rows[-2] if direct_jet else strict_rows[-1]
+            jet = strict_rows[-1] if direct_jet else None
+            strict, strict_text = _chart_equation(strict_row, coords)
+            has_strict = any(any(e[:n]) for e in strict)
+            orders = (map(integer_from_decimal, row.split()) for row in rows[:len(exceptional)])
         ambient_rows = [_row(g, coords) for g in ambient]
         def same_ideal(gens, expected):
             return (_same_ideal(coords, ambient, gens, expected) if field
@@ -398,8 +455,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             labels = {j: {"id": f"E{chart['ray_indices'][j]-n+1}"} for j in exceptional}
         components = []
         here = []
-        for pos, j in enumerate(exceptional):
-            order, nu = map(int, rows[pos].split())
+        for j, (order, nu) in zip(exceptional, orders, strict=True):
             c = labels[j]
             label = c["id"]
             if split and not saved and any(k in c and (type(c[k]) != int or c[k] != value)
@@ -450,7 +506,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                                     *(_row(g, coords) for g in region)]))
         crossing_ideals = ideals
         if has_strict and not named:
-            jet = strict_rows[-1] if direct_jet else _crossing_strict(coords, strict_text, monomials, excluded)
+            if jet is None:
+                jet = _crossing_strict(coords, strict_text, monomials, excluded)
             crossing_ideals = [*ideals[:-1], (jet,)]
         if crossings_rows(dimension, n, ambient_rows, crossing_ideals, owned, ()):
             if not intrinsic:

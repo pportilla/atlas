@@ -169,6 +169,7 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
     sections, labels, rays_by_label = {}, [], {}
     exhaustive = exhaustive_faces()
     visible = set()
+    seen_faces = set()
     global_equation = None
     for details in chart_terms:
         rays, boundary, terms = details
@@ -196,6 +197,13 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
             for indices in combinations(range(dimension), size):
                 if not any(i in boundary for i in indices):
                     continue
+                if common_source:
+                    # A cone face defines one orbit across all charts containing it.
+                    # Coordinate rays also determine its section and its image in the base.
+                    face = frozenset(rays[i] for i in indices)
+                    if face in seen_faces:
+                        continue
+                    seen_faces.add(face)
                 if size == 1:
                     restricted = hyperplanes[indices[0]]
                 else:

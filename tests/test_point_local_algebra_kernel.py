@@ -237,8 +237,10 @@ class PointLocalAlgebraKernel(unittest.TestCase):
         x, y = variables = np.symbols("x y")
         degree = 2**64 + 17
         f = (x - Fraction(2, 3))**2 + np.from_terms(variables, {(0, degree): 1})
-        with patch("engine.quotient_monomials._box_points", side_effect=AssertionError("enumerated a basis")):
+        from engine.quotient_monomials import affine_request
+        with patch("engine.quotient_monomials.affine_request", wraps=affine_request) as request:
             for operation in LOCAL_NUMBERS:
                 with self.subTest(operation=operation):
                     result = calculate(operation, f, variables, point=["2/3", 0])
                     self.assertEqual((result["finite"], result["value"]), (True, degree - 1))
+        self.assertEqual({call.args[0][0] for call in request.call_args_list}, {"monomial_length"})

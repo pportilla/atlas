@@ -1,10 +1,12 @@
 """Shell commands for exact polynomial and ideal arithmetic."""
 
 import argparse
+import re
 import sys
 
 from .exact_json import result_json
 from .polynomial import integer_text
+from .series_display import format_hilbert_series
 
 
 _DESCRIPTIONS = {
@@ -16,10 +18,17 @@ _DESCRIPTIONS = {
     "normal-form": "reduce a polynomial modulo an ideal",
     "membership": "test whether a polynomial belongs to an ideal",
     "eliminate": "eliminate variables from an ideal",
+    "radical": "compute the radical of a polynomial ideal over QQ",
     "intersection": "intersect two ideals",
     "quotient": "compute the quotient of two ideals",
     "saturation": "saturate an ideal by a polynomial",
     "dimension": "compute the Krull dimension of the quotient ring",
+    "multiplicity": "compute the dimension over QQ of a finite-colength quotient across all its points",
+    "hilbert-series": "compute the standard graded Hilbert series of a quotient by a homogeneous ideal over QQ",
+    "tangent-cone": "compute the homogeneous ideal of the tangent cone at a rational point",
+    "zariski-tangent-space": "compute the linear equations and a basis of tangent directions at a rational point",
+    "embedding-dimension": "compute the dimension of the Zariski tangent space at a rational point",
+    "tangent-cone-hilbert-series": "compute the graded Hilbert series of the tangent cone at a rational point",
     "hilbert-samuel-function": "compute local quotient lengths and graded dimensions at the requested degrees",
     "hilbert-samuel-multiplicity": "compute the Hilbert–Samuel multiplicity of the local quotient",
     "quotient-basis": "compute a vector space basis of the global quotient algebra over QQ",
@@ -96,6 +105,16 @@ def register_parser(subparsers):
         parser.add_argument("--json", action="store_true", help="print the complete result as JSON")
 
 
+def _show_direction_equations(result, equations, label, empty):
+    # The wire record uses the original coordinate names for directions.
+    names = result["ring"]["variables"]
+    if names:
+        point = result.get("point", ["0"] * len(names))
+        print("Tangent coordinates:", ", ".join(f"Δ{v} = {v} - ({p})" for v, p in zip(names, point)))
+    directions = [re.sub(r"[A-Za-z][A-Za-z0-9_]*", r"Δ\g<0>", f) for f in equations]
+    print(label, ", ".join(directions) or empty)
+
+
 def _show(record):
     result = record["result"]
     ring = result["ring"]
@@ -106,7 +125,23 @@ def _show(record):
         print("Scope:", result["scope"])
     if "point" in result:
         print("Point: (" + ", ".join(result["point"]) + ")")
-    if result["type"] in ("basis", "ideal", "local-standard-basis"):
+    if result["type"] in ("hilbert-series", "tangent-cone-hilbert-series", "tangent-cone"):
+        if result["type"] == "tangent-cone":
+            _show_direction_equations(result, result["generators"], "Tangent cone generators:", "(zero ideal)")
+        else:
+            print("H(t) =", format_hilbert_series(result["numerator"], result["denominator_power"]))
+        print("Dimension:", integer_text(result["dimension"]))
+        print("Multiplicity:", integer_text(result["multiplicity"]))
+    elif record["operation"] in ("zariski-tangent-space", "embedding-dimension"):
+        space = result["type"] == "zariski-tangent-space"
+        if space:
+            _show_direction_equations(result, result["equations"], "Tangent equations:", "(no constraints)")
+            vectors = ["(" + ", ".join(v) + ")" for v in result["basis"]]
+            print("Basis of tangent directions:", ", ".join(vectors) or "(zero space)")
+        print("Ambient dimension:", result["ambient_dimension"])
+        print("Jacobian rank:", result["jacobian_rank"])
+        print("Embedding dimension:", result["dimension"] if space else result["value"])
+    elif result["type"] in ("basis", "ideal", "local-standard-basis"):
         print("Generators:", ", ".join(result["generators"]) or "(zero ideal)")
     elif result["type"] == "local-normal-form":
         print("Reduction:", result["reduction"])
@@ -125,6 +160,11 @@ def _show(record):
         print(f"{label}:", result["polynomial"])
     elif result["type"] == "boolean":
         print("Member:", "yes" if result["value"] else "no")
+    elif record["operation"] == "multiplicity":
+        if result["finite"]:
+            print("Multiplicity:", integer_text(result["value"]))
+        else:
+            print("The ideal has infinite colength.")
     elif record["operation"] in ("hilbert-samuel-function", "hilbert-samuel-multiplicity"):
         print("Dimension:", integer_text(result["dimension"]))
         function = result["type"] == "hilbert-samuel-function"

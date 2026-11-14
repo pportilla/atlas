@@ -27,6 +27,17 @@ class ExhaustivePlane(unittest.TestCase):
             rhs = parse(chart["ambient_total_transform"],chart["coordinates"],bounded=False)
             self.assertEqual(lhs,rhs,chart["id"])
 
+    def test_simple_tangent_branches_fit_quick_chart_budget(self):
+        # In the x-chart the two finite slopes are ±1. Fully translating
+        # every high-degree term at either slope would create over 8192 terms.
+        expression = "-{x}^2+" + "+".join(f"{{y}}^{n}" for n in range(2,129))
+        polynomial = expression.format(x="x",y="y")
+        result = solve(polynomial,search="quick")
+        self.assertEqual(result["status"],"resolved")
+        self.assertEqual(len(result["steps"]),1)
+        self.assertEqual([b["point"] for b in result["branches"]],[["0","-1"],["0","1"]])
+        self.check_pullbacks(result,expression)
+
     def test_long_cusp_enters_constructive_algorithm(self):
         # For y²=x^(2m+1), m successive x-chart blowups produce v²=x.
         # Embedded resolution needs two more blowups for tangency and the

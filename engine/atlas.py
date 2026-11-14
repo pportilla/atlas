@@ -38,7 +38,9 @@ map alone:
           each earlier chart.
 
 Affine maps, including translated point blowups and sheared fans, use native
-pullbacks and orders. A regular fan supplies its common faces for overlaps.
+pullbacks and orders. For a regular rational fan the kernel applies the common
+linear change once, then uses the ray matrices for strict transforms and
+Jacobian orders. A regular fan supplies its common faces for overlaps.
 The kernel's sparse exponent and coefficient lists also supply the torus
 orbit sections and the polynomials in the serialized charts. An affine
 strict transform need not be converted into a dense coefficient array.
@@ -377,7 +379,7 @@ def _field_relation(t, relation, degree):
     return len(factors) == 1 and factors[0][1] == 1
 
 
-def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True):
+def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False):
     """What the atlas determines, by the same computations for every engine.
 
     Returns numerical data, strata, and, if requested, the full dual complex
@@ -405,7 +407,10 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True)
                 raise GiveUp("Distinct strict components meet over the origin on the proposed smooth transform.")
             if not integrals:
                 owned = replace(owned, components=strict)
-        if _own_failures(owned, dimension, known)[0]:
+        if factor_fibre:
+            from .repeated_tangent import certify_fibre
+            certify_fibre(owned, dimension)
+        elif _own_failures(owned, dimension, known)[0]:
             raise GiveUp("The total transform fails normal crossings at a point of a chart.")
     answer = {}
     if integrals:

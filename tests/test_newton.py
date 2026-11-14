@@ -286,6 +286,14 @@ class GeneralNewton(unittest.TestCase):
         result.update(variables=list("xyz"),polynomial="(x+y)*(x+y+z)+z^4",mode="intrinsic",origin=[0,0,0])
         self.assertEqual(topological_zeta(result)["expression"],"(s + 1)^(-2)")
 
+    def test_failed_repair_skips_chart_expansion(self):
+        from unittest.mock import patch
+        names = list("xyz")
+        polynomial = parse("(x+y)^2+z^3+x^3", names)
+        with patch("engine.newton_backend.transform_atlas") as transform:
+            self.assertIsNone(resolve_newton(polynomial, names, "embedded", defer_outputs=True))
+            transform.assert_not_called()
+
     def test_nonprimitive_support_lattice(self):
         # Support differences span a proper finite-index sublattice of the
         # rank-two saturated plane. The Fermat curve is still irreducible.

@@ -272,11 +272,14 @@ def _prime_groups(charts, pieces, overlap, transition):
         return False
 
     for p, ((i, strict), prime) in enumerate(pieces):
+        distinct = set()
         for q in range(p):
             (j, other_strict), other = pieces[q]
-            if i == j or strict != other_strict or root(p) == root(q):
+            target = root(q)
+            if i == j or strict != other_strict or root(p) == target or target in distinct:
                 continue
             if different_images(i,prime,j,other):
+                distinct.add(target)
                 continue
             direct = transition(j, i)
             if direct is not None:
@@ -302,7 +305,13 @@ def _prime_groups(charts, pieces, overlap, transition):
             source = (*graph, *(g.xreplace(swap_a) for g in other))
             if _present(coords, source, holes) and all(
                     not _present(coords, source, (*holes, (g.xreplace(swap_b),))) for g in prime):
-                parents[root(p)] = root(q)
+                parents[root(p)] = target
+            else:
+                # The saturated diagonal covers the entire chart overlap.
+                # Two nonempty chart restrictions of one irreducible prime
+                # share its generic point. An empty restriction here, or a
+                # point outside the target prime, rules out its whole class.
+                distinct.add(target)
     groups = defaultdict(dict)
     for p, (section, prime) in enumerate(pieces):
         group = groups[root(p)]

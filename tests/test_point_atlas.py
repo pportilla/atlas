@@ -244,6 +244,24 @@ class PointAtlas(unittest.TestCase):
                 self.assertEqual(result["strata"], record["topological_zeta"]["strata"])
                 self.assertEqual(result["dual_complex"]["vertices"], [{"id":"E1", "dimension":1}])
 
+    def test_ordinary_strata_with_zero_euler_characteristic(self):
+        # A smooth plane cubic is elliptic (χ=0); a smooth quadric surface
+        # is P¹ × P¹ (χ=4), filling the Euler characteristic of P³.
+        for names, equation, expected in (
+            ("xyz", "x^3+y^3+z^3+x^4", [{"components": ["E1"], "euler_characteristic": 3}]),
+            ("xyzt", "x^2+y^2+z^2+t^2+x^3", [{"components": ["E1","strict"], "euler_characteristic": 4}]),
+        ):
+            with self.subTest(equation=equation):
+                variables = list(names)
+                polynomial = parse(equation, variables)
+                result = resolve(dict(variables=variables, polynomial=equation, mode="embedded", monodromy=True))
+                self.assertEqual(result["topological_zeta"]["strata"], expected)
+                saved = dict(variables=variables, atlas=json.loads(json.dumps(result["atlas"])))
+                self.assertEqual(point_outputs(saved, polynomial)[1]["strata"], expected)
+                saved["atlas"][-1]["components"][-1]["ideal"] = ["1"]
+                with self.assertRaisesRegex(InvalidChart, "saved component ideal"):
+                    point_outputs(saved, polynomial)
+
     def test_actual_pullback_and_projective_partition_are_verified(self):
         names = list("xyz")
         f = "x^2+y^2+z^2"

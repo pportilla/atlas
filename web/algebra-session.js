@@ -51,7 +51,17 @@ class AlgebraSession {
         }
         operands.point = saved.result.point;
       }
-      if (key === "ideal" && saved.result.type === "basis" && ["normal-form", "membership"].includes(form.operation)) {
+      if (saved.result.type === "tangent-cone") {
+        if (key !== "ideal" || !AlgebraSession.coneInputs.has(form.operation)) {
+          throw new Error("Choose an operation on the saved tangent cone at its vertex.");
+        }
+        const vertex = form.ring.variables.map(() => "0");
+        if (operands.point && !AlgebraSession.samePoint(operands.point, vertex)) {
+          throw new Error("The vertex of “" + name + "” has all tangent coordinates zero. Clear the point or enter the vertex.");
+        }
+      }
+      if (key === "ideal" && saved.result.type === "basis" && (["normal-form", "membership"].includes(form.operation)
+          || (form.operation === "multiplicity" && saved.basisRef))) {
         if (!saved.basisRef) throw new Error("Compute and save this basis again to obtain a reference from the server.");
         delete operands.ideal;
         operands.basis_ref = saved.basisRef;
@@ -87,9 +97,10 @@ class AlgebraSession {
     const firstSource = Object.values(form.sources)[0];
     // Eliminations of different subsets can reach the same surviving
     // coordinates. Keep the original declaration, independent of that path.
-    const origin = firstSource ? this.objects.get(firstSource).origin : form.ring;
+    let origin = firstSource ? this.objects.get(firstSource).origin : form.ring;
+    if (answer.result.coordinate_system === "tangent") origin = { tangentSpace: form.name };
     const survivors = answer.result.ring.variables;
-    const space = survivors.length ? JSON.stringify([origin, survivors]) : "QQ";
+    const space = survivors.length || origin.tangentSpace ? JSON.stringify([origin, survivors]) : "QQ";
     this.objects.set(form.name, { result: answer.result, basisRef: answer.basis_ref, origin, space });
     if (answer.result.type === "factorization") {
       answer.result.factors.forEach(({ polynomial }, index) => {
@@ -195,7 +206,11 @@ class AlgebraSession {
 }
 
 AlgebraSession.hypersurfaceOperations = new Set(["local-jacobian-algebra", "milnor-number", "tjurina-number"]);
-AlgebraSession.localBasisInputs = new Set(["local-normal-form", "local-quotient-basis", "hilbert-samuel-function", "hilbert-samuel-multiplicity"]);
+AlgebraSession.coneInputs = new Set(["tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension"]);
+AlgebraSession.localBasisInputs = new Set([
+  "local-normal-form", "local-quotient-basis", "hilbert-samuel-function", "hilbert-samuel-multiplicity",
+  "tangent-cone", ...AlgebraSession.coneInputs,
+]);
 AlgebraSession.pointOperations = new Set([
   ...AlgebraSession.hypersurfaceOperations, ...AlgebraSession.localBasisInputs, "local-standard-basis",
 ]);
@@ -203,7 +218,8 @@ AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate dimension gcd factor resultant algebra_request help quit exit " +
+  "quotient saturation saturate radical dimension multiplicity gcd factor resultant algebra_request help quit exit " +
   "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form " +
-  "hilbert_samuel_function hilbert_samuel_multiplicity"
+  "hilbert_series hilbert_samuel_function hilbert_samuel_multiplicity tangent_cone tangent_cone_hilbert_series " +
+  "zariski_tangent_space embedding_dimension"
 ).split(" "));
