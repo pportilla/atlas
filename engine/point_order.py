@@ -8,7 +8,8 @@ from .point_germs import nonzero_terms_at_point
 
 def _new_row(row, pivots):
     """Retain a new independent moment row using integer elimination."""
-    for i, value in enumerate(row):
+    for i in range(len(row)):
+        value = row[i]
         if not value:
             continue
         pivot = pivots.get(i)
