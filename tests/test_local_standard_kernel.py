@@ -114,6 +114,51 @@ class LocalStandardKernel(unittest.TestCase):
         self.assertEqual(native(result["unit"], names), 1)
         self.assertEqual(native(result["remainder"], names), native(standard, names))
 
+    def test_associate_rows_remain_polynomials_and_replay_without_a_lift(self):
+        names = ("x", "y")
+        for point in (["0", "0"], ["1/2", "-2/3"]):
+            a, b = (f"({name}-({p}))" for name, p in zip(names, point))
+            rows = [f"{a}*{b}*(1+{a})", f"{a}*{b}*(1+{b})", f"{a}^2*{b}*(1-{b})"]
+            ideal = [f"2*({rows[0]})", f"-3/5*({rows[0]})", f"-7*({rows[1]})", rows[2]]
+            expected = {native(f, names) for f in rows[:2]}
+            for order in ("lex", "grevlex"):
+                with self.subTest(point=point, order=order), patch.object(
+                        local_standard, "_homogeneous_local_basis", side_effect=AssertionError("unexpected lift")):
+                    basis = self.calculate("local-standard-basis", ideal, names=names, point=point, order=order)
+                    result = basis["generators"]
+                    # xy is the only minimal local head. Keep one actual monic
+                    # polynomial with that head, including its unit factor.
+                    self.assertEqual(len(result), 1)
+                    self.assertIn(native(result[0], names), expected)
+                    self.assertEqual(self.calculate("local-standard-basis", ideal[::-1], names=names,
+                                                    point=point, order=order), basis)
+                    self.assertEqual(self.calculate("local-standard-basis", result, names=names,
+                                                    point=point, order=order), basis)
+                    if shutil.which("Singular"):
+                        original = ",".join(str(translated(f, names, point)) for f in ideal)
+                        selected = translated(result[0], names, point)
+                        self.assertEqual(singular("Ds" if order == "lex" else "ds", [
+                            f"ideal I={original}; ideal G=std(I); ideal B={selected};",
+                            'print("ANSWER "+string(size(reduce(B,G))==0));',
+                            'print("ANSWER "+string(size(reduce(I,std(B)))==0));',
+                            'print("ANSWER "+string(size(reduce(lead(G),std(lead(B))))==0));',
+                            'print("ANSWER "+string(size(reduce(lead(B),std(lead(G))))==0));',
+                        ], names), [1, 1, 1, 1])
+
+    def test_missing_coordinatewise_minimum_uses_general_basis(self):
+        names = ("x", "y")
+        # x+y² has componentwise minimum (0,0) across its exponents, but no
+        # constant term. Together with x*(1+x) it forces y² into the ideal.
+        ideal = ["x*(1+x)", "x+y^2"]
+        for order in ("lex", "grevlex"):
+            with self.subTest(order=order), patch.object(
+                    local_standard, "_homogeneous_local_basis", wraps=local_standard._homogeneous_local_basis) as lift:
+                basis = self.calculate("local-standard-basis", ideal, names=names, order=order)
+                lift.assert_called_once()
+                heads = {local_head(native(g, names), names, order) for g in basis["generators"]}
+                self.assertEqual(len(basis["generators"]), 2)
+                self.assertEqual(heads, {(1, 0), (0, 2)})
+
     @unittest.skipUnless(shutil.which("Singular"), "Singular is not installed")
     def test_weak_normal_forms_and_leading_ideal_match_singular_at_the_point(self):
         names, point = ("x", "y"), ["1/2", "1/3"]

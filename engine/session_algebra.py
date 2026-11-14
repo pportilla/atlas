@@ -98,8 +98,17 @@ class _Basis(_IdealResult):
     _label = "Groebner basis"
 
 
+class _AtPoint:
+    @property
+    def point(self):
+        result = self._record["result"]
+        if result["scope"] == "origin":
+            return ["0"] * len(self.variables)
+        return list(result["point"])
+
+
 @dataclass(frozen=True, eq=False, repr=False)
-class _PointResult(_Result):
+class _PointResult(_AtPoint, _Result):
     _space: _CoordinateSpace
     order: str
     _record: dict
@@ -108,10 +117,6 @@ class _PointResult(_Result):
     @property
     def scope(self):
         return self._record["result"]["scope"]
-
-    @property
-    def point(self):
-        return list(self._record["result"]["point"])
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -221,8 +226,8 @@ class _QuotientData:
         return self._record["result"]["finite"]
 
 
-class _LocalNumber(_QuotientData, _ScalarResult):
-    _fields = _ScalarResult._fields | _QuotientData._fields
+class _LocalNumber(_AtPoint, _QuotientData, _ScalarResult):
+    _fields = _ScalarResult._fields | _QuotientData._fields | {"point"}
 
     def __repr__(self):
         return integer_text(self.value) if self.finite else "infinite"
@@ -245,10 +250,14 @@ class _QuotientBasis(_QuotientData, _Result):
         return f"{self.type}({self.scope}, dimension={dimension})"
 
 
+class _LocalQuotientBasis(_AtPoint, _QuotientBasis):
+    _fields = _QuotientBasis._fields | {"point"}
+
+
 @dataclass(frozen=True, eq=False, repr=False)
-class _JacobianAlgebra(_QuotientBasis):
+class _JacobianAlgebra(_LocalQuotientBasis):
     generators: tuple[Polynomial, ...]
-    _fields = _QuotientBasis._fields | {"generators"}
+    _fields = _LocalQuotientBasis._fields | {"generators"}
 
 
 def _polynomial(value, space):
@@ -384,7 +393,8 @@ def _typed(record, space):
         basis = None if result["basis"] is None else polynomials(result["basis"])
         if kind == "local-jacobian-algebra":
             return _JacobianAlgebra(space, order, record, basis, polynomials(result["generators"]))
-        return _QuotientBasis(space, order, record, basis)
+        cls = _QuotientBasis if result["scope"] == "global" else _LocalQuotientBasis
+        return cls(space, order, record, basis)
     if kind == "polynomial":
         return _PolynomialResult(space, decode(result["polynomial"]), order, record)
     if kind == "factorization":
@@ -427,9 +437,17 @@ def _require_ideal(value):
 
 
 def _calculate(operation, left, compute, **operands):
-    local_basis = isinstance(left, _LocalStandardBasis) and operation == "local-normal-form"
+    local_basis = (isinstance(left, _LocalStandardBasis)
+                   and operation in ("local-normal-form", "local-quotient-basis"))
     if not local_basis:
         left = _require_ideal(left)
+    point = operands.pop("point", None)
+    if point is not None:
+        operands["point"] = _local_point(point, len(left.variables))
+    if local_basis:
+        saved_point = left.point
+        if operands.setdefault("point", saved_point) != saved_point:
+            raise ValueError("The supplied point differs from the saved local standard basis point.")
     if "other_ideal" in operands:
         right = _require_ideal(operands["other_ideal"])
         if right._space is not left._space:
@@ -441,7 +459,8 @@ def _calculate(operation, left, compute, **operands):
         operands["polynomial"] = str(_polynomial(operands["polynomial"], left._space))
     operands["ideal"] = [str(f) for f in left.generators]
     request = {"operation": operation, "ring": left.ring, "operands": operands, "compute": compute}
-    known_basis = local_basis or (isinstance(left, _Basis) and operation in ("groebner", "normal-form", "membership"))
+    known_basis = ((local_basis and operation == "local-normal-form") or
+                   (isinstance(left, _Basis) and operation in ("groebner", "normal-form", "membership")))
     return _typed(_evaluate(request, known_basis=known_basis), left._space)
 
 
@@ -453,29 +472,18 @@ def normal_form(polynomial, ideal, *, compute="auto"):
     return _calculate("normal-form", ideal, compute, polynomial=polynomial)
 
 
-def _local_point(point, ideal):
-    if point is None:
-        return ["0"] * len(ideal.variables)
+def _local_point(point, dimension):
     if not isinstance(point, (list, tuple)):
         raise TypeError("Pass the point as a list or tuple in coordinate order.")
     entries = [rational_text(value) if isinstance(value, Fraction) else value for value in point]
-    return normalize_point(entries, len(ideal.variables))
+    return normalize_point(entries, dimension)
 
 
 def local_standard_basis(ideal, *, point=None, compute="auto"):
-    ideal = _require_ideal(ideal)
-    return _calculate("local-standard-basis", ideal, compute, point=_local_point(point, ideal))
+    return _calculate("local-standard-basis", ideal, compute, point=point)
 
 
 def local_normal_form(polynomial, ideal, *, point=None, compute="auto"):
-    if isinstance(ideal, _LocalStandardBasis):
-        saved_point = ideal.point
-        if point is not None and _local_point(point, ideal) != saved_point:
-            raise ValueError("The supplied point differs from the saved local standard basis point.")
-        point = saved_point
-    else:
-        ideal = _require_ideal(ideal)
-        point = _local_point(point, ideal)
     return _calculate("local-normal-form", ideal, compute, polynomial=polynomial, point=point)
 
 
@@ -483,10 +491,13 @@ def membership(polynomial, ideal, *, compute="auto"):
     return _calculate("membership", ideal, compute, polynomial=polynomial)
 
 
-def _calculate_polynomials(operation, order, variables, compute, **operands):
+def _calculate_polynomials(operation, order, variables, compute, *, point=None, **operands):
     space, values, order = _polynomial_inputs(operands.values(), order, variables, _scalar_space)
+    inputs = {key: str(f) for key, f in zip(operands, values)}
+    if point is not None:
+        inputs["point"] = _local_point(point, len(space.names))
     request = {"operation": operation, "ring": {"field": "QQ", "variables": list(space.names), "order": order},
-               "operands": {key: str(f) for key, f in zip(operands, values)}, "compute": compute}
+               "operands": inputs, "compute": compute}
     return _typed(_evaluate(request), space)
 
 
@@ -500,16 +511,16 @@ def factor(polynomial, *, order=None, variables=None, compute="auto"):
     return _calculate_polynomials("factor", order, variables, compute, polynomial=polynomial)
 
 
-def local_jacobian_algebra(polynomial, *, order=None, variables=None, compute="auto"):
-    return _calculate_polynomials("local-jacobian-algebra", order, variables, compute, polynomial=polynomial)
+def local_jacobian_algebra(polynomial, *, point=None, order=None, variables=None, compute="auto"):
+    return _calculate_polynomials("local-jacobian-algebra", order, variables, compute, polynomial=polynomial, point=point)
 
 
-def milnor_number(polynomial, *, order=None, variables=None, compute="auto"):
-    return _calculate_polynomials("milnor-number", order, variables, compute, polynomial=polynomial)
+def milnor_number(polynomial, *, point=None, order=None, variables=None, compute="auto"):
+    return _calculate_polynomials("milnor-number", order, variables, compute, polynomial=polynomial, point=point)
 
 
-def tjurina_number(polynomial, *, order=None, variables=None, compute="auto"):
-    return _calculate_polynomials("tjurina-number", order, variables, compute, polynomial=polynomial)
+def tjurina_number(polynomial, *, point=None, order=None, variables=None, compute="auto"):
+    return _calculate_polynomials("tjurina-number", order, variables, compute, polynomial=polynomial, point=point)
 
 
 def eliminate(ideal, *variables, compute="auto"):
@@ -545,8 +556,8 @@ def quotient_basis(ideal, *, compute="auto"):
     return _calculate("quotient-basis", ideal, compute)
 
 
-def local_quotient_basis(ideal, *, compute="auto"):
-    return _calculate("local-quotient-basis", ideal, compute)
+def local_quotient_basis(ideal, *, point=None, compute="auto"):
+    return _calculate("local-quotient-basis", ideal, compute, point=point)
 
 
 def algebra_bindings():

@@ -1,4 +1,4 @@
-"""Rational quotient algebras globally and at the coordinate origin.
+"""Rational quotient algebras globally and at rational affine points.
 
 The local order takes the terms of lowest total degree first, breaking ties
 by the requested order on the coordinates. A homogeneous lift realizes this
@@ -11,8 +11,10 @@ local algebra. A surviving pure power in every degree implies infinite length.
 from . import native_polynomial as np
 from .algebra_execution import cpu_stage, stage_label
 from .algebra_groebner import reduced_basis
-from .polynomial import InputError, format_poly
+from .point_germs import centered_ideal, nonzero_terms_at_point
+from .polynomial import InputError, format_poly, integer_text, rational_text
 from .quotient_monomials import quotient_monomials
+from .rational_point import coordinate_fraction, normalize_point
 
 
 def _leading(powers, order):
@@ -87,39 +89,101 @@ def _jacobian(variables, terms):
         return tuple(np.from_terms(variables, partial) for partial in partials)
 
 
+def _smooth_at_point(shifts, terms):
+    """Check f(p)=0 and inspect just the terms that can contribute to the gradient."""
+    zeros = [i for i, a in enumerate(shifts) if not a]
+    active = [i for i, a in enumerate(shifts) if a]
+    nonzero_coords = tuple(shifts[i] for i in active)
+    values = {}
+    linear = {i: {} for i in zeros}
+    for e, c in terms.items():
+        degree = sum(e[i] for i in zeros)
+        if degree < 2:
+            powers = tuple(e[i] for i in active)
+            if degree == 0:
+                values[powers] = c
+            else:
+                axis = next(i for i in zeros if e[i])
+                linear[axis][powers] = c
+    if nonzero_terms_at_point(nonzero_coords, values):
+        raise InputError("The hypersurface must pass through the supplied point.")
+    if any(nonzero_terms_at_point(nonzero_coords, row) for row in linear.values() if row):
+        return True
+    # On a nonzero axis, x_i * df/dx_i has the same exponents as f.
+    return any(nonzero_terms_at_point(nonzero_coords, {e: c*e[i] for e, c in values.items() if e[i]})
+               for i in range(len(active)))
+
+
+def _basis_text(basis, names, shifts):
+    if not any(shifts):
+        return [format_poly({e: 1}, names) for e in basis]
+    # Return the centered monomials in the original ring. Keeping products
+    # factored also avoids a binomial expansion for every basis element.
+    axes = [name if not a else name + ("-" if a > 0 else "+") + rational_text(abs(a))
+            for name, a in zip(names, shifts)]
+    result = []
+    for exponents in basis:
+        factors = []
+        grouped = sum(exponents) > 1
+        for axis, shift, power in zip(axes, shifts, exponents):
+            if power:
+                factor = f"({axis})" if shift and grouped else axis
+                factors.append(factor if power == 1 else factor + "^" + integer_text(power))
+        result.append("*".join(factors) or "1")
+    return result
+
+
 def handle(operation, ring, operands):
     """Compute validated QQ quotients, local Jacobian algebras and their lengths."""
     if ring["field"] != "QQ" or ring["order"] not in ("lex", "grevlex"):
         raise InputError("Quotient algebras require QQ and lex or grevlex order.")
-    variables = tuple(map(np.Symbol, ring["variables"]))
+    names = ring["variables"]
+    variables = tuple(map(np.Symbol, names))
     local = operation != "quotient-basis"
     number = operation in ("milnor-number", "tjurina-number")
     result = {"ring": ring, "scope": "origin" if local else "global"}
+    shifts = (0,) * len(names)
+    if "point" in operands:
+        if not local:
+            raise InputError("A global quotient basis does not take a point.")
+        point = normalize_point(operands["point"], len(names))
+        shifts = tuple(map(coordinate_fraction, point))
+        result.update(scope="point", point=point)
+    shifted = any(shifts)
     if operation in ("quotient-basis", "local-quotient-basis"):
-        generators = operands["ideal"]
+        generators = tuple(map(np.coerce, operands["ideal"]))
         result["type"] = "quotient-basis"
     elif number or operation == "local-jacobian-algebra":
-        f = operands["polynomial"]
-        with cpu_stage("hypersurface_first_order" if number else "hypersurface_at_origin",
-                       variables=len(variables)):
+        f = np.coerce(operands["polynomial"])
+        with cpu_stage("hypersurface_first_order" if number else
+                       ("hypersurface_at_point" if shifted else "hypersurface_at_origin"),
+                       variables=len(names)):
             if not variables:
                 raise InputError("A hypersurface germ requires at least one coordinate.")
             terms = np.terms(variables, f)
-            if (0,) * len(variables) in terms:
+            if shifted:
+                if number and _smooth_at_point(shifts, terms):
+                    return {**result, "type": "integer", "finite": True, "value": 0}
+                if not number and nonzero_terms_at_point(shifts, terms):
+                    raise InputError("The hypersurface must pass through the supplied point.")
+            elif (0,) * len(variables) in terms:
                 raise InputError("The hypersurface must pass through the origin.")
             # A linear term makes its partial derivative a unit at the origin.
             # Both local quotients then have length zero.
-            if number and any(sum(powers) == 1 for powers in terms):
+            if number and not shifted and any(sum(powers) == 1 for powers in terms):
                 return {**result, "type": "integer", "finite": True, "value": 0}
         generators = _jacobian(variables, terms)
         if operation == "tjurina-number":
             generators = (*generators, f)
         result["type"] = "integer" if number else operation
         if not number:
-            result["generators"] = [format_poly(np.terms(variables, g), ring["variables"]) for g in generators]
+            result["generators"] = [format_poly(np.terms(variables, g), names) for g in generators]
     else:
         raise InputError(f"Unknown quotient algebra operation {operation!r}.")
 
+    if shifted:
+        with cpu_stage("center_at_point", variables=len(names), generators=len(generators)):
+            generators = centered_ideal(variables, shifts, generators)
     heads = _initial_monomials(variables, generators, ring["order"], local)
     with cpu_stage("quotient_length" if number else "standard_monomials", generators=len(heads)):
         dimension, basis = quotient_monomials(len(variables), heads, include_basis=not number)
@@ -128,6 +192,5 @@ def handle(operation, ring, operands):
             result["value"] = dimension
         else:
             result["dimension"] = dimension
-            result["basis"] = (None if basis is None else
-                               [format_poly({e: 1}, ring["variables"]) for e in basis])
+            result["basis"] = None if basis is None else _basis_text(basis, names, shifts)
     return result

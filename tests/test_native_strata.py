@@ -64,6 +64,21 @@ class NativeEuler(unittest.TestCase):
         found = kernel.strata((x, y, z), (z,), [(x,), (y,), (x - 1, y - 1)])
         self.assertEqual(found, {(0, 1): 1, (2,): 1})
 
+    def test_strata_on_coordinate_orbits(self):
+        # On z=0 the Laurent trinomial on (C*)² covers a punctured
+        # line with degree six; its two coordinate axes have 3 and 2 roots.
+        axes = [(x,), (y,), (z,)]
+        found = kernel.strata((x,y,z), (z**4,), [*axes, (2*x**2 + 3*y**3 - 1,)])
+        self.assertEqual(found, {(2,3):-6, (2,):6, (0,2,3):3, (0,2):-3,
+                                 (1,2,3):2, (1,2):-2, (0,1,2):1})
+        # A repeated Laurent root crossed with a free torus has chi=0.
+        found = kernel.strata((x,y,z), (z,), [*axes, ((x*y-1)**2,)])
+        self.assertEqual(found, {(0,1,2):1})
+        # Four terms on a two-torus can introduce singularities. The
+        # general calculation counts the crossing of x=1 and y=1 once.
+        found = kernel.strata((x,y,z), (z,), [*axes, ((x-1)*(y-1),)])
+        self.assertEqual(found[(2,3)], -1)
+
 
 if __name__ == "__main__":
     unittest.main()

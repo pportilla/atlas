@@ -5,6 +5,7 @@ import os
 import subprocess
 import unittest
 
+from engine.polynomial import parse_expression
 from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
 
 
@@ -111,6 +112,104 @@ class LocalAlgebraBrowserTests(AlgebraBrowserCase):
             self.assertEqual(self.submit()["result"]["value"], 0)
             expect(value).to_have_text("0")
             page.locator("#polynomial").fill("x^2")
+
+    def test_translated_hypersurface_invariants_and_named_derivatives(self):
+        page = self.page
+        choose = page.locator("#operation").select_option
+        point = page.locator("#local-point")
+        polynomial = "(x-1/2)^3+(y+2)^2"
+        results = []
+        choose("local-jacobian-algebra")
+        point.fill("2/4, -4/2")
+        page.locator("#polynomial").fill(polynomial)
+        record = self.submit("A")
+        jacobian = record["result"]
+        results.append(jacobian)
+        self.assertEqual((jacobian["scope"], jacobian["point"]), ("point", ["1/2", "-2"]))
+        self.assertEqual([parse_expression(f, ["x", "y"]) for f in jacobian["generators"]],
+                         [parse_expression(f, ["x", "y"]) for f in ["3*(x-1/2)^2", "2*(y+2)"]])
+        self.assertEqual(jacobian["basis"], ["1", "x-1/2"])
+        expect(page.locator("#result-value")).to_contain_text("1, x-1/2")
+        expect(page.locator("#result-ring")).to_contain_text("at (x = 1/2, y = -2)")
+        self.assertEqual(json.loads(self.download("#export")), record)
+        self.assertEqual(self.replay(self.download("#download-script"))[0]["result"], jacobian)
+
+        for op in ("milnor-number", "tjurina-number"):
+            choose(op)
+            expect(point).to_have_value("2/4, -4/2")
+            expect(page.locator("#polynomial")).to_have_value(polynomial)
+            result = self.submit()["result"]
+            self.assertEqual((result["scope"], result["point"], result["value"]), ("point", jacobian["point"], 2))
+            results.append(result)
+        point.fill("0, 0")
+        with page.expect_response(self.url + "/api/algebra") as api:
+            page.locator("#run").click()
+        failure = json.loads(api.value.body())
+        self.assertEqual(failure["status"], "error")
+        expect(page.locator("#error")).to_contain_text(failure["error"]["message"])
+        expect(page.locator("#result")).to_be_hidden()
+
+        choose("local-quotient-basis")
+        page.locator("#ideal-source").select_option("A")
+        expect(point).to_have_value("1/2, -2")
+        result = self.submit()["result"]
+        self.assertEqual(result["basis"], jacobian["basis"])
+        results.append(result)
+        # The derivatives of f are global polynomials, so one may localize them elsewhere.
+        point.fill("1/2, 0")
+        result = self.submit()["result"]
+        self.assertEqual((result["point"], result["dimension"]), (["1/2", "0"], 0))
+        results.append(result)
+        choose("quotient-basis")
+        expect(point).to_be_hidden()
+        result = self.submit()["result"]
+        self.assertEqual((result["scope"], result["dimension"]), ("global", 2))
+        self.assertNotIn("point", result)
+        results.append(result)
+        page.locator("#session-replay summary").click()
+        script = self.download("#download-session")
+        self.assertIn("ideal(A.generators,", script)
+        self.assertEqual([row["result"] for row in self.replay(script)], results)
+
+    def test_implicit_origin_explicit_origin_and_local_basis_source(self):
+        page = self.page
+        choose = page.locator("#operation").select_option
+        point = page.locator("#local-point")
+        results = []
+        choose("local-quotient-basis")
+        self.rows("#generators", "#add-generator", ["x^2*(x-1/2)", "y"])
+        result = self.submit()["result"]
+        self.assertEqual((result["scope"], result["dimension"]), ("origin", 2))
+        self.assertNotIn("point", result)
+        results.append(result)
+        point.fill("0/2, -0")
+        result = self.submit()["result"]
+        self.assertEqual((result["scope"], result["point"], result["dimension"]), ("point", ["0", "0"], 2))
+        results.append(result)
+        point.fill("1/2, 0")
+        choose("local-standard-basis")
+        results.append(self.submit("B")["result"])
+        choose("local-quotient-basis")
+        point.fill("")
+        page.locator("#ideal-source").select_option("B")
+        expect(point).to_have_value("1/2, 0")
+        result = self.submit()["result"]
+        self.assertEqual((result["scope"], result["point"], result["basis"]), ("point", ["1/2", "0"], ["1"]))
+        results.append(result)
+        point.fill("0, 0")
+        page.locator("#run").click()
+        expect(page.locator("#error")).to_contain_text("was computed at (1/2, 0)")
+        page.locator("#ideal-source").select_option("")
+        page.locator("#variables").fill("")
+        self.rows("#generators", "#add-generator", [])
+        point.fill("()")
+        result = self.submit()["result"]
+        self.assertEqual((result["scope"], result["point"], result["basis"]), ("point", [], ["1"]))
+        results.append(result)
+        page.locator("#session-replay summary").click()
+        script = self.download("#download-session")
+        self.assertIn("local_quotient_basis(B,", script)
+        self.assertEqual([row["result"] for row in self.replay(script)], results)
 
     @unittest.skipUnless(os.getenv("ATLAS_GROEBNER", "native") == "native",
                          "requires the native sparse polynomial representation")

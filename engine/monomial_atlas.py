@@ -297,7 +297,10 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                 linear = matrix
         else:
             projection = tuple(format_poly(dict(zip(monomials, row)), coords) for row in linear)
-            if any(_row(chart["map"][v], coords) != _row(g, coords) for v, g in zip(base, projection)):
+            # Most producers already use the canonical text of the verified
+            # projection. Compare other spellings in the polynomial ring.
+            if any(actual != expected and _row(actual, coords) != _row(expected, coords)
+                   for actual, expected in zip((chart["map"][v] for v in base), projection)):
                 raise InvalidChart("The projection map differs from its monomial chart.")
         region = [format_poly({tuple(int(j in face) for j in range(n)): 1}, coords)
                   for face in excluded]

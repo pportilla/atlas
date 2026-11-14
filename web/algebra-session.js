@@ -32,8 +32,8 @@ class AlgebraSession {
       }
       owner = saved.space;
       if (saved.result.type === "local-standard-basis") {
-        if (key !== "ideal" || form.operation !== "local-normal-form") {
-          throw new Error("Choose a local standard basis as the ideal for a local normal form.");
+        if (key !== "ideal" || !AlgebraSession.localBasisInputs.has(form.operation)) {
+          throw new Error("Use a saved local standard basis for a local normal form or a local quotient basis.");
         }
         const point = operands.point ?? form.ring.variables.map(() => "0");
         if (!AlgebraSession.samePoint(point, saved.result.point)) {
@@ -162,8 +162,8 @@ class AlgebraSession {
           else if (operation === "saturation") args.push(poly("polynomial"));
           else if (operation === "quotient" || operation === "intersection") args.push(ideal("other_ideal"));
           else if (operation === "eliminate") args.push(...operands.variables.map(v => quote(v)));
-          if (AlgebraSession.pointOperations.has(operation)) args.push("point=" + quote(operands.point));
         }
+        if (operands.point !== undefined) args.push("point=" + quote(operands.point));
         args.push("compute=" + quote(form.compute));
         expression = operation.replaceAll("-", "_") + "(" + args.join(", ") + ")";
       }
@@ -175,7 +175,10 @@ class AlgebraSession {
 }
 
 AlgebraSession.hypersurfaceOperations = new Set(["local-jacobian-algebra", "milnor-number", "tjurina-number"]);
-AlgebraSession.pointOperations = new Set(["local-standard-basis", "local-normal-form"]);
+AlgebraSession.localBasisInputs = new Set(["local-normal-form", "local-quotient-basis"]);
+AlgebraSession.pointOperations = new Set([
+  ...AlgebraSession.hypersurfaceOperations, ...AlgebraSession.localBasisInputs, "local-standard-basis",
+]);
 AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +

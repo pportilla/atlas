@@ -2,6 +2,8 @@
 #include "groebner.hpp"
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_poly_factor.h>
+#include <flint/fmpz_poly_q.h>
+#include <memory>
 #include <sstream>
 
 namespace atlas {
@@ -12,6 +14,27 @@ struct Univariate {
     ~Univariate() { fmpz_poly_clear(p); }
     Univariate(const Univariate&) = delete;
 };
+
+struct RationalFunction {
+    fmpz_poly_q_t value;
+    RationalFunction() { fmpz_poly_q_init(value); }
+    ~RationalFunction() { fmpz_poly_q_clear(value); }
+    RationalFunction(const RationalFunction&) = delete;
+};
+
+// Each occupied level holds the reduced sum of 2^level nonzero strata.
+void add_stratum(std::vector<std::unique_ptr<RationalFunction>>& levels,
+                 std::unique_ptr<RationalFunction> term) {
+    for (auto& partial : levels) {
+        if (!partial) {
+            partial = std::move(term);
+            return;
+        }
+        fmpz_poly_q_add_in_place(term->value, partial->value);
+        partial.reset();
+    }
+    levels.push_back(std::move(term));
+}
 
 Z integer(std::istream& in) {
     Z a;
@@ -51,46 +74,54 @@ std::string zeta(std::istream& in) {
     size_t n, strata;
     if (!(in >> n >> strata)) throw std::invalid_argument("Missing zeta input sizes.");
     std::vector<Univariate> factors(n);
-    Univariate denominator, numerator, term;
-    fmpz_poly_one(denominator.p);
     for (auto& linear : factors) {
         const auto order = integer(in), nu = integer(in);
         if (fmpz_sgn(&order.v) <= 0 || fmpz_sgn(&nu.v) <= 0)
             throw std::invalid_argument("Expected positive numerical data.");
         fmpz_poly_set_coeff_fmpz(linear.p, 0, &nu.v);
         fmpz_poly_set_coeff_fmpz(linear.p, 1, &order.v);
-        fmpz_poly_mul(denominator.p, denominator.p, linear.p);
     }
+    std::vector<std::unique_ptr<RationalFunction>> levels;
+    std::vector<size_t> seen(n, strata);
     for (size_t k = 0; k < strata; ++k) {
         const auto chi = integer(in);
         size_t count;
         if (!(in >> count) || count > n) throw std::invalid_argument("Invalid stratum.");
-        std::vector<bool> seen(n);
-        fmpz_poly_set(term.p, denominator.p);
+        std::unique_ptr<RationalFunction> term;
+        if (!fmpz_is_zero(&chi.v)) {
+            term = std::make_unique<RationalFunction>();
+            fmpz_poly_set_fmpz(fmpz_poly_q_numref(term->value), &chi.v);
+        }
         for (size_t j = 0; j < count; ++j) {
             size_t index;
-            if (!(in >> index) || index >= n || seen[index])
+            if (!(in >> index) || index >= n || seen[index] == k)
                 throw std::invalid_argument("Invalid component in stratum.");
-            seen[index] = true;
-            fmpz_poly_divexact(term.p, term.p, factors[index].p);
+            seen[index] = k;
+            if (term) {
+                auto denominator = fmpz_poly_q_denref(term->value);
+                fmpz_poly_mul(denominator, denominator, factors[index].p);
+            }
         }
-        fmpz_poly_scalar_mul_fmpz(term.p, term.p, &chi.v);
-        fmpz_poly_add(numerator.p, numerator.p, term.p);
+        if (term) {
+            fmpz_poly_q_canonicalise(term->value);
+            add_stratum(levels, std::move(term));
+        }
     }
-    if (numerator.p->length == 0 || !fmpz_equal(numerator.p->coeffs, denominator.p->coeffs))
+    RationalFunction sum;
+    for (const auto& partial : levels)
+        if (partial) fmpz_poly_q_add_in_place(sum.value, partial->value);
+    const auto numerator = fmpz_poly_q_numref(sum.value);
+    const auto denominator = fmpz_poly_q_denref(sum.value);
+    if (!numerator->length || !fmpz_equal(numerator->coeffs, denominator->coeffs))
         return "bad origin\n";
-    Univariate gcd;
-    fmpz_poly_gcd(gcd.p, numerator.p, denominator.p);
-    fmpz_poly_divexact(numerator.p, numerator.p, gcd.p);
-    fmpz_poly_divexact(denominator.p, denominator.p, gcd.p);
     std::string out;
-    for (slong i = 0; i < numerator.p->length; ++i) {
+    for (slong i = 0; i < numerator->length; ++i) {
         if (i) out += ' ';
-        append_integer(out, numerator.p->coeffs + i);
+        append_integer(out, numerator->coeffs + i);
     }
     out += '\n';
-    append_factors(out, numerator.p);
-    append_factors(out, denominator.p);
+    append_factors(out, numerator);
+    append_factors(out, denominator);
     return out;
 }
 }  // namespace

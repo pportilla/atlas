@@ -11,15 +11,15 @@ const polynomialLabels = {
   "local-normal-form": "Polynomial to reduce",
   membership: "Polynomial to test",
   saturation: "Saturating polynomial f",
-  "local-jacobian-algebra": "Hypersurface polynomial f with f(0) = 0",
-  "milnor-number": "Hypersurface polynomial f with f(0) = 0",
-  "tjurina-number": "Hypersurface polynomial f with f(0) = 0",
+  "local-jacobian-algebra": "Hypersurface polynomial f with f(p) = 0",
+  "milnor-number": "Hypersurface polynomial f with f(p) = 0",
+  "tjurina-number": "Hypersurface polynomial f with f(p) = 0",
 };
 const polynomialInputs = { gcd: "(x+y)*(x+1)", factor: "-3/2*(x-y)^2*(x+y)", "normal-form": polynomial.value, "local-normal-form": polynomial.value, membership: "y^2-1", saturation: "x", hypersurface: "x^2+y^3" };
 const quotientDescriptions = {
   "quotient-basis": "Find a monomial basis of the quotient by I over ℚ, including points away from the origin.",
-  "local-quotient-basis": "Find a monomial basis of the quotient by I after localizing at the origin, where all coordinates are zero.",
-  "local-jacobian-algebra": "In the local ring at the origin, take the quotient by the partial derivatives of f.",
+  "local-quotient-basis": "Find a basis of the quotient by I in coordinates centered at the chosen point p.",
+  "local-jacobian-algebra": "In the local ring at p, take the quotient by the partial derivatives of f.",
   "milnor-number": "Compute the dimension over ℚ of the local quotient by the partial derivatives of f.",
   "tjurina-number": "Compute the dimension over ℚ of the local quotient by f and its partial derivatives.",
   "local-standard-basis": "Compute a standard basis of the ideal in the local ring at the chosen point.",
@@ -111,7 +111,7 @@ function updateOperation() {
   description.hidden = !description.textContent;
   if (description.hidden) operation.removeAttribute("aria-describedby");
   else operation.setAttribute("aria-describedby", description.id);
-  byId("order-label").textContent = usesLocalOrder(activeOperation) ? "Local order tie-breaker" : "Monomial order";
+  byId("order-label").textContent = AlgebraSession.pointOperations.has(activeOperation) ? "Local order tie-breaker" : "Monomial order";
   showOperandGroup("local-point-field", AlgebraSession.pointOperations.has(activeOperation));
   const needsIdeal = ["intersection", "quotient"].includes(activeOperation);
   showOperandGroup("second-ideal", needsIdeal);
@@ -126,11 +126,6 @@ function updateOperation() {
   markChanges();
 }
 
-function usesLocalOrder(operation) {
-  return operation === "local-quotient-basis" || AlgebraSession.hypersurfaceOperations.has(operation) ||
-    AlgebraSession.pointOperations.has(operation);
-}
-
 function inputRing() {
   return { field: "QQ", variables: variables(), order: byId("order").value };
 }
@@ -143,9 +138,12 @@ function ringText(ring) {
 function updateSources() {
   const ring = inputRing();
   byId("point-label").textContent = ring.variables.length ? "Coordinates (" + ring.variables.join(", ") + ")" : "Point in zero coordinates";
+  byId("point-help").textContent = ring.variables.length
+    ? "Enter comma-separated integers or fractions. Leave blank for the origin."
+    : "The unique point has no coordinates. Enter () to specify it explicitly, or leave blank for the origin.";
   const ideals = ["ideal", "basis", "local-jacobian-algebra"];
   for (const [source, group, kinds] of [
-    ["ideal-source", "first-ideal-inputs", operation.value === "local-normal-form" ? [...ideals, "local-standard-basis"] : ideals],
+    ["ideal-source", "first-ideal-inputs", AlgebraSession.localBasisInputs.has(operation.value) ? [...ideals, "local-standard-basis"] : ideals],
     ["second-ideal-source", "second-ideal-inputs", ideals],
     ["polynomial-source", "polynomial", ["polynomial"]],
     ["other-polynomial-source", "other-polynomial", ["polynomial"]],
@@ -200,7 +198,7 @@ function readRequest() {
   }
   if (AlgebraSession.pointOperations.has(operation.value)) {
     const point = byId("local-point").value.trim();
-    if (point) operands.point = point.split(",").map(value => value.trim());
+    if (point) operands.point = point === "()" ? [] : point.split(",").map(value => value.trim());
   }
   return {
     operation: operation.value,
@@ -236,7 +234,10 @@ byId("variables").addEventListener("input", updateEliminationChoices);
 byId("variables").addEventListener("input", updateSources);
 byId("ideal-source").addEventListener("change", () => {
   const saved = session.objects.get(byId("ideal-source").value);
-  if (saved?.result.type === "local-standard-basis") byId("local-point").value = saved.result.point.join(", ");
+  if (!AlgebraSession.pointOperations.has(operation.value) || !saved) return;
+  if (["local-standard-basis", "local-jacobian-algebra"].includes(saved.result.type)) {
+    byId("local-point").value = saved.result.point ? saved.result.point.join(", ") || "()" : "";
+  }
 });
 for (const id of ["order", "ideal-source", "second-ideal-source", "polynomial-source", "other-polynomial-source"]) {
   byId(id).addEventListener("change", updateSources);
@@ -317,10 +318,10 @@ const problemNotation = {
   dimension: "dim(<i>R</i>/<i>I</i>)",
   gcd: "gcd(<i>f</i>, <i>g</i>)",
   "quotient-basis": "<i>R</i>/<i>I</i>",
-  "local-quotient-basis": "<i>R</i><sub>0</sub>/<i>I R</i><sub>0</sub>",
-  "local-jacobian-algebra": "<i>R</i><sub>0</sub>/J(<i>f</i>)",
-  "milnor-number": "μ<sub>0</sub>(<i>f</i>)",
-  "tjurina-number": "τ<sub>0</sub>(<i>f</i>)",
+  "local-quotient-basis": "<i>R</i><sub><i>p</i></sub>/<i>I R</i><sub><i>p</i></sub>",
+  "local-jacobian-algebra": "<i>R</i><sub><i>p</i></sub>/J(<i>f</i>)",
+  "milnor-number": "μ<sub><i>p</i></sub>(<i>f</i>)",
+  "tjurina-number": "τ<sub><i>p</i></sub>(<i>f</i>)",
   "local-standard-basis": "SB<sub><i>p</i></sub>(<i>I</i>)",
   "local-normal-form": "NF<sub><i>I,p</i></sub>(<i>f</i>)",
 };
@@ -373,7 +374,7 @@ function showProblem(request) {
   }
   byId("problem-ring").textContent = "R = " + ringText(ring).split(" · ")[0];
   const selected = byId("order").selectedOptions[0].textContent;
-  const order = usesLocalOrder(operation) ? "Lowest total degree first · " + selected.toLowerCase() + " tie-breaker" : selected + " order";
+  const order = AlgebraSession.pointOperations.has(operation) ? "Lowest total degree first · " + selected.toLowerCase() + " tie-breaker" : selected + " order";
   byId("problem-order").textContent = ring.variables.length > 1 ? order + " · " + ring.variables.join(" > ") : order;
 }
 
@@ -387,7 +388,8 @@ function showQuotient(value, result) {
   }
   entry("Dimension over ℚ", result.finite ? String(result.dimension) : "Infinite");
   if (result.finite) {
-    entry("Monomial basis", result.basis.length ? expressionText(result.basis.join(", ")) : "∅ (empty basis)");
+    const label = result.scope === "point" ? "Basis in coordinates centered at p" : "Monomial basis";
+    entry(label, result.basis.length ? expressionText(result.basis.join(", ")) : "∅ (empty basis)");
   }
   if (result.type === "local-jacobian-algebra") {
     entry("Jacobian ideal generators", result.generators.length ? expressionText(result.generators.join(", ")) : "(0)");

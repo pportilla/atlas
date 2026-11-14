@@ -7,17 +7,17 @@ from .polynomial import InputError, integer_text, parse_expression
 from .rational_point import normalize_point
 
 
-QUOTIENT_ALGEBRA_OPERANDS = {
-    "quotient-basis": ("ideal",),
+LOCAL_QUOTIENT_OPERANDS = {
     "local-quotient-basis": ("ideal",),
     "local-jacobian-algebra": ("polynomial",),
     "milnor-number": ("polynomial",),
     "tjurina-number": ("polynomial",),
 }
-POINT_OPERATIONS = {
+LOCAL_STANDARD_OPERANDS = {
     "local-standard-basis": ("ideal",),
     "local-normal-form": ("ideal", "polynomial"),
 }
+POINT_OPERATIONS = LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "factor": ("polynomial",),
@@ -30,8 +30,9 @@ OPERATION_OPERANDS = {
     "quotient": ("ideal", "other_ideal"),
     "saturation": ("ideal", "polynomial"),
     "dimension": ("ideal",),
-    **QUOTIENT_ALGEBRA_OPERANDS,
-    **POINT_OPERATIONS,
+    "quotient-basis": ("ideal",),
+    **LOCAL_QUOTIENT_OPERANDS,
+    **LOCAL_STANDARD_OPERANDS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
 
@@ -83,9 +84,11 @@ def _request(data):
     operands = data["operands"]
     point_operation = operation in POINT_OPERATIONS
     _fields(operands, "operands", OPERATION_OPERANDS[operation], ("point",) if point_operation else ())
-    if point_operation:
-        point = normalize_point(operands["point"], len(names)) if "point" in operands else ["0"] * len(names)
-        operands = dict(operands, point=point)
+    if "point" in operands:
+        operands = dict(operands, point=normalize_point(operands["point"], len(names)))
+    elif operation in LOCAL_STANDARD_OPERANDS:
+        # These two operations have always returned an explicit origin point.
+        operands = dict(operands, point=["0"] * len(names))
     for key in ("ideal", "other_ideal"):
         if key in operands and (not isinstance(operands[key], list)
                                 or not all(isinstance(f, str) for f in operands[key])):
@@ -141,9 +144,9 @@ def dispatch(data, *, known_basis=False):
                 result_operands = dict(operands, ideal=basis)
         elif operation in ("gcd", "factor"):
             from . import algebra_polynomial as handler
-        elif operation in QUOTIENT_ALGEBRA_OPERANDS:
+        elif operation == "quotient-basis" or operation in LOCAL_QUOTIENT_OPERANDS:
             from . import local_algebra as handler
-        elif operation in POINT_OPERATIONS:
+        elif operation in LOCAL_STANDARD_OPERANDS:
             from . import local_standard as handler
             if known_basis and operation == "local-normal-form":
                 handler_options["known_basis"] = True

@@ -24,6 +24,18 @@ def candidate(variables, center, boundary=None):
 class KernelIdealTests(unittest.TestCase):
     """Each kernel routine against the SymPy route it replaces."""
 
+    def test_coordinate_crossings_respect_ordinary_directions_and_the_whole_fibre(self):
+        def failures(equations, fibre=(), region=()):
+            return kernel.crossings((x, y, z), 3, (), [(f,) for f in equations], fibre, region)
+
+        # At the origin z is an ordinary coordinate, so dz is still an
+        # available tangent direction on the intersection x=y=0.
+        self.assertEqual(failures((x, y, x+y+z), (x,y,z)), [])
+        self.assertEqual(failures((x, y, x+y+z**2), (x,y,z)), [((0,1,2), True, (x,y,z))])
+        # The same triple is bad on the fibre but outside this chart's owner.
+        self.assertEqual(failures((x, y, x+y+z**2), (), (z-1,)), [((0,1,2), False, (x,y,z))])
+        self.assertEqual(failures((x, x), (x,)), [((0,1), True, (x,))])
+
     def test_finite_radical(self):
         from engine.centres import GiveUp
         self.assertEqual(kernel.finite_radical((x, y), (y, y - x**2)), (x, y))

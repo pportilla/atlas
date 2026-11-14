@@ -8,7 +8,7 @@ For a comparison of the two systems and a phased roadmap for bringing more algeb
 
 Factor a polynomial over the rationals with `./atlas algebra factor --vars x --poly 'x^4-1'`, with `factor(f)` in a session, or with **Polynomial factorization** in the browser’s Algebra view. Each returns the rational unit, the irreducible factors, and their multiplicities. [Factorization examples](examples/algebra-api.md#polynomial-factorization)
 
-Use the **Algebra** view or `./atlas algebra` for global and local quotient bases, local Jacobian algebras, and Milnor and Tjurina numbers. For example, `./atlas algebra local-jacobian-algebra --vars x,y --poly 'y^2-x^3'` gives basis $1,x$ at the origin and dimension 2. [Examples for the shell, prompt and browser](examples/algebra-api.md#quotient-bases-and-local-hypersurface-invariants)
+Use the **Algebra** view or `./atlas algebra` for global quotient bases and for local quotient bases, Jacobian algebras, and Milnor and Tjurina numbers at any rational point. For example, `./atlas algebra local-jacobian-algebra --vars x,y --point '1/2,0' --poly 'y^2-(x-1/2)^3'` gives dimension 2 and basis $1,x-1/2$. Omitting the point computes at the origin. [Examples for the shell, prompt and browser](examples/algebra-api.md#quotient-bases-and-local-hypersurface-invariants)
 
 Local standard bases and normal forms also accept any rational point. For example, `./atlas algebra local-normal-form --vars x,y --point '1/2,-2' --gen 'x-1/2' --gen 'y+2' --poly 'x+y'` returns $-3/2$. [Point coordinates, saved bases and local units](examples/algebra-api.md#local-standard-bases-and-normal-forms-at-a-rational-point)
 

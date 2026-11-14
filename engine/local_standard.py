@@ -1,21 +1,21 @@
 """Local standard bases and normal forms over QQ at rational affine points."""
 
-from math import lcm, prod
-
 from . import native_polynomial as np
 from .algebra_execution import cpu_stage, stage_label
 from .algebra_groebner import reduced_basis
 from .local_algebra import _homogeneous_local_basis, _leading
-from .local_mora import weak_normal_form
+from .local_mora import _divides, weak_normal_form
+from .point_germs import _nonzero_at_point, _translate
 from .polynomial import InputError, format_poly
 from .rational_point import coordinate_fraction, normalize_point
 
 
-def _translate(variables, shifts, polynomials):
-    if not any(shifts):
-        return polynomials
-    mapping = {v: v + a for v, a in zip(variables, shifts) if a}
-    return tuple(f.xreplace(mapping) for f in polynomials)
+def _minimal_heads(heads):
+    minimal = []
+    for head in sorted(heads, key=lambda e: (sum(e), e)):
+        if not any(_divides(h, head) for h in minimal):
+            minimal.append(head)
+    return minimal
 
 
 def _project_monomials(variables, point, generators):
@@ -26,44 +26,7 @@ def _project_monomials(variables, point, generators):
     for g in generators:
         head, = np.terms(variables, g)
         heads.add(tuple(0 if p else e for p, e in zip(point, head)))
-    minimal = []
-    for head in sorted(heads, key=lambda e: (sum(e), e)):
-        if not any(all(a <= b for a, b in zip(h, head)) for h in minimal):
-            minimal.append(head)
-    return tuple(np.from_terms(variables, {h: 1}) for h in minimal)
-
-
-def _nonzero_at_point(variables, point, f):
-    # Drop terms killed by zero coordinates. A single surviving term is
-    # nonzero without ever expanding a power of a nonzero rational number.
-    terms = np.terms(variables, f)
-    active = [(e, c) for e, c in terms.items()
-              if all(not k or a for k, a in zip(e, point))]
-    if len(active) < 2:
-        return bool(active)
-    # All surviving monomials share a nonzero factor at p. Removing it keeps
-    # exponents small for inputs like x^N*(x-2) evaluated at x=2.
-    if len({(c < 0) ^ (sum(k for a, k in zip(point, e) if a < 0) % 2)
-            for e, c in active}) == 1:
-        return True
-    minimum = tuple(map(min, zip(*(e for e, _ in active))))
-    active = [(tuple(k - m for k, m in zip(e, minimum)), c) for e, c in active]
-    if any(k.bit_length() > 16 and abs(a) > 0 and abs(a) != 1
-           for e, _ in active for k, a in zip(e, point)):
-        # A nonzero residue certifies a nonzero rational evaluation. Clear
-        # coefficient denominators so a chosen prime may divide those too.
-        common = lcm(*(c.denominator for _, c in active))
-        for prime in (1000000007, 1000000009, 998244353):
-            if any(a.denominator % prime == 0 for a in point):
-                continue
-            residues = [a.numerator * pow(a.denominator, -1, prime) % prime for a in point]
-            value = sum((common // c.denominator) * c.numerator *
-                        prod(pow(v, k, prime) for v, k in zip(residues, e) if k)
-                        for e, c in active)
-            if value % prime:
-                return True
-    return bool(sum(c * prod(a**k for a, k in zip(point, e) if k)
-                    for e, c in active))
+    return tuple(np.from_terms(variables, {h: 1}) for h in _minimal_heads(heads))
 
 
 def _local_head(row, order):
@@ -71,27 +34,45 @@ def _local_head(row, order):
     return _leading((e for e in row if sum(e) == degree), order)
 
 
+def _monic_row(variables, row, head):
+    coefficient = row[head]
+    return np.from_terms(variables, row if coefficient == 1 else
+                         {e: c / coefficient for e, c in row.items()})
+
+
+def _minimal_rows(variables, rows, heads):
+    # For a certified standard basis, a row for each minimal head still spans
+    # the initial ideal. Local weak division by those rows reduces all of I to zero.
+    by_head = {}
+    for head, row in zip(heads, rows):
+        by_head.setdefault(head, []).append(row)
+    monic = []
+    for head in _minimal_heads(by_head):
+        candidates = by_head[head]
+        if len(candidates) > 1:
+            # A lower-degree, sparser polynomial generally costs less to shift.
+            # Break remaining ties on monic polynomials for reproducible replay.
+            costs = [(max(map(sum, row)), len(row)) for row in candidates]
+            best = min(costs)
+            candidates = [row for row, cost in zip(candidates, costs) if cost == best]
+        monic.append(min((_monic_row(variables, row, head) for row in candidates),
+                         key=np.default_sort_key))
+    return tuple(sorted(monic, key=np.default_sort_key))
+
+
 def _certified_rows(variables, inputs, computed, order):
-    """Preserve a supplied standard basis once its local head ideal is certified."""
+    """Prefer supplied rows once their local head ideal is certified."""
     with cpu_stage("certify_local_heads", input_rows=len(inputs), basis_rows=len(computed)):
         heads = [_local_head(row, order) for row in inputs]
         certified = [_local_head(row, order) for row in computed]
         if any(not any(h) for h in certified):
             return (np.S.One,)
         # All input rows belong to I. The reverse inclusion of head ideals
-        # proves that these very rows form a standard basis, even if redundant.
-        # Keeping them prevents a saved weak remainder changing on raw replay.
-        if all(any(all(a <= b for a, b in zip(h, target)) for h in heads)
-               for target in certified):
-            rows = inputs
-        else:
-            rows, heads = computed, certified
-        monic = set()
-        for row, head in zip(rows, heads):
-            coefficient = row[head]
-            monic.add(np.from_terms(variables, row if coefficient == 1 else
-                                    {e: c / coefficient for e, c in row.items()}))
-        return tuple(sorted(monic, key=np.default_sort_key))
+        # proves that these very rows form a standard basis. Preferring them
+        # ensures that replaying a saved minimal basis keeps its representatives.
+        if all(any(_divides(h, target) for h in heads) for target in certified):
+            return _minimal_rows(variables, inputs, heads)
+        return _minimal_rows(variables, computed, certified)
 
 
 def _standard_basis(variables, generators, order):
@@ -105,11 +86,21 @@ def _standard_basis(variables, generators, order):
         if len(rows) == 1:
             # Local heads multiply, so one generator is already a standard basis.
             row, = rows
-            head = _local_head(row, order)
-            return (np.from_terms(variables, {e: c / row[head] for e, c in row.items()}),)
-        homogeneous = all(len({sum(e) for e in row}) == 1 for row in rows)
+            return (_monic_row(variables, row, _local_head(row, order)),)
+        heads = []
+        for row in rows:
+            minimum = tuple(map(min, zip(*row)))
+            if minimum not in row:
+                break
+            heads.append(minimum)
+    if len(heads) == len(rows):
+        # Each row is x^m times a polynomial whose constant coefficient is
+        # nonzero. These factors are units in the centered local ring, so the
+        # x^m generate its entire initial ideal for either local tie order.
+        with cpu_stage("local_monomial_associates", generators=len(rows)):
+            return _minimal_rows(variables, rows, heads)
 
-    if homogeneous:
+    if all(len({sum(e) for e in row}) == 1 for row in rows):
         with stage_label("local_standard_basis"):
             basis = reduced_basis(generators, variables, order=order)
         return _certified_rows(variables, rows, [np.terms(variables, f) for f in basis.exprs], order)

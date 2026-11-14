@@ -56,6 +56,12 @@ remainder has a reduced local leading term.
   milnor_number(f).value                 # 2 at the origin
   tjurina_number(f).value                # 2 at the origin
 
+Local quotient bases, Jacobian algebras, Milnor numbers and Tjurina numbers
+default to the origin. Pass rational coordinates in ring order to select a point.
+
+  g = y^2 - (x-1/2)^3
+  milnor_number(g, point=(1/2, 0)).value # 2 at the translated cusp
+
 For an infinite-dimensional quotient, .finite is False and both .basis and
 .dimension are None. For an infinite Milnor or Tjurina number, .value is None.
 

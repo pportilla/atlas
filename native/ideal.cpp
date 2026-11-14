@@ -6,6 +6,7 @@
 // Every routine follows engine/blowup_ideal.py step by step and returns the
 // same generators, so the two implementations can be compared exactly.
 #include "groebner.hpp"
+#include <flint/fmpz_mat.h>
 #include <flint/fmpz_poly.h>
 
 #include <chrono>
@@ -1969,6 +1970,116 @@ void restrict_to_base_monomials(const Ring& R, std::vector<Poly>& base,
     for (auto& p : divisors) base.push_back(std::move(p));
 }
 
+void append_stratum(std::string& out, const std::vector<size_t>& subset, const Z& chi) {
+    out += "stratum " + std::to_string(subset.size());
+    for (size_t j : subset) out += " " + std::to_string(j);
+    char* decimal = fmpz_get_str(nullptr, 10, &chi.v);
+    out += " "; out += decimal; out += '\n';
+    flint_free(decimal);
+}
+
+// A character of a coordinate torus is a unit. A hypersurface depending
+// on fewer than d independent character differences has a torus factor of
+// positive dimension, hence Euler characteristic zero. With d independent
+// differences and d+1 terms the corresponding isogeny takes the section to
+// a hyperplane minus its coordinate hyperplanes. Its Euler characteristic
+// is (-1)^(d-1) times the degree of the isogeny (the absolute determinant).
+bool orbit_section_euler(const Ring& R, const Poly& section,
+                         const std::vector<unsigned>& supports, unsigned zeros,
+                         Z& chi) {
+    std::vector<int> active;
+    for (int j = 0; j < R.n; ++j) if (!(zeros & (1u << j))) active.push_back(j);
+    const size_t d = active.size();
+    std::vector<const u64*> terms;
+    for (size_t i = 0; i < section.size(); ++i)
+        if (!(zeros & supports[i])) terms.push_back(section.m.data() + i*R.stride);
+    if (terms.empty()) {
+        fmpz_set_ui(&chi.v, d == 0);
+        return true;
+    }
+    if (terms.size() == 1 || terms.size() <= d) return true;
+    if (terms.size() != d + 1) return false;
+    fmpz_mat_t differences;
+    fmpz_mat_init(differences, d, d);
+    for (size_t row = 0; row < d; ++row)
+        for (size_t col = 0; col < d; ++col) {
+            const int pos = R.position(active[col]);
+            const long difference = long(R.field(terms[row+1], pos)) - long(R.field(terms[0], pos));
+            fmpz_set_si(fmpz_mat_entry(differences, row, col), difference);
+        }
+    fmpz_mat_det(&chi.v, differences);
+    fmpz_mat_clear(differences);
+    fmpz_abs(&chi.v, &chi.v);
+    if (!(d % 2)) fmpz_neg(&chi.v, &chi.v);
+    return true;
+}
+
+// Partition a monomial base by its exact coordinate zero set. Each
+// monomial divisor then contains the entire orbit or is disjoint from it.
+// One additional hypersurface may split the orbit into its section and
+// its complement. If any section is unresolved, use the general algorithm.
+bool monomial_orbit_strata(const Ring& R, const std::vector<Poly>& base,
+                           const std::vector<std::vector<Poly>>& ideals, std::string& out) {
+    if (R.n > 8 || ideals.size() > size_t(R.n+1)) return false;
+    auto support = [&](const u64* exponents) {
+        unsigned mask = 0;
+        for (int j = 0; j < R.n; ++j)
+            if (R.field(exponents, R.position(j))) mask |= 1u << j;
+        return mask;
+    };
+    std::vector<unsigned> required;
+    for (const auto& f : base) {
+        if (f.size() != 1) return false;
+        required.push_back(support(f.m.data()));
+    }
+    const size_t k = ideals.size();
+    std::vector<unsigned> axes(k), terms;
+    size_t section = k;
+    for (size_t j = 0; j < k; ++j) {
+        if (ideals[j].empty()) continue; // The zero ideal contains every orbit.
+        if (ideals[j].size() != 1) return false;
+        const auto& f = ideals[j][0];
+        if (f.size() == 1) {
+            axes[j] = support(f.m.data());
+        } else {
+            if (section != k) return false;
+            section = j;
+            for (size_t i = 0; i < f.size(); ++i) terms.push_back(support(f.m.data() + i*R.stride));
+        }
+    }
+    std::vector<Z> totals(1u << k);
+    const unsigned full = (1u << R.n) - 1;
+    for (unsigned zeros = 0; zeros <= full; ++zeros) {
+        if (std::any_of(required.begin(), required.end(), [&](unsigned g){ return !(g & zeros); })) continue;
+        unsigned subset = 0;
+        for (size_t j = 0; j < k; ++j)
+            if (ideals[j].empty() || (axes[j] & zeros)) subset |= 1u << j;
+        if (zeros == full) fmpz_add_ui(&totals[subset].v, &totals[subset].v, 1);
+        if (section < k) {
+            Z chi;
+            if (!orbit_section_euler(R, ideals[section][0], terms, zeros, chi)) return false;
+            const auto with = subset | (1u << section);
+            fmpz_add(&totals[with].v, &totals[with].v, &chi.v);
+            fmpz_sub(&totals[subset].v, &totals[subset].v, &chi.v);
+        }
+    }
+    std::vector<std::vector<size_t>> subsets;
+    for (unsigned mask = 1; mask < totals.size(); ++mask) {
+        if (fmpz_is_zero(&totals[mask].v)) continue;
+        subsets.emplace_back();
+        for (size_t j = 0; j < k; ++j) if (mask & (1u << j)) subsets.back().push_back(j);
+    }
+    std::sort(subsets.begin(), subsets.end(), [](const auto& a, const auto& b) {
+        return a.size() == b.size() ? a < b : a.size() < b.size();
+    });
+    for (const auto& subset : subsets) {
+        unsigned mask = 0;
+        for (size_t j : subset) mask |= 1u << j;
+        append_stratum(out, subset, totals[mask]);
+    }
+    return true;
+}
+
 // "strata n b k s_1 ... s_k [r t_1 ... t_r]": b equations of a part of a
 // chart, then k ideals of closed sets, then r ideals of closed sets that are
 // left out of the part. For every set J of the k whose common part there is
@@ -1987,10 +2098,12 @@ std::string op_strata(Reader& in) {
     std::vector<std::vector<Poly>> ideals, removed;
     for (size_t i = 0; i < k; ++i) ideals.push_back(present(polys(in.ideal(R, sizes[i]))));
     for (size_t i = 0; i < r; ++i) removed.push_back(present(polys(in.ideal(R, left[i]))));
+    std::string out;
+    if (removed.empty() && monomial_orbit_strata(R, base, ideals, out))
+        return out.empty() ? "none\n" : out;
     restrict_to_base_monomials(R, base, ideals, removed);
     Euler euler(R);
     std::vector<std::vector<size_t>> alive = {{}};
-    std::string out;
     for (size_t size = 1; size <= k; ++size) {
         std::vector<std::vector<size_t>> found;
         std::vector<size_t> subset(size);
@@ -2012,13 +2125,7 @@ std::string op_strata(Reader& in) {
                     for (size_t j = 0; j < k; ++j)
                         if (std::find(subset.begin(), subset.end(), j) == subset.end()) others.push_back(ideals[j]);
                     const auto chi = euler.characteristic(equations, others);
-                    if (!fmpz_is_zero(&chi.v)) {
-                        out += "stratum " + std::to_string(size);
-                        for (size_t j : subset) out += " " + std::to_string(j);
-                        char* decimal = fmpz_get_str(nullptr, 10, &chi.v);
-                        out += " "; out += decimal; out += '\n';
-                        flint_free(decimal);
-                    }
+                    if (!fmpz_is_zero(&chi.v)) append_stratum(out, subset, chi);
                 }
             }
             size_t d = size;
@@ -2031,6 +2138,51 @@ std::string op_strata(Reader& in) {
         alive = std::move(found);
     }
     return out.empty() ? "none\n" : out;
+}
+
+// On affine space coordinate hyperplanes are transverse. With one additional
+// hypersurface f=0, the only possible failure is where df vanishes on the
+// tangent space of the intersection of all coordinate divisors through p.
+// The vector fields x_j*d/dx_j for boundary axes, and d/dx_j for all other
+// axes, span exactly this tangent space at p (even if an ordinary x_j=0).
+bool coordinate_crossings_on_fibre(const Ring& R, const std::vector<std::vector<Poly>>& divisors,
+                                   const std::vector<Poly>& fibre) {
+    const Poly* hypersurface = nullptr;
+    std::vector<bool> boundary(R.n);
+    for (const auto& ideal : divisors) {
+        if (ideal.size() != 1) return false;
+        const auto& f = ideal.front();
+        if (f.size() == 1 && f.m[0] == 1) {
+            int j = 0;
+            while (!Ring::field(f.m.data(), R.position(j))) ++j;
+            if (boundary[j]) return false;
+            boundary[j] = true;
+        } else {
+            if (hypersurface) return false;
+            hypersurface = &f;
+        }
+    }
+    if (!hypersurface || constant(*hypersurface)) return true;
+
+    std::vector<Poly> bad = fibre;
+    bad.push_back(*hypersurface);
+    for (int j = 0; j < R.n; ++j) {
+        Poly d = derivative(R, *hypersurface, j);
+        if (d.empty()) continue;
+        if (boundary[j]) {
+            Poly x = one(R);
+            variable(R, x.m.data(), j);
+            d = multiply(R, x, d);
+        }
+        if (constant(d)) return true;
+        bad.push_back(std::move(d));
+    }
+    try {
+        return unit_basis(R, bad);
+    } catch (const Limit&) {
+        // The ordinary subset tests can still succeed on smaller ideals.
+        return false;
+    }
 }
 
 // "crossings n d a k s_1 ... s_k f r": a chart W = V(ambient) of dimension d in
@@ -2057,6 +2209,8 @@ std::string op_crossings(Reader& in) {
     const std::vector<Poly> fibre = present(polys(in.ideal(R, f)));
     const std::vector<Poly> region = present(polys(in.ideal(R, r)));
     const long codimension = R.n - dimension;
+    if (!codimension && ambient.empty() && coordinate_crossings_on_fibre(R, divisors, fibre))
+        return "none\n";
     std::vector<std::vector<size_t>> alive = {{}};
     std::string out;
     for (size_t size = 1; size <= k; ++size) {

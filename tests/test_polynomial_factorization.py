@@ -4,6 +4,8 @@ from fractions import Fraction
 import unittest
 
 from engine import native_polynomial as np
+from engine.algebra import calculate_algebra
+from engine.algebra_execution import algebra_execution
 from engine.polynomial import InputError
 from engine.polynomial_factorization import factor_polynomial
 
@@ -55,3 +57,41 @@ class RationalFactorization(unittest.TestCase):
         h = x**power - Fraction(3, 2)*y**2
         p = -2*x**3 * y**5 * h
         self.check_factors(variables, p, "lex", -2, ((x, 3), (y, 5), (h, 1)))
+
+    def test_pure_linear_variable_preserves_unit_and_order(self):
+        x, y, z = variables = np.symbols("x y z")
+        # x also has a pure linear term, but occurs elsewhere; only y qualifies.
+        f = Fraction(-5, 7) * (2*y - 3*x**2 + x*z + x + 1)
+        for coords, order, unit in (
+            (variables, "lex", Fraction(15, 7)),
+            ((y, z, x), "lex", Fraction(-10, 7)),
+            ((y, z, x), "grevlex", Fraction(-5, 7)),
+        ):
+            with self.subTest(coords=coords, order=order), algebra_execution("cpu") as execution:
+                self.check_factors(coords, f, order, unit, ((f/unit, 1),))
+                stage, = execution.report()["stages"]
+                self.assertEqual((stage["operation"], stage["algorithm"], stage["order"], stage["backend"]),
+                                 ("polynomial_factorization", "linear_variable", order, "cpu"))
+
+    def test_public_linear_variable_certificate_with_wide_exponent(self):
+        source = "x^1000000000000000000000+y+1"
+        ring = {"field": "QQ", "variables": ["x", "y"], "order": "grevlex"}
+        status, answer = calculate_algebra({"operation": "factor", "ring": ring,
+                                           "operands": {"polynomial": source}})
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["result"], {"type": "factorization", "ring": ring, "unit": "1",
+                                            "factors": [{"polynomial": source, "multiplicity": 1}]})
+        stage, = answer["execution"]["stages"]
+        self.assertEqual(stage["algorithm"], "linear_variable")
+
+    def test_linear_variable_certificate_requires_constant_coefficient_and_degree_one(self):
+        x, y = variables = np.symbols("x y")
+        for f, factors in (
+            (x*y+x, ((x, 1), (y+1, 1))),
+            (x*y+x+y+1, ((x+1, 1), (y+1, 1))),
+            ((x**2+1)**2 - y**2, ((x**2+1-y, 1), (x**2+1+y, 1))),
+        ):
+            with self.subTest(f=f), algebra_execution("cpu") as execution:
+                self.check_factors(variables, f, "lex", 1, factors)
+                stage, = execution.report()["stages"]
+                self.assertNotEqual(stage["algorithm"], "linear_variable")

@@ -18,12 +18,12 @@ _DESCRIPTIONS = {
     "saturation": "saturate an ideal by a polynomial",
     "dimension": "compute the Krull dimension of the quotient ring",
     "quotient-basis": "compute a vector space basis of the global quotient algebra over QQ",
-    "local-quotient-basis": "compute a vector space basis of the quotient algebra at the origin",
+    "local-quotient-basis": "compute a vector space basis of the quotient algebra at a rational point",
     "local-standard-basis": "compute a standard basis of an ideal at a rational point",
     "local-normal-form": "reduce a polynomial modulo an ideal at a rational point",
-    "local-jacobian-algebra": "compute the Jacobian generators and quotient basis at the origin",
-    "milnor-number": "compute the dimension over QQ of the Jacobian algebra at the origin",
-    "tjurina-number": "compute the quotient dimension over QQ by f and its partial derivatives at the origin",
+    "local-jacobian-algebra": "compute the Jacobian generators and quotient basis at a rational point",
+    "milnor-number": "compute the dimension over QQ of the Jacobian algebra at a rational point",
+    "tjurina-number": "compute the quotient dimension over QQ by f and its partial derivatives at a rational point",
 }
 
 

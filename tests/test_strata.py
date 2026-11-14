@@ -6,12 +6,13 @@ import sympy as sp
 from engine.general_resolution import verify_candidate
 from engine.monodromy import monodromy_zeta
 from engine.newton_backend import resolve_newton
-from engine.polynomial import format_poly, parse
+from engine.native_library import _MODE
+from engine.polynomial import InputError, format_poly, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
 from engine.strata import resolution_strata
 from engine.strata_reference import _power_factors
-from engine.topological import topological_zeta
+from engine.topological import _reduce, topological_zeta
 
 
 def answer(polynomial, names, mode="embedded"):
@@ -30,6 +31,35 @@ def newton(polynomial, names):
 
 
 class TopologicalZeta(unittest.TestCase):
+    def test_repeated_and_cancelled_poles(self):
+        numbers = {"unused": (6, 3), "C": (3, 1), "B": (4, 2),
+                   "D": (6, 2), "A": (2, 1), "S": (1, 1)}
+        # C and D cancel; A and B contribute a double pole. An unused
+        # component with the same candidate pole retains its input position.
+        terms = [(2, ["A", "B"]), (1, ["S"]), (1, ["C"]),
+                 (-1, ["A"]), (-2, ["D"]), (0, ["C", "S"])]
+        rows = [dict(components=names, euler_characteristic=chi) for chi, names in terms]
+        expected = ("(2*s^2 + 2*s + 1)/((s + 1)*(2*s + 1)^2)", "2*s^2 + 2*s + 1",
+                    "(s + 1)*(2*s + 1)^2",
+                    [{"value": "-1", "order": 1, "components": ["S"]},
+                     {"value": "-1/2", "order": 2, "components": ["unused", "B", "A"]}])
+        self.assertEqual(_reduce(numbers, rows), expected)
+        self.assertEqual(_reduce(numbers, list(reversed(rows))), expected)
+
+    def test_constant_terms_and_origin_validation(self):
+        for weights, expected in (([], None), ([0], None), ([1, -1], None),
+                                  ([2], None), ([3, -2], ("1", "1", "1", []))):
+            with self.subTest(weights=weights):
+                rows = [dict(components=[], euler_characteristic=chi) for chi in weights]
+                self.assertEqual(_reduce({}, rows), expected)
+
+    @unittest.skipIf(_MODE == "sympy", "Malformed stratum validation uses the native reader.")
+    def test_zero_terms_validate_component_indices(self):
+        rows = [dict(components=[], euler_characteristic=1),
+                dict(components=["A", "A"], euler_characteristic=0)]
+        with self.assertRaisesRegex(InputError, "Invalid component in stratum"):
+            _reduce({"A": (1, 1), "B": (2, 1)}, rows)
+
     def test_every_engine(self):
         expected = {
             ("y^2-x^3", "xy"): ("C++ / FLINT plane point blowups", "(4*s + 5)/((s + 1)*(6*s + 5))"),
