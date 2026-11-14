@@ -3030,18 +3030,13 @@ std::string op_graph_orders(Reader& in) {
 
 }  // namespace
 // Work with a frame on the open set where every specified unit is nonzero.
-std::string frame_locus(const Ring& input_ring, const std::vector<Poly>& equations,
-                        const std::vector<Poly>& units, bool closure) {
-    const Ring R = grevlex(input_ring.n);
-    const auto positions = shifted(R.n, 0);
-    std::vector<Poly> generators;
-    for (const Poly& g : equations)
-        if (!g.empty()) generators.push_back(convert(input_ring, R, g, positions.data()));
+static std::string frame_locus_grevlex(const Ring& R, const std::vector<Poly>& generators,
+                                       const std::vector<Poly>& units, bool closure) {
     Basis basis(R, generators);
     Poly unit = one(R);
     for (const Poly& u : units) {
         if (unit.empty() || basis.unit()) break;
-        Poly factor = basis.remainder(convert(input_ring, R, u, positions.data()));
+        Poly factor = basis.remainder(u);
         if (constant(factor)) continue;
         if (factor.empty() || constant(unit)) unit = std::move(factor);
         else unit = basis.remainder(multiply(R, unit, factor));
@@ -3053,6 +3048,27 @@ std::string frame_locus(const Ring& input_ring, const std::vector<Poly>& equatio
     else put(R, out, monic(saturation(R, basis.elements(), unit)));
     return out;
 }
+
+std::string frame_locus(const Ring& input_ring, const std::vector<Poly>& equations,
+                        const std::vector<Poly>& units, bool closure) {
+    const Ring R = grevlex(input_ring.n);
+    const auto positions = shifted(R.n, 0);
+    auto convert_rows = [&](const std::vector<Poly>& rows) {
+        std::vector<Poly> result;
+        result.reserve(rows.size());
+        for (const Poly& f : rows) result.push_back(convert(input_ring, R, f, positions.data()));
+        return result;
+    };
+    return frame_locus_grevlex(R, present(convert_rows(equations)), convert_rows(units), closure);
+}
+
+// Expanded affine-frame inputs are already in this ring and term order.
+static std::string op_frame_locus(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const auto equations = present(polys(in.ideal(R, in.count(1))));
+    const auto units = polys(in.ideal(R, in.count(2)));
+    return frame_locus_grevlex(R, equations, units, in.op == "frame_basis");
+}
 }  // namespace atlas
 
 using namespace atlas;
@@ -3060,6 +3076,7 @@ using namespace atlas;
 extern "C" {
 
 int atlas_monomial_strata_abi() noexcept { return 1; }
+int atlas_frame_locus_abi() noexcept { return 1; }
 int atlas_affine_overlap_abi() noexcept { return 1; }
 
 // One request: a header line naming the operation with its integers, then
@@ -3087,6 +3104,7 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "strata" || in.op == "monomial_strata") out = op_strata(in);
         else if (in.op == "strata_totals") out = op_strata_totals(in);
         else if (in.op == "crossings" || in.op == "bounded_crossings") out = op_crossings(in);
+        else if (in.op == "frame_basis" || in.op == "frame_empty") out = op_frame_locus(in);
         else if (in.op == "open_locus") out = op_open_locus(in);
         else if (in.op == "owned_crossings") out = op_owned_crossings(in);
         else if (in.op == "blowup") out = op_blowup(in);

@@ -128,9 +128,24 @@ def ideal_basis(variables, ideal, *, domain=QQ):
     return _basis(variables, _expressions(variables, ideal, domain), domain)
 
 
+@lru_cache(maxsize=128)
+def _packed_present(variables, ideal):
+    return kernel.present_outside(variables, ideal, ())
+
+
 def empty_locus(variables, ideal, *, domain=QQ):
     """Decide geometric emptiness by the unit ideal test."""
-    return ideal_basis(variables, ideal, domain=domain) == (1,)
+    variables = _ring(variables, domain)
+    equations = _expressions(variables, ideal, domain)
+    if _MODE == "native" and domain == QQ and np.native_ring(variables):
+        from .algebra_execution import current_execution
+        from .native_library import current_replay_scope
+        scope = current_replay_scope()
+        if current_execution() is None and (scope is None or scope.compute == "cpu"):
+            present = _packed_present(variables, equations)
+            if present is not None:
+                return not present
+    return _basis(variables, equations, domain) == (1,)
 
 
 def ideal_subset(variables, smaller, larger, *, domain=QQ):

@@ -11,6 +11,37 @@ from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, f
 
 
 class AffineMaps(unittest.TestCase):
+    def test_sparse_frame_loci_and_held_restrictions(self):
+        from fractions import Fraction
+        from engine import native_library, native_polynomial as np
+        from engine.blowup_ideal import empty_locus
+
+        x, y, z = np.symbols("frame_x frame_y frame_z")
+        xys = (x, y)
+        large = Fraction(2**500 + 1, 7)
+        for ideal, units, closed, empty in (
+                ((large*x*y,), (y,), (x,), False),
+                ((large*x*y,), (x,y), (1,), True),
+                ((x*y,), (0,), (1,), True),
+                ((), (), (), False),
+                ((x**40000,), (), (x**40000,), False)):
+            with self.subTest(ideal=ideal, units=units):
+                self.assertEqual(frame_locus(xys, ideal, units), empty)
+                self.assertEqual(frame_locus(xys, ideal, units, closure=True), closed)
+        with patch("engine.native_library.ideal_request", side_effect=native_library.Unavailable("limit")):
+            frame_locus.cache_clear()
+            self.assertEqual(frame_locus(xys, (x*y,), (x,), closure=True), (y,))
+        self.assertFalse(empty_locus(xys, (large*x*y,)))
+        self.assertTrue(empty_locus(xys, (large*x*y, x*y-1)))
+        self.assertFalse(empty_locus(xys, (x**40000,)))
+        self.assertEqual(frame_restrict(list(xys), x+y, x, np.S.One, y), 0)
+        with self.assertRaises(ValueError):
+            affine_kernel.frame_function(xys, x+z)
+        with self.assertRaises(ValueError):
+            frame_locus(xys, (x+z,), ())
+        with self.assertRaises(ValueError):
+            empty_locus(xys, (x+z,))
+
     def test_fan_boundary_keeps_the_union_of_exceptional_restrictions(self):
         from engine.native_library import affine_request
         from engine.polynomial import sparse_row

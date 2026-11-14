@@ -262,9 +262,23 @@ def frame_locus(variables, equations, units, *, closure=False):
         return ((1,) if empty else ()) if closure else empty
 
     def native():
+        op = "frame_basis" if closure else "frame_empty"
         ring = _ring(variables)
-        lines = ["frame_basis" if closure else "frame_empty", ring.header,
-                 str(len(equations)), *map(ring.text, equations), *map(ring.text, units)]
+        if (gb._MODE == "native" and np.native_ring(variables) and len(variables) <= gb._MAX_VARIABLES
+                and all(isinstance(f, (np.Expr, int, Fraction)) for f in (*equations, *units))):
+            from .native_library import _kernel, ideal_request
+            if hasattr(_kernel(), "atlas_frame_locus_abi"):
+                try:
+                    rows = [np.row(variables, f) for f in (*equations, *units)]
+                    result = ideal_request(f"{op} {len(variables)} {len(equations)} {len(units)}", rows)
+                except (_AffineUnavailable, KeyError):
+                    pass  # The general affine reader supports wide exponents and checks coordinates.
+                else:
+                    if closure:
+                        return tuple(_sparse_expression(variables, row) for row in result)
+                    if result in (["1"], ["0"]):
+                        return result == ["1"]
+        lines = [op, ring.header, str(len(equations)), *map(ring.text, equations), *map(ring.text, units)]
         result = _request(lines)
         return tuple(_sparse_expression(variables, row) for row in result) if closure else result == ["1"]
 
@@ -285,6 +299,10 @@ def frame_function(variables, value):
     variables = tuple(variables)
     if not variables:
         return value if isinstance(value, (np.Expr, int, Fraction)) else sp.sympify(value)
+    if gb._MODE == "native" and np.native_ring(variables) and isinstance(value, (np.Expr, int, Fraction)):
+        value = np.coerce(value)
+        if value.free_symbols.issubset(_ring(variables).names):
+            return value  # Native chart polynomials already carry their expanded coefficients.
     return _checked(lambda: _frame_polys("function", variables, None, (value,))[0],
                     lambda: _oracle("frame_function", value), variables)
 
@@ -374,10 +392,18 @@ def frame_linear(variables, f, k):
     return _checked(native, lambda: _oracle("frame_linear", f, k), variables)
 
 
+@lru_cache(maxsize=512)
+def _native_restriction(variables, f, k, a, b):
+    return _frame_polys("restrict", variables, (k,), (f, a, b))[0]
+
+
 def frame_restrict(variables, f, k, a, b):
     """Restrict f to k=-b/a, clearing its denominator up to an invertible power of a."""
     variables = tuple(variables)
 
+    if (gb._MODE == "native" and np.native_ring(variables)
+            and all(isinstance(value, (np.Expr, int, Fraction)) for value in (f, k, a, b))):
+        return _native_restriction(variables, f, k, a, b)
     return _checked(lambda: _frame_polys("restrict", variables, (k,), (f, a, b))[0], lambda: _oracle("frame_restrict", variables, f, k, a, b), variables)
 
 
