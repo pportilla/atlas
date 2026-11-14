@@ -123,8 +123,7 @@ class LocalStandardKernel(unittest.TestCase):
             ideal = [f"2*({rows[0]})", f"-3/5*({rows[0]})", f"-7*({rows[1]})", rows[2]]
             expected = {native(f, names) for f in rows[:2]}
             for order in ("lex", "grevlex"):
-                with self.subTest(point=point, order=order), patch.object(
-                        local_standard, "_homogeneous_local_basis", side_effect=AssertionError("unexpected lift")):
+                with self.subTest(point=point, order=order):
                     basis = self.calculate("local-standard-basis", ideal, names=names, point=point, order=order)
                     result = basis["generators"]
                     # xy is the only minimal local head. Keep one actual monic
@@ -152,10 +151,8 @@ class LocalStandardKernel(unittest.TestCase):
         # constant term. Together with x*(1+x) it forces y² into the ideal.
         ideal = ["x*(1+x)", "x+y^2"]
         for order in ("lex", "grevlex"):
-            with self.subTest(order=order), patch.object(
-                    local_standard, "_homogeneous_local_basis", wraps=local_standard._homogeneous_local_basis) as lift:
+            with self.subTest(order=order):
                 basis = self.calculate("local-standard-basis", ideal, names=names, order=order)
-                lift.assert_called_once()
                 heads = {local_head(native(g, names), names, order) for g in basis["generators"]}
                 self.assertEqual(len(basis["generators"]), 2)
                 self.assertEqual(heads, {(1, 0), (0, 2)})
@@ -234,8 +231,7 @@ class LocalStandardKernel(unittest.TestCase):
         ]
         for ideal, query, expected in cases:
             point = ["1", "1"] if query == "x^130" else ["1", "0"]
-            with self.subTest(ideal=ideal), patch.object(local_standard, "_taylor_jet",
-                                                        side_effect=AssertionError("unexpected jet")):
+            with self.subTest(ideal=ideal):
                 result = self.calculate("local-normal-form", ideal, query, point=point)
                 self.assertEqual(result["remainder"], expected)
 

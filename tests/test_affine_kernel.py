@@ -40,6 +40,25 @@ class AffineMaps(unittest.TestCase):
                     self.assertEqual(header.split()[0], str(int(any(any(e) for e in terms))))
                     self.assertEqual(text, expected)
 
+    def test_fan_projection_preserves_wide_exponents_and_signed_coefficients(self):
+        from engine.native_library import affine_request
+
+        # The first two ray columns tie in total degree. Both the degree and
+        # the coefficient exceed machine integers and the Python decimal limit.
+        power = "1" + "0" * 4500
+        coefficient = "8" * 4501
+        header = ["x y z", "zeta alpha mu", "z"]
+        cone = ["1 0 0", "0 1 0", f"{power} {power} 1", "5 6 4"]
+        frame = [f"0 -{coefficient} 1", "-1 1 0", f"1 {coefficient} 0"]
+        rows = affine_request(["fan_charts_with_projection", *header, *frame, *cone])
+        self.assertEqual(rows[:4], affine_request(["fan_charts", *header, *cone]))
+        first, second = f"zeta*mu^{power}", f"alpha*mu^{power}"
+        self.assertEqual(rows[4:], [
+            f"-{coefficient}*{second}+mu",
+            f"-{first}+{second}",
+            f"{first}+{coefficient}*{second}",
+        ])
+
     def test_native_factor_multiplicities_are_exact_decimal_integers(self):
         from engine.native_library import affine_request
 

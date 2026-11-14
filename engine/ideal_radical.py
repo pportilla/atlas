@@ -3,7 +3,7 @@
 from . import native_polynomial as np
 from .affine_kernel import _request, _ring
 from .ideal_operations import IdealBasis, intersection, saturate
-from .local_algebra import _leading
+from .local_algebra import _basis_heads
 
 
 def _squarefree(variables, f):
@@ -70,7 +70,7 @@ def radical(variables, generators, *, order, basis, stage):
         with stage("radical_squarefree_generators", generators=len(generators)):
             squarefree = tuple(dict.fromkeys(_squarefree(variables, f) for f in generators))
         rows = tuple(basis("radical_basis", variables, squarefree, order).exprs)
-        heads = [_leading(np.terms(variables, f), order) for f in rows]
+        heads = _basis_heads(variables, rows, order, "radical_initial_monomials")
         if len(squarefree) == 1 or all(all(e <= 1 for e in h) for h in heads):
             # If the initial ideal is radical, the ideal itself is radical:
             # the head of a nonzero normal form cannot have a power in it.

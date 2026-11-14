@@ -41,6 +41,13 @@ class SessionWorkspaceTests(unittest.TestCase):
         self.assertIn("n = number", bindings)
         self.assertIn("q = 1/3", bindings)
 
+        marked = Resolution({"variables": ["x"], "dual_complex": {"vertices": []},
+                             "coefficient_field": {"generator": "theta"},
+                             "charts": [{"id": "M", "coordinates": ["u"]}]})
+        with patch("engine.session_values.chart_space", side_effect=AssertionError("unexpected field computation")):
+            marked_rings, _ = workspace({"C": marked.chart("M")})
+        self.assertIn("u", marked_rings[0])
+
     def test_narrow_panel_counts_omitted_bindings_and_clips_wide_text(self):
         stream = Terminal()
         with patch.dict(os.environ, TERM="xterm"), patch("os.get_terminal_size", return_value=os.terminal_size((36, 10))):

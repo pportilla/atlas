@@ -1,186 +1,39 @@
 """Local standard bases and normal forms over QQ at rational affine points."""
 
-from math import comb, prod
-
 from . import native_polynomial as np
-from .algebra_execution import cpu_stage, stage_label
-from .algebra_groebner import reduced_basis
-from .local_algebra import _homogeneous_local_basis, _leading
-from .local_mora import _divides, finite_degree_cutoff, weak_normal_form
+from .algebra_execution import cpu_stage, current_execution, stage_label
+from .local_kernel import local_polynomials, local_request
 from .point_germs import _nonzero_at_point, _translate
 from .polynomial import InputError, format_poly
 from .rational_point import coordinate_fraction, normalize_point
 
 
-def _minimal_heads(heads):
-    minimal = []
-    for head in sorted(heads, key=lambda e: (sum(e), e)):
-        if not any(_divides(h, head) for h in minimal):
-            minimal.append(head)
-    return minimal
-
-
-def _project_monomials(variables, point, generators):
-    # x_i is a unit at p when p_i != 0. On the remaining axes the original
-    # and centered coordinates agree. Translation on the unit axes therefore
-    # commutes with deleting every term in this projected monomial ideal.
-    heads = set()
-    for g in generators:
-        head, = np.terms(variables, g)
-        heads.add(tuple(0 if p else e for p, e in zip(point, head)))
-    return tuple(np.from_terms(variables, {h: 1}) for h in _minimal_heads(heads))
-
-
-def _local_head(row, order):
-    degree = min(map(sum, row))
-    return _leading((e for e in row if sum(e) == degree), order)
-
-
-def _monic_row(variables, row, head):
-    coefficient = row[head]
-    return np.from_terms(variables, row if coefficient == 1 else
-                         {e: c / coefficient for e, c in row.items()})
-
-
-def _minimal_rows(variables, rows, heads):
-    # For a certified standard basis, a row for each minimal head still spans
-    # the initial ideal. Local weak division by those rows reduces all of I to zero.
-    by_head = {}
-    for head, row in zip(heads, rows):
-        by_head.setdefault(head, []).append(row)
-    monic = []
-    for head in _minimal_heads(by_head):
-        candidates = by_head[head]
-        if len(candidates) > 1:
-            # A lower-degree, sparser polynomial generally costs less to shift.
-            # Break remaining ties on monic polynomials for reproducible replay.
-            costs = [(max(map(sum, row)), len(row)) for row in candidates]
-            best = min(costs)
-            candidates = [row for row, cost in zip(candidates, costs) if cost == best]
-        monic.append(min((_monic_row(variables, row, head) for row in candidates),
-                         key=np.default_sort_key))
-    return tuple(sorted(monic, key=np.default_sort_key))
-
-
-def _certified_rows(variables, inputs, computed, order):
-    """Prefer supplied rows once their local head ideal is certified."""
-    with cpu_stage("certify_local_heads", input_rows=len(inputs), basis_rows=len(computed)):
-        heads = [_local_head(row, order) for row in inputs]
-        certified = [_local_head(row, order) for row in computed]
-        if any(not any(h) for h in certified):
-            return (np.S.One,)
-        # All input rows belong to I. The reverse inclusion of head ideals
-        # proves that these very rows form a standard basis. Preferring them
-        # ensures that replaying a saved minimal basis keeps its representatives.
-        if all(any(_divides(h, target) for h in heads) for target in certified):
-            return _minimal_rows(variables, inputs, heads)
-        return _minimal_rows(variables, computed, certified)
-
-
 def _standard_basis(variables, generators, order):
-    """A local standard basis in coordinates centered at the chosen point."""
-    with cpu_stage("inspect_local_generators", generators=len(generators)):
-        rows = [np.terms(variables, f) for f in generators if f]
-        if not rows:
-            return ()
-        if any((0,) * len(variables) in row for row in rows):
-            return (np.S.One,)
-        if len(rows) == 1:
-            # Local heads multiply, so one generator is already a standard basis.
-            row, = rows
-            return (_monic_row(variables, row, _local_head(row, order)),)
-        heads = []
-        for row in rows:
-            minimum = tuple(map(min, zip(*row)))
-            if minimum not in row:
-                break
-            heads.append(minimum)
-    if len(heads) == len(rows):
-        # Each row is x^m times a polynomial whose constant coefficient is
-        # nonzero. These factors are units in the centered local ring, so the
-        # x^m generate its entire initial ideal for either local tie order.
-        with cpu_stage("local_monomial_associates", generators=len(rows)):
-            return _minimal_rows(variables, rows, heads)
-
-    if all(len({sum(e) for e in row}) == 1 for row in rows):
-        with stage_label("local_standard_basis"):
-            basis = reduced_basis(generators, variables, order=order)
-        return _certified_rows(variables, rows, [np.terms(variables, f) for f in basis.exprs], order)
-
-    basis = _homogeneous_local_basis(variables, rows, order)
-    # Clearing the homogenizing power in any representation f=sum(a_i*g_i)
-    # shows that these projected heads divide every local leading monomial in I.
-    # The rows are homogeneous, so setting h=1 never merges distinct terms.
-    with cpu_stage("dehomogenize_local_basis", generators=len(basis.exprs)):
-        projected = [{e[1:]: c for e, c in np.terms(basis.gens, f).items()} for f in basis.exprs]
-    return _certified_rows(variables, rows, projected, order)
-
-
-def _taylor_jet(variables, shifts, terms, cutoff):
-    """Expand f(p+X) sparsely through total degree cutoff-1."""
-    result = {}
-    for powers, coefficient in terms.items():
-        base = tuple(0 if shift else e for e, shift in zip(powers, shifts))
-        room = cutoff - 1 - sum(base)
-        if room < 0:
-            continue
-        # Combine equal and reciprocal shift magnitudes before exponentiating.
-        # For example (x*y)^n at (2,1/2) has constant coefficient 1 for all n.
-        scales = {}
-        axes = []
-        for i, (e, shift) in enumerate(zip(powers, shifts)):
-            if not shift or not e:
-                continue
-            axes.append(i)
-            if shift < 0 and e % 2:
-                coefficient = -coefficient
-            magnitude = abs(shift)
-            if magnitude != 1:
-                factor = magnitude if magnitude > 1 else 1 / magnitude
-                scales[factor] = scales.get(factor, 0) + (e if magnitude > 1 else -e)
-        coefficient *= prod(factor**e for factor, e in scales.items() if e)
-        # For each axis the kth Taylor coefficient is the preceding one
-        # times (e-k+1)/(k*p_i). Only iterate over reachable degrees.
-        partials = [(base, coefficient, room)]
-        for i in axes:
-            expanded = []
-            for monomial, value, remaining in partials:
-                expanded.append((monomial, value, remaining))
-                for k in range(1, min(powers[i], remaining) + 1):
-                    value = value * (powers[i] - k + 1) / (k * shifts[i])
-                    powers_k = monomial[:i] + (k,) + monomial[i + 1:]
-                    expanded.append((powers_k, value, remaining - k))
-            partials = expanded
-        for monomial, value, _ in partials:
-            result[monomial] = result.get(monomial, 0) + value
-    return np.from_terms(variables, result)
+    run = current_execution()
+    operation = "local_basis_gpu" if run and run.replay.compute == "gpu" else "local_basis"
+    with stage_label("local_standard_basis"), cpu_stage("local_standard_basis", generators=len(generators)):
+        return local_polynomials(operation, variables, order, generators)
 
 
 def _center_query(variables, shifts, query, basis, order):
     if not any(shifts):
         return query
-    if len(basis) < len(variables):
-        # A finite leading ideal needs a pure power for each coordinate.
-        return _translate(variables, shifts, (query,))[0]
-    terms = np.terms(variables, query)
-    active = [i for i, shift in enumerate(shifts) if shift]
-    # Small shifts are cheap in the native polynomial kernel. For larger ones
-    # compare the full binomial support to an upper bound on the retained jet.
-    full = sum(prod(e[i] + 1 for i in active) for e in terms)
-    if full >= 128:
-        heads = (_local_head(np.terms(variables, g), order) for g in basis)
-        cutoff = finite_degree_cutoff(len(variables), heads)
-        if cutoff is not None:
-            retained = 0
-            for e in terms:
-                room = cutoff - 1 - sum(k for k, a in zip(e, shifts) if not a)
-                if room >= 0:
-                    degrees = [e[i] for i in active if e[i]]
-                    box = prod(min(k, room) + 1 for k in degrees)
-                    retained += min(box, comb(room + len(degrees), len(degrees)))
-            if 4 * retained <= full:
-                return _taylor_jet(variables, shifts, terms, cutoff)
-    return _translate(variables, shifts, (query,))[0]
+    reply = local_polynomials("local_query_jet", variables, order, (*basis, query), point=shifts)
+    return reply[0] if reply else _translate(variables, shifts, (query,))[0]
+
+
+def _normal_form(variables, basis, query, order):
+    run = current_execution()
+    if run and run.replay.compute == "gpu" and basis:
+        from .gpu_normal_form import normal_form
+        heads = local_request("local_associate_heads", variables, order, basis)
+        if heads:
+            with stage_label("local_normal_form"):
+                remainder = normal_form(variables, heads, np.row(variables, query))
+            if remainder is not None:
+                return np.S.One, np.from_row(variables, remainder), "standard"
+    reduction, unit, remainder = local_request("local_normal_form", variables, order, (*basis, query))
+    return np.from_row(variables, unit), np.from_row(variables, remainder), reduction
 
 
 def handle(operation, ring, operands, *, known_basis=False):
@@ -203,7 +56,7 @@ def handle(operation, ring, operands, *, known_basis=False):
                           remainder=format_poly(np.terms(variables, query), names))
             return result
         if any(shifts) and generators and all(len(g._terms) == 1 for g in generators):
-            projected = _project_monomials(variables, shifts, generators)
+            projected = local_polynomials("local_project", variables, ring["order"], generators, point=shifts)
         if any(g.is_number for g in generators) or projected == (np.S.One,) or (
                 projected is None and any(shifts) and
                 any(_nonzero_at_point(variables, shifts, g) for g in generators)):
@@ -215,7 +68,7 @@ def handle(operation, ring, operands, *, known_basis=False):
     if projected is not None:
         if normal:
             with cpu_stage("local_normal_form", divisors=len(projected)):
-                _, remainder, reduction = weak_normal_form(variables, projected, query, ring["order"])
+                _, remainder, reduction = _normal_form(variables, projected, query, ring["order"])
             result.update(unit="1", reduction=reduction, remainder=format_poly(np.terms(variables, remainder), names))
         else:
             result["generators"] = [format_poly(np.terms(variables, f), names) for f in projected]
@@ -236,7 +89,7 @@ def handle(operation, ring, operands, *, known_basis=False):
         with cpu_stage("center_query_at_point", variables=len(names)):
             query = _center_query(variables, shifts, query, basis, ring["order"])
         with cpu_stage("local_normal_form", divisors=len(basis)):
-            unit, remainder, reduction = weak_normal_form(variables, basis, query, ring["order"])
+            unit, remainder, reduction = _normal_form(variables, basis, query, ring["order"])
         outputs = (unit, remainder)
     else:
         outputs = basis
