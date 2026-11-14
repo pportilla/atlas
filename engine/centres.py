@@ -326,8 +326,20 @@ def _groups(st):
         yield st.working, [item for item in st.coll if item[1] != 0]
         return
 
-    def alive(ideals):
-        return [w for w in ideals if not frame.empty(*st.locus, *w)]
+    def distinct(ideals, *, check_empty=False):
+        pieces = tuple(dict.fromkeys(ideals))
+        if check_empty:
+            pieces = tuple(w for w in pieces if not frame.empty(*st.locus, *w))
+        if len(pieces) < 2:
+            return pieces
+        # A piece is used only on this frame and invariant locus. Equal
+        # reduced bases there give equal restrictions on every smaller open.
+        # Keep the original equations when passing a piece to the next level.
+        representatives = {}
+        for w in pieces:
+            basis = ideal_basis(frame.variables, (*frame.rows, *st.locus, *w))
+            representatives.setdefault(basis, w)
+        return tuple(representatives.values())
 
     def go(work, pending, kept):
         if not pending:
@@ -339,8 +351,9 @@ def _groups(st):
             return
         # The closure of the part of N where the function is not zero.
         support = saturate(frame.variables, frame.rows, item[1])
-        on = alive([(*w, *support) for w in work])
-        off = alive([tuple(saturate(frame.variables, (*frame.rows, *st.locus, *w), g)) for w in work for g in support])
+        on = distinct(((*w, *support) for w in work), check_empty=True)
+        off = distinct((tuple(saturate(frame.variables, (*frame.rows, *st.locus, *w), g))
+                        for w in work for g in support), check_empty=True)
         if any(not frame.empty(*st.locus, *w, *support) for w in off):
             raise GiveUp("A function vanishes identically near only part of a locus.")
         if on:
@@ -348,7 +361,7 @@ def _groups(st):
         if off:
             yield from go(off, rest, kept)
 
-    yield from go(list(st.working), list(st.coll), [])
+    yield from go(distinct(st.working), list(st.coll), [])
 
 
 def _residual(st, ctx):

@@ -167,11 +167,7 @@ def _resolve(request, proofs):
             if found is not None:
                 result["embedded_companion"] = {"atlas": record["atlas"]}
         report("Computing the selected zeta functions", recorded_blowups(record))
-        zetas = zetas_from_strata(record, kinds, found)
-        if companion:
-            for zeta in zetas.values():
-                zeta["source"] = "companion embedded resolution"
-        result.update(zetas)
+        result.update(zetas_from_strata(record, kinds, found, companion=companion))
     result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
 

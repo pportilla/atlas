@@ -14,6 +14,12 @@ class ExhaustiveFallback(unittest.TestCase):
         result = resolve(request)
         self.assertEqual(result["status"], "resolved")
         self.assertEqual([step["rule"] for step in result["steps"]], ["repeated tangent"] * 3)
+        first, second, third = [step["center_charts"] for step in result["steps"]]
+        self.assertEqual(first, [dict(history=[], coordinates=list("xyztu"), ideal=list("xyztu"))])
+        self.assertEqual(sorted(piece["history"] for piece in second), [[[1, pivot]] for pivot in range(5)])
+        for piece in third:
+            self.assertEqual([stage for stage, pivot in piece["history"]], [1, 2])
+            self.assertTrue(piece["ideal"])
         self.assertEqual(len(result["atlas"]), len(result["charts"]))
         self.assertEqual(result["certificate"]["atlas_verification"], "Embedded normal crossings on the owned origin fibre")
 

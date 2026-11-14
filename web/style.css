@@ -96,7 +96,6 @@ code { font-size: .93em; overflow-wrap: anywhere; }
 .input-pane { padding-right: 30px; }
 .output-pane { border-left: 1px solid var(--rule); padding-left: clamp(26px, 3.1vw, 45px); padding-bottom: 30px; scroll-margin-top: 16px; }
 .output-pane:focus, .workspace:focus { outline: none; }
-.pane-heading { font: 500 24px/1.22 var(--serif); letter-spacing: -.025em; }
 
 .field { display: grid; gap: 6px; min-width: 0; }
 .field > span:first-child, legend { color: var(--text); font-size: 13px; font-weight: 600; }
@@ -157,6 +156,8 @@ summary::marker { color: var(--accent); font-size: .83em; }
 .quotient > span:first-child { align-self: stretch; padding: 0 .3em .12em; border-bottom: 1px solid currentColor; text-align: center; }
 .quotient > span:last-child { padding: .12em .3em 0; }
 .zeta-euler { width: fit-content; margin-top: 12px; }
+#panel-zeta > .section-head:not(:first-child) { margin-top: 24px; }
+.monodromy-verdict { margin-top: 9px; }
 .zeta-convention { overflow-x: auto; overflow-y: hidden; padding: 4px 0 6px; font-size: 19px; white-space: nowrap; }
 .stack > * + * { margin-top: 14px; }
 .zeta-convention sup sup, .zeta-convention sup sub { font-size: .8em; }
@@ -233,13 +234,10 @@ details.more > .more-body { padding: 10px 0 4px; }
 details.more > .more-body > * + * { margin-top: 12px; }
 pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; background: var(--wash); border-left: 2px solid var(--rule-strong); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Record */
-.record { max-width: 56em; }
+/* Field lists */
 .facts { display: grid; grid-template-columns: minmax(108px, 9em) minmax(0, 1fr); gap: 5px 20px; margin-top: 12px; font-size: 14px; align-items: baseline; }
 .facts > dt { color: var(--muted); font-size: 13px; }
 .facts > dd { min-width: 0; overflow-wrap: anywhere; }
-.notes { display: grid; gap: 6px; padding-left: 1.2em; list-style: disc; color: var(--muted); font-size: 13.5px; }
-.prose { max-width: 50em; }
 
 @media (max-width: 820px) {
   .masthead-inner { min-height: 54px; }

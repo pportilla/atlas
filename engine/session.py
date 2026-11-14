@@ -128,9 +128,9 @@ Inspect R.charts and R.branches, or use print(...) for explicit output.
 Run the same expressions in a file with ./atlas run FILE.atlas."""
 
 
-def _json_value(value):
+def json_value(value):
     if isinstance(value, (DualComplex, Divisor)):
-        return _json_value(value._record)
+        return json_value(value._record)
     if isinstance(value, (QuotientElement, QuotientRing)):
         return value.result
     if isinstance(value, Polynomial):
@@ -140,9 +140,9 @@ def _json_value(value):
     if isinstance(value, dict):
         if not all(isinstance(key, str) for key in value):
             raise ValueError("JSON record fields must have string names.")
-        return {key: _json_value(value[key]) for key in sorted(value)}
+        return {key: json_value(value[key]) for key in sorted(value)}
     if isinstance(value, (list, tuple)):
-        return [_json_value(item) for item in value]
+        return [json_value(item) for item in value]
     if isinstance(value, float) and not isfinite(value):
         raise ValueError("JSON numbers must be finite.")
     return value
@@ -150,7 +150,7 @@ def _json_value(value):
 
 def print_json(**fields):
     """Emit one JSON record, with canonical polynomials and exact rational strings."""
-    print(result_json(_json_value(fields)), flush=True)
+    print(result_json(json_value(fields)), flush=True)
 
 
 def _resolution_input(polynomial, variables):

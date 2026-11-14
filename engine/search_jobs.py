@@ -1,5 +1,5 @@
 """A bounded queue of cancellable resolutions with retained result records."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -30,6 +30,7 @@ class Job:
     child: subprocess.Popen | None = None
     watcher: threading.Thread | None = None
     progress: dict | None = None
+    zeta_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 class SearchJobs:
@@ -215,6 +216,13 @@ class SearchJobs:
                         and other.get("polynomial") == record.get("polynomial") and other.get("atlas")):
                     return {"atlas": other["atlas"]}
         return None
+
+    def zeta_lock(self, ident):
+        """Serialize follow-ups for this result so each worker sees the previous zeta."""
+        with self.lock:
+            self._prune()
+            job = self.jobs.get(ident)
+            return job.zeta_lock if job else None
 
     def attach_zetas(self, ident, outputs, companion=None):
         with self.lock:

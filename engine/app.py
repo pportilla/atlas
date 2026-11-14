@@ -1,6 +1,7 @@
 """Local CLI and HTTP frontend, using only the Python standard library."""
 import argparse
 import codeop
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import shlex
@@ -139,7 +140,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def replay_zetas(self, data, ident):
         from .resolution_zetas import selected_zetas
-        from .worker_process import run_worker
         if not isinstance(data, dict) or "zetas" not in data:
             return self.obj(400, {"error": "Select a zeta function."})
         try:
@@ -149,6 +149,14 @@ class Handler(BaseHTTPRequestHandler):
         if not kinds:
             return self.obj(400, {"error": "Select a zeta function."})
 
+        lock = self.server.search_jobs.zeta_lock(ident) if ident is not None else nullcontext()
+        if lock is None:
+            return self.obj(404, {"error": "Search no longer available."})
+        with lock:
+            return self.run_zeta_replay(data, kinds, ident)
+
+    def run_zeta_replay(self, data, kinds, ident):
+        from .worker_process import run_worker
         jobs = self.server.search_jobs
         if ident is not None:
             job = jobs.get(ident)

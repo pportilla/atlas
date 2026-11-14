@@ -1005,15 +1005,23 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             # comes at later stages.
             if size > 1:
                 raise
-            fewer = _apart(current, chosen) if size else _alike(current, chosen)
+            chosen = _apart(current, chosen) if size else _alike(current, chosen)
             try:
-                following = blown(fewer)
+                following = blown(chosen)
             except Uneven:
-                following = blown(_alike(current, fewer, single=True))
+                chosen = _alike(current, chosen, single=True)
+                following = blown(chosen)
         rule.created(label, detail)
+        # Keep the ideals of the accepted blowup, in its actual local coordinates.
+        # Stage and pivot identify the parent open even when it is no longer a final chart.
+        center_charts = [{"history": list(chart.history), "coordinates": [v.name for v in chart.variables],
+                          "ideal": [str(g).replace("**", "^") for g in centre],
+                          **({"ambient_ideal": [str(g).replace("**", "^") for g in chart.ambient]}
+                             if chart.ambient else {})}
+                         for chart, centre in zip(current, chosen) if centre is not None]
         centres.append({"id": label, "stage": stage, "dimension": size, "rule": detail.get("rule", rule.name),
                         "kind": {0: "points", 1: "curve", 2: "surface"}.get(size, "subvariety"),
-                        "components": detail.get("components", through),
+                        "components": detail.get("components", through), "center_charts": center_charts,
                         **({"invariant": detail["invariant"]} if "invariant" in detail else {})})
         current = following
         if budget is not None and len(current) > budget:

@@ -121,6 +121,7 @@ def _record(names, charts, centres, data, strata, *, defer_outputs):
             **({"blown_up": [{"ideal": [_text(g) for g in z]} for z in chart.removed]} if chart.removed else {}),
         })
     steps = [{"id": centre["id"], "type": "blowup", "center": centre["kind"], "rule": centre["rule"],
+              "dimension": centre["dimension"], "center_charts": centre["center_charts"],
               **({"invariant": centre["invariant"]} if "invariant" in centre else {}),
               "components": centre["components"]} for centre in centres]
     if defer_outputs:

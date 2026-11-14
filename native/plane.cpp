@@ -354,7 +354,7 @@ struct Resolver {
         mults.push_back(add_powers(m,add_powers(mults[ax[0]],mults[ax[1]])));
         if(ax[0] && ax[1]) edges.erase(minmax(ax[0],ax[1]));
         J s;
-        s["id"]="B"+to_string(e); s["parent_chart"]=parent;s["center"]=point(center);
+        s["id"]="B"+to_string(e); s["type"]="point blowup"; s["parent_chart"]=parent;s["center"]=point(center);
         s["strict_multiplicity"]=Json::Int64(m);s["exceptional_id"]=E(e);
         s["total_multiplicity"]=Json::Int64(mults[e]);
         for(int a:ax) if(a){--weights[a]; edges.insert(minmax(a,e));}

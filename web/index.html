@@ -76,46 +76,10 @@
       <section id="output" class="output-pane" tabindex="-1" aria-label="Resolution output">
         <p id="announcements" class="visually-hidden" aria-live="polite"></p>
 
-        <figure class="germ-plate" id="germ-plate" aria-labelledby="plate-title plate-equation">
-          <div class="plate-heading">
-            <h2 id="plate-title" class="pane-heading">Plane cusp</h2>
-            <p class="m" id="plate-equation"><i>y</i><sup>2</sup> = <i>x</i><sup>3</sup></p>
-          </div>
-          <svg class="curve-drawing" viewBox="0 0 560 310" role="img" aria-labelledby="curve-title" aria-describedby="plate-caption">
-            <title id="curve-title">Plane cusp in real coordinates</title>
-            <defs>
-              <clipPath id="plot-window"><rect x="16" y="12" width="528" height="286"></rect></clipPath>
-            </defs>
-            <g clip-path="url(#plot-window)">
-              <g class="plot-grid">
-                <path d="M80 12V298 M340 12V298 M470 12V298 M16 35H544 M16 95H544 M16 215H544 M16 275H544"/>
-              </g>
-              <path class="plot-axes" d="M16 155H544 M210 12V298"/>
-              <path class="plot-ticks" d="M80 151v8 M340 151v8 M470 151v8 M206 35h8 M206 95h8 M206 215h8 M206 275h8"/>
-              <g transform="translate(210 155) scale(130 -60)">
-                <path class="germ-curve" id="plate-curve" d="M2.25 -3.375 C-.75 3.375 -.75 -3.375 2.25 3.375" vector-effect="non-scaling-stroke"/>
-              </g>
-              <circle class="singular-point" cx="210" cy="155" r="4"/>
-            </g>
-            <g class="axis-ticks" text-anchor="middle">
-              <text x="80" y="174">−1</text><text x="340" y="174">1</text><text x="470" y="174">2</text>
-            </g>
-            <g class="axis-ticks" text-anchor="end">
-              <text x="200" y="39">2</text><text x="200" y="99">1</text><text x="200" y="219">−1</text><text x="200" y="279">−2</text>
-              <text x="201" y="174">0</text>
-            </g>
-            <g class="axis-labels"><text x="535" y="146">x</text><text x="220" y="24">y</text></g>
-          </svg>
-          <figcaption id="plate-caption">The real cusp is parametrized by <span class="m">(<i>t</i><sup>2</sup>, <i>t</i><sup>3</sup>)</span>.</figcaption>
-        </figure>
-        <section class="germ-preview" id="plate-empty" aria-labelledby="preview-title" hidden>
-          <h2 class="pane-heading" id="preview-title">Polynomial</h2>
-          <p class="m" id="preview-equation"></p>
-          <p id="preview-coordinates" class="helper"></p>
-          <p class="helper" id="preview-note"></p>
-        </section>
-
         <div id="runs" aria-label="Resolution history"></div>
+        <div id="workspace-logo">
+          <img src="/atlas-mark.svg" width="84" height="84" alt="Atlas">
+        </div>
         <article id="result" hidden aria-label="Selected resolution">
           <header class="result-head">
             <p id="result-summary" hidden></p>
@@ -125,7 +89,6 @@
           <section class="section" id="panel-zeta"></section>
           <section class="section folded" id="panel-steps"></section>
           <section class="section folded" id="panel-charts"></section>
-          <section class="section folded" id="panel-record"></section>
           <footer class="record-export"><button class="link export" type="button" id="export" disabled>Download JSON</button></footer>
         </article>
       </section>

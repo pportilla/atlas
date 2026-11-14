@@ -16,20 +16,29 @@ def selected_zetas(request):
     return tuple(kind for kind in KINDS if kind in kinds)
 
 
-def zetas_from_strata(record, kinds, strata):
+def zetas_from_strata(record, kinds, strata, *, companion=False):
     if strata is None:
         reason = ("The resolution has not been certified." if record.get("status") != "resolved" else
                   "These charts do not certify the embedded strata over the origin. "
                   "Compute an embedded resolution to obtain the missing data.")
-        return {kind + "_zeta": {"status": "unavailable", "reason": reason} for kind in kinds}
-    results = {}
-    if "monodromy" in kinds:
-        from .monodromy import monodromy_zeta
-        results["monodromy_zeta"] = monodromy_zeta(record, strata=strata)
-    if "topological" in kinds:
-        from .topological import topological_zeta
-        results["topological_zeta"] = topological_zeta(
-            record, strata=strata, monodromy=results.get("monodromy_zeta"))
+        results = {kind + "_zeta": {"status": "unavailable", "reason": reason} for kind in kinds}
+    else:
+        results = {}
+        if "monodromy" in kinds:
+            from .monodromy import monodromy_zeta
+            results["monodromy_zeta"] = monodromy_zeta(record, strata=strata)
+        if "topological" in kinds:
+            from .topological import topological_zeta
+            results["topological_zeta"] = topological_zeta(
+                record, strata=strata, monodromy=results.get("monodromy_zeta"))
+    if companion:
+        for zeta in results.values():
+            zeta["source"] = "companion embedded resolution"
+    if len(results) == len(KINDS) and all(zeta["status"] == "computed" for zeta in results.values()):
+        from .session import json_value
+        from .session_monodromy import check_zetas
+        check = check_zetas(record, results["topological_zeta"], results["monodromy_zeta"])
+        results["monodromy_check"] = json_value(check)
     return results
 
 
@@ -42,9 +51,9 @@ def replay_zetas(request):
     kinds = selected_zetas(request)
     if not kinds:
         raise InputError("Select a zeta function.")
-    found = resolution_strata(record)
-    results = zetas_from_strata(record, kinds, found)
-    if record.get("mode") == "intrinsic" and record.get("embedded_companion"):
-        for zeta in results.values():
-            zeta["source"] = "companion embedded resolution"
-    return results
+    # Imported zeta fields may be stale. Replay any computed member of the
+    # pair alongside the newly requested one on the very same saved strata.
+    kinds = tuple(kind for kind in KINDS if kind in kinds or
+                  (isinstance(saved := record.get(kind + "_zeta"), dict) and saved.get("status") == "computed"))
+    companion = record.get("mode") == "intrinsic" and bool(record.get("embedded_companion"))
+    return zetas_from_strata(record, kinds, resolution_strata(record), companion=companion)

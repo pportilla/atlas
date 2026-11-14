@@ -43,16 +43,8 @@ def _pole_witnesses(topological, monodromy):
     return poles, evidence["candidates"]
 
 
-def check_resolution(resolution, *, check_isolation, compute):
-    record = resolution._record
-    topological, monodromy = deepcopy(resolution._local_zetas)
-    if record["status"] != "resolved":
-        reason = (record.get("diagnostic") or {}).get("description") or record["summary"]
-        return unavailable_check(reason, resolution, topological, monodromy)
-    for zeta in (topological, monodromy):
-        if zeta["status"] != "computed":
-            return unavailable_check(zeta["reason"], resolution, topological, monodromy)
-
+def check_zetas(record, topological, monodromy):
+    """Find eigenvalue witnesses for the actual poles of a computed zeta pair."""
     poles, candidates = _pole_witnesses(topological, monodromy)
     missing = [pole for pole in poles if pole["witness"] is None]
     if missing:
@@ -71,28 +63,42 @@ def check_resolution(resolution, *, check_isolation, compute):
                     pole.update(witness="nearby transverse Morse", transverse=evidence)
         missing = [pole for pole in missing if pole["witness"] is None]
     result = {"status": "verified", "reason": "Every actual pole has a local monodromy eigenvalue witness.",
-              "resolution": resolution, "topological_zeta": topological, "monodromy_zeta": monodromy,
-              "poles": poles, "candidate_poles": candidates, "milnor_number": None}
+              "poles": poles, "candidate_poles": candidates}
     if missing:
         result.update(status="unresolved", reason="A nontrivial order is invisible in the origin zeta "
                       "and its nearby monodromy is undetermined.")
-        if check_isolation:
-            try:
-                f = polynomial(record["polynomial"], variables=resolution.coordinates)
-                mu = milnor_number(f, compute=compute or "auto")
-            except (ValueError, ArithmeticError, RuntimeError, OSError) as exc:
-                result["reason"] += f" The isolation check was unavailable ({exc})."
-                return result
-            result["milnor_number"] = mu
-            if mu.finite:
-                # The reduced cohomology of an isolated hypersurface Milnor
-                # fibre is concentrated in degree n-1. A nontrivial order
-                # cannot cancel there, and nearby smooth fibres only give 1.
-                expected_chi = integer_from_decimal(_request("isolated_euler", dimension=len(record["variables"]),
-                                                             mu=integer_text(mu.value)))
-                if expected_chi == monodromy["milnor_fiber_euler_characteristic"]:
-                    result.update(status="isolated_candidate", reason="A nontrivial order is missing for a "
-                                  "finite local Milnor number. Independently check the resolution and zetas.")
-                else:
-                    result["reason"] = "The finite local Milnor number disagrees with the zeta's fibre Euler characteristic."
+    return result
+
+
+def check_resolution(resolution, *, check_isolation, compute):
+    record = resolution._record
+    topological, monodromy = deepcopy(resolution._local_zetas)
+    if record["status"] != "resolved":
+        reason = (record.get("diagnostic") or {}).get("description") or record["summary"]
+        return unavailable_check(reason, resolution, topological, monodromy)
+    for zeta in (topological, monodromy):
+        if zeta["status"] != "computed":
+            return unavailable_check(zeta["reason"], resolution, topological, monodromy)
+
+    result = check_zetas(record, topological, monodromy)
+    result.update(resolution=resolution, topological_zeta=topological, monodromy_zeta=monodromy, milnor_number=None)
+    if check_isolation and result["status"] == "unresolved":
+        try:
+            f = polynomial(record["polynomial"], variables=resolution.coordinates)
+            mu = milnor_number(f, compute=compute or "auto")
+        except (ValueError, ArithmeticError, RuntimeError, OSError) as exc:
+            result["reason"] += f" The isolation check was unavailable ({exc})."
+            return result
+        result["milnor_number"] = mu
+        if mu.finite:
+            # The reduced cohomology of an isolated hypersurface Milnor
+            # fibre is concentrated in degree n-1. A nontrivial order
+            # cannot cancel there, and nearby smooth fibres only give 1.
+            expected_chi = integer_from_decimal(_request("isolated_euler", dimension=len(record["variables"]),
+                                                         mu=integer_text(mu.value)))
+            if expected_chi == monodromy["milnor_fiber_euler_characteristic"]:
+                result.update(status="isolated_candidate", reason="A nontrivial order is missing for a "
+                              "finite local Milnor number. Independently check the resolution and zetas.")
+            else:
+                result["reason"] = "The finite local Milnor number disagrees with the zeta's fibre Euler characteristic."
     return result

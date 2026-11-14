@@ -946,9 +946,6 @@ function showZeta(data) {
     } else convention.append(code(text));
   }
   if (convention.childNodes.length > 1) body.append(convention);
-  const shown = ["status", "variable", "convention", "formula", "expression", "factors", "contributions", "milnor_fiber_euler_characteristic"];
-  const rest = Object.entries(zeta).filter(([key]) => !shown.includes(key));
-  if (rest.length) body.append(dataList(rest));
   const contributions = Array.isArray(zeta.contributions) ? zeta.contributions.filter((c) => c && typeof c === "object") : [];
   if (contributions.length) {
     const keys = columnsOf(contributions, ["multiplicity", "euler_characteristic"], ["component"]);
@@ -956,7 +953,7 @@ function showZeta(data) {
       contributions, (c) => [idNode(c.component ?? "—"), ...keys.map((key) => valueNode(key, c[key]))], 12));
   }
   if (body.childElementCount) {
-    panel.append(disclosure(contributions.length ? "Convention and contributions" : "Convention", body));
+    panel.append(disclosure("Formula", body));
   }
 }
 
@@ -994,16 +991,10 @@ function showTopological(data) {
   } else line.append(typeset(zeta.expression ?? ""));
   panel.append(line);
 
-  const poles = Array.isArray(zeta.poles) ? zeta.poles.filter((pole) => pole && typeof pole === "object") : [];
-  if (poles.length) {
+  if (Array.isArray(zeta.poles)) {
     const row = el("p", "zeta-euler m");
-    row.title = "Poles of the topological zeta function";
-    row.append("poles  ");
-    poles.forEach((pole, index) => {
-      if (index) row.append(",  ");
-      row.append(minus(pole.value));
-      if (Number.isInteger(pole.order) && pole.order > 1) row.append(el("sup", "", "(" + pole.order + ")"));
-    });
+    const values = zeta.poles.map(pole => minus(pole.value));
+    row.append("Poles: " + (values.join(", ") || "none"));
     panel.append(row);
   }
 
@@ -1016,24 +1007,6 @@ function showTopological(data) {
     convention.append(pretty);
     body.append(convention);
   }
-  if (poles.length) {
-    const known = poles.some((pole) => typeof pole.in_monodromy_zeta_at_origin === "boolean");
-    const headers = ["Pole", "Order", "Components"];
-    if (known) {
-      const head = el("span", "m");
-      head.title = "Whether exp(2πi·pole) is a zero or pole of the monodromy zeta function at the origin";
-      head.append("e", el("sup", "", "2πi·pole"), " in ζ");
-      headers.push(head);
-    }
-    const grid = table(headers.map((h) => (h instanceof Node ? "" : h)), poles, (pole) => {
-      const cells = [minus(pole.value), String(pole.order ?? ""),
-        (Array.isArray(pole.components) ? pole.components : []).join(", ") || "—"];
-      if (known) cells.push(pole.in_monodromy_zeta_at_origin === true ? "yes" : pole.in_monodromy_zeta_at_origin === false ? "no" : "—");
-      return cells;
-    }, 12);
-    if (known) grid.querySelector("thead th:last-child").replaceChildren(headers[3]);
-    body.append(grid);
-  }
   const numbers = Array.isArray(zeta.numerical_data) ? zeta.numerical_data.filter((row) => row && typeof row === "object") : [];
   if (numbers.length) {
     body.append(table(["Component", "N", "ν"], numbers,
@@ -1044,18 +1017,149 @@ function showTopological(data) {
     body.append(table(["Stratum", "χ"], strata,
       (row) => [(Array.isArray(row.components) ? row.components : []).join(" ∩ ") + "°", signed(row.euler_characteristic)], 12));
   }
-  if (body.childElementCount) panel.append(disclosure("Poles, numerical data and strata", body));
+  if (body.childElementCount) panel.append(disclosure("Formula", body));
+  showMonodromyCheck(panel, data);
+}
+
+function showMonodromyCheck(panel, data) {
+  const check = data.monodromy_check;
+  if (data.monodromy_zeta?.status !== "computed" || !check) return;
+  panel.append(sectionHead("Topological monodromy conjecture"));
+  const verified = check.status === "verified";
+  const verdict = el("p", "monodromy-verdict");
+  verdict.append(el("strong", "", verified ? "Verified for this germ." :
+    check.status === "unresolved" ? "Unresolved for this germ." : "Check unavailable."));
+  if (verified) verdict.append(" Each pole gives a monodromy eigenvalue at or near the origin.");
+  else if (check.reason) verdict.append(" " + check.reason);
+  panel.append(verdict);
+
+  const witnesses = {
+    "origin zeta": "Monodromy zeta at the origin",
+    "origin H^0": "Degree-zero cohomology at the origin",
+    "nearby smooth component": "Nearby smooth component",
+    "nearby transverse binomial": "Nearby transverse binomial singularity",
+    "nearby transverse Morse": "Nearby transverse Morse singularity",
+  };
+  if (check.poles?.length) {
+    panel.append(disclosure("Eigenvalue witnesses", () =>
+      table(["Pole", "Eigenvalue order", "Witness"], check.poles, pole => {
+        const witness = witnesses[pole.witness] || pole.witness || "Undetermined";
+        const where = pole.witness_component ? " (" + pole.witness_component + ")" : "";
+        return [minus(pole.value), String(pole.eigenvalue_order), witness + where];
+      })));
+  }
+}
+
+function stepMethod(step, data) {
+  let method = step.method || step.type;
+  if (!method && Array.isArray(step.center) && step.parent_chart && step.exceptional_id) method = "point blowup";
+  if (method === "blowup" && Array.isArray(step.center_ray_indices)) method = "toric coordinate blowup";
+  if (method === "blowup" && (step.kind || step.center) && data.engine === "canonical-blowups") {
+    method = "smooth-center blowup";
+  }
+  return method ? method.replace(/blowup/g, "blow-up")
+    .replace(/^./, c => c.toUpperCase()) : "Unrecorded";
+}
+
+function stepChartCenter(entry) {
+  const line = el("div");
+  line.append(locus(entry.ideal));
+  if (entry.chart) line.append(" in " + entry.chart);
+  else if (entry.history?.length) {
+    const path = entry.history.map(([stage, pivot]) => "step " + stage + ", pivot " + (pivot + 1));
+    line.append(" in " + path.join(" → "));
+  } else line.append(" in the input chart");
+  if (entry.ambient_ideal?.length) line.append(" subject to ", locus(entry.ambient_ideal));
+  return line;
+}
+
+function stepCenter(step, data, chartCoordinates, repair) {
+  const block = el("div", "eqs");
+  if (repair) {
+    const above = el("span", "", "Over ");
+    above.append(locus(repair.ideal), " in " + repair.chart);
+    block.append(above);
+  }
+  if (Array.isArray(step.center)) {
+    const input = step.parent_chart === "origin";
+    const coordinates = input ? data.variables : chartCoordinates.get(step.parent_chart);
+    const point = el("span");
+    if (coordinates?.length) point.append(tuple(coordinates), " = ");
+    point.append(tuple(step.center));
+    if (step.parent_chart) point.append(input ? " in the input chart" : " in " + step.parent_chart);
+    block.append(point);
+  } else {
+    const kind = step.center || step.kind;
+    if (kind) {
+      const label = kind === "subvariety" && step.dimension != null ? step.dimension + "-dimensional center" : kind;
+      block.append(el("span", "", label.replace(/^./, c => c.toUpperCase())));
+    }
+  }
+  const ideal = step.center_ideal || step.generators || step.ideal;
+  if (ideal?.length) block.append(locus(ideal));
+  if (step.center_charts?.length) {
+    const [first, ...rest] = step.center_charts;
+    block.append(stepChartCenter(first));
+    if (rest.length) block.append(disclosure(plural(rest.length, "other chart", "other charts"),
+      () => joined(rest.map(stepChartCenter), "")));
+  }
+  if (Array.isArray(step.center_ray_indices)) {
+    block.append("Orbit closure for rays " + step.center_ray_indices.join(", "));
+  } else if (step.type?.includes("toric modification")) {
+    // A fan modification can represent many blow-ups without specifying their factorization.
+    const images = data.certificate?.boundary_image_coordinate_ideals;
+    if (images?.length) {
+      block.append("Exceptional images");
+      for (const ideal of images) block.append(locus(ideal));
+    } else if (data.fan?.isomorphism_off_origin || data.engine === "native-toric") {
+      block.append("Over the origin");
+    } else block.append("Specified by the fan");
+  }
+  return block.hasChildNodes() ? block : "—";
+}
+
+function stepDetails(step, data) {
+  const block = el("div", "eqs");
+  function line(label, content) {
+    const item = el("span", "", label + " ");
+    item.append(content);
+    block.append(item);
+  }
+  const divisor = step.exceptional_id || step.exceptional;
+  if (divisor) line(data.mode === "intrinsic" ? "Ambient divisor" : "Creates", idNode(divisor));
+  for (const key of ["strict_multiplicity", "total_multiplicity", "multiplicity", "reduced_support_strict_multiplicity",
+                     "reduced_support_multiplicity", "weight", "rule"]) {
+    if (step[key] != null) line(labelFor(key), valueNode(key, step[key]));
+  }
+  if (step.components?.length) line("On", joined(step.components.map(id => id === "strict" ? "strict transform" : idNode(id)), ", "));
+  if (step.image_zero_coordinates?.length) line("Image", locus(step.image_zero_coordinates));
+  if (step.new_ray_index != null) line("New ray", String(step.new_ray_index));
+  if (step.type?.includes("toric modification") && data.fan?.cones) {
+    line("Fan with", plural(data.fan.cones.length, "maximal cone", "maximal cones"));
+  }
+  if (step.type === "polynomial graph isomorphism" && data.graph?.equation) {
+    line("Graph equation", typeset(data.graph.equation, " = 0"));
+  }
+  return block.hasChildNodes() ? block : "—";
 }
 
 function showSteps(data) {
   const panel = $("panel-steps");
   panel.replaceChildren();
   const steps = (Array.isArray(data.steps) ? data.steps : []).filter((step) => step && typeof step === "object");
-  if (!steps.length) return;
-  const keys = columnsOf(steps, ["type", "center", "parent_chart", "center_ideal", "center_charts", "generators", "weight",
-    "exceptional_id", "strict_multiplicity", "total_multiplicity"], ["id"]);
-  foldedSection(panel, "Construction", steps.length).body.append(table(["Step", ...keys.map(labelFor)], steps,
-    (step, index) => [String(step.id ?? index + 1), ...keys.map((key) => valueNode(key, step[key]))]));
+  if (!steps.length) {
+    if (data.status === "resolved" && Array.isArray(data.steps)) {
+      foldedSection(panel, "Resolution steps", 0).body.append(el("p", "", "The identity map resolves this germ."));
+    }
+    return;
+  }
+  const chartCoordinates = new Map((data.charts || []).map(chart => [chart.id, chart.coordinates]));
+  const rows = steps.flatMap(step => step.centers?.length
+    ? step.centers.map(center => ({step: {...center, type: "smooth-center blowup"}, repair: step}))
+    : [{step}]);
+  foldedSection(panel, "Resolution steps", rows.length).body.append(table(["Step", "Method", "Center", "Details"], rows,
+    ({step, repair}, index) => [String(step.id ?? index + 1), stepMethod(step, data),
+      stepCenter(step, data, chartCoordinates, repair), stepDetails(step, data)]));
 }
 
 // "u = 0" for a divisor, "u = v = 0" for a locus cut out by several equations.
@@ -1313,72 +1417,8 @@ function showCharts(data) {
   refresh();
 }
 
-function backendName(id) {
-  return { opencl: "OpenCL GPU", cpu: "CPU", cpu_after_opencl: "CPU (OpenCL fallback)" }[id] || id;
-}
-
-function showComputation(data, request) {
-  const panel = $("panel-record");
-  panel.replaceChildren();
-  const proof = data.certificate;
-  const record = el("div", "record");
-  foldedSection(panel, proof ? "Certificate" : "Computation").body.append(record);
-  if (proof && typeof proof === "object" && proof.description) record.append(el("p", "prose", proof.description));
-  else if (proof && typeof proof !== "object") record.append(el("p", "prose", String(proof)));
-
-  record.append(dataList(Object.entries({
-    Method: proof && typeof proof === "object" ? proof.method : undefined,
-    Engine: data.engine,
-    Device: data.execution?.device,
-  }).filter(([, v]) => v)));
-
-  if (data.diagnostic && Object.keys(data.diagnostic).length) {
-    record.append(el("h4", "sub", "Quick search diagnostic"), dataList(Object.entries(data.diagnostic)));
-  }
-  if (proof?.rank_backend) {
-    const rankInfo = [
-      ["Rank backend", backendName(proof.rank_backend)],
-      ["Device", proof.device?.name],
-      ["Rank time", Number.isFinite(proof.rank_elapsed_ms) ? duration(proof.rank_elapsed_ms) : undefined],
-      ["Rank", proof.rank],
-      ["Matrix rows", proof.rows],
-      ["Prime", proof.prime],
-    ].filter(([, v]) => v !== undefined);
-    record.append(el("h4", "sub", "Modular Jacobian rank"), dataList(rankInfo));
-  }
-  const batch = proof?.chart_batch;
-  if (batch?.backend) {
-    const chartInfo = [
-      ["Transform backend", backendName(batch.backend)], ["Device", batch.device?.name],
-      ["Chart–monomial pairs", batch.chart_term_pairs],
-      ["Batch time", Number.isFinite(batch.elapsed_ms) ? duration(batch.elapsed_ms) : undefined],
-      ["Native computation", Number.isFinite(batch.native_elapsed_ms) ? duration(batch.native_elapsed_ms) : undefined],
-    ].filter(([, value]) => value !== undefined);
-    record.append(el("h4", "sub", "Toric chart transforms"), dataList(chartInfo));
-  }
-  if (request.compute !== "cpu" && !proof?.rank_backend && !batch?.backend) {
-    record.append(el("p", "helper", data.execution?.note || "The selected algorithm runs on the CPU."));
-  }
-  const notes = Array.isArray(data.notes) ? data.notes : [];
-  // Without charts, the field and its algebraic numbers are described here.
-  const fields = Array.isArray(data.charts) && data.charts.length ? null : fieldInfo(data);
-  if (fields) record.append(fields);
-  if (notes.length) {
-    const list = el("ul", "notes");
-    for (const note of notes) list.append(el("li", "", note));
-    record.append(disclosure("Notes (" + notes.length + ")", list));
-  }
-  if (proof && typeof proof === "object") {
-    const rest = Object.entries(proof).filter(([key]) => key !== "description" && key !== "method");
-    if (rest.length) record.append(disclosure("Certificate details", () => dataList(rest)));
-  }
-  if (data.branches?.length) record.append(rawRecord("Branch records (" + data.branches.length + ")", data.branches));
-  if (data.steps?.length) record.append(rawRecord("Step records (" + data.steps.length + ")", data.steps));
-  record.append(rawRecord("Full record", data));
-}
-
 function showResult(run) {
-  const {result, request} = run;
+  const {result} = run;
   selected = null;
   selectionViews.length = 0;
   run.body.append(report);
@@ -1395,78 +1435,24 @@ function showResult(run) {
   showTopological(result);
   showSteps(result);
   showCharts(result);
-  showComputation(result, request);
   $("export").disabled = false;
 }
 
 /* ---------- The input ---------- */
 
-// These three reference curves have exact SVG paths in mathematical coordinates.
-// For the cusp the cubic Bézier is (t², t³) for −3/2 ≤ t ≤ 3/2.
-const planeExamples = {
-  cusp: {
-    polynomial: "y^2-x^3", equation: "y^2=x^3", title: "Plane cusp",
-    path: "M2.25 -3.375 C-.75 3.375 -.75 -3.375 2.25 3.375",
-    caption: () => ["The real cusp is parametrized by ", typeset("(t^2,t^3)"), "."],
-  },
-  node: {
-    polynomial: "y^2-x^2", equation: "y^2=x^2", title: "Ordinary node",
-    path: "M-3 -3L3 3 M-3 3L3 -3",
-    caption: () => ["Two real branches, ", typeset("y=x"), " and ", typeset("y=-x"), ", cross transversely at the origin."],
-  },
-  tacnode: {
-    polynomial: "y^2-x^4", equation: "y^2=x^4", title: "Tacnode",
-    path: "M-2 4Q0 -4 2 4 M-2 -4Q0 4 2 -4",
-    caption: () => ["The branches ", typeset("y=x^2"), " and ", typeset("y=-x^2"), " share a tangent at the origin."],
-  },
-};
+const planeExamples = { cusp: "y^2-x^3", node: "y^2-x^2", tacnode: "y^2-x^4" };
 const exampleButtons = form.querySelectorAll("[data-example]");
-let drawnExample = null;
 
-function showInputGerm(request) {
-  const equation = $("preview-equation");
-  const coordinates = $("preview-coordinates");
-  const empty = !request.polynomial;
-  $("preview-title").textContent = empty ? "Polynomial preview" : "Polynomial";
-  equation.hidden = coordinates.hidden = empty;
-  if (empty) {
-    $("preview-note").textContent = "Enter a polynomial or choose an example.";
-    return;
-  }
-  // Preview only a bounded prefix of the source. Exhaustive requests can be
-  // large; truncation applies only here, never to the submitted polynomial.
-  const limit = 400;
-  const truncated = request.polynomial.length > limit;
-  if (truncated) equation.replaceChildren(el("code", "", request.polynomial.slice(0, limit) + "…"));
-  else equation.replaceChildren(typeset(request.polynomial, " = 0"));
-  const names = request.variables.slice(0, 12).map((name) => name.length > 32 ? name.slice(0, 32) + "…" : name);
-  if (request.variables.length > names.length) names.push("…");
-  coordinates.textContent = names.length ? "Coordinates (" + names.join(", ") + ")" : "Enter the coordinate variables.";
-  $("preview-note").textContent = truncated ? "Showing the first " + limit + " characters." : "";
-}
-
-function updatePlate() {
-  const request = getRequest();
+function updateExampleButtons(request) {
   const polynomial = request.polynomial.length <= 100 ? request.polynomial.replace(/\s+/g, "") : null;
   const plane = request.variables.length === 2 && request.variables.includes("x") && request.variables.includes("y");
-  const key = plane && Object.keys(planeExamples).find((name) => planeExamples[name].polynomial === polynomial);
-  for (const button of exampleButtons) button.setAttribute("aria-pressed", String(button.dataset.example === key));
-  const show = Boolean(key) && !runs.length;
-  $("germ-plate").hidden = !show;
-  $("plate-empty").hidden = show || runs.length > 0;
-  if (!$("plate-empty").hidden) showInputGerm(request);
-  if (!show || key === drawnExample) return;
-  const curve = planeExamples[key];
-  $("plate-title").textContent = curve.title;
-  $("plate-equation").replaceChildren(typeset(curve.equation));
-  $("curve-title").textContent = curve.title + " in real coordinates";
-  $("plate-curve").setAttribute("d", curve.path);
-  $("plate-caption").replaceChildren(...curve.caption());
-  drawnExample = key;
+  for (const button of exampleButtons) {
+    button.setAttribute("aria-pressed", String(plane && planeExamples[button.dataset.example] === polynomial));
+  }
 }
 
 for (const button of exampleButtons) button.addEventListener("click", () => {
-  $("polynomial").value = planeExamples[button.dataset.example].polynomial;
+  $("polynomial").value = planeExamples[button.dataset.example];
   $("variables").value = "x, y";
   variablesFollow = true;
   fitInput();
@@ -1532,7 +1518,7 @@ function updateInput() {
       + (/^[A-Za-z]{2,4}$/.test(name) ? " If it is a product, write " + [...name].join("*") + "." : "");
   }
   $("form-error").hidden = true;
-  updatePlate();
+  updateExampleButtons(request);
 }
 
 $("polynomial").addEventListener("input", () => {
@@ -1686,7 +1672,6 @@ function makeRun(request, restored = false) {
   }
   toggle.addEventListener("click", () => openRun(opened === run ? null : run));
   refreshRun(run);
-  updatePlate();
   return run;
 }
 
@@ -1703,11 +1688,6 @@ function openRun(run) {
   writeAddress(run.request);
   refreshRun(run);
   if (run.result) showResult(run);
-}
-
-function matchingMode(run, mode) {
-  return runs.find(other => sameGerm(other.request, {...run.request, mode})
-    && (activeStates.has(other.state) || other.result?.status === "resolved"));
 }
 
 function refreshRun(run) {
@@ -1735,14 +1715,6 @@ function refreshRun(run) {
       button.disabled = Boolean(run.pendingZeta);
       run.controls.append(button);
     }
-    const mode = run.request.mode === "embedded" ? "intrinsic" : "embedded";
-    const other = matchingMode(run, mode);
-    run.controls.append(action((other ? "View " : "Compute ") + mode + " resolution", () => {
-      if (other) {
-        openRun(other);
-        other.toggle.focus();
-      } else submitRun({...run.request, mode});
-    }));
   } else if (run.result?.can_search && run.request.search !== "exhaustive") {
     run.controls.append(action("Start exhaustive search", () => submitRun({...run.request, search: "exhaustive"})));
   } else if (["failed", "cancelled"].includes(run.state)) {
@@ -1780,7 +1752,10 @@ function updateJob(run, job) {
   run.progressData = job.progress;
   run.elapsedMs = job.elapsed_ms;
   run.connectionWarning = "";
-  if (job.result) run.result = job.result;
+  if (job.result) {
+    run.result = job.result;
+    $("workspace-logo").hidden = true;
+  }
   if (job.request) run.request = normalizeRequest(job.request);
   // Avoid replacing a focused cancel control on every poll.
   if (run.state !== previous || run.error || !run.controls.childElementCount || run.message.textContent.startsWith("Reconnecting")) {
@@ -1790,7 +1765,6 @@ function updateJob(run, job) {
   if (activeStates.has(run.state)) schedulePoll(run);
   else if (previous !== run.state) {
     $("announcements").textContent = stateLabel(run) + ": " + run.request.polynomial.slice(0, 100);
-    if (opened && opened !== run) refreshRun(opened);
   }
 }
 
@@ -1807,7 +1781,6 @@ function schedulePoll(run, delay = 850) {
         run.state = "failed";
         run.error = error.message;
         refreshRun(run);
-        if (opened && opened !== run) refreshRun(opened);
       } else {
         run.connectionWarning = "Reconnecting to the search server…";
         refreshRun(run);
@@ -1850,7 +1823,6 @@ async function computeZeta(run, key) {
     if (opened === run) {
       showZeta(run.result);
       showTopological(run.result);
-      showComputation(run.result, run.request);
     }
   } catch (error) { run.warning = error.message; }
   finally {
@@ -1885,7 +1857,6 @@ async function submitRun(request) {
     run.state = "failed";
     run.error = error.message;
     refreshRun(run);
-    if (opened && opened !== run) refreshRun(opened);
   }
 }
 

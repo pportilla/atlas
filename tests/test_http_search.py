@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import threading
 import time
@@ -107,9 +108,14 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         record = job["result"]
         self.assertEqual(record["topological_zeta"]["expression"], "(4*s + 5)/((s + 1)*(6*s + 5))")
         self.assertNotIn("monodromy_zeta", record)
+        self.assertNotIn("monodromy_check", record)
         _, job = self.request("POST", "/api/searches/" + job["id"] + "/zetas", {"zetas": ["monodromy"]})
         self.assertEqual(job["result"]["monodromy_zeta"]["expression"], "(1-T^6)/((1-T^2)*(1-T^3))")
-        self.assertEqual(job["result"]["topological_zeta"], record["topological_zeta"])
+        self.assertEqual(job["result"]["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
+        check = job["result"]["monodromy_check"]
+        self.assertEqual(check["status"], "verified")
+        self.assertEqual([(p["value"], p["eigenvalue_order"], p["witness"]) for p in check["poles"]],
+                         [("-1", 1, "origin zeta"), ("-5/6", 6, "origin zeta")])
         self.assertEqual(job["result"]["charts"], record["charts"])
 
         _, intrinsic = self.request("POST", "/api/searches", dict(request, mode="intrinsic", zetas=[]))
@@ -120,14 +126,50 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         self.assertEqual(updated["result"]["topological_zeta"]["source"], "companion embedded resolution")
         self.assertEqual(saved["charts"], updated["result"]["charts"])
 
+        # A stale pole imported with a saved record provides no evidence.
+        record["topological_zeta"]["poles"].append({"value": "-2/7", "order": 1, "components": []})
         _, outputs = self.request("POST", "/api/zetas", {"record": record, "zetas": ["monodromy"]})
-        self.assertEqual(set(outputs), {"monodromy_zeta"})
+        self.assertEqual(outputs["monodromy_check"], check)
+        self.assertEqual(outputs["topological_zeta"], job["result"]["topological_zeta"])
         self.assertEqual(outputs["monodromy_zeta"], job["result"]["monodromy_zeta"])
         from engine.resolution_zetas import replay_zetas
         with patch("engine.resolve._resolve_polynomial", side_effect=AssertionError("started a new resolution")):
             both = replay_zetas({"record": plain_record, "zetas": ["monodromy", "topological"]})
         self.assertEqual(both["monodromy_zeta"]["expression"], job["result"]["monodromy_zeta"]["expression"])
         self.assertEqual(both["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
+        self.assertEqual(both["monodromy_check"], check)
+
+    def test_concurrent_zeta_requests_attach_the_same_check_as_the_initial_pair(self):
+        self.server.search_jobs = SearchJobs()
+        request = {"variables": ["x", "y"], "polynomial": "x*y", "mode": "embedded", "search": "quick"}
+        _, both = self.request("POST", "/api/resolve", dict(request, zetas=["monodromy", "topological"]))
+        self.assertEqual(both["monodromy_check"]["poles"][0]["witness"], "origin H^0")
+        _, job = self.request("POST", "/api/searches", dict(request, zetas=[]))
+        self.wait(job["id"])
+        path = "/api/searches/" + job["id"]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = [pool.submit(self.request, "POST", path + "/zetas", {"zetas": [kind]})
+                         for kind in ("monodromy", "topological")]
+            for response in responses:
+                self.assertEqual(response.result()[0], 200)
+        _, job = self.request("GET", path)
+        self.assertEqual(job["result"]["monodromy_check"], both["monodromy_check"])
+
+    def test_automatic_check_preserves_transverse_rationals_and_wide_orders(self):
+        self.server.search_jobs = SearchJobs()
+        for equation, variables, pole, order, witness in (
+                ("3/7*x^2+11/13*y^2+t*z^2+z^3", list("xyzt"), "-3/2", 2, "nearby transverse Morse"),
+                ("(123456789012345678901234567890123456789/7)*x^4294967299", ["x"],
+                 "-1/4294967299", 4294967299, "origin zeta")):
+            with self.subTest(equation=equation):
+                _, job = self.request("POST", "/api/searches", {"polynomial": equation, "variables": variables,
+                                      "search": "exhaustive", "zetas": ["monodromy", "topological"]})
+                check = self.wait(job["id"])["result"]["monodromy_check"]
+                evidence = next(p for p in check["poles"] if p["value"] == pole)
+                self.assertEqual((check["status"], evidence["eigenvalue_order"], evidence["witness"]),
+                                 ("verified", order, witness))
+                if evidence["transverse"]:
+                    self.assertEqual(evidence["transverse"]["transverse_hessian_determinant"], "264/91")
 
     def test_shutdown_reaps_active_workers(self):
         first = self.post("x^2")[1]
