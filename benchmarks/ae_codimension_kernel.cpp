@@ -11,10 +11,12 @@
 int main(int argc, char** argv) {
     using namespace atlas::local;
     try {
-        if (argc != 3) throw std::invalid_argument("Supply repetitions and mode (parse, solve, graded).");
+        if (argc != 3) throw std::invalid_argument("Supply repetitions and mode (parse, solve, solve-once, graded).");
         const int repetitions = std::stoi(argv[1]);
         const std::string mode = argv[2];
-        if (repetitions < 1 || (mode != "parse" && mode != "solve" && mode != "graded"))
+        const bool single = mode == "solve-once";
+        if (repetitions < 1 || (single && repetitions != 1) ||
+            (!single && mode != "parse" && mode != "solve" && mode != "graded"))
             throw std::invalid_argument("Invalid timing arguments.");
         std::string line;
         std::getline(std::cin, line);
@@ -28,24 +30,27 @@ int main(int argc, char** argv) {
             return map;
         };
         auto map = parse();
-        auto reference = ae_codimension(map, names);
+        Json::Value reference;
         Json::Value result;
         auto run = [&] {
             if (mode == "parse") map = parse();
-            else if (mode == "solve") result = ae_codimension(map, names);
+            else if (single || mode == "solve") result = ae_codimension(map, names);
             else {
                 const auto graded = ae_graded(map, names);
                 if (!graded) throw std::invalid_argument("This map did not admit graded elimination.");
                 result = *graded;
             }
         };
-        run();
+        if (!single) {
+            reference = ae_codimension(map, names);
+            run();
+        }
         using Clock = std::chrono::steady_clock;
         const auto start = Clock::now();
         for (int i = 0; i < repetitions; ++i) run();
         const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-start);
         if (mode == "parse") result = ae_codimension(map, names);
-        if (result["finite"] != reference["finite"] || result["value"] != reference["value"])
+        if (!single && (result["finite"] != reference["finite"] || result["value"] != reference["value"]))
             throw std::logic_error("Timed result disagrees with the public solver.");
         result["elapsed_ns"] = Json::Int64(elapsed.count());
         Json::StreamWriterBuilder format;

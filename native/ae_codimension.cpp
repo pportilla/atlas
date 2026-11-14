@@ -332,45 +332,71 @@ Json::Value ae_codimension(const Basis& f, const std::vector<std::string>& names
         if (component.count(origin)) throw std::invalid_argument("Each map component must vanish at the origin.");
     if (auto special = ae_special(f,names)) return *special;
 
-    Budget budget;
+    Budget budget, probe_budget;
+    probe_budget.steps /= 2;
     std::optional<Index> contact;
     bool other_methods_tried = false;
     size_t lower_bound = 0;
     Index last_degree = 0;
     const auto alternate = [&]() -> std::optional<Json::Value> {
         other_methods_tried = true;
-        if (auto graded = ae_graded(f,names)) return graded;
+        if (auto graded = ae_graded(f,names,contact)) return graded;
         if (!contact && positive_contact_dimension(f,names))
             return answer(false,0,"positive_dimensional_contact_support");
         return std::nullopt;
     };
 
-    try {
-        for (Index degree = 1;; degree *= 2) {
-            Jet jet(f,names.size(),degree,budget);
+    Index checkpoint = 1;
+    unsigned probes_left = 0;
+    for (Index degree = 1;;) {
+        const bool at_checkpoint = degree == checkpoint;
+        Index d;
+        try {
+            Jet jet(f,names.size(),degree,at_checkpoint ? budget : probe_budget);
             if (!contact) {
                 const Index k = jet.contact_order();
                 if (k <= degree) contact = k;
             }
-            Index d;
             lower_bound = jet.tangent(d);
             last_degree = degree;
-            // Write M = R^p/df R^n and N = M/(f*B)^p, B = QQ[[y]].
-            // Nakayama on m^k M proves m^k M ⊂ (f) M from the contact jets.
-            // M is then finite over B by completeness. The k full A layers imply
-            // image(m^d M in N) = image(m^(d+k) M in N) ⊂ (y) image(m^d M).
-            // Nakayama over B kills this image, proving the exact colength.
-            if (contact && d + *contact <= degree + 1) {
-                auto result = answer(true,lower_bound,"extended_tangent_jets");
-                result["jet_degree"] = degree;
-                result["contact_order"] = *contact;
-                return result;
-            }
-            if (degree >= 4 && !other_methods_tried)
-                if (auto result = alternate()) return *result;
+        } catch (const JetLimit&) {
+            if (at_checkpoint) break;
+            // A failed optional probe cannot spend the ordinary checkpoints'
+            // work allowance. Disable further probes and resume that sequence.
+            probe_budget.steps = 0;
+            degree = checkpoint;
+            continue;
         }
-    } catch (const JetLimit&) {
-        // Only completed exact quotients enter the reported lower bound.
+        // Write M = R^p/df R^n and N = M/(f*B)^p, B = QQ[[y]].
+        // Nakayama on m^k M proves m^k M ⊂ (f) M from the contact jets.
+        // M is then finite over B by completeness. The k full A layers imply
+        // image(m^d M in N) = image(m^(d+k) M in N) ⊂ (y) image(m^d M).
+        // Nakayama over B kills this image, proving the exact colength.
+        if (contact && d + *contact <= degree + 1) {
+            auto result = answer(true,lower_bound,"extended_tangent_jets");
+            result["jet_degree"] = degree;
+            result["contact_order"] = *contact;
+            return result;
+        }
+        if (degree >= 4 && !other_methods_tried)
+            if (auto result = alternate()) return *result;
+
+        // For wide graphs a doubled jet can be much larger than the first
+        // possible certificate at d+k-1. Probe that cutoff, and allow one
+        // refinement if a full tail appears. Keep the doubling checkpoints
+        // so a gap in a later layer cannot send the next trial past them.
+        if (at_checkpoint) {
+            checkpoint *= 2;
+            probes_left = 2;
+        }
+        const bool wide_graph = names.size() + 2*f.size() >= 10;
+        if (wide_graph && contact && degree >= 8 && probes_left && probe_budget.steps &&
+            (at_checkpoint || d <= degree)) {
+            degree = std::min(checkpoint, d + *contact - 1);
+            --probes_left;
+        } else {
+            degree = checkpoint;
+        }
     }
     if (!other_methods_tried)
         if (auto result = alternate()) return *result;

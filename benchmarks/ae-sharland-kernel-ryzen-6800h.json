@@ -1,0 +1,320 @@
+{
+  "cpu": "AMD Ryzen 7 6800H",
+  "flint": "3.6.0",
+  "coefficient_field": "QQ",
+  "point": [
+    0,
+    0,
+    0
+  ],
+  "variables": [
+    "x",
+    "y",
+    "z"
+  ],
+  "reference": "https://arxiv.org/pdf/1202.4992#page=6",
+  "mode": "Fresh process, one ae_codimension call per trial, following parse_expression on all four original components. No warm-up solve.",
+  "conditions": {
+    "kernel_timeout_s": 120,
+    "address_space_limit_bytes": 2147483648,
+    "before_trials_per_germ": 3,
+    "after_trials_per_germ": 15,
+    "timed": "Native solver only using a steady clock. Process startup, component parsing and result serialization are excluded.",
+    "before_measurement_order": "One pair of fresh processes per round on distinct pinned physical cores.",
+    "after_measurement_order": "One process at a time; reverse the order of the two germs in alternate rounds.",
+    "baseline_interpretation": "Baseline times mark timeout or allocation failure. No baseline call returned a codimension.",
+    "warm_secondary": "Seven fresh processes per germ. Each process makes two warm-up calls, then times 15 successive solves. Each stored sample is the elapsed nanoseconds for the entire batch."
+  },
+  "builds": {
+    "before": {
+      "revision": "66a47b6694a5e34ea37ae390410c270838e1f263",
+      "library_sha256": "94560053febb89f8797c9669af22e2844abb4b3cdcdb9d96a5665cc15522ceea"
+    },
+    "after": {
+      "library_sha256": "4eba3997425fab0b1fba8561e5f4f90bd03cbe54d1d151d54eb29342541c99a6",
+      "harness_sha256": "06c781b3830dd86ff249ef056b4d47aa7b1f3c20cdd5e409380c21c83d565442"
+    }
+  },
+  "cases": {
+    "Ahat2": {
+      "components": [
+        "x",
+        "y^2+x*z+x^2*y",
+        "y*z",
+        "z^2+y^3"
+      ],
+      "expected": 18,
+      "logical_cpu": 3,
+      "before_trials": [
+        {
+          "outcome": "timeout",
+          "kernel_s": null,
+          "elapsed_lower_bound_s": 120,
+          "elapsed_process_s": 120.08,
+          "user_cpu_s": 119.37,
+          "peak_rss_KiB": 576860
+        },
+        {
+          "outcome": "timeout",
+          "kernel_s": null,
+          "elapsed_lower_bound_s": 120,
+          "elapsed_process_s": 120.08,
+          "user_cpu_s": 119.37,
+          "peak_rss_KiB": 591396
+        },
+        {
+          "outcome": "timeout",
+          "kernel_s": null,
+          "elapsed_lower_bound_s": 120,
+          "elapsed_process_s": 120.05,
+          "user_cpu_s": 119.52,
+          "peak_rss_KiB": 586308
+        }
+      ],
+      "after_samples_ns": [
+        1361175,
+        770236,
+        763584,
+        800223,
+        796747,
+        771660,
+        798671,
+        986727,
+        809711,
+        792268,
+        784384,
+        774755,
+        777451,
+        758986,
+        820081
+      ],
+      "result": {
+        "contact_order": 2,
+        "finite": true,
+        "last_weight": 10,
+        "method": "weighted_tangent_ranks",
+        "value": "18"
+      },
+      "after_median_ms": 0.792268,
+      "after_warm_batch_ns": [
+        7767902,
+        8090281,
+        7992156,
+        7696497,
+        7780154,
+        7705954,
+        7790585
+      ],
+      "after_warm_median_ms_per_solve": 0.5186769333333333,
+      "before_median_time_to_allocation_failure_s": null
+    },
+    "Bhat3": {
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2-x*y",
+        "y^3+y^2*z+y*z^2-z^3"
+      ],
+      "expected": 33,
+      "logical_cpu": 5,
+      "before_trials": [
+        {
+          "outcome": "address_space_limit",
+          "kernel_s": 61.3047,
+          "elapsed_lower_bound_s": null,
+          "elapsed_process_s": 61.41,
+          "user_cpu_s": 60.16,
+          "peak_rss_KiB": 1170352
+        },
+        {
+          "outcome": "address_space_limit",
+          "kernel_s": 45.028,
+          "elapsed_lower_bound_s": null,
+          "elapsed_process_s": 45.13,
+          "user_cpu_s": 43.96,
+          "peak_rss_KiB": 1170296
+        },
+        {
+          "outcome": "address_space_limit",
+          "kernel_s": 32.0465,
+          "elapsed_lower_bound_s": null,
+          "elapsed_process_s": 32.12,
+          "user_cpu_s": 31.19,
+          "peak_rss_KiB": 1170992
+        }
+      ],
+      "after_samples_ns": [
+        3349786,
+        3311353,
+        3908753,
+        3476004,
+        3253694,
+        3218707,
+        3478448,
+        3451588,
+        3372579,
+        3230229,
+        3280885,
+        3225600,
+        3237833,
+        3300673,
+        3292507
+      ],
+      "result": {
+        "contact_order": 3,
+        "finite": true,
+        "last_weight": 7,
+        "method": "weighted_tangent_ranks",
+        "value": "33"
+      },
+      "after_median_ms": 3.300673,
+      "after_warm_batch_ns": [
+        32608753,
+        33412684,
+        33240278,
+        33042163,
+        32997448,
+        32938798,
+        33353802
+      ],
+      "after_warm_median_ms_per_solve": 2.202810866666667,
+      "before_median_time_to_allocation_failure_s": 45.028
+    }
+  },
+  "reproduce": "Build native/groebner.mk target build/bench_ae_codimension. For each fresh-process sample run native/build/bench_ae_codimension 1 solve-once with the line x,y,z followed by the four components on separate lines as standard input. Pin the process to the listed logical CPU with taskset -c, set ulimit -v 2097152 and a timeout of 120 seconds. Repeat 15 times per germ. Use 15 solve for the secondary warmed batches. For the earlier binary use the baseline native library and time exactly one ae_codimension(map,names) call after parsing. Start the 120-second alarm just before this call.",
+  "controls": {
+    "conditions": "Atlas-only, logical CPU 13. Three trials per build, reversing build order in alternating trials. Two warm-up calls before each measured batch. Samples are milliseconds per complete solve. Both builds returned the expected value in every trial.",
+    "cases": [
+      {
+        "name": "P2",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "components": [
+          "x",
+          "y",
+          "z^3+x*z",
+          "z^5+y*z"
+        ],
+        "value": "2",
+        "finite": true,
+        "solves_per_batch": 5,
+        "before_ms_per_solve": [
+          2.037205,
+          1.9759772000000002,
+          2.0107489999999997
+        ],
+        "after_ms_per_solve": [
+          0.1736122,
+          0.1793672,
+          0.184537
+        ]
+      },
+      {
+        "name": "5_2",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "t"
+        ],
+        "components": [
+          "x",
+          "y",
+          "z",
+          "t^5+x*t+y*t^2+z^2*t^3"
+        ],
+        "value": "1",
+        "finite": true,
+        "solves_per_batch": 7,
+        "before_ms_per_solve": [
+          0.43516014285714283,
+          0.4277677142857143,
+          0.4397345714285715
+        ],
+        "after_ms_per_solve": [
+          0.43910342857142853,
+          0.45887942857142855,
+          0.42756142857142854
+        ]
+      },
+      {
+        "name": "3,5,7",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^3",
+          "y^5",
+          "(x+y)^7"
+        ],
+        "value": "1710",
+        "finite": true,
+        "solves_per_batch": 4,
+        "before_ms_per_solve": [
+          1.074387,
+          1.080576,
+          1.0811575
+        ],
+        "after_ms_per_solve": [
+          1.1183775,
+          1.07347275,
+          1.079469
+        ]
+      },
+      {
+        "name": "bad prime",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2",
+          "y^3",
+          "(65521*x+y)^5"
+        ],
+        "value": "115",
+        "finite": true,
+        "solves_per_batch": 4,
+        "before_ms_per_solve": [
+          1.74579925,
+          1.70329375,
+          1.6832235
+        ],
+        "after_ms_per_solve": [
+          1.7809635,
+          1.71082325,
+          1.75467875
+        ]
+      },
+      {
+        "name": "infinite",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "components": [
+          "x^2+y^2",
+          "x^2-y^2",
+          "x*y"
+        ],
+        "value": null,
+        "finite": false,
+        "solves_per_batch": 4,
+        "before_ms_per_solve": [
+          0.13368775,
+          0.13999475,
+          0.13759275
+        ],
+        "after_ms_per_solve": [
+          0.14508425,
+          0.13865975,
+          0.13688375
+        ]
+      }
+    ]
+  }
+}

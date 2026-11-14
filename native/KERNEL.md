@@ -203,8 +203,30 @@ $M/IM$, detected locally using $f$ and the maximal minors of $df$, certifies
 infinity because target fields contribute at most $p$ constants modulo $I$.
 [Filtered computation](ae_codimension.cpp)
 
-**Positive gradings.** When the source admits positive weights making each
-component homogeneous, introduce graph equations $y_j-f_j$ and square-zero
+**Weighted tangent ranks.** Suppose the source variables have positive weights
+$w_i$ and each component $f_j$ is homogeneous of degree $d_j>0$. In weight
+$q$ the ambient vector fields have component degrees $q+d_j$. The source
+tangent rows are $x^a\partial_i f$ with $|a|_w=q+w_i$. The target rows are
+$f^b e_j$ with $|b|_d=q+d_j$. These span the full extended tangent space in
+that weight. The matrix corank over $\mathbb Q$ is therefore $\dim N_q$.
+Clearing denominators by an invertible target scaling makes the rows integral.
+Maximal rank modulo one prime proves maximal rational rank. Every other rank
+is computed exactly over the integers.
+
+Let $k$ be the contact order proved by the filtered jets. Since
+$\mathfrak m^kM\subset(f)M$, the monomial vectors of ordinary degree less
+than $k$ span $M/(f)M$. Their weights are at most
+$G=(k-1)\max_i w_i-\min_j d_j$. Thus for $q>G$,
+$N_q=\sum_j f_j N_{q-d_j}$. A run of $\max_j d_j$ consecutive zero pieces
+ending at or above $G$ proves by induction that every later piece vanishes.
+The sum of the computed coranks is then the dimension of the completed normal
+space, since positive weights give finite pieces and tend to infinity with
+ordinary degree. The kernel caches the Jacobian and the pullbacks across
+weights. If the bounded rank calculation runs out of work, the graded graph
+can still prove a finite or infinite answer. [Weighted rank computation](ae_weighted_ranks.cpp)
+
+**Graded graph elimination.** When the source admits positive weights making
+each component homogeneous, introduce graph equations $y_j-f_j$ and square-zero
 markers $z_j$ with every $z_i z_j=0$. Impose the Jacobian rows
 $\sum_j (\partial_i f_j)z_j$. In the resulting ring the marker-degree-one part
 is the polynomial Jacobian cokernel. Under lex order $x>y>z$, reduction of

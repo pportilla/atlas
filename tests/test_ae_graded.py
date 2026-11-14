@@ -67,6 +67,22 @@ class AeGradedTests(unittest.TestCase):
                 self.assertIs(result["finite"], True)
                 self.assertEqual(result["value"], expected)
 
+    def test_weighted_rank_with_bad_reduction(self):
+        # P2 has codimension 2. Rescale x and y in both source and target.
+        # The mixed terms vanish modulo 65521; over QQ both survive.
+        c = "65521/18446744073709551617"
+        result = calculate("ae-codimension", variables=("x", "y", "z"),
+                           components=["x", "y", f"z^3+{c}*x*z", f"z^5+{c}*y*z"])
+        self.assertEqual((result["method"], result["finite"], result["value"]),
+                         ("weighted_tangent_ranks", True, 2))
+
+    def test_finite_contact_does_not_certify_a_finite_normal_space(self):
+        # The ideal (x, y², z²) has finite colength. This even map of the
+        # y,z-plane has the same image at (y,z) and (-y,-z) in every degree.
+        result = calculate("ae-codimension", variables=("x", "y", "z"),
+                           components=["x", "y^2", "z^2", "(y+z)^4"])
+        self.assertEqual((result["finite"], result["value"]), (False, None))
+
     def test_surface_to_three_space(self):
         # In R^3/df the odd terms remaining in the third component are
         # represented by y,x*y,...,x^(k-2)*y for this S-family.

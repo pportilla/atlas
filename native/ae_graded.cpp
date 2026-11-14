@@ -1,6 +1,7 @@
 // Compute the extended tangent quotient as a graded vector space. See KERNEL.md.
 #include "ae_graded.hpp"
 #include "ae_graded_surface.hpp"
+#include "ae_weighted_ranks.hpp"
 #include "local_monomial.hpp"
 #include "local_point_quotient.hpp"
 #include "primary_decomposition.hpp"
@@ -14,7 +15,7 @@ namespace {
 // A positive grading identifies finite jets of the formal local quotient with
 // the weight pieces of its polynomial counterpart. Any positive null vector
 // of these exponent differences suffices. An unsuccessful search just declines.
-bool positive_grading(const Basis& map, size_t n) {
+std::optional<Powers> positive_grading(const Basis& map, size_t n) {
     std::vector<Powers> differences;
     bool ordinary = true;
     for (const auto& f : map) {
@@ -27,7 +28,7 @@ bool positive_grading(const Basis& map, size_t n) {
             differences.push_back(std::move(row));
         }
     }
-    if (ordinary) return true;
+    if (ordinary) return Powers(n,1);
     fmpz_mat_t equations, kernel;
     fmpz_mat_init(equations, differences.size(), n);
     fmpz_mat_init(kernel, n, n);
@@ -50,7 +51,13 @@ bool positive_grading(const Basis& map, size_t n) {
     }
     fmpz_mat_clear(kernel);
     fmpz_mat_clear(equations);
-    return std::all_of(weights.begin(), weights.end(), [](const auto& w) { return w > 0; });
+    mpz_class common = 0;
+    for (const auto& weight : weights) {
+        if (weight <= 0) return std::nullopt;
+        mpz_gcd(common.get_mpz_t(),common.get_mpz_t(),weight.get_mpz_t());
+    }
+    for (auto& weight : weights) weight /= common;
+    return weights;
 }
 
 bool has_source(const Powers& e, size_t n) {
@@ -58,19 +65,30 @@ bool has_source(const Powers& e, size_t n) {
 }
 }
 
-std::optional<Json::Value> ae_graded(const Basis& map, const std::vector<std::string>& names) {
+std::optional<Json::Value> ae_graded(const Basis& map, const std::vector<std::string>& names,
+                                     std::optional<unsigned> contact_order) {
     const size_t n = names.size(), p = map.size(), base = n+p, width = base+p;
     if (n == 2 && p == 3)
         if (auto ranks = ae_graded_surface(map)) return ranks;
-    // Lexicographic graph elimination can grow much faster than a small jet.
-    if (width > 18) return std::nullopt;
+    // On small graphs or maps with a single nonlinear output, elimination is
+    // usually cheaper and can certify infinity immediately. On larger graphs
+    // try the bounded weight matrices first, even beyond the lex width limit.
+    constexpr size_t max_graph_width = 18;
+    if (width > max_graph_width && (!contact_order || n > 8 || p > 8)) return std::nullopt;
     size_t terms = 0;
+    size_t nonlinear = 0;
     for (const auto& f : map) {
         terms += f.size();
         if (terms > 120) return std::nullopt;
-        for (const auto& t : f) if (total_degree(t.first) > 40) return std::nullopt;
+        const auto degree = max_total_degree(f);
+        if (degree > 40) return std::nullopt;
+        if (degree > 1) ++nonlinear;
     }
-    if (!positive_grading(map,n)) return std::nullopt;
+    const auto weights = positive_grading(map,n);
+    if (!weights) return std::nullopt;
+    if (contact_order && ((width > 8 && nonlinear > 1) || width > max_graph_width))
+        if (auto ranks = ae_weighted_ranks(map,*weights,*contact_order)) return ranks;
+    if (width > max_graph_width) return std::nullopt;
 
     // Square-zero markers z_j encode vectors as sum(v_j*z_j).
     // Lex order x > y > z eliminates all source variables before the targets.
