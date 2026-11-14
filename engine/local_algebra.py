@@ -80,9 +80,9 @@ def _point_quotient(operation, ring, operands, variables):
         with stage_label(label), cpu_stage(label, variables=len(names), generators=len(rows)):
             length, derivative_count, *rows_out = local_request(kernel, variables, ring["order"], rows, point=shifts)
     except ArithmeticError as error:
-        if str(error) == "The hypersurface must pass through the supplied point.":
-            message = str(error) if any(shifts) else "The hypersurface must pass through the origin."
-            raise InputError(message) from error
+        if str(error) in ("The hypersurface must pass through the supplied point.",
+                          "The hypersurface must pass through the origin."):
+            raise InputError(str(error)) from error
         raise
     dimension = None if length == "infinite" else integer_from_decimal(length)
     result["finite"] = dimension is not None
