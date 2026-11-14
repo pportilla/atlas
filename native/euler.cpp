@@ -19,6 +19,10 @@
 #include "groebner.hpp"
 
 #include <flint/fmpz_mpoly.h>
+#include <flint/fmpz_mpoly_factor.h>
+#include <flint/fmpz_mat.h>
+#include <flint/fmpq_mpoly.h>
+#include <sstream>
 
 #include <map>
 #include <memory>
@@ -97,18 +101,19 @@ struct Euler::State {
     Ring R;
     int n;
     std::vector<MP> conditions;          // [0] is the constant 1
-    std::vector<u64> support;            // the variables of each condition
+    std::vector<Set> support;            // the variables of each condition
     std::map<std::string, int> numbers;  // a condition -> its number
     std::map<std::string, int> seen;     // a polynomial -> the number of its condition
     std::map<Set, int> products;
-    std::map<std::pair<u64, Set>, long> values;
+    std::map<Set, Z> values;
 
-    explicit State(const Ring& ring) : R(ring), n(ring.n) {
+    explicit State(const Ring& ring) : State(ring.n) { R = ring; }
+    explicit State(int dimensions) : n(dimensions) {
         fmpz_mpoly_ctx_init(ctx, n, ORD_LEX);
         MP one(ctx);
         fmpz_mpoly_one(one.p, ctx);
         conditions.push_back(std::move(one));
-        support.push_back(0);
+        support.emplace_back();
     }
     ~State() {
         conditions.clear();
@@ -122,13 +127,14 @@ struct Euler::State {
         flint_free(text);
         return out;
     }
-    u64 variables(const MP& f) const {
-        slong degrees[MAX_VARIABLES];
-        fmpz_mpoly_degrees_si(degrees, f.p, ctx);
-        u64 mask = 0;
-        for (int v = 0; v < n; ++v)
-            if (degrees[v] > 0) mask |= 1ULL << v;
-        return mask;
+    Set variables(const MP& f) const {
+        Set names;
+        Z degree;
+        for (int v = 0; v < n; ++v) {
+            fmpz_mpoly_degree_fmpz(&degree.v, f.p, v, ctx);
+            if (fmpz_sgn(&degree.v) > 0) names.push_back(v);
+        }
+        return names;
     }
     MP gcd(const MP& a, const MP& b) const {
         MP g(ctx);
@@ -164,8 +170,8 @@ struct Euler::State {
         if (known != seen.end()) return known->second;
         // The squarefree part: f divided by the gcd of f and its derivatives.
         MP g(f), d(ctx);
-        for (int v = 0; v < n && !g.constant(); ++v) {
-            if (fmpz_mpoly_degree_si(f.p, v, ctx) <= 0) continue;
+        for (int v : variables(f)) {
+            if (g.constant()) break;
             fmpz_mpoly_derivative(d.p, f.p, v, ctx);
             g = gcd(g, d);
         }
@@ -220,7 +226,10 @@ struct Euler::State {
 
     // f as a polynomial in the variable v.
     Uni split(const MP& f, int v) const {
-        const slong degree = fmpz_mpoly_degree_si(f.p, v, ctx);
+        Z exact;
+        fmpz_mpoly_degree_fmpz(&exact.v, f.p, v, ctx);
+        if (fmpz_cmp_si(&exact.v, INT_MAX) >= 0) throw Limit("Fibre degree is too large to materialize.");
+        const slong degree = fmpz_get_si(&exact.v);
         auto coefficients = std::make_shared<std::vector<MP>>();
         Uni out;
         if (degree < 0) return out;
@@ -383,44 +392,77 @@ struct Euler::State {
 
     // chi of the points of the affine space of `variables` where the
     // polynomials of z vanish and those of u do not.
-    long open_part(u64 variables, const Set& z, const Set& u) {
-        if (has(z, 0) || !disjoint(z, u)) return 0;
-        const long value = closed(variables, z);
-        if (u.empty()) return value;
-        return value - closed(variables, with(z, forbidden(u)));
-    }
-    // chi of V(equations) in the affine space of the variables they involve:
-    // a variable that they do not involve contributes the factor chi(C) = 1.
-    long closed(u64, const Set& equations) {
-        if (has(equations, 0)) return 0;
-        if (equations.empty()) return 1;
-        u64 variables = 0;
-        for (int id : equations) variables |= support[static_cast<size_t>(id)];
-        const auto key = std::make_pair(variables, equations);
-        const auto known = values.find(key);
-        if (known != values.end()) return known->second;
-        const long value = projected(variables, equations);
-        values.emplace(key, value);
+    Z open_part(const Set& z, const Set& u) {
+        if (has(z, 0) || !disjoint(z, u)) return {};
+        Z value = closed(z);
+        if (!u.empty()) {
+            const auto excluded = closed(with(z, forbidden(u)));
+            fmpz_sub(&value.v, &value.v, &excluded.v);
+        }
         return value;
     }
-    long projected(u64 variables, const Set& equations) {
-        std::vector<int> names;
-        for (int v = 0; v < n; ++v)
-            if (variables >> v & 1) names.push_back(v);
+    // Free affine coordinates contribute one. The equations alone index the
+    // cache: they determine the active coordinate set in every projection.
+    Z closed(const Set& equations) {
+        if (has(equations, 0)) return {};
+        if (equations.empty()) { Z one; fmpz_one(&one.v); return one; }
+        const auto known = values.find(equations);
+        if (known != values.end()) return known->second;
+        Set names;
+        for (int id : equations) names = united(names, support[id]);
+        // Equations on disjoint coordinate sets define a Cartesian product.
+        // Split the connected components of the variable/equation incidence graph.
+        std::map<int, Set> groups;
+        if (equations.size() > 1 && names.size() > 1) {
+            std::vector<int> parent(n, -1);
+            auto root = [&](int v) {
+                while (parent[v] >= 0) {
+                    if (parent[parent[v]] >= 0) parent[v] = parent[parent[v]];
+                    v = parent[v];
+                }
+                return v;
+            };
+            for (int id : equations) {
+                const auto& vars = support[id];
+                for (int v : vars) {
+                    int a = root(vars.front()), b = root(v);
+                    if (a != b) parent[b] = a;
+                }
+            }
+            for (int id : equations) groups[root(support[id].front())].push_back(id);
+        }
+        Z value;
+        if (groups.size() <= 1) value = projected(names, equations);
+        else {
+            fmpz_one(&value.v);
+            for (const auto& group : groups) {
+                auto factor = closed(group.second);
+                fmpz_mul(&value.v, &value.v, &factor.v);
+                if (fmpz_is_zero(&value.v)) break;
+            }
+        }
+        values.emplace(equations, value);
+        return value;
+    }
+    Z projected(const Set& names, const Set& equations) {
         if (names.size() == 1) {
             MP g(conditions[static_cast<size_t>(equations[0])]);
             for (size_t i = 1; i < equations.size(); ++i) g = gcd(g, conditions[static_cast<size_t>(equations[i])]);
-            return static_cast<long>(fmpz_mpoly_degree_si(g.p, names[0], ctx));
+            Z count;
+            fmpz_mpoly_degree_fmpz(&count.v, g.p, names[0], ctx);
+            return count;
         }
         // An equation c*v + p0 with c a nonzero constant removes v: first those
         // that give v a value, then any.
         for (int pass = 0; pass < 2; ++pass) {
             for (int id : equations) {
                 const MP& p = conditions[static_cast<size_t>(id)];
-                const u64 here = support[static_cast<size_t>(id)];
-                if (pass == 0 && (fmpz_mpoly_total_degree_si(p.p, ctx) != 1 || (here & (here - 1)))) continue;
+                const auto& here = support[static_cast<size_t>(id)];
+                if (pass == 0 && here.size() != 1) continue;
                 for (int v : names) {
-                    if (fmpz_mpoly_degree_si(p.p, v, ctx) != 1) continue;
+                    Z degree;
+                    fmpz_mpoly_degree_fmpz(&degree.v, p.p, v, ctx);
+                    if (!fmpz_is_one(&degree.v)) continue;
                     const Uni parts = split(p, v);
                     if (!parts.at(1).constant()) continue;
                     Z c;
@@ -431,75 +473,207 @@ struct Euler::State {
                         const int next = condition(substituted(conditions[static_cast<size_t>(other)], v, parts.at(0), &c.v));
                         if (next >= 0) remaining = with(remaining, next);
                     }
-                    return closed(variables & ~(1ULL << v), remaining);
+                    return closed(remaining);
                 }
             }
         }
         // The projection along the variable of least degree.
         int variable = names[0];
-        std::pair<slong, slong> least(-1, -1);
+        Z least_max, least_sum;
+        fmpz_set_si(&least_max.v, -1);
         for (int v : names) {
-            std::pair<slong, slong> cost(0, 0);
+            Z maximum, sum, degree;
             for (int id : equations) {
-                const slong d = fmpz_mpoly_degree_si(conditions[static_cast<size_t>(id)].p, v, ctx);
-                cost.first = std::max(cost.first, d);
-                cost.second += d;
+                fmpz_mpoly_degree_fmpz(&degree.v, conditions[id].p, v, ctx);
+                if (fmpz_cmp(&degree.v, &maximum.v) > 0) maximum = degree;
+                fmpz_add(&sum.v, &sum.v, &degree.v);
             }
-            if (least.first < 0 || cost < least) {
-                least = cost;
+            const int cmp = fmpz_cmp(&maximum.v, &least_max.v);
+            if (fmpz_sgn(&least_max.v) < 0 || cmp < 0 || (cmp == 0 && fmpz_cmp(&sum.v, &least_sum.v) < 0)) {
+                least_max = maximum;
+                least_sum = sum;
                 variable = v;
             }
         }
-        const u64 base = variables & ~(1ULL << variable);
         std::vector<Uni> fibre;
         Set below;
         for (int id : equations) {
-            if (support[static_cast<size_t>(id)] >> variable & 1) fibre.push_back(split(conditions[static_cast<size_t>(id)], variable));
+            if (has(support[static_cast<size_t>(id)], variable)) fibre.push_back(split(conditions[static_cast<size_t>(id)], variable));
             else below = with(below, id);
         }
-        long value = 0;
+        Z value;
         for (const Case& piece : gcd_cases(fibre, below, Set())) {
             if (!piece.some || piece.g.degree() == 1) {
-                value += open_part(base, piece.z, piece.u);
+                const auto part = open_part(piece.z, piece.u);
+                fmpz_add(&value.v, &value.v, &part.v);
             } else if (piece.g.degree() > 1) {
                 std::vector<Uni> pair = {piece.g, derivative(piece.g)};
                 for (const Case& repeated : gcd_cases(pair, piece.z, piece.u)) {
                     if (!repeated.some) throw Limit("A polynomial of known degree became zero.");
-                    value += static_cast<long>(piece.g.degree() - repeated.g.degree()) * open_part(base, repeated.z, repeated.u);
+                    const auto part = open_part(repeated.z, repeated.u);
+                    fmpz_addmul_ui(&value.v, &part.v, piece.g.degree() - repeated.g.degree());
                 }
             }
         }
         return value;
     }
+    Z integrate(const Set& closed_set, const std::vector<Set>& exclusions);
 };
 
-Euler::Euler(const Ring& R) : state_(new State(R)) {}
-Euler::~Euler() { delete state_; }
-
-long Euler::characteristic(const std::vector<Poly>& equations, const std::vector<std::vector<Poly>>& excluded) {
-    State& s = *state_;
-    const u64 all = s.n >= 64 ? ~0ULL : (1ULL << s.n) - 1;
-    std::map<Set, long> pieces;
-    pieces[s.set_of(equations)] = 1;
+// Indicator inclusion-exclusion for nonprincipal excluded ideals.
+Z Euler::State::integrate(const Set& closed_set, const std::vector<Set>& exclusions) {
+    std::map<Set, Z> pieces;
+    fmpz_one(&pieces[closed_set].v);
     Set inequations;
-    for (const std::vector<Poly>& ideal : excluded) {
-        const Set forbidden = s.set_of(ideal);
-        if (forbidden.empty()) return 0;
+    for (const Set& forbidden : exclusions) {
+        if (forbidden.empty()) return {};
         if (has(forbidden, 0)) continue;
         if (forbidden.size() == 1) {
             inequations = with(inequations, forbidden[0]);
             continue;
         }
         // The indicator of X minus V(I) is that of X minus that of X and V(I).
-        std::map<Set, long> next(pieces);
-        for (const auto& piece : pieces) next[united(piece.first, forbidden)] -= piece.second;
+        std::map<Set, Z> next(pieces);
+        for (const auto& piece : pieces) {
+            auto& weight = next[united(piece.first, forbidden)];
+            fmpz_sub(&weight.v, &weight.v, &piece.second.v);
+        }
         pieces.clear();
         for (const auto& piece : next)
-            if (piece.second) pieces.insert(piece);
+            if (!fmpz_is_zero(&piece.second.v)) pieces.insert(piece);
     }
-    long total = 0;
-    for (const auto& piece : pieces) total += piece.second * s.open_part(all, piece.first, inequations);
+    Z total;
+    for (const auto& piece : pieces) {
+        const auto chi = open_part(piece.first, inequations);
+        fmpz_addmul(&total.v, &piece.second.v, &chi.v);
+    }
     return total;
 }
 
+Euler::Euler(const Ring& R) : state_(new State(R)) {}
+Euler::~Euler() { delete state_; }
+
+Z Euler::characteristic(const std::vector<Poly>& equations, const std::vector<std::vector<Poly>>& excluded) {
+    std::vector<Set> exclusions;
+    for (const auto& ideal : excluded) exclusions.push_back(state_->set_of(ideal));
+    return state_->integrate(state_->set_of(equations), exclusions);
+}
+
+// External FLINT presentation. It avoids the variable and degree limits of
+// packed Groebner monomials when an Euler integral needs no such basis.
+Z Euler::from_text(const std::string& input) {
+    std::istringstream in(input);
+    std::string header;
+    if (!std::getline(in, header)) throw std::invalid_argument("Expected coordinate names.");
+    std::istringstream names_in(header);
+    std::vector<std::string> names;
+    for (std::string name; names_in >> name;) names.push_back(name);
+    if (names.empty() || names.size() > INT_MAX) throw Limit("Invalid Euler dimension.");
+    std::vector<const char*> printed;
+    for (const auto& name : names) printed.push_back(name.c_str());
+    State state(static_cast<int>(names.size()));
+    struct Reader {
+        fmpq_mpoly_ctx_t ctx;
+        fmpq_mpoly_t f;
+        explicit Reader(int n) { fmpq_mpoly_ctx_init(ctx, n, ORD_LEX); fmpq_mpoly_init(f, ctx); }
+        ~Reader() { fmpq_mpoly_clear(f, ctx); fmpq_mpoly_ctx_clear(ctx); }
+    } reader(state.n);
+    auto ideal = [&](size_t count) {
+        Set ids;
+        for (size_t i = 0; i < count; ++i) {
+            std::string row;
+            if (!std::getline(in, row) || fmpq_mpoly_set_str_pretty(reader.f, row.c_str(), printed.data(), reader.ctx))
+                throw std::invalid_argument("Invalid Euler condition.");
+            MP f(state.ctx);
+            fmpz_mpoly_set(f.p, reader.f->zpoly, state.ctx);
+            const int id = state.condition(f);
+            if (id >= 0) ids = with(ids, id);
+        }
+        return ids;
+    };
+    if (!std::getline(in, header)) throw std::invalid_argument("Expected Euler ideal sizes.");
+    std::istringstream sizes(header);
+    size_t count;
+    if (!(sizes >> count)) throw std::invalid_argument("Missing Euler equations.");
+    const Set closed = ideal(count);
+    std::vector<Set> excluded;
+    while (sizes >> count) excluded.push_back(ideal(count));
+    return state.integrate(closed, excluded);
+}
+
+// Nullity of the bounded logarithmic differential equation for a squarefree
+// plane polynomial. Each column is the contribution of one numerator monomial.
+static long absolute_factors(const MP& f, int x, int y) {
+    const auto ctx = f.ctx;
+    const long m = fmpz_mpoly_degree_si(f.p, x, ctx);
+    const long n = fmpz_mpoly_degree_si(f.p, y, ctx);
+    if (m == 0 || n == 0) return m + n;
+    const long rows = 4 * m * n, cols = m * (n + 1) + (m + 1) * n;
+    if (rows > 2000000 / cols) throw Limit("The absolute factor matrix exceeds the exact rank budget.");
+    fmpz_mat_t matrix;
+    fmpz_mat_init(matrix, rows, cols);
+    long exponents[MAX_VARIABLES];
+    Z coefficient;
+    for (slong term = 0; term < fmpz_mpoly_length(f.p, ctx); ++term) {
+        fmpz_mpoly_get_term_exp_si(exponents, f.p, term, ctx);
+        fmpz_mpoly_get_term_coeff_fmpz(&coefficient.v, f.p, term, ctx);
+        const long a = exponents[x], b = exponents[y];
+        long column = 0;
+        for (long i = 0; i < m; ++i)
+            for (long j = 0; j <= n; ++j, ++column)
+                if (j != b) fmpz_addmul_si(fmpz_mat_entry(matrix, (a+i)*2*n+b+j-1, column), &coefficient.v, j-b);
+        for (long i = 0; i <= m; ++i)
+            for (long j = 0; j < n; ++j, ++column)
+                if (a != i) fmpz_addmul_si(fmpz_mat_entry(matrix, (a+i-1)*2*n+b+j, column), &coefficient.v, a-i);
+    }
+    const long count = cols - fmpz_mat_rank(matrix);
+    fmpz_mat_clear(matrix);
+    return count;
+}
+
+std::pair<long, long> Euler::plane_components(const Poly& equation, int x, int y,
+        const std::vector<Poly>& region, const std::vector<std::vector<Poly>>& removed) {
+    State& s = *state_;
+    const MP f = s.converted(equation);
+    const int id = s.condition(f);
+    if (id < 0) throw Limit("Expected a nonzero plane equation.");
+    if (id == 0) return {0, 0};
+    struct Factors {
+        fmpz_mpoly_factor_t list;
+        const fmpz_mpoly_ctx_struct* ctx;
+        explicit Factors(const fmpz_mpoly_ctx_struct* c) : ctx(c) { fmpz_mpoly_factor_init(list, ctx); }
+        ~Factors() { fmpz_mpoly_factor_clear(list, ctx); }
+    } factors(s.ctx);
+    if (!fmpz_mpoly_factor(factors.list, s.conditions[id].p, s.ctx)) throw Limit("Plane factorization failed.");
+    long geometric = 0, rational = 0;
+    for (slong i = 0; i < fmpz_mpoly_factor_length(factors.list, s.ctx); ++i) {
+        MP factor(s.ctx), quotient(s.ctx);
+        fmpz_mpoly_factor_get_base(factor.p, factors.list, i, s.ctx);
+        auto vanishes = [&](const std::vector<Poly>& equations) {
+            return std::all_of(equations.begin(), equations.end(), [&](const Poly& g) {
+                return fmpz_mpoly_divides(quotient.p, s.converted(g).p, factor.p, s.ctx);
+            });
+        };
+        if (!vanishes(region) || std::any_of(removed.begin(), removed.end(), vanishes)) continue;
+        ++rational;
+        geometric += absolute_factors(factor, x, y);
+    }
+    return {geometric, rational};
+}
+
 }  // namespace atlas
+
+extern "C" char* atlas_euler(const char* input, size_t length) noexcept {
+    try {
+        const auto chi = atlas::Euler::from_text(std::string(input, length));
+        char* decimal = fmpz_get_str(nullptr, 10, &chi.v);
+        char* answer = atlas::copy_text(decimal);
+        flint_free(decimal);
+        return answer;
+    } catch (const std::exception& e) {
+        atlas::set_error(e.what());
+    } catch (...) {
+        atlas::set_error("Unknown Euler characteristic failure.");
+    }
+    return nullptr;
+}

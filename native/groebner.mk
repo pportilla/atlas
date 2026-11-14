@@ -11,11 +11,20 @@ endif
 .PHONY: all
 all: $(GROEBNER_LIB)
 
-$(GROEBNER_LIB): groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp groebner.hpp
+$(GROEBNER_LIB): groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp groebner.hpp
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) -fPIC $(GROEBNER_SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
 
-# The optional OpenCL plugin: replays of the modular route for a batch of primes.
+$(GROEBNER_LIB): trace_screen.inc trace_rows.inc groebner_verify.hpp
+
+.PHONY: test-verify
+test-verify: build/test_groebner_verify
+	./build/test_groebner_verify
+
+build/test_groebner_verify: test_groebner_verify.cpp groebner_verify.hpp groebner.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< $(abspath $(GROEBNER_LIB)) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
+
+# The optional OpenCL plugin screens trace rows and replays prime batches.
 ifeq ($(shell uname -s),Darwin)
   GROEBNER_GPU_LIB := build/libgroebner_opencl.dylib
   OPENCL_LIBS ?= -framework OpenCL

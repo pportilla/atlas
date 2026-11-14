@@ -68,6 +68,37 @@ class MonodromyTests(unittest.TestCase):
         graph = monodromy_zeta(record | req)
         self.assertEqual(graph["expression"], "1/(1-T^2)")
         self.assertEqual(graph["contributions"][0]["euler_characteristic"], 1)
+        # Old records have the same marked root but omit its polynomial.
+        del record["coefficient_field"]["minimal_polynomial_coefficients"]
+        archived = monodromy_zeta(record | req)
+        self.assertEqual(archived["expression"], graph["expression"])
+        self.assertEqual(archived["contributions"], graph["contributions"])
+
+
+    def test_archived_graph_reconstructs_its_marked_field(self):
+        from engine.monodromy_graph import _archived_field, _field_coefficients
+        from engine.polynomial import InputError
+        x = sp.Symbol("x")
+        for text, root, coefficients in (
+                ("sqrt(2)", sp.sqrt(2), (1, 0, -2)),
+                ("-sqrt(1/2)", -sp.sqrt(2)/2, (2, 0, -1)),
+                ("sqrt(9/4)", sp.Rational(3,2), (2, -3)),
+                ("-I", -sp.I, (1, 0, 1)),
+                ("CRootOf(T**4 - T - 1, 3)", sp.CRootOf(x**4-x-1,3), (1,0,0,-1,-1)),
+                ("CRootOf((x**2-2)^2, 2)", sp.CRootOf(x**2-2,1), (1,0,-2)),
+                ("CRootOf((x-1)*(x**2-2), 2)", sp.CRootOf(x**2-2,1), (1,0,-2))):
+            with self.subTest(text=text):
+                self.assertEqual(_field_coefficients({"exact_root": text}), coefficients)
+                field, marked = _archived_field(text)
+                # The bound variable can differ between serialized polynomials.
+                if root.is_Rational:
+                    self.assertEqual(marked, root)
+                else:
+                    self.assertTrue(field.ext.minpoly.same_root(marked, root))
+        for text in ("CRootOf(x^2-2, 2)", "object.attribute(1)"):
+            with self.assertRaises(InputError):
+                _archived_field(text)
+        self.assertEqual(_field_coefficients({"exact_root": "sqrt(2) + sqrt(3)"}), (1, 0, -10, 0, 1))
 
     def test_inconclusive_input_and_option_validation(self):
         self.assertEqual(monodromy_zeta({"status":"inconclusive"})["status"], "unavailable")

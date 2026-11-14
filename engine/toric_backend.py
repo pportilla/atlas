@@ -4,15 +4,12 @@ The C++ kernel constructs a regular fan. Cone exponents give all pullbacks
 and orbit strata exactly by integer pairings, without solving chart equations.
 """
 from itertools import combinations
-from math import gcd, lcm
+from math import prod
 import subprocess
 from .polynomial import LimitError
 from .resolve import BUILD
 import json
-
-
-def dot(x,y):
-    return sum(a*b for a,b in zip(x,y))
+from .binomial_kernel import pairings, primitive_character
 
 
 def monomial(names, powers):
@@ -26,12 +23,14 @@ def resolve_toric(p, variables, mode, compute=None):
     axial=[min((e[i] for e in exps if e[i] and sum(e)==e[i]),default=0) for i in range(3)]
     if min(axial)<2:
         return None
-    level=lcm(*axial)
-    w=tuple(level//a for a in axial)
+    cofactor = tuple(prod(b for j,b in enumerate(axial) if j != i) for i in range(3))
+    _, w = primitive_character(cofactor)
+    level = w[0]*axial[0]
     if max(w)>1024:
         return None
     principal=[tuple(a if j==i else 0 for j in range(3)) for i,a in enumerate(axial)]
-    if any(dot(w,e)<=level for e in exps if e not in principal):
+    higher = [e for e in exps if e not in principal]
+    if higher and min(pairings([w], higher)[0]) <= level:
         return None
     binary=BUILD/'toricfan'
     if not binary.is_file():
@@ -48,10 +47,16 @@ def resolve_toric(p, variables, mode, compute=None):
         raise LimitError('Toric atlas exceeds the chart expansion budget.')
     # The Newton polyhedron is the diagonal simplex plus the positive orthant:
     # every higher-weight exponent lies above its supporting plane.
-    orders=[min(dot(r,e) for e in principal) for r in rays]
+    valuations = pairings(rays, principal)
+    orders = [min(row) for row in valuations]
     from .chart_batch import transform_batch
     transformed,batch_info=transform_batch(exps,rays,cones,orders,compute=compute)
-    face=[tuple(i for i,e in enumerate(principal) if dot(r,e)==m) for r,m in zip(rays,orders)]
+    face=[tuple(i for i,value in enumerate(row) if value==m) for row,m in zip(valuations,orders)]
+    characters = {}
+    for edge in dict.fromkeys(f for f in face[3:] if mode == "intrinsic" and len(f) == 2):
+        a, b = edge
+        degree, direction = primitive_character(tuple(x-y for x,y in zip(principal[a],principal[b])))
+        characters[edge] = degree, tuple(v for v, in pairings(rays, (direction,)))
     coords=['u','v','w']
     def eid(i):
         return f'E{i-2}'
@@ -67,7 +72,7 @@ def resolve_toric(p, variables, mode, compute=None):
             # hypersurface by the radial G_m. Its strict closure is irreducible.
             v['label']='Central curve';vertices.append(v);divs[i]=[v['id']]
         elif len(face[i])==2:
-            a,b=face[i];g=gcd(axial[a],axial[b])
+            a,b=face[i];g=characters[face[i]][0]
             divs[i]=[]
             family=f'alpha{a+1}{b+1}'
             roots[family]={'degree':g,'power_value':str(-p[principal[b]]/p[principal[a]]),
@@ -86,7 +91,7 @@ def resolve_toric(p, variables, mode, compute=None):
             cells.append({'vertices':[eid(i),eid(j)]})
         elif len(inter:=set(face[i])&set(face[j]))==2:
             a,b=sorted(inter)
-            for t in range(gcd(axial[a],axial[b])):
+            for t in range(characters[a,b][0]):
                 cells.append({'vertices':[divs[i][t if len(face[i])==2 else 0],divs[j][t if len(face[j])==2 else 0]],
                     'stratum_root':f'alpha{a+1}{b+1}_{t+1}'})
     if mode=='embedded':
@@ -118,8 +123,8 @@ def resolve_toric(p, variables, mode, compute=None):
             if mode=='embedded' or len(face[i])==3:
                 exc.append({'id':eid(i),'equation':coords[k]})
             elif len(face[i])==2:
-                a,b=face[i];g=gcd(axial[a],axial[b])
-                chi=[(dot(r,principal[a])-dot(r,principal[b]))//g for r in rr]
+                a,b=face[i]
+                chi=[characters[a,b][1][j] for j in cone]
                 pos=monomial(coords,map(lambda x:max(0,x),chi))
                 neg=monomial(coords,map(lambda x:max(0,-x),chi))
                 for t,ident in enumerate(divs[i],1):

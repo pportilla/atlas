@@ -35,17 +35,18 @@ where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
 from dataclasses import dataclass, replace
-from itertools import combinations
+from itertools import combinations, islice
 from time import monotonic
 
-import sympy as sp
-from sympy import QQ
+from .chart_expressions import chart_expressions
+from .native_polynomial import native_ring
 
 from .blowup_ideal import (blowup_charts, empty_locus, ideal_basis, ideal_subset, radical_subset, saturate,
                            smooth_locus)
+from .affine_kernel import frame_function, frame_linear, pullbacks
 from .centres import GiveUp, maximum
-from .constructible_euler import euler_characteristic
-from .groebner import colon, groebner
+from .groebner import _MODE, colon, groebner
+from .incidence import dual_cells
 
 
 @dataclass(frozen=True)
@@ -58,14 +59,29 @@ class Chart:
     coordinates: tuple  # (name, expression) for the coordinates of the first chart
     history: tuple      # (stage, index of the pivot) of the blowups leading here
     removed: tuple = () # ideals of centres blown up in this chart: their points are no longer its own
+    coefficient_field: tuple = ()  # (parameter, minimal polynomial, degree, chosen embedding)
+    torus: tuple = ()  # regular cone rays and common linear map to the input coordinates
+    point_blowup: tuple = ()  # parent chart index and rational centre of an ordered plane blowup pair
+    split_cone: tuple = ()  # chart rays in the common split base coordinates
+
+    def one_sheet(self, count):
+        """A field parameter describes one fixed embedding. Over Q the kernel
+        sees its conjugates, each with the same geometric count."""
+        if not self.coefficient_field or count is None:
+            return count
+        degree = self.coefficient_field[2]
+        value, remainder = divmod(count, degree)
+        if remainder:
+            raise GiveUp("A geometric count is inconsistent across coefficient field embeddings.")
+        return value
 
 
-def _covers(removed):
+def _covers(variables, removed):
     """Functions whose nonvanishing sets cover the complement of the removed
     centres: the products of one generator of each ideal."""
-    out = [sp.Integer(1)]
+    out = [chart_expressions(variables).sympify(1)]
     for ideal in removed:
-        out = [sp.expand(u*g) for u in out for g in ideal]
+        out = [_expanded(variables, u*g) for u in out for g in ideal]
     return list(dict.fromkeys(out))
 
 
@@ -74,63 +90,93 @@ def _present(variables, ideal, removed=()):
     if empty_locus(variables, ideal):
         return False
     relevant = [z for z in removed if not empty_locus(variables, (*ideal, *z))]
-    return any(not radical_subset(variables, (u,), ideal) for u in _covers(relevant))
+    return any(not radical_subset(variables, (u,), ideal) for u in _covers(variables, relevant))
 
 
 def _dimension(variables, ideal):
     """The dimension of V(ideal), from the leading monomials of a Groebner basis."""
-    basis = groebner(tuple(ideal), variables)
-    if basis.exprs == [1] or list(basis.exprs) == [sp.S.One]:
+    from . import kernel
+    from .groebner import CHECK
+    value = kernel.dimension(variables, ideal)
+    if value is None:
+        if _MODE == "native" or native_ring(variables):
+            raise GiveUp("No native dimension certificate is available for this chart.")
+        return _dimension_reference(variables, ideal)
+    if CHECK and value != _dimension_reference(variables, ideal):
+        raise AssertionError("The dimension differs from the leading-monomial reference.")
+    return value
+
+
+def _dimension_reference(variables, ideal):
+    # Variables absent from the generators give an affine factor. This
+    # also keeps the independent reference small on wide sparse charts.
+    import sympy as sp
+    used = set().union(*(sp.sympify(f).free_symbols for f in ideal))
+    active = tuple(v for v in variables if v in used)
+    if not active:
+        return -1 if any(ideal) else len(variables)
+    basis = sp.groebner(tuple(ideal), *active, order="grevlex", domain=sp.QQ)
+    if tuple(basis) == (1,):
         return -1
-    heads = [sp.Poly(g, *variables).monoms(order="grevlex")[0] for g in basis.exprs]
+    heads = [p.monoms(order="grevlex")[0] for p in basis.polys]
     best = 0
-    count = len(variables)
+    fixed = {i for head in heads if sum(e > 0 for e in head) == 1 for i, e in enumerate(head) if e}
+    heads = [head for head in heads if not any(head[i] for i in fixed)]
+    relevant = sorted({i for head in heads for i, e in enumerate(head) if e})
+    heads = [tuple(head[i] for i in relevant) for head in heads]
     # The largest set of variables no power product of which is a leading monomial.
-    for mask in range(1, 1 << count):
+    for mask in range(1, 1 << len(relevant)):
         size = bin(mask).count("1")
         if size > best and not any(all(e == 0 or (mask >> i) & 1 for i, e in enumerate(head)) for head in heads):
             best = size
-    return best
+    return len(variables) - len(relevant) - len(fixed) + best
 
 
 def _generators(variables, ambient, ideal):
     """Few generators of the ideal modulo the ambient one."""
-    basis = ideal_basis(variables, (*ambient, *ideal))
-    gens = [g for g in basis if not ideal_subset(variables, (g,), ambient)]
-    for g in sorted(gens, key=lambda h: (-sp.Poly(h, *variables).total_degree(), sp.default_sort_key(h))):
+    basis = groebner((*ambient, *ideal), variables)
+    from .affine_kernel import sparse_terms
+    degree = {g: max(sum(m) for m, _ in sparse_terms(variables, g)) for g in basis.exprs}
+    gens = [g for g in degree if not ideal_subset(variables, (g,), ambient)]
+    for g in sorted(gens, key=lambda h: (-degree[h], chart_expressions(variables).default_sort_key(h))):
         rest = [h for h in gens if h != g]
         if rest and ideal_subset(variables, (g,), (*ambient, *rest)):
             gens = rest
     return tuple(gens)
 
 
-def _substitute(exprs, v, value, variables):
-    """Replace the variable v by a polynomial in the others (Horner's rule on polynomials)."""
-    image = sp.Poly(value, *variables, domain=QQ)
-    out = []
-    for expr in exprs:
-        p = sp.Poly(sp.sympify(expr), v)
-        if p.degree() <= 0:
-            result = sp.expand(expr)
-        else:
-            total = sp.Poly(0, *variables, domain=QQ)
-            for coefficient in p.all_coeffs():
-                total = total*image + sp.Poly(coefficient, *variables, domain=QQ)
-            result = total.as_expr()
-        if result != 0 and result not in out:
-            out.append(result)
-    return tuple(out)
+def _expanded(variables, value):
+    if getattr(value, "is_Atom", False) or getattr(value, "is_number", False):
+        return value
+    return frame_function(variables, value)
+
+
+def _solved(variables, polynomial, variable):
+    """Return the solution of a linear chart equation with scalar leading coefficient."""
+    if polynomial == variable:
+        return chart_expressions(variables).sympify(0)
+    if variable not in getattr(polynomial, "free_symbols", ()):
+        return None
+    pair = frame_linear(variables, polynomial, variable)
+    if pair is not None and pair[0].is_number:
+        return _expanded(variables, -pair[1]/pair[0])
+    return None
 
 
 def _eliminate(chart):
-    """Remove the variables that an ambient equation expresses through the others."""
+    """An equation a*v+b=0 with a nonzero scalar exhibits the chart as a
+    polynomial graph. Substituting v=-b/a in its defining ideals and every
+    carried function is an isomorphism. Zero map coordinates remain in
+    place; zero generators of ideals are immaterial."""
     while True:
         found = None
         for g in chart.ambient:
             for v in chart.variables:
-                p = sp.Poly(g, v)
-                if p.degree() == 1 and p.LC().is_number:
-                    found = v, sp.expand(-p.nth(0)/p.LC())
+                if chart.coefficient_field and v == chart.coefficient_field[0]:
+                    continue
+                value = _solved(chart.variables, g, v)
+                if value is not None:
+                    found = v, value
                     break
             if found:
                 break
@@ -138,16 +184,21 @@ def _eliminate(chart):
             return chart
         v, value = found
         variables = tuple(w for w in chart.variables if w != v)
+        mapping = tuple(value if w == v else w for w in chart.variables)
+        ideals = [chart.ambient, *(row[3] for row in chart.components), chart.fibre, chart.region, *chart.removed]
+        functions = [*(g for ideal in ideals for g in ideal), *(g for _, g in chart.coordinates)]
+        moved = iter(pullbacks(variables, mapping, chart.variables, functions)) if variables else iter(
+            chart_expressions(chart.variables).sympify(g).xreplace({v: value}) for g in functions)
 
-        def move(exprs):
-            return _substitute(exprs, v, value, variables)
+        def move(ideal):
+            return tuple(dict.fromkeys(g for g in islice(moved, len(ideal)) if g != 0))
 
-        chart = replace(
-            chart, variables=variables, ambient=move(chart.ambient),
-            components=tuple((label, n, nu, move(ideal)) for label, n, nu, ideal in chart.components),
-            fibre=move(chart.fibre), region=move(chart.region),
-            coordinates=tuple((name, sp.expand(expr.xreplace({v: value}))) for name, expr in chart.coordinates),
-            removed=tuple(move(z) for z in chart.removed))
+        ambient = move(chart.ambient)
+        components = tuple((label, n, nu, move(ideal)) for label, n, nu, ideal in chart.components)
+        fibre, region = move(chart.fibre), move(chart.region)
+        removed = tuple(move(z) for z in chart.removed)
+        chart = replace(chart, variables=variables, ambient=ambient, components=components, fibre=fibre, region=region,
+                        removed=removed, coordinates=tuple((name, next(moved)) for name, _ in chart.coordinates))
 
 
 def _failures(chart, dimension):
@@ -166,23 +217,24 @@ def _failures(chart, dimension):
     answers when it cannot, and with ATLAS_GROEBNER=check both must agree.
     """
     from . import kernel
-    from .groebner import CHECK
+    from .groebner import CHECK, _MODE
     labels = [component[0] for component in chart.components]
     found = kernel.crossings(chart.variables, dimension, chart.ambient,
                              [component[3] for component in chart.components], chart.fibre, chart.region)
     if found is not None:
         over = {tuple(labels[i] for i in positions): gens for positions, _, gens in found}
         inside = {tuple(labels[i] for i in positions) for positions, flag, _ in found if flag}
-        if CHECK:
-            other, within = _failures_here(chart, dimension)
-            if inside != within or {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in over.items()} != \
-                    {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in other.items()}:
-                raise AssertionError("The native check of normal crossings differs from this file's.")
-        return over, inside
-    return _failures_here(chart, dimension)
+    else:
+        over, inside = _failures_here(chart, dimension, reference=_MODE == "sympy")
+    if CHECK:
+        other, within = _failures_here(chart, dimension, reference=True)
+        if inside != within or {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in over.items()} != \
+                {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in other.items()}:
+            raise AssertionError("The native check of normal crossings differs from this file's.")
+    return over, inside
 
 
-def _failures_here(chart, dimension):
+def _failures_here(chart, dimension, *, reference=False):
     """The computation of `_failures`, done here."""
     variables = chart.variables
     labels = [component[0] for component in chart.components]
@@ -203,10 +255,24 @@ def _failures_here(chart, dimension):
             rank = codimension + size
             if rank <= len(variables):
                 basis = groebner(bad, variables)
-                matrix = sp.Matrix([[basis.reduce(sp.diff(g, v))[1] for v in variables] for g in gens])
-                minors = {sp.expand(matrix.extract(list(rows), list(columns)).det(method="berkowitz"))
-                          for rows in combinations(range(len(gens)), rank)
-                          for columns in combinations(range(len(variables)), rank)}
+                if reference:
+                    import sympy as sp
+                    matrix = sp.Matrix([[basis.reduce(sp.diff(g, v))[1] for v in variables] for g in gens])
+                    minors = {sp.expand(matrix.extract(list(rows), list(columns)).det(method="berkowitz"))
+                              for rows in combinations(range(len(gens)), rank)
+                              for columns in combinations(range(len(variables)), rank)}
+                else:
+                    from .affine_kernel import frame_minor
+                    minors = set()
+                    for rows in combinations(gens, rank):
+                        active = set().union(*(getattr(g, "free_symbols", ()) for g in rows))
+                        for columns in combinations((v for v in variables if v in active), rank):
+                            # Determinant commutes with passage to the fibre
+                            # quotient, so reduction after the minor gives the
+                            # same rank-defect ideal there.
+                            minor = frame_minor(variables, rows, columns)
+                            if minor != 0:
+                                minors.add(basis.reduce(minor)[1])
                 bad = (*bad, *(m for m in minors if m != 0))
                 if empty_locus(variables, bad):
                     continue
@@ -235,23 +301,78 @@ class Uneven(GiveUp):
     """The parts of a centre are not alike: a divisor has different orders along them."""
 
 
+def _point_factor_rows(variables, ideal, parameter):
+    """Rational factors of the coordinate eliminant, with their multiplicities."""
+    from .affine_kernel import rational_factor_rows
+    for p in reversed(groebner(tuple(ideal), variables, order="lex").exprs):
+        if p.free_symbols <= {parameter}:
+            return rational_factor_rows((parameter,), p)[1]
+    raise GiveUp("A centre expected to be finite is not.")
+
+
+def _point_factors(variables, ideal, parameter):
+    """Distinct factors and their degrees for splitting a finite centre."""
+    from .affine_kernel import _sparse_expression, _sparse_terms
+    return [(_sparse_expression((parameter,), row), _sparse_terms(row)[0][0][0])
+            for row, _, _ in _point_factor_rows(variables, ideal, parameter)]
+
+
 def _point_components(variables, ideal):
-    """The components over Q of a finite reduced set of points: conjugate
-    points stay together, and the divisors, defined over Q, have the same
-    orders at them. A linear form with distinct values at the points is
-    eliminated; the factors of its minimal polynomial give the components."""
+    """Orbits of a reduced finite centre over Q, via a separating linear form."""
+    from . import kernel
+    from .affine_kernel import pullbacks
+    from .groebner import CHECK
+    # V(0) as the only stratum returns chi of the whole closed fibre. For
+    # a finite complex variety this counts geometric points with no weights.
+    native = kernel.strata(variables, ideal, ((),))
+    if native is None:
+        from .constructible_euler import euler_characteristic
+        count = euler_characteristic(variables, ideal)
+    else:
+        count = native.get((0,), 0)
+    t = chart_expressions(variables).Dummy("form")
+    # On d distinct points the number of integer a for which
+    # sum a^i*x_i collides is at most (n-1)*binomial(d,2).
+    bad = (len(variables) - 1)*count*(count - 1)//2
+    for a in range(1, bad + 2):
+        form = sum(a**i*v for i, v in enumerate(variables))
+        try:
+            factors = _point_factors((*variables, t), (*ideal, t - form), t)
+            if sum(degree for _, degree in factors) != count:
+                continue
+            equations = pullbacks(variables, (form,), (t,), [f for f, _ in factors])
+        except ArithmeticError as exc:
+            if _MODE == "native" or native_ring(variables):
+                raise GiveUp("The native kernel could not separate this finite centre.") from exc
+            return _point_components_reference(variables, ideal)
+        parts = [(degree, ideal_basis(variables, (*ideal, eq))) for (_, degree), eq in zip(factors, equations)]
+        answer = [p for _, p in sorted(parts, key=lambda part: (part[0], chart_expressions(variables).default_sort_key(part[1])))]
+        if CHECK and answer != _point_components_reference(variables, ideal, form):
+            raise AssertionError("The finite point components differ from the reference decomposition.")
+        return answer
+    raise GiveUp("The points of a centre were not separated.")
+
+
+def _point_components_reference(variables, ideal, separated=None):
+    """SymPy reference for finite point decomposition and fallback on kernel limits."""
+    import sympy as sp
+    from sympy import QQ
+    from .constructible_euler import euler_characteristic
     count = euler_characteristic(variables, ideal)
     t = sp.Dummy("form")
-    for attempt in range(1, 12):
-        form = sum((1 + (attempt*(i + 1)) % 7)*(attempt + i)**i % 11*v for i, v in enumerate(variables))
-        last = [g for g in groebner((*ideal, t - form), (*variables, t), order="lex").exprs if g.free_symbols <= {t}]
+    bad = (len(variables) - 1)*count*(count - 1)//2
+    forms = (separated,) if separated is not None else (sum(a**i*v for i, v in enumerate(variables))
+                                                         for a in range(1, bad + 2))
+    for form in forms:
+        basis = sp.groebner((*ideal, t - form), *variables, t, order="lex", domain=QQ)
+        last = [g for g in basis if g.free_symbols <= {t}]
         if not last:
             raise GiveUp("A centre expected to be finite is not.")
         minimal = sp.Poly(last[-1], t).sqf_part()
         if minimal.degree() != count:
-            continue  # two points have the same value
+            continue
         factors = [factor.as_expr().subs(t, form) for factor, _ in minimal.factor_list()[1]]
-        return sorted((ideal_basis(variables, (*ideal, sp.expand(f))) for f in factors),
+        return sorted((tuple(sp.groebner((*ideal, f), *variables, order="grevlex", domain=QQ)) for f in factors),
                       key=lambda gens: (euler_characteristic(variables, gens), sp.default_sort_key(gens)))
     raise GiveUp("The points of a centre were not separated.")
 
@@ -271,9 +392,9 @@ def _linear(chart, centre, codimension):
     for v in others:
         for g in basis:
             if v in g.free_symbols and g.free_symbols <= {v, *parameters}:
-                p = sp.Poly(g, v)
-                if p.degree() == 1 and p.LC().is_number:
-                    found.append((v, sp.expand(-p.nth(0)/p.LC())))
+                value = _solved(chart.variables, g, v)
+                if value is not None:
+                    found.append((v, value))
                     break
     if len(found) != codimension:
         return None
@@ -292,7 +413,7 @@ def _child_variables(chart, linear, stage):
         while name in used:
             name += "_"
         used.add(name)
-        return sp.Symbol(name)
+        return chart_expressions(chart.variables).Symbol(name)
 
     position = {v: i for i, (v, _) in enumerate(linear)}
     out = []
@@ -314,14 +435,19 @@ def _blow_up_linear(chart, linear, label, stage, codimension):
     The kernel computes this (native/ideal.cpp, op_blowup); `_blow_up_linear_here`
     answers when it cannot, and with ATLAS_GROEBNER=check both must agree."""
     from . import kernel
-    from .groebner import CHECK
+    from .groebner import CHECK, _MODE
     names = _child_variables(chart, linear, stage)
     native = kernel.blowup_linear(
         chart.variables, chart.ambient, [chart.variables.index(v) for v, _ in linear], [shift for _, shift in linear],
         [component[3] for component in chart.components], chart.fibre, chart.region,
         [*(expr for _, expr in chart.coordinates), *(g for z in chart.removed for g in z)])
     if native is None:
-        return _blow_up_linear_here(chart, linear, label, stage, codimension, names)
+        children = _blow_up_linear_here(chart, linear, label, stage, codimension, names,
+                                        reference=_MODE == "sympy")
+        if CHECK and children != _blow_up_linear_here(chart, linear, label, stage, codimension, names,
+                                                      reference=True):
+            raise AssertionError("The sparse blowup of a linear centre differs from its reference.")
+        return children
     children = []
     for j, ((variables, w, ratios), raw) in enumerate(zip(names, native)):
         components, multiplicity, discrepancy = [], 0, codimension
@@ -339,9 +465,10 @@ def _blow_up_linear(chart, linear, label, stage, codimension):
             at += len(z)
         children.append(Chart(variables, chart.ambient, tuple(components), kernel.exprs(variables, raw["fibre"]), region,
                               tuple((name, expr) for (name, _), expr in zip(chart.coordinates, moved)),
-                              (*chart.history, (stage, j)), tuple(removed)))
+                              (*chart.history, (stage, j)), tuple(removed), chart.coefficient_field))
     if CHECK:
-        for mine, other in zip(children, _blow_up_linear_here(chart, linear, label, stage, codimension, names)):
+        for mine, other in zip(children, _blow_up_linear_here(chart, linear, label, stage, codimension, names,
+                                                               reference=True)):
             def same(a, b):
                 return ideal_basis(mine.variables, (*mine.ambient, *a)) == ideal_basis(mine.variables, (*mine.ambient, *b))
             if mine.variables != other.variables or [c[:3] for c in mine.components] != [c[:3] for c in other.components] \
@@ -353,7 +480,7 @@ def _blow_up_linear(chart, linear, label, stage, codimension):
     return children
 
 
-def _blow_up_linear_here(chart, linear, label, stage, codimension, names):
+def _blow_up_linear_here(chart, linear, label, stage, codimension, names, *, reference=False):
     """The computation of `_blow_up_linear`, done here."""
     parameters = [v for v in chart.variables if any(v in g.free_symbols for g in chart.ambient)]
     children = []
@@ -362,9 +489,15 @@ def _blow_up_linear_here(chart, linear, label, stage, codimension, names):
         swap = {pivot: w + shift}
         swap.update({v: value + ratios[i]*w for i, (v, value) in enumerate(linear) if i != j})
         reducer = groebner(chart.ambient, variables) if chart.ambient else None
+        mapping = tuple(swap.get(v,v) for v in chart.variables)
 
         def move(f):
-            value = sp.Poly(sp.sympify(f).xreplace(swap), *variables, domain=QQ).as_expr()
+            if reference:
+                import sympy as sp
+                from sympy import QQ
+                value = sp.Poly(sp.sympify(f).xreplace(swap), *variables, domain=QQ).as_expr()
+            else:
+                value, = pullbacks(variables, mapping, chart.variables, (f,))
             return reducer.reduce(value)[1] if reducer is not None and value.free_symbols & set(parameters) else value
 
         def ideal(gens):
@@ -375,14 +508,30 @@ def _blow_up_linear_here(chart, linear, label, stage, codimension, names):
             moved = ideal(before)
             if not moved:
                 raise GiveUp("A divisor contains a chart of a blowup.")
-            order = min(min(monomial[0] for monomial in sp.Poly(g, w).monoms()) for g in moved)
+            if reference:
+                import sympy as sp
+                order = min(min(monomial[0] for monomial in sp.Poly(g, w).monoms()) for g in moved)
+            else:
+                from .affine_kernel import sparse_terms
+                column = variables.index(w)
+                order = min(e[column] for g in moved for e, _ in sparse_terms(variables, g))
             if order and len(moved) > 1:
                 after = colon((*chart.ambient, *moved), (w**order,), variables)
                 if after is None:
                     raise GiveUp("An ideal quotient is not available.")
                 after = _generators(variables, chart.ambient, after)
-            else:
+            elif not order:
+                after = moved
+            elif reference:
+                import sympy as sp
                 after = tuple(sp.expand(sp.cancel(g/w**order)) for g in moved)
+            else:
+                from .affine_kernel import _request, _ring, _sparse_expression
+                ring = _ring(variables)
+                q, r = _request(["wide_division", ring.header, "lex", ring.text(moved[0]), ring.text(w**order)])
+                if r:
+                    raise ArithmeticError("The chart function was not divisible by its exceptional order.")
+                after = (_sparse_expression(variables, q),)
             if not empty_locus(variables, (*chart.ambient, *after)):
                 components.append((name, n, nu, after))
             multiplicity += n*order
@@ -391,8 +540,48 @@ def _blow_up_linear_here(chart, linear, label, stage, codimension, names):
         region = (*ideal(chart.region), *(r for r in ratios[:j]))
         children.append(Chart(variables, chart.ambient, tuple(components), ideal(chart.fibre), region,
                               tuple((name, move(expr)) for name, expr in chart.coordinates),
-                              (*chart.history, (stage, j)), tuple(ideal(z) for z in chart.removed)))
+                              (*chart.history, (stage, j)), tuple(ideal(z) for z in chart.removed),
+                              chart.coefficient_field))
     return children
+
+
+def _strict_ideal(variables, ambient, pivot, generators):
+    """Order and residual ideal of a pulled-back divisor along the new pivot.
+
+    In the regular chart ring let g_i = p^a_i h_i, with h_i the principal
+    residual ideals returned by the kernel. Their common order is m=min a_i.
+    Since p is a nonzerodivisor, J:(p^m) = sum_i p^(a_i-m) (h_i). Vanishing
+    on an entire component of the pivot after this division still signals
+    nonuniform order; the caller checks that before accepting the centre.
+    """
+    from . import kernel
+    from .groebner import CHECK
+    nonzero = tuple(g for g in generators if not ideal_subset(variables, (g,), ambient))
+    native = kernel.strict_parts(variables, ambient, ((pivot,),), nonzero) if nonzero else None
+    if native:
+        order = min(orders[0] for orders, _ in native)
+        if len(native) == 1:
+            after = native[0][1]
+        else:
+            residual = [_expanded(variables, g*pivot**(orders[0]-order)) for orders, ideal in native for g in ideal]
+            after = ideal_basis(variables, (*ambient, *residual))
+        if not CHECK:
+            return order, after
+    # Independent comparison and fallback for rings outside the kernel.
+    expected_order = _order(variables, ambient, pivot, generators, limit=max(64, order) if native else 64)
+    expected = colon((*ambient, *generators), (pivot**expected_order,), variables)
+    if expected is None:
+        if _MODE == "native" or native_ring(variables):
+            raise GiveUp("The native kernel could not compute the residual divisor ideal.")
+        from sympy import QQ
+        ring = QQ.old_poly_ring(*variables, order="grevlex")
+        quotient = ring.ideal(*ambient, *generators).quotient(ring.ideal(pivot**expected_order))
+        expected = ideal_basis(variables, tuple(ring.to_sympy(g) for g in quotient.gens))
+    if native:
+        if order != expected_order or after != expected:
+            raise AssertionError("The graph blowup divisor order or residual ideal differs from its reference.")
+        return order, after
+    return expected_order, expected
 
 
 def _blow_up(chart, centre, label, stage, dimension, codimension, deadline=None):
@@ -414,10 +603,7 @@ def _blow_up(chart, centre, label, stage, dimension, codimension, deadline=None)
             # removed as often as it occurs: an ideal quotient by that power of
             # the pivot. The order must be the same on every component of the
             # new divisor: what is left may vanish on none of them.
-            order = _order(child.variables, child.ambient, child.pivot, before)
-            after = colon((*child.ambient, *before), (child.pivot**order,), child.variables)
-            if after is None:
-                raise GiveUp("An ideal quotient is not available.")
+            order, after = _strict_ideal(child.variables, child.ambient, child.pivot, before)
             if _dimension(child.variables, (*child.ambient, child.pivot, *after)) >= dimension - 1:
                 raise Uneven("A divisor has different orders along parts of one exceptional divisor.")
             if not empty_locus(child.variables, (*child.ambient, *after)):
@@ -431,7 +617,7 @@ def _blow_up(chart, centre, label, stage, dimension, codimension, deadline=None)
                            for name, n, nu, ideal in components)
         children.append(_eliminate(Chart(child.variables, child.ambient, components, chart.fibre, region,
                                          chart.coordinates, (*chart.history, (stage, child.pivot_index)),
-                                         chart.removed)))
+                                         chart.removed, chart.coefficient_field)))
     return children
 
 
@@ -441,24 +627,56 @@ def _is_strict(label):
 
 def _hypersurface(chart):
     """Generators of the ideal of the strict transform: the product of the ideals of its components."""
-    gens = (sp.Integer(1),)
+    gens = (chart_expressions(chart.variables).sympify(1),)
     for label, _, _, ideal in chart.components:
         if _is_strict(label):
-            gens = tuple(sp.expand(a*b) for a in gens for b in ideal)
+            gens = tuple(_expanded(chart.variables, a*b) for a in gens for b in ideal)
     return _generators(chart.variables, chart.ambient, gens)
 
 
 def _radical_points(variables, ideal):
-    """The radical of a zero-dimensional ideal (Seidenberg): add, for each
-    variable, the square-free part of the generator of its elimination ideal."""
+    """Seidenberg's radical of a finite ideal, using the squarefree coordinate eliminants."""
+    from .affine_kernel import _sparse_expression
+    from .groebner import CHECK, _MODE
+    from .kernel import finite_radical
+    if _MODE == "sympy":
+        return _radical_points_reference(variables, ideal)
+    answer = finite_radical(variables, ideal)
+    if answer is not None:
+        if CHECK and answer != _radical_points_reference(variables, ideal):
+            raise AssertionError("The native finite radical differs from its reference.")
+        return answer
+    try:
+        extra = []
+        for v in variables:
+            order = (*(w for w in variables if w != v), v)
+            factors = _point_factor_rows(order, ideal, v)
+            # A squarefree eliminant is already in the input ideal.
+            if all(multiplicity == 1 for _, multiplicity, _ in factors):
+                continue
+            distinct = (_sparse_expression((v,), row) for row, _, _ in factors)
+            extra.append(frame_function((v,), chart_expressions((v,)).prod(distinct)))
+        answer = ideal_basis(variables, (*ideal, *extra))
+    except ArithmeticError as exc:
+        if _MODE == "native" or native_ring(variables):
+            raise GiveUp("The native kernel could not reduce this finite centre.") from exc
+        return _radical_points_reference(variables, ideal)
+    if CHECK and answer != _radical_points_reference(variables, ideal):
+        raise AssertionError("The radical of a finite locus differs from its reference.")
+    return answer
+
+
+def _radical_points_reference(variables, ideal):
+    import sympy as sp
+    from sympy import QQ
     extra = []
     for v in variables:
         order = (*(w for w in variables if w != v), v)
-        last = [g for g in groebner(tuple(ideal), order, order="lex").exprs if g.free_symbols <= {v}]
+        last = [g for g in sp.groebner(ideal, *order, order="lex", domain=QQ) if g.free_symbols <= {v}]
         if not last:
             raise GiveUp("A centre expected to be finite is not.")
         extra.append(sp.Poly(last[-1], v).sqf_part().as_expr())
-    return ideal_basis(variables, (*ideal, *extra))
+    return tuple(sp.groebner((*ideal, *extra), *variables, order="grevlex", domain=QQ))
 
 
 def _reduced(chart, locus):
@@ -750,7 +968,7 @@ def _own_failures(chart, dimension, known):
     return known[id(chart)][1]
 
 
-def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None):
+def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None, count_strata=True):
     dimension = len(variables) if dimension is None else dimension
     current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
                      tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
@@ -763,7 +981,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
         failures = [_own_failures(chart, dimension, known) if retains else _failures(chart, dimension)
                     for chart in current]
         if not any(inside for _, inside in failures):
-            return (*_strata(current), current, centres)
+            return (*(_strata(current) if count_strata else ({}, {})), current, centres)
         chosen, detail = rule.choose(current, failures, dimension, deadline)
         if all(centre is None for centre in chosen):
             raise GiveUp("No centre was found.")
@@ -828,7 +1046,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
 
 
 def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, budget=400, deadline=None,
-                rules=("complete", "direct")):
+                rules=("complete", "direct"), count_strata=True):
     """Blow up over V(fibre) until the divisor has normal crossings there.
 
     `components` lists (label, N, nu, ideal) on affine space with the given
@@ -850,7 +1068,7 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     for name in rules:
         rule = _Direct() if name == "direct" else _Canonical(components)   # "complete"
         try:
-            return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension)
+            return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata)
         except GiveUp as error:
             reason = error
             if deadline is not None and monotonic() > deadline:
@@ -858,7 +1076,7 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     raise reason
 
 
-def _strata(charts, domain=QQ):
+def _strata(charts, domain=None):
     """Numerical data of the components, and the Euler characteristic of the
     set of points over the fibre lying on exactly a given set of components.
 
@@ -877,7 +1095,7 @@ def _strata(charts, domain=QQ):
         # cannot, and with ATLAS_GROEBNER=check both must agree.
         native = kernel.strata(chart.variables, (*chart.ambient, *chart.fibre, *chart.region),
                                [component[3] for component in chart.components], chart.removed) \
-            if domain == QQ else None
+            if domain is None or getattr(domain, "is_QQ", False) else None
         if native is not None:
             here = {frozenset(chart.components[j][0] for j in subset): chi for subset, chi in native.items()}
             if CHECK and here != _strata_here(chart, domain):
@@ -885,19 +1103,24 @@ def _strata(charts, domain=QQ):
         else:
             here = _strata_here(chart, domain)
         for key, chi in here.items():
-            strata[key] = strata.get(key, 0) + chi
+            strata[key] = strata.get(key, 0) + chart.one_sheet(chi)
     return data, {key: chi for key, chi in strata.items() if chi}
 
 
-def _strata_here(chart, domain=QQ):
+def _strata_here(chart, domain=None):
     """The strata of one chart, computed here: {labels: Euler characteristic}."""
+    from .constructible_euler import euler_characteristic
+    if domain is None:
+        from .reference import QQ
+        domain = QQ
+    api = chart_expressions(chart.variables)
     strata = {}
     zero = [g for g in dict.fromkeys((*chart.fibre, *chart.region)) if g in chart.variables]
-    zero = dict.fromkeys(zero[:len(chart.variables) - 1], sp.S.Zero)
+    zero = dict.fromkeys(zero[:len(chart.variables) - 1], api.S.Zero)
     variables = tuple(v for v in chart.variables if v not in zero)
 
     def cut(ideal):
-        values = (sp.sympify(g).xreplace(zero) for g in ideal)
+        values = (api.sympify(g).xreplace(zero) for g in ideal)
         return tuple(g for g in values if g != 0)
 
     base = (*cut(chart.ambient), *cut(chart.fibre), *cut(chart.region))
@@ -924,7 +1147,7 @@ def _strata_here(chart, domain=QQ):
     return {key: chi for key, chi in strata.items() if chi}
 
 
-def cells(charts, dimension):
+def cells(charts, dimension, *, rational_counts=None):
     """The sets of exceptional divisors with a common point over the fibre,
     with the number of geometric components of their intersection:
     {set of labels: number, or None when it is not determined here}.
@@ -944,7 +1167,6 @@ def cells(charts, dimension):
     answer still says that the intersection has a point over the fibre.
     """
     from . import kernel
-    from .geometric_components import geometric_components
     counts = {}
     for chart in charts:
         labels = [(name, ideal) for name, _, _, ideal in chart.components if not _is_strict(name)]
@@ -960,58 +1182,43 @@ def cells(charts, dimension):
                     continue
                 found.add(subset)
                 key = frozenset(labels[j][0] for j in subset)
-                here = None
+                here = rational = None
                 if radical_subset(chart.variables, chart.fibre, whole):  # the intersection lies over the fibre
                     if dimension == size:
                         native = kernel.strata(chart.variables, (*whole, *own), [()], chart.removed)
-                        here = native.get((0,), 0) if native is not None else \
-                            euler_characteristic(chart.variables, (*whole, *own), chart.removed)
+                        if native is None:
+                            from .constructible_euler import euler_characteristic
+                            here = euler_characteristic(chart.variables, (*whole, *own), chart.removed)
+                        else:
+                            here = native.get((0,), 0)
+                    elif (chart.coefficient_field and chart.ambient == (chart.coefficient_field[1],)
+                          and all(len(labels[j][1]) == 1 and labels[j][1][0] in chart.variables[:-1] for j in subset)):
+                        # A coordinate flat on each embedding. Its generic point
+                        # is owned on all sheets or on none by conjugacy.
+                        owned = ideal_subset(chart.variables, own, whole) and not any(
+                            ideal_subset(chart.variables, z, whole) for z in chart.removed)
+                        here = chart.coefficient_field[2] if owned else 0
+                    elif dimension - size == 1 and (plane := kernel.plane_components(
+                            chart.variables, whole, own, chart.removed)) is not None:
+                        here, rational = plane
                     elif dimension > size:
+                        from .geometric_components import geometric_components
                         primes = geometric_components(chart.variables, whole, dimension - size)
                         if primes is not None:
                             here = sum(1 for prime in primes if ideal_subset(chart.variables, own, (*chart.ambient, *prime))
                                        and not any(ideal_subset(chart.variables, z, (*chart.ambient, *prime))
                                                    for z in chart.removed))
+                if rational_counts is not None and size == 1:
+                    # The plane operation counts rational factors as well as
+                    # their geometric constituents. Explicit geometric primes
+                    # from the general routine are already defined over Q.
+                    count = rational if rational is not None else here if dimension > size else None
+                    current = rational_counts.get(key, 0)
+                    rational_counts[key] = None if current is None or count is None else current + chart.one_sheet(count)
                 if key not in counts:
                     counts[key] = 0
-                counts[key] = None if here is None or counts[key] is None else counts[key] + here
+                counts[key] = None if here is None or counts[key] is None else counts[key] + chart.one_sheet(here)
             if not found:
                 break
             alive = found
     return counts
-
-
-def dual_cells(counts, order, fixed=None):
-    """The cells of dimension at least one of the dual complex with the
-    labels as vertices: for a set J of labels whose intersection has m
-    components, m cells with the vertices J. `order` sorts the labels and
-    `fixed` maps the sets that are cells already known (the vertices and
-    cells of a fan) to their names: these are not listed again, and serve
-    as faces. Returns (cells, None), or (None, reason) when the counts do
-    not determine the complex: a number is unknown, a divisor has several
-    components, or an intersection with several components is a face."""
-    fixed = fixed or {}
-
-    def name(key):
-        if key in fixed:
-            return fixed[key]
-        return next(iter(key)) if len(key) == 1 else "C" + "-".join(sorted(key, key=order)) + ".1"
-
-    out = []
-    for key in sorted(counts, key=lambda k: (len(k), sorted(map(order, k)))):
-        if key in fixed:
-            continue
-        count, labels = counts[key], sorted(key, key=order)
-        if count is None:
-            return None, "The number of components of " + " ∩ ".join(labels) + " was not determined."
-        if len(key) == 1:
-            if count != 1:
-                return None, f"{labels[0]} has {count} components; the cells are not attached to each of them."
-            continue
-        faces = [key - {label} for label in labels]
-        if any(face not in fixed and counts.get(face) != 1 for face in faces):
-            return None, "An intersection with several components is a face of " + " ∩ ".join(labels) + "."
-        out.extend({"id": "C" + "-".join(labels) + f".{k}", "dimension": len(key) - 1, "vertices": labels,
-                    "faces": [name(face) for face in faces]} for k in range(1, count + 1))
-    return out, None
-

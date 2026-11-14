@@ -4,13 +4,98 @@ import unittest
 
 import sympy as sp
 
-from engine.centres import maximum
-from engine.local_blowups import _point_components, acampo_over
+from engine.centres import Frame, maximum
+from engine.local_blowups import _point_components, _radical_points, acampo_over
 
 INFINITE = float("inf")
 
 
+class OpenFrame(unittest.TestCase):
+    def test_residual_removes_all_coordinate_powers(self):
+        from engine.centres import _remove_coordinate_powers
+        x, y, z = sp.symbols("x y z")
+        frame = Frame((x, y, z), (x, y, z))
+        self.assertEqual(_remove_coordinate_powers(frame, x**7*y**3*(z+x), [y, x]), ([3, 7], x+z))
+    def test_jets_with_mixed_and_repeated_partials(self):
+        x, y = sp.symbols("x y")
+        frame = Frame((x, y), (x, y), units=(y,))
+        self.assertEqual(frame.jet(x*y**2, 4), (x*y**2, y**2, 2*x*y, 2*y, 2*x, 2))
+        frame = Frame((x, y), (x, y), units=(0,))
+        self.assertEqual(frame.jet(x*y, 2), (x*y,))
+
+    def test_units_modulo_the_locus_before_localization(self):
+        x, y = sp.symbols("x y")
+        # On xy=0, the first large unit is just y. Inverting y removes the
+        # other axis. The second unit removes y=-1 as well.
+        frame = Frame((x, y), (y,), (x*y,), (y + (x*y)**9, y + 1))
+        self.assertTrue(frame.vanishes(x))
+        self.assertFalse(frame.vanishes(y))
+        self.assertTrue(frame.empty(x - 1))
+        self.assertTrue(frame.empty(y + 1))
+        self.assertFalse(frame.empty(y - 1))
+        self.assertTrue(frame.inside(y - 1, (y**2 - 1,)))
+        self.assertFalse(frame.inside(y + 1, (y**2 - 1,)))
+
+    def test_contraction_preserves_multiplicities(self):
+        x, y = sp.symbols("x y")
+        frame = Frame((x, y), (y,), (x**2*y,), (y,))
+        self.assertTrue(frame.basis().contains(x**2))
+        self.assertFalse(frame.basis().contains(x))
+        self.assertTrue(frame.inside(x, ()))
+
+    def test_implicit_vector_fields_with_rational_rows(self):
+        x, y, z, w = sp.symbols("x y z w")
+        rows = ((w - x**2)/2, (z - y*w)/3)
+        frame = Frame((x, y, w, z), (x, y), rows)
+        # dw/dx=2x, dz/dx=2xy, dz/dy=w, scaled by the Jacobian minor 1/6.
+        self.assertEqual(frame.field(x), {x: sp.Rational(1, 6), w: x/3, z: x*y/3})
+        self.assertEqual(frame.field(y), {y: sp.Rational(1, 6), z: w/6})
+        for row in rows:
+            self.assertEqual(frame.derivative(row, x), 0)
+            self.assertEqual(frame.derivative(row, y), 0)
+        self.assertEqual(frame.derivative(z, y), w/6)
+
+    def test_elimination_clears_the_linear_coefficient(self):
+        x, y, z = sp.symbols("x y z")
+        frame = Frame((x, y, z), (x, y, z))
+        inside, move = frame.eliminated((x + 1)*z - y, z)
+        self.assertEqual(inside.units, (x + 1,))
+        self.assertEqual(move(z**2 + y*z), x*y**2 + 2*y**2)
+        self.assertEqual(move((x + 1)**3*z**2), y**2)
+        self.assertEqual(move((x + 1)*z - y), 0)
+        self.assertEqual(move(y), y)
+
+    def test_changed_frame_keeps_eliminated_variables_in_saved_rows(self):
+        x, y, z = sp.symbols("x y z")
+        frame, _ = Frame((x, y, z), (x, y, z)).eliminated(z - x*y, z)
+        renamed = frame.changed({y: y+x})
+        self.assertEqual(renamed.variables, (x, y))
+        self.assertEqual(renamed.solved, (z-x*y-x**2,))
+
+    def test_unit_vanishing_on_whole_frame(self):
+        x, y = sp.symbols("x y")
+        frame = Frame((x, y), (y,), (x,), (x*y,))
+        self.assertTrue(frame.empty())
+        self.assertTrue(frame.vanishes(1))
+
+
 class Invariant(unittest.TestCase):
+    def test_residual_thresholds_are_exact_with_fractional_exceptional_orders(self):
+        from engine.centre_weights import Presentation
+        labels = ("E", "F")
+        collection = ((dict(E=Fraction(7,3), F=Fraction(5,4)), None, Fraction(3,2)),
+                      (dict(E=Fraction(8,3), F=Fraction(3,2)), None, Fraction(2)))
+        alpha, first, second = Presentation(labels, collection).residual()
+        self.assertEqual(alpha, dict(E=Fraction(4,3), F=Fraction(3,4)))
+        self.assertEqual(first, dict(E=Fraction(1,3), F=Fraction(1,8)))
+        self.assertEqual(second, dict(E=0, F=0))
+        table = Presentation(labels, ((first, None, Fraction(3,2)), (second, None, Fraction(2))))
+        strata = ((), (0, 1))
+        self.assertEqual(table.requirements(strata, Fraction(7,4)), [(3, 4), (3, 4)])
+        self.assertEqual(table.requirements(strata, Fraction(1,4)), [(1, 1), (0, 1)])
+        self.assertEqual(table.candidate_values(strata, [(0, 1), (1, 0)]),
+                         [0, Fraction(11,36), Fraction(1,2), Fraction(35,36)])
+
     def test_cusp(self):
         x, y = sp.symbols("x y")
         value, key, centre = maximum((x, y), (), 2, (y**2 - x**3,), [], [(x, y)], {}, [])
@@ -72,6 +157,15 @@ class Blowups(unittest.TestCase):
         self.assertEqual(values, sorted(values, reverse=True))
         self.assertEqual(values[0], (2, 0, Fraction(5, 2), 0, INFINITE))
 
+    def test_point_radical_and_colliding_projection(self):
+        x, y = sp.symbols("x y")
+        # Three underlying points, including a conjugate pair. All three
+        # initially project to x+y=0, so another form is needed.
+        radical = _radical_points((x, y), ((x*(x**2 + 1))**2, (x+y)**3))
+        self.assertEqual(_point_components((x, y), radical), [(x, y), (y**2 + 1, x+y)])
+        self.assertEqual(_radical_points((x, y), (1,)), (sp.S.One,))
+        self.assertEqual(_point_components((x, y), (1,)), [])
+
     def test_components_of_a_finite_centre(self):
         x, y = sp.symbols("x y")
         parts = _point_components((x, y), (x**3 - x, y))    # 0 and the pair +-1... over Q: three rational points
@@ -79,6 +173,13 @@ class Blowups(unittest.TestCase):
         parts = _point_components((x, y), (x*(x**2 + 1), y - x))
         self.assertEqual(sorted(len(sp.Poly(part[-1], x, y).free_symbols) >= 1 for part in parts), [True, True])
         self.assertEqual(len(parts), 2)   # the origin and a pair of conjugate points
+
+    def test_squarefree_coordinate_eliminants(self):
+        x, y = sp.symbols("x y")
+        # Both projections are squarefree; the original relation still pairs the points.
+        self.assertEqual(_radical_points((x, y), (x+y, 2*y**2-2*y)), (y**2-y, x+y))
+        # Only x needs a new relation, and both distinct x-factors must survive.
+        self.assertEqual(_radical_points((x, y), (x**2*(x-1), y**2-y)), (x**2-x, y**2-y))
 
 
 if __name__ == "__main__":

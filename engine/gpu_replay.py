@@ -44,7 +44,6 @@ import numpy as np
 _HOOK = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(ctypes.c_uint32), ctypes.c_size_t, ctypes.c_uint32, ctypes.c_uint32,
                          ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32),
                          ctypes.POINTER(ctypes.c_uint32))
-_kept = []  # the callbacks handed to the kernel must stay alive
 
 
 def instructions(code):
@@ -127,77 +126,7 @@ def triton_kernels():
     arithmetic never overflows and % is the mathematical remainder.
     """
     import triton
-    import triton.language as tl
-
-    @triton.jit
-    def pivot(work_ptr, factor_ptr, prime_ptr, work_size, column, items, BLOCK: tl.constexpr):
-        # factor = p - (work[column] mod p), or 0; work[column] = 0.
-        offsets = tl.program_id(0)*BLOCK + tl.arange(0, BLOCK)
-        mask = offsets < items
-        p = tl.load(prime_ptr + offsets, mask=mask, other=1).to(tl.int64)
-        place = work_ptr + offsets.to(tl.int64)*work_size + column
-        f = tl.load(place, mask=mask, other=0) % p
-        tl.store(place, f*0, mask=mask)
-        tl.store(factor_ptr + offsets, tl.where(f == 0, f, p - f).to(tl.int32), mask=mask)
-
-    @triton.jit
-    def axpy(work_ptr, pool_ptr, index_ptr, factor_ptr, prime_ptr, work_size, pool_size, source, count,
-             BLOCK: tl.constexpr):
-        # work[index[t]] += factor * pool[source + t], modulo p^2 without division.
-        item = tl.program_id(0).to(tl.int64)
-        offsets = tl.program_id(1)*BLOCK + tl.arange(0, BLOCK)
-        mask = offsets < count
-        p = tl.load(prime_ptr + item).to(tl.int64)
-        factor = tl.load(factor_ptr + item).to(tl.int64)
-        index = tl.load(index_ptr + offsets, mask=mask, other=0).to(tl.int64)
-        src = tl.load(pool_ptr + item*pool_size + source + offsets, mask=mask, other=0).to(tl.int64)
-        place = work_ptr + item*work_size + index
-        w = tl.load(place, mask=mask, other=0) + factor*src
-        square = p*p
-        tl.store(place, tl.where(w >= square, w - square, w), mask=mask)
-
-    @triton.jit
-    def check(work_ptr, index_ptr, prime_ptr, status_ptr, work_size, count, BLOCK: tl.constexpr):
-        # status = 0 for a prime with a listed entry that is not zero mod p.
-        item = tl.program_id(0).to(tl.int64)
-        offsets = tl.program_id(1)*BLOCK + tl.arange(0, BLOCK)
-        mask = offsets < count
-        p = tl.load(prime_ptr + item).to(tl.int64)
-        index = tl.load(index_ptr + offsets, mask=mask, other=0).to(tl.int64)
-        w = tl.load(work_ptr + item*work_size + index, mask=mask, other=0) % p
-        wrong = tl.sum(((w != 0) & mask).to(tl.int32), axis=0)
-        # Programs of the same prime may all write the same value 0.
-        tl.store(status_ptr + item, wrong*0, mask=wrong > 0)
-
-    @triton.jit
-    def inverse(work_ptr, factor_ptr, prime_ptr, status_ptr, work_size, column, items, BLOCK: tl.constexpr):
-        # factor = (work[column] mod p)^(p-2) mod p; status = 0 where that entry is 0.
-        offsets = tl.program_id(0)*BLOCK + tl.arange(0, BLOCK)
-        mask = offsets < items
-        p = tl.load(prime_ptr + offsets, mask=mask, other=3).to(tl.int64)
-        base = tl.load(work_ptr + offsets.to(tl.int64)*work_size + column, mask=mask, other=1) % p
-        tl.store(status_ptr + offsets, (base*0).to(tl.int32), mask=mask & (base == 0))
-        exponent = p - 2
-        result = base*0 + 1
-        for _ in range(31):  # p < 2^31
-            result = tl.where((exponent & 1) == 1, result*base % p, result)
-            base = base*base % p
-            exponent = exponent >> 1
-        tl.store(factor_ptr + offsets, result.to(tl.int32), mask=mask)
-
-    @triton.jit
-    def scale(work_ptr, pool_ptr, index_ptr, factor_ptr, prime_ptr, work_size, pool_size, target, count,
-              BLOCK: tl.constexpr):
-        # pool[target + t] = work[index[t]] * factor mod p, and 1 for t = 0.
-        item = tl.program_id(0).to(tl.int64)
-        offsets = tl.program_id(1)*BLOCK + tl.arange(0, BLOCK)
-        mask = offsets < count
-        p = tl.load(prime_ptr + item).to(tl.int64)
-        factor = tl.load(factor_ptr + item).to(tl.int64)
-        index = tl.load(index_ptr + offsets, mask=mask, other=0).to(tl.int64)
-        w = tl.load(work_ptr + item*work_size + index, mask=mask, other=0) % p
-        value = tl.where(offsets == 0, w*0 + 1, w*factor % p)
-        tl.store(pool_ptr + item*pool_size + target + offsets, value.to(tl.int32), mask=mask)
+    from .triton_replay_kernels import axpy, check, inverse, pivot, scale
 
     return {"pivot": pivot, "axpy": axpy, "check": check, "inverse": inverse, "scale": scale, "cdiv": triton.cdiv}
 
@@ -205,15 +134,22 @@ def triton_kernels():
 _compiled = None
 
 
-def replay_triton(code, pool_size, work_size, primes, pools, status, block=256):
+def replay_triton(code, pool_size, work_size, primes, pools, status, block=256, device="cuda"):
     """The replay on the GPU that PyTorch uses, with the Triton kernels:
     the host walks the program and launches one part per instruction."""
-    global _compiled
     import torch
+    from .gpu_devices import torch_device_context
+    selected = torch.device(device)
+    with torch_device_context(selected):
+        return _launch_replay(code, pool_size, work_size, primes, pools, status, block, selected)
+
+
+def _launch_replay(code, pool_size, work_size, primes, pools, status, block, device):
+    import torch
+    global _compiled
     if _compiled is None:
         _compiled = triton_kernels()
     k = _compiled
-    device = torch.device("cuda")
     items = len(primes)
     # Primes are below 2^31: every 32-bit value fits in int32.
     prime = torch.as_tensor(np.asarray(primes, dtype=np.int32), device=device)
@@ -246,50 +182,71 @@ def replay_triton(code, pool_size, work_size, primes, pools, status, block=256):
             k["inverse"][by_primes](work, factor, prime, state, work_size, int(code[start]), items, BLOCK=block)
             k["scale"][by_terms(count)](work, pool, index, factor, prime, work_size, pool_size, scalars[0], count,
                                         BLOCK=block)
-    torch.cuda.synchronize()
-    pools[:] = pool.view(items, pool_size).cpu().numpy()
-    status[:] = state.cpu().numpy()
+    # Both blocking transfers complete before any native inputs are modified.
+    output = pool.view(items, pool_size).cpu().numpy()
+    accepted = state.cpu().numpy()
+    pools[:] = output
+    status[:] = accepted
     return 0
 
 
 def triton_available():
-    """Whether the Triton kernels can run here: PyTorch with CUDA and the triton package."""
-    try:
-        import torch
-        import triton  # noqa: F401
-    except ImportError:
-        return False
-    return torch.cuda.is_available()
+    import os
+    from .gpu_devices import triton_device
+    return triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0))) is not None
+
+
+def _arrays(args):
+    code, length, pool_size, work_size, primes, count, pools, status = args
+    return (np.ctypeslib.as_array(code, shape=(length,)), pool_size, work_size,
+            np.ctypeslib.as_array(primes, shape=(count,)),
+            np.ctypeslib.as_array(pools, shape=(count, pool_size)),
+            np.ctypeslib.as_array(status, shape=(count,)))
+
+
+def run_batch(args, device):
+    """Dispatch an actual native batch, preserving its input on failed transfers."""
+    arrays = _arrays(args)
+    if device is not None:
+        return replay_triton(*arrays, device=device["torch_device"])
+    # NumPy operates in place. Commit only after successful interpretation
+    # so the C++ fallback still sees its initial coefficients after a failure.
+    code, pool_size, work_size, primes, pools, status = arrays
+    output = pools.copy()
+    replay_reference(code, pool_size, work_size, primes, output, status)
+    pools[:] = output
+    return 0
 
 
 def hook(backend):
-    """A C callback with the kernel's batch signature that runs `backend`."""
-    def call(code, length, pool_size, work_size, primes, count, pools, status):
+    """A C callback retained by the caller for the duration of its use."""
+    @_HOOK
+    def call(*args):
         try:
-            program = np.ctypeslib.as_array(code, shape=(length,))
-            moduli = np.ctypeslib.as_array(primes, shape=(count,))
-            table = np.ctypeslib.as_array(pools, shape=(count, pool_size))
-            answer = np.ctypeslib.as_array(status, shape=(count,))
-            return backend(program, pool_size, work_size, moduli, table, answer)
+            return backend(*_arrays(args))
         except Exception:  # the kernel then replays on the host
             return 1
-    callback = _HOOK(call)
-    _kept.append(callback)
-    return callback
+    return call
 
 
 def use(library, backend="triton"):
     """Hand the replays of the modular route to a backend: "triton" (when it
     can run here) or "reference". Returns whether it was installed."""
     if backend == "triton":
-        if not triton_available():
+        from functools import partial
+        import os
+        from .gpu_devices import triton_device
+        device = triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0)))
+        if device is None:
             return False
-        chosen = replay_triton
+        chosen = partial(replay_triton, device=device["torch_device"])
     elif backend == "reference":
         chosen = replay_reference
     else:
         raise ValueError("Unknown replay backend.")
     library.atlas_groebner_use_batch.argtypes = [ctypes.c_void_p]
     library.atlas_groebner_use_batch.restype = None
-    library.atlas_groebner_use_batch(ctypes.cast(hook(chosen), ctypes.c_void_p))
+    callback = hook(chosen)
+    library.atlas_groebner_use_batch(ctypes.cast(callback, ctypes.c_void_p))
+    library._replay_callback = callback
     return True

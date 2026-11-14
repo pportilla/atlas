@@ -76,6 +76,15 @@ class SearchTests(unittest.TestCase):
         self.assertFalse(any(len(c.boundary)==2 for c in
                              priority_candidates((x,y,z), y**2+z*x**2+x**4)))
 
+    def test_common_repeated_slopes_have_numerical_order(self):
+        from engine.resolution_search import _two_blowup_candidates
+        x,y,z = s.symbols("x y z")
+        repeated = (y-x)**2*(2*y+x)**2
+        f = repeated*((y-2*x)**2 + z*(x**2+y**2)) + x**7
+        candidates = _two_blowup_candidates((x,y,z), s.Poly(f, x,y,z, domain=s.QQ))
+        self.assertEqual([c.center for c in candidates],
+                         [(x**3, x*h, h**2) for h in (y+x/2, y-x)])
+
     def test_domain_and_homogeneous_components_in_unbounded_code(self):
         x,y = s.symbols("x y")
         # K=Q(alpha), alpha^2-2=0, root index 1.

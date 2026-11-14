@@ -83,10 +83,27 @@ class DualComplexAfterBlowups(unittest.TestCase):
         engine, vertices, rest = self.euler("x^2+(y+z)^3+y^4")
         self.assertEqual((engine, vertices, vertices + rest), ("canonical-blowups", 6, 1))
 
-    def test_a_divisor_with_conjugate_components_is_left_partial(self):
-        result = resolve({"polynomial": "(x+y)^2+z^3+x^3", "variables": NAMES, "mode": "embedded"})
-        self.assertEqual(result["dual_complex"]["status"], "partial")
-        self.assertIn("B2", result["dual_complex"]["reason"])
+    def test_incident_edges_and_faces_follow_each_conjugate_component(self):
+        from itertools import combinations
+        for text, degree in (("(x+y)^2+z^3+x^3", 3), ("(x*y-z^2)^2+x^5+y^5", 10)):
+            with self.subTest(text=text):
+                result = resolve({"polynomial": text, "variables": NAMES, "mode": "embedded"})
+                dual = result["dual_complex"]
+                self.assertEqual(dual["status"], "complete", dual.get("reason"))
+                vertices = {v["id"] for v in dual["vertices"]}
+                edges = {c["id"]: frozenset(c["vertices"]) for c in dual["cells"] if c["dimension"] == 1}
+                triangles = [c for c in dual["cells"] if c["dimension"] == 2]
+                self.assertEqual((len(vertices), len(edges), len(triangles)),
+                                 (degree+3, 3*degree+2, 2*degree))
+                for i in range(1, degree+1):
+                    sheet = f"B2.{i}"
+                    self.assertEqual({v for edge in edges.values() if sheet in edge for v in edge if v != sheet},
+                                     {"B1", "B3", "B4"})
+                    self.assertCountEqual([set(c["vertices"])-{sheet} for c in triangles if sheet in c["vertices"]],
+                                          [{"B1", "B4"}, {"B3", "B4"}])
+                for c in triangles:
+                    self.assertCountEqual([edges[e] for e in c["faces"]],
+                                          [frozenset(pair) for pair in combinations(c["vertices"], 2)])
 
 
 class NormalCrossingsAtTheOrigin(unittest.TestCase):

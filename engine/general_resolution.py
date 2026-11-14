@@ -5,6 +5,7 @@ finitely generated ideal (Stacks 080B). This permits a slower complete search
 in addition to the geometric algorithms. Every candidate is checked.
 """
 import atexit
+from functools import lru_cache
 from itertools import combinations, product
 from math import prod
 import json
@@ -16,23 +17,45 @@ import sys
 import threading
 from time import monotonic, sleep
 
-import sympy as sp
-from sympy import QQ
+from fractions import Fraction
+from . import native_polynomial as np
+from .candidate_field import NativeField
+from .chart_expressions import chart_expressions, runtime_expressions
+from .reference import sp
+from .reference import QQ
 
 from . import kernel
 from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_basis, ideal_subset,
                            radical_subset, resolution_charts, verify_snc)
 from .groebner import CHECK
+from .native_library import current_replay_scope, replay_scope
 
 
 def expression(poly, variables):
+    if np.native_ring(variables):
+        return np.from_terms(variables, poly)
     return sp.Add(*(sp.Rational(c.numerator,c.denominator)*prod(x**d for x,d in zip(variables,e))
                     for e,c in poly.items()))
 
 
 def _text(value, domain, generator="field_generator"):
+    if isinstance(domain, NativeField):
+        return str(np.coerce(value).xreplace({domain.parameter: np.Symbol(generator)}))
     if domain!=QQ:
-        value=sp.sympify(value).xreplace({domain.ext.as_expr():sp.Symbol(generator)})
+        # Express every coefficient in the primitive basis. A lowered
+        # coefficient such as sqrt(3) need not literally contain the
+        # generator sqrt(2)+sqrt(3) as a subexpression.
+        from .affine_kernel import pullbacks
+        from .field_polynomial import lift, modulus
+        value = sp.sympify(value)
+        theta = sp.Symbol(generator)
+        variables = tuple(sorted(value.free_symbols, key=sp.default_sort_key))
+        ring = (*variables, theta)
+        value, = pullbacks(ring, ring, ring, (lift(value, variables, domain, theta),), modulus(domain, theta))
+    if isinstance(value, np.Expr):
+        # Preserve spacing in certificates and their D(unit) descriptions.
+        text = str(value)
+        return text[:1] + text[1:].replace('+', ' + ').replace('-', ' - ')
     return str(value).replace('**','^')
 
 
@@ -46,11 +69,15 @@ def _cover(variables, ambient, pivot, pieces, domain):
     return radical_subset(variables,union,(*ambient,pivot),domain=domain)
 
 
-def _on_overlap(source, target, ideal):
-    """Pull target equations back to source on U_target/U_source != 0."""
-    scale=source.ratios[target.pivot_index]
-    substitution={v:source.ratios[i]/scale for i,v in enumerate(target.ratios) if i!=target.pivot_index}
-    return tuple(sp.cancel(f.xreplace(substitution)).as_numer_denom()[0] for f in ideal),scale
+def _on_overlap(source, target, ideal, domain):
+    """Substitute target ratios in the localized chart using inv*scale=1."""
+    from .field_factors import compose
+    inv = chart_expressions(source.variables).Dummy("inverse_overlap")
+    scale = source.ratios[target.pivot_index]
+    variables = (*source.variables, inv)
+    replacements = {v: source.ratios[i]*inv for i,v in enumerate(target.ratios) if i != target.pivot_index}
+    mapping = tuple(replacements.get(v,v) for v in target.variables)
+    return variables, (*compose(variables, mapping, target.variables, ideal, domain), 1-inv*scale)
 
 
 def _glue(charts, ideals, original, domain):
@@ -66,10 +93,8 @@ def _glue(charts, ideals, original, domain):
         if a[0]==b[0] or root(a)==root(b):
             continue
         source,target=charts[a[0]],charts[b[0]]
-        moved,scale=_on_overlap(source,target,ideals[b])
-        inv=sp.Dummy('inverse_overlap')
-        if not empty_locus((*source.variables,inv),
-                (*ideals[a],*moved,1-inv*scale),domain=domain):
+        variables, moved = _on_overlap(source,target,ideals[b],domain)
+        if not empty_locus(variables, (*ideals[a],*moved), domain=domain):
             parent[root(b)]=root(a)
     groups={}
     for key in keys:
@@ -150,11 +175,14 @@ def _charts(variables,f,candidate):
     # Verify the property here too: direct callers can supply their own candidate.
     for group in candidate.boundary:
         for g in group:
-            monomials = sp.Poly(g,*variables,*candidate.projective,domain=domain).monoms()
-            if len({sum(e[len(variables):]) for e in monomials}) > 1:
+            terms = _term_rows(g, (*variables,*candidate.projective), domain)
+            if len({sum(e[len(variables):]) for e,_ in terms}) > 1:
                 return False
     # The blowup must preserve the smooth locus of the original hypersurface.
-    if not radical_subset(variables,(f,*(f.diff(x) for x in variables)),center,domain=QQ):
+    from .affine_kernel import frame_derivative
+    gradient = (tuple(f.diff(x) for x in variables) if CHECK
+                else tuple(frame_derivative(variables, f, {x:1}) for x in variables))
+    if not radical_subset(variables,(f,*gradient),center,domain=QQ):
         return False
     charts=blowup_charts(variables,(),(f,),center,domain=domain)
     pieces=_pieces(candidate,charts)
@@ -207,6 +235,12 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
     if result is None:
         return 'undecided', None
     dual,divisors=result
+    ambient_divisors = divisors
+    if mode == "intrinsic":
+        ambient = _component_atlas(charts, variables, pieces, "embedded", domain, effort, generator)
+        if ambient is None:
+            return "undecided", None
+        ambient_divisors = ambient[1]
     atlas=[]
     for i,chart in enumerate(charts):
         if empty_locus(chart.variables,(*chart.ambient,*variables),domain=domain):
@@ -218,6 +252,7 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
             'ambient_ideal':[_text(e,domain,generator) for e in chart.ambient],
             'strict_transform':[_text(e,domain,generator) for e in strict],
             'map':{str(x):str(x) for x in variables},'exceptional':divisors[i],
+            **({'ambient_components': ambient_divisors[i]} if mode == "intrinsic" else {}),
             'pivot_generator':_text(chart.pivot,domain,generator),'projective_coordinates':list(map(str,chart.ratios))})
     out={'status':'resolved','engine':'verified-ideal-blowup','charts':atlas,'dual_complex':dual,
             'steps':[{'id':'B','type':'blowup of an ideal','generators':[_text(e,domain,generator) for e in center]}],
@@ -227,10 +262,11 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
                 'projective_coordinates':[str(x) for x in candidate.projective],
                 'boundary_ideals':[[_text(e,domain,generator) for e in piece] for piece in candidate.boundary]}}
     if domain!=QQ:
-        primitive=candidate.primitive
+        primitive = domain.exact_root if isinstance(domain, NativeField) else candidate.primitive
+        coefficients = domain.coefficients if isinstance(domain, NativeField) else domain.ext.minpoly.all_coeffs()
         out['coefficient_field']={'name':f'Q({generator})','generator':generator,
             'exact_root':str(primitive),'description':f'{generator} = {primitive}',
-            'minimal_polynomial_coefficients':[str(c) for c in domain.ext.minpoly.all_coeffs()]}
+            'minimal_polynomial_coefficients':[str(c) for c in coefficients]}
     return "certified", out
 
 
@@ -242,21 +278,62 @@ def verify_candidate(variables,f,candidate,mode,effort=1):
 def _pack_rational(expr):
     # Hex strings avoid the decimal digit cap in JSON, including for very long
     # coefficients appearing in unbounded certificate descriptions.
-    q = QQ.convert(expr)
-    return [hex(int(q.numerator)), hex(int(q.denominator))]
+    return [hex(int(expr.numerator)), hex(int(expr.denominator))]
 
 
 def _unpack_rational(q):
     return sp.Rational(int(q[0],16), int(q[1],16))
 
 
+@lru_cache(maxsize=512)
+def _term_rows(expr, variables, domain):
+    """Sparse monomials and their descending power-basis coefficients."""
+    from . import groebner as gb
+    from .affine_kernel import pullbacks, sparse_terms
+    if domain == QQ and np.native_ring(variables):
+        return tuple(sorted((e, (c,)) for e,c in np.terms(variables, expr).items()))
+    from .field_polynomial import _parameter, lift, modulus
+
+    def reference():
+        terms = sp.Poly(expr, *variables, domain=domain).rep.to_dict()
+        return tuple(sorted((e, (v,) if domain == QQ else tuple(v.to_list())) for e,v in terms.items()))
+
+    if gb._MODE == "sympy":
+        return reference()
+    theta = None
+    if domain != QQ:
+        theta = _parameter(domain)
+        value = lift(expr, variables, domain, theta)
+    else:
+        value = expr.as_expr() if hasattr(expr, "as_expr") else chart_expressions(variables).sympify(expr)
+    if theta is None or not value.has(theta):
+        rows = tuple((e,(c,)) for e,c in reversed(sparse_terms(variables, value)))
+    else:
+        extended = (*variables, theta)
+        reduced, = pullbacks(extended, extended, extended, (value,), modulus(domain, theta))
+        groups = {}
+        for powers, coefficient in sparse_terms(extended, reduced):
+            groups.setdefault(powers[:-1], {})[powers[-1]] = coefficient
+        rows = tuple((e, tuple(c.get(j, 0) for j in range(max(c), -1, -1)))
+                     for e,c in sorted(groups.items()))
+    if CHECK and rows != reference():
+        raise AssertionError("Candidate coefficients differ from their power-basis reference.")
+    return rows
+
+
 def _pack_poly(poly, variables, domain=QQ):
-    terms = sp.Poly(poly, *variables, domain=domain).rep.to_dict()
-    return [[e, [_pack_rational(c) for c in ([v] if domain == QQ else v.to_list())]]
-            for e,v in terms.items()]
+    return [[e, [_pack_rational(c) for c in coefficients]]
+            for e,coefficients in _term_rows(poly, tuple(variables), domain)]
 
 
 def _unpack_poly(terms, variables, primitive=None):
+    if np.native_ring(variables):
+        groups = {}
+        for exponents, coefficients in terms:
+            for j, q in enumerate(reversed(coefficients)):
+                powers = tuple(exponents) + ((j,) if primitive is not None else ())
+                groups[powers] = Fraction(int(q[0],16), int(q[1],16))
+        return np.from_terms((*variables, primitive) if primitive is not None else variables, groups)
     result = []
     for exponents, coefficients in terms:
         # Domain ANP coefficients are in descending powers of its primitive element.
@@ -269,14 +346,14 @@ def _unpack_poly(terms, variables, primitive=None):
 
 def _wire_candidate(variables, f, candidate, mode, effort):
     field = None
-    if candidate.domain != QQ:
+    if isinstance(candidate.domain, NativeField):
+        field = [[_pack_rational(v) for v in candidate.domain.coefficients], candidate.domain.index]
+    elif candidate.domain != QQ:
         poly = candidate.domain.ext.minpoly
-        primitive = candidate.domain.ext.as_expr()
-        if isinstance(primitive, sp.CRootOf):
-            root_index = primitive.index
-        else:
-            root_index = next(i for i in range(poly.degree())
-                              if poly.same_root(primitive, sp.CRootOf(poly.as_expr(),i)))
+        from .field_coefficient import generator_expression, root_position
+        from .groebner import _MODE
+        primitive = candidate.domain.ext.as_expr() if _MODE == "sympy" else generator_expression(candidate.domain.ext)
+        root_index = root_position(poly, primitive)
         field = [[_pack_rational(v) for v in poly.all_coeffs()], root_index]
     return {
         "variables": [v.name for v in variables], "polynomial": _pack_poly(f,variables),
@@ -288,17 +365,28 @@ def _wire_candidate(variables, f, candidate, mode, effort):
     }
 
 
+@lru_cache(maxsize=1)
+def _worker_field_variable():
+    return sp.Dummy("coefficient_root")
+
+
 def _read_candidate(info):
     from .resolution_search import ResolutionCandidate
-    variables = tuple(map(sp.Symbol, info["variables"]))
-    projective = tuple(map(sp.Symbol, info["projective"]))
+    api = runtime_expressions()
+    variables = tuple(map(api.Symbol, info["variables"]))
+    projective = tuple(map(api.Symbol, info["projective"]))
     domain, primitive = QQ, None
     if info["field"] is not None:
         coefficients, index = info["field"]
-        t = sp.Dummy("coefficient_root")
-        poly = sp.Poly.from_list([_unpack_rational(q) for q in coefficients],t)
-        primitive = sp.CRootOf(poly.as_expr(),index)
-        domain = QQ.algebraic_field(primitive)
+        # Private worker payloads carry the already-established minimal
+        # polynomial and marked embedding of their originating domain.
+        if api is np:
+            from .candidate_field import indexed_field
+            domain, primitive = indexed_field(tuple(Fraction(int(q[0],16), int(q[1],16)) for q in coefficients), index)
+        else:
+            from .field_coefficient import indexed_field
+            domain, primitive = indexed_field(tuple(_unpack_rational(q) for q in coefficients),
+                                              _worker_field_variable(), index)
     center = tuple(_unpack_poly(g,variables) for g in info["center"])
     boundary = tuple(tuple(_unpack_poly(g,(*variables,*projective),primitive) for g in ideal)
                      for ideal in info["boundary"])
@@ -355,13 +443,19 @@ def _serve():
         line = sys.stdin.readline()
         if not line:
             break
+        report = None
         try:
-            outcome = _decide(json.loads(line))
+            info = json.loads(line)
+            with replay_scope(**info.get("replay", {"compute": None})) as replay:
+                try:
+                    outcome = _decide(info)
+                finally:
+                    report = replay.report()
         except Exception:
             # A backend limitation is inconclusive. The scheduler can continue with
             # other certificates and will revisit this one with more resources.
             outcome = ("undecided", None)
-        sys.stdout.write(json.dumps(outcome,separators=(",",":"))+"\n")
+        sys.stdout.write(json.dumps([*outcome, report],separators=(",",":"))+"\n")
         sys.stdout.flush()
 
 
@@ -469,7 +563,11 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
     """
     start = monotonic()
     try:
-        payload = json.dumps(_wire_candidate(variables,f,candidate,mode,effort))
+        info = _wire_candidate(variables,f,candidate,mode,effort)
+        replay = current_replay_scope()
+        if replay is not None:
+            info["replay"] = replay.settings()
+        payload = json.dumps(info)
     except Exception:
         return "undecided", None
     try:
@@ -487,7 +585,9 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
     worker.answered += 1
     _workers.give(worker)
     try:
-        state, result = json.loads(output)
+        state, result, report = json.loads(output)
+        if replay is not None and report:
+            replay.merge(report)
     except (TypeError,ValueError):
         return "undecided", None
     if state in ("rejected","undecided","certified"):
@@ -496,20 +596,32 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
 
 
 def search(poly,names,mode,*,exhaustive=False,seconds=4):
+    from .affine_kernel import _sparse_expression, _sparse_terms, frame_function, rational_factor_rows
     from .resolution_search import priority_candidates, scheduled_candidates
-    variables=tuple(sp.Symbol(s) for s in names)
+    api = runtime_expressions()
+    variables=tuple(api.Symbol(s) for s in names)
     f=expression(poly,variables)
     _workers.warm()  # the interpreter starts while the candidates are prepared
     # Over the germ, repeated global factors that miss zero are units. Preserve
     # them in ordinary charts, or record the unit if this fallback removes it.
-    factors=sp.factor_list(f,*variables)[1]
-    origin={s:0 for s in variables}
-    for factor,power in factors:
-        if power>1 and factor.subs(origin)==0:
+    scalar, factors = rational_factor_rows(variables, f)
+    active_factors, unit_factors = [], [api.Rational(scalar)]
+    origin = (0,)*len(variables)
+    for row, power, _ in factors:
+        factor = _sparse_expression(variables, row)
+        if any(e == origin for e,_ in _sparse_terms(row)):
+            unit_factors.append(factor**power)
+        elif power > 1:
             from .polynomial import NonReducedError
             raise NonReducedError('The germ has a repeated component through the origin. Resolution of the underlying reduced hypersurface requires its square-free equation.')
-    active=prod(factor for factor,power in factors if factor.subs(origin)==0)
-    unit=sp.cancel(f/active)
+        else:
+            active_factors.append(factor)
+    active = prod(active_factors, start=api.S.One)
+    # All removed factors are nonzero at the origin. The factorization
+    # gives f/active directly, including the original scalar and powers.
+    unit = frame_function(variables, prod(unit_factors))
+    if CHECK and unit != sp.cancel(f/active):
+        raise AssertionError("The removed unit differs from the exact quotient.")
     deadline=monotonic()+seconds
     schedule=(scheduled_candidates(variables,active) if exhaustive else
               ((c,1.25) for c in priority_candidates(variables,active)))

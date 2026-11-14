@@ -2,6 +2,8 @@
 #include <flint/fexpr.h>
 #include <flint/qqbar.h>
 #include <flint/fmpq_mpoly.h>
+#include <flint/fmpq_poly.h>
+#include <flint/fmpz_poly.h>
 #include <flint/gr_poly.h>
 #include <flint/gr_vec.h>
 #include <flint/fmpz_vec.h>
@@ -350,6 +352,102 @@ struct Resolver {
         return r;
     }
 };
+// Present a finite set of exact chart coefficients in one number field.
+// Each input uses FLINT's own root order (as in PolynomialRootIndexed).
+J coefficient_field(const J& roots, const J& rectangles) {
+    vector<Num> values;
+    for (const auto& row : roots) {
+        fmpz_poly_t polynomial;
+        fmpz_poly_init(polynomial);
+        fmpz_t coefficient;
+        fmpz_init(coefficient);
+        slong i = 0;
+        for (const auto& c : row["coefficients"]) {
+            if (fmpz_set_str(coefficient, c.asCString(), 10))
+                throw invalid_argument("Invalid number field coefficient.");
+            fmpz_poly_set_coeff_fmpz(polynomial, i++, coefficient);
+        }
+        fmpz_clear(coefficient);
+        slong degree = fmpz_poly_degree(polynomial);
+        slong index = row["index"].asInt64();
+        if (index < 1 || index > degree)
+            throw invalid_argument("Invalid algebraic root index.");
+        qqbar_ptr conjugates = _qqbar_vec_init(degree);
+        qqbar_roots_fmpz_poly(conjugates, polynomial, 0);
+        values.emplace_back();
+        qqbar_set(values.back().n, conjugates + index - 1);
+        _qqbar_vec_clear(conjugates, degree);
+        fmpz_poly_clear(polynomial);
+    }
+    if (values.empty()) throw invalid_argument("No algebraic constants.");
+    if (!rectangles.isNull()) {
+        // The public expression syntax numbers roots by disjoint rational
+        // isolating rectangles. Exact qqbar comparisons locate this marked
+        // embedding, including real roots or roots on a rectangle edge.
+        if (values.size() != 1) throw invalid_argument("Expected one marked root.");
+        Num real, imaginary;
+        qqbar_re_im(real.n, imaginary.n, values[0].n);
+        int index = -1;
+        for (Json::ArrayIndex j = 0; j < rectangles.size(); ++j) {
+            if (rectangles[j].size() != 4) throw invalid_argument("Expected four rectangle bounds.");
+            array<Num,4> bounds;
+            for (Json::ArrayIndex k = 0; k < bounds.size(); ++k) {
+                fmpq_t q;
+                fmpq_init(q);
+                bool valid = fmpq_set_str(q, rectangles[j][k].asCString(), 10) == 0;
+                if (valid) qqbar_set_fmpq(bounds[k].n, q);
+                fmpq_clear(q);
+                if (!valid) throw invalid_argument("Invalid root rectangle bound.");
+            }
+            if (qqbar_cmp_re(real.n, bounds[0].n) >= 0 && qqbar_cmp_re(real.n, bounds[1].n) <= 0 &&
+                qqbar_cmp_re(imaginary.n, bounds[2].n) >= 0 && qqbar_cmp_re(imaginary.n, bounds[3].n) <= 0) {
+                if (index != -1) throw invalid_argument("The root belongs to several rectangles.");
+                index = static_cast<int>(j);
+            }
+        }
+        if (index < 0) throw invalid_argument("The marked root was absent from the isolating rectangles.");
+        J result;
+        result["root_index"] = index;
+        return result;
+    }
+    Num generator = values.front();
+    fmpq_poly_t expression;
+    fmpq_poly_init(expression);
+    for (size_t i = 1; i < values.size(); ++i) {
+        // Only finitely many integers k fail to separate the embeddings of
+        // Q(generator, value) by generator + k*value. For a good k, increasing
+        // precision finds both field inclusions. FLINT verifies each exactly.
+        for (slong round = 1, prec = 128; ; ++round, prec *= 2) {
+            bool found = false;
+            for (slong k = 0; k <= round; ++k) {
+                Num candidate = generator + Num(k)*values[i];
+                if (qqbar_express_in_field(expression, candidate.n, values[i].n, 0, 0, prec) &&
+                    qqbar_express_in_field(expression, candidate.n, generator.n, 0, 0, prec)) {
+                    generator = std::move(candidate);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+            if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
+        }
+    }
+    J out;
+    out["minimal_polynomial"] = taken(fmpz_poly_get_str_pretty(QQBAR_POLY(generator.n), "T"));
+    out["degree"] = Json::Int64(qqbar_degree(generator.n));
+    fexpr_t exact;
+    fexpr_init(exact);
+    qqbar_get_fexpr_root_indexed(exact, generator.n);
+    out["exact"] = taken(fexpr_get_str(exact));
+    fexpr_clear(exact);
+    for (const auto& value : values) {
+        for (slong prec = 128; !qqbar_express_in_field(expression, generator.n, value.n, 0, 0, prec); prec *= 2)
+            if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
+        out["values"].append(taken(fmpq_poly_get_str_pretty(expression, "T")));
+    }
+    fmpq_poly_clear(expression);
+    return out;
+}
 int main(){
     J req,out;
     try{
@@ -361,21 +459,25 @@ int main(){
             limit.rlim_cur=min<rlim_t>(limit.rlim_cur,rlim_t(1)<<30);
             if(setrlimit(RLIMIT_AS,&limit)!=0) throw Fail("Could not bound the exact-arithmetic worker.");
         }
-        Resolver solver;solver.names={req["variables"][0].asString(),req["variables"][1].asString()};
-        solver.embedded=req["mode"].asString()=="embedded";
-        Poly f;
-        for(auto& t:req["terms"]){
-            Num n;fmpq_t q;fmpq_init(q);
-            if(fmpq_set_str(q,t[2].asCString(),10)!=0)throw Fail("Invalid internal coefficient.");
-            fmpq_canonicalise(q);qqbar_set_fmpq(n.n,q);fmpq_clear(q);
-            auto exponent=[](const J& v)->Exp {
-                if(!v.isUInt64() || v.asUInt64()>static_cast<Json::UInt64>(numeric_limits<Exp>::max()))
-                    throw Fail("Plane input exponent exceeds a signed FLINT word.");
-                return static_cast<Exp>(v.asUInt64());
-            };
-            put(f,{exponent(t[0]),exponent(t[1])},n);
+        if (req.isMember("field_roots")) {
+            out=coefficient_field(req["field_roots"], req["root_rectangles"]);
+        } else {
+            Resolver solver;solver.names={req["variables"][0].asString(),req["variables"][1].asString()};
+            solver.embedded=req["mode"].asString()=="embedded";
+            Poly f;
+            for(auto& t:req["terms"]){
+                Num n;fmpq_t q;fmpq_init(q);
+                if(fmpq_set_str(q,t[2].asCString(),10)!=0)throw Fail("Invalid internal coefficient.");
+                fmpq_canonicalise(q);qqbar_set_fmpq(n.n,q);fmpq_clear(q);
+                auto exponent=[](const J& v)->Exp {
+                    if(!v.isUInt64() || v.asUInt64()>static_cast<Json::UInt64>(numeric_limits<Exp>::max()))
+                        throw Fail("Plane input exponent exceeds a signed FLINT word.");
+                    return static_cast<Exp>(v.asUInt64());
+                };
+                put(f,{exponent(t[0]),exponent(t[1])},n);
+            }
+            out=solver.run(f);
         }
-        out=solver.run(f);
     }catch(const invalid_argument& e){out["error"]=e.what();out["kind"]="input";}
     catch(const exception& e){out["error"]=e.what();out["kind"]="limit";}
     Json::StreamWriterBuilder w;w["indentation"]="";

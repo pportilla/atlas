@@ -74,8 +74,10 @@ from itertools import combinations
 from math import ceil, lcm
 from time import monotonic
 
-import sympy as sp
+from .chart_expressions import chart_expressions
 
+from .affine_kernel import (frame_derivative, frame_field, frame_function, frame_linear, frame_locus,
+                            frame_minor, frame_quotient, frame_restrict)
 from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
 from .groebner import groebner
 
@@ -94,27 +96,24 @@ class Frame:
     """A submanifold N of affine space, on an open set, with coordinates and derivations.
 
     N is given by the equations `rows` in the `variables`, on the open set
-    where the `units` do not vanish (an inverse variable for each unit makes
-    it closed). Variables that an equation determined rationally have been
-    eliminated: `solved` keeps those equations, for the way back.
+    where the `units` do not vanish. Variables determined rationally by an
+    equation have been eliminated: `solved` keeps those equations, for the way back.
     """
 
     def __init__(self, variables, coords, rows=(), units=(), solved=()):
         self.variables = tuple(variables)
         self.coords = tuple(coords)         # variables that are local coordinates on N
         self.rows = tuple(rows)             # equations with invertible Jacobian in the other variables
-        self.units = tuple(u for u in units if not sp.sympify(u).is_number)
+        self.units = tuple(u for u in units if not getattr(u, "is_number", True) or u == 0)
         self.solved = tuple(solved)
-        inverses = tuple(sp.Dummy("inverse") for _ in self.units)
-        self.ring = (*self.variables, *inverses)
-        self.equations = (*self.rows, *(t*u - 1 for t, u in zip(inverses, self.units)))
         self._fields = {}
-        self._polys = {}
         self._basis = None
         self._reducer = None
         self._jets = {}
         self._inverted = {}
         self._cuts = {}
+        self._empty = {}
+        self._vanishing = {}
         self._unit = None
 
     def field(self, k):
@@ -122,38 +121,31 @@ class Frame:
         if k not in self._fields:
             others = [v for v in self.variables if v not in self.coords]
             if not others:
-                self._fields[k] = {k: sp.Integer(1)}
+                self._fields[k] = {k: chart_expressions(self.variables).sympify(1)}
             else:
-                columns = (*others, k)
-                jacobian = sp.Matrix([[sp.diff(g, v) for v in columns] for g in self.rows])
-                field = {}
-                for j, v in enumerate(columns):
-                    kept = [i for i in range(len(columns)) if i != j]
-                    c = sp.expand((-1)**(len(others) + j) * jacobian[:, kept].det(method="berkowitz"))
-                    if c != 0:
-                        field[v] = c
-                self._fields[k] = field
+                self._fields[k] = frame_field(self.variables, self.rows, (*others, k))
         return self._fields[k]
 
     def basis(self):
         if self._basis is None:
-            self._basis = groebner(self.equations, self.ring)
+            contracted = frame_locus(self.variables, self.rows, self.units, closure=True)
+            self._basis = groebner(contracted, self.variables, known=len(contracted))
         return self._basis
 
     def over(self, x):
         """A variable t and a basis of (rows) + (t*x - 1) for an order that
         compares t first. The units are left out of it on purpose."""
         if x not in self._inverted:
-            t = sp.Dummy("over")
+            t = chart_expressions(self.variables).Dummy("over")
             self._inverted[x] = t, groebner((*self.rows, t*x - 1), (t, *self.variables), order="first")
         return self._inverted[x]
 
     def unit(self):
         """The product of the units, as a function on V(rows)."""
         if self._unit is None:
-            value = sp.Integer(1)
+            value = chart_expressions(self.variables).sympify(1)
             for u in self.units:
-                value = self.reduced(sp.expand(value*self.reduced(u)))
+                value = self.reduced(value*self.reduced(u))
             self._unit = value
         return self._unit
 
@@ -164,15 +156,16 @@ class Frame:
         when u vanishes there: N does not meet x = 0)."""
         if x not in self._cuts:
             first = groebner((*self.rows, x), self.variables)
-            u = sp.Integer(1)
+            u = chart_expressions(self.variables).sympify(1)
             for factor in self.units:
-                u = first.reduce(sp.expand(u*first.reduce(factor)[1]))[1]
+                factor = first.reduce(frame_function(self.variables, factor))[1]
+                u = first.reduce(frame_function(self.variables, u*factor))[1]
             if u == 0:
                 second = False
             elif u.is_number:
                 second = None
             else:
-                s = sp.Dummy("unit")
+                s = chart_expressions(self.variables).Dummy("unit")
                 second = groebner((*first.exprs, s*u - 1), (s, *self.variables))
             self._cuts[x] = first, second
         return self._cuts[x]
@@ -181,72 +174,104 @@ class Frame:
         """A smaller representative of the function f on N."""
         if not self.rows:
             return f
+        return self._reduced_terms(frame_function(self.variables, f))
+
+    def _reduced_terms(self, value):
         if self._reducer is None:
             self._reducer = groebner(self.rows, self.variables)
-        return self._reducer.reduce(f)[1]
+        return self._reducer.reduce(value)[1]
 
     def derivative(self, f, k):
         field = self.field(k)
+        value = frame_derivative(self.variables, f, field)
         if len(field) == 1 and field.get(k) == 1:
-            return sp.expand(sp.diff(f, k))
-        # Polynomial arithmetic: products of large expressions are slow to expand.
-        if k not in self._polys:
-            self._polys[k] = {v: sp.Poly(c, *self.variables, domain=sp.QQ) for v, c in field.items()}
-        p = sp.Poly(f, *self.variables, domain=sp.QQ)
-        total = sp.Poly(0, *self.variables, domain=sp.QQ)
-        for v, c in self._polys[k].items():
-            total += c*p.diff(v)
-        return self.reduced(total.as_expr())
+            return value
+        return self._reduced_terms(value)
 
     def vanishes(self, f):
         """Whether f is zero on N."""
         if f == 0:
             return True
-        return bool(self.rows) and self.basis().contains(f)
+        if not self.variables:
+            return self.empty()
+        if not self.rows and 0 not in self.units:
+            return False
+        if f in self._vanishing:
+            return self._vanishing[f]
+        residue = self.reduced(f)
+        if not residue:
+            answer = True
+        elif self._basis is None and self.coords and self.units and self._witness(residue):
+            answer = False
+        else:
+            answer = self.basis().contains(residue)
+        self._vanishing[f] = answer
+        return answer
+
+    def _witness(self, f):
+        """One point on the open frame with f nonzero disproves membership.
+        Specialization only supplies witnesses. If these fibres miss the
+        open set, use the exact saturated ideal of the whole chart."""
+        for start in (2, -3, 5):
+            fixed = tuple(v - (start+i) for i, v in enumerate(self.coords))
+            if not self._empty_on(fixed, (*self.units, f)):
+                return True
+        return False
 
     def jet(self, f, order):
         """f and its derivatives of order < `order`: they vanish at the points where f has at least that order."""
         key = (f, order)
         if key not in self._jets:
-            found, layer = [f], [f]
-            for _ in range(order - 1):
-                layer = list(dict.fromkeys(d for g in layer for k in self.coords
-                                           if not self.vanishes(d := self.derivative(g, k))))
-                found.extend(layer)
-            self._jets[key] = tuple(dict.fromkeys(found))
+            from . import native_library
+            if (not self.rows and self.variables and order > 1 and 0 not in self.units
+                    and native_library._MODE != "sympy" and hasattr(native_library._kernel(), "atlas_jet_abi")):
+                from .affine_kernel import _request, _ring, _sparse_expression
+                ring = _ring(self.variables)
+                rows = _request(["affine_jet", ring.header, str(order),
+                                 " ".join(str(self.variables.index(c)) for c in self.coords), ring.text(f)])
+                self._jets[key] = tuple(dict.fromkeys((f, *(_sparse_expression(self.variables, r) for r in rows[1:]))))
+                if native_library.CHECK and self._jets[key] != self._jet_reference(f, order):
+                    raise AssertionError("The native affine jet differs from iterated differentiation.")
+            else:
+                self._jets[key] = self._jet_reference(f, order)
         return self._jets[key]
 
+    def _jet_reference(self, f, order):
+        found, layer = [f], [f]
+        for _ in range(order - 1):
+            layer = list(dict.fromkeys(d for g in layer for k in self.coords
+                                       if not self.vanishes(d := self.derivative(g, k))))
+            found.extend(layer)
+            if not layer:
+                break
+        return tuple(dict.fromkeys(found))
+
     def empty(self, *gens):
-        return empty_locus(self.ring, (*self.equations, *gens))
+        return self._empty_on(gens, self.units)
 
     def inside(self, unit, gens):
         """Whether the zero set of the ideal lies in that of `unit`, on N."""
-        return radical_subset(self.ring, (unit,), (*self.equations, *gens))
+        return self._empty_on(tuple(gens), (*self.units, unit))
+
+    def _empty_on(self, gens, units):
+        key = (gens, units)
+        if key not in self._empty:
+            self._empty[key] = frame_locus(self.variables, (*self.rows, *gens), units)
+        return self._empty[key]
 
     def restricted(self, z, k, unit):
         """The submanifold z = 0 of N, where D_k z is invertible, on the open set unit != 0."""
         return Frame(self.variables, tuple(c for c in self.coords if c != k), (*self.rows, z),
                      (*self.units, unit), self.solved)
 
-    def eliminated(self, z, k):
+    def eliminated(self, z, k, coefficients=None):
         """The submanifold z = 0 when z = a*k + b and a is invertible: k = -b/a
         there. Returns the frame without k and the map taking a function to a
         polynomial that is a unit times its restriction (the numerator)."""
-        p = sp.Poly(z, k)
-        a, b = p.nth(1), p.nth(0)
+        a, b = frame_linear(self.variables, z, k) if coefficients is None else coefficients
 
         def move(f):
-            q = sp.Poly(f, k)
-            degree = q.degree()
-            if degree <= 0:
-                return sp.expand(f)
-            value = sp.expand(sum(q.nth(j)*(-b)**j*a**(degree - j) for j in range(degree + 1)))
-            while value != 0 and not a.is_number:
-                quotient, remainder = sp.div(value, a, *self.variables)
-                if remainder != 0:
-                    break
-                value = sp.expand(quotient)
-            return value
+            return frame_restrict(self.variables, f, k, a, b)
 
         rows = tuple(g for g in map(move, self.rows) if g != 0)
         return Frame(tuple(v for v in self.variables if v != k), tuple(c for c in self.coords if c != k), rows,
@@ -254,9 +279,13 @@ class Frame:
 
     def changed(self, swap):
         """The same submanifold after a substitution of the coordinates."""
-        def move(gens):
-            return tuple(sp.expand(sp.sympify(g).xreplace(swap)) for g in gens)
-        return Frame(self.variables, self.coords, move(self.rows), move(self.units), move(self.solved))
+        def move(gens, variables):
+            return tuple(frame_function(variables, chart_expressions(variables).sympify(g).xreplace(swap)) for g in gens)
+        # Saved graph equations still use the eliminated coordinates.
+        extra = set().union(*(g.free_symbols for g in self.solved)) - set(self.variables)
+        original = (*self.variables, *sorted(extra, key=chart_expressions(self.variables).default_sort_key))
+        return Frame(self.variables, self.coords, move(self.rows, self.variables),
+                     move(self.units, self.variables), move(self.solved, original))
 
 
 @dataclass(frozen=True)
@@ -321,7 +350,7 @@ def _divide(frame, f, x):
     which are large polynomials.
     """
     if not frame.rows:
-        return sp.expand(sp.cancel(f/x)) if sp.Poly(f, x).eval(0) == 0 else None
+        return frame_quotient(frame.variables, f, x)
     first, second = frame.cut(x)
     if second is False:
         return None  # x has no zero on N
@@ -330,22 +359,47 @@ def _divide(frame, f, x):
     t, basis = frame.over(x)
     g = frame.reduced(f)
     for _ in range(12):
-        q = basis.reduce(sp.expand(t*g))[1]
+        q = basis.reduce(frame_function((t, *frame.variables), t*g))[1]
         if t not in q.free_symbols:
             return q
-        g = frame.reduced(sp.expand(g*frame.unit()))
+        g = frame.reduced(g*frame.unit())
     raise GiveUp("A quotient by the equation of a divisor was not found.")
 
 
-def _settle(element, variables, through, new):
+def _settle(element, frame, variables, through, new):
     """Move into the function the powers of the divisors that become old.
     Those through the locus need integral exponents: (h, mu) is replaced by
     (h^k, k*mu) [BM, Remark 2.8]. The others are units near the locus."""
     exps, poly, weight = element
     power = lcm(*(Fraction(exps.get(h, 0)).denominator for h in through)) if through else 1
-    factor = sp.Mul(*(variables[h]**int(exps.get(h, 0)*power) for h in through))
+    factor = chart_expressions(frame.variables).prod((variables[h]**int(exps.get(h, 0)*power) for h in through))
     kept = tuple((h, e*power) for h, e in exps.items() if h in new and e)
-    return dict(kept), sp.expand(poly**power*factor), weight*power
+    return dict(kept), frame_function(frame.variables, poly**power*factor), weight*power
+
+
+def _remove_coordinate_powers(frame, poly, divisors):
+    """Return all orders on free coordinate hyperplanes and their joint residual."""
+    from .affine_kernel import _request, _ring, _sparse_expression
+    from .native_library import CHECK, _MODE, _kernel
+    divisors = tuple(divisors)
+    def iterated():
+        residual = poly
+        orders = []
+        for v in divisors:
+            order = 0
+            while (quotient := _divide(frame, residual, v)) is not None:
+                residual, order = quotient, order + 1
+            orders.append(order)
+        return orders, residual
+    if frame.rows or _MODE == "sympy" or not hasattr(_kernel(), "atlas_residual_abi"):
+        return iterated()
+    ring = _ring(frame.variables)
+    rows = _request(["coordinate_residual", ring.header,
+                     " ".join(str(frame.variables.index(v)) for v in divisors), ring.text(poly)])
+    answer = list(map(int, rows[:-1])), _sparse_expression(frame.variables, rows[-1])
+    if CHECK and answer != iterated():
+        raise AssertionError("Coordinate orders differ from repeated exact division.")
+    return answer
 
 
 def _level(st, ctx):
@@ -372,7 +426,7 @@ def _level(st, ctx):
         # Maximal contact is taken for the collection alone; the equations of the
         # divisors old at this level are then added on it, with weight 1
         # [BM, 3.2 and Remark 3.6].
-        coll = tuple(_settle(element, new, chosen, rest) for element in st.coll)
+        coll = tuple(_settle(element, frame, new, chosen, rest) for element in st.coll)
         start = replace(st, coll=coll, extra=tuple(new[h] for h in chosen), new=tuple(rest.items()), locus=locus,
                         working=working, prefix=(*st.prefix, len(chosen)))
         # A hypersurface of maximal contact chosen here need not be the transform of
@@ -405,11 +459,11 @@ def _contact(st, ctx, banned=frozenset()):
     while remaining:
         ctx.check()
         frame, new = current.frame, dict(current.new)
-        ranked = sorted(enumerate(current.coll), key=lambda item: (item[1][2], len(item[1][0]), sp.count_ops(item[1][1])))
+        ranked = sorted(enumerate(current.coll), key=lambda item: (item[1][2], len(item[1][0]), chart_expressions(frame.variables).count_ops(item[1][1])))
         for index, (exps, poly, weight) in ranked:
             if weight.denominator != 1 or weight < 1 or frame.vanishes(poly):
                 continue
-            monomial = sp.Mul(*(new[h] for h, e in exps.items() if e > 0 and h in new))
+            monomial = chart_expressions(frame.variables).prod((new[h] for h, e in exps.items() if e > 0 and h in new))
             for k in frame.coords:
                 if (index, k, attempts) in banned:
                     continue
@@ -423,16 +477,19 @@ def _contact(st, ctx, banned=frozenset()):
                 top = frame.derivative(z, k)
                 if frame.vanishes(top):
                     continue
-                unit = sp.expand(top*monomial*k) if absent else sp.expand(top*monomial)
+                unit = frame_function(frame.variables, top*monomial*(k if absent else 1))
                 hit = [w for w in remaining if not frame.inside(unit, (*current.locus, *w))]
                 if not hit:
                     continue
-                if not frame.rows and sp.Poly(z, k).degree() == 1:
-                    inside, move = frame.eliminated(z, k)
+                if not frame.rows and (coefs := frame_linear(frame.variables, z, k)) is not None:
+                    inside, move = frame.eliminated(z, k, coefs)
                     inside = Frame(inside.variables, inside.coords, inside.rows,
                                    (*inside.units, move(monomial), *((move(k),) if absent else ())), inside.solved)
                 else:
-                    inside, move = frame.restricted(z, k, unit), sp.expand
+                    inside = frame.restricted(z, k, unit)
+
+                    def move(f):
+                        return frame_function(inside.variables, f)
                 coll = []
                 for e, p, w in current.coll:
                     e = {h: x for h, x in e.items() if h not in absent}
@@ -467,10 +524,10 @@ def _contact(st, ctx, banned=frozenset()):
         back = {c: c - (value - c) for c, value in swap.items()}
 
         def move(gens):
-            return tuple(sp.expand(sp.sympify(g).xreplace(swap)) for g in gens)
+            return tuple(frame_function(frame.variables, chart_expressions(frame.variables).sympify(g).xreplace(swap)) for g in gens)
 
         current = replace(current, frame=frame.changed(swap),
-                          coll=tuple((e, sp.expand(p.xreplace(swap)), w) for e, p, w in current.coll),
+                          coll=tuple((e, frame_function(frame.variables, p.xreplace(swap)), w) for e, p, w in current.coll),
                           extra=move(current.extra),
                           locus=move(current.locus), working=tuple(move(w) for w in current.working),
                           undo=(*current.undo, back))
@@ -537,42 +594,46 @@ def _residue(st, ctx):
     normal = []
     for exps, poly, weight in st.coll:
         exps = {h: Fraction(exps.get(h, 0)) for h in live}
-        for h in live:
-            while (quotient := _divide(frame, poly, new[h])) is not None:
-                poly, exps[h] = quotient, exps[h] + 1
+        if live:
+            orders, poly = _remove_coordinate_powers(frame, poly, (new[h] for h in live))
+            for h, order in zip(live, orders):
+                exps[h] += order
         normal.append((exps, poly, weight))
-    alpha = {h: min(e[h]/w for e, _, w in normal) for h in live}
-    rest = [({h: e[h] - alpha[h]*w for h in live}, p, w) for e, p, w in normal]
+    from .centre_weights import Presentation
+    alpha, *residual = Presentation(live, normal).residual()
+    rest = [(e, p, w) for e, (_, p, w) in zip(residual, normal)]
+    table = Presentation(live, rest)
     strata = [chosen for size in range(len(live) + 1) for chosen in combinations(live, size)
               if here(tuple(new[h] for h in chosen))]
+    positions = {h: j for j, h in enumerate(live)}
+    indices = [tuple(positions[h] for h in chosen) for chosen in strata]
 
-    def conditions(chosen, value):
-        # On the divisors of `chosen`: ord g >= value*mu - (the exponents left on them).
-        gens = [new[h] for h in chosen]
-        for e, p, w in rest:
-            need = ceil(value*w - sum(e[h] for h in chosen))
-            if need >= 1:
-                gens.extend(frame.jet(p, need))
-        return tuple(gens)
+    def conditions(value):
+        for chosen, required in zip(strata, table.requirements(indices, value)):
+            gens = [new[h] for h in chosen]
+            for (_, p, _), need in zip(rest, required):
+                if need >= 1:
+                    gens.extend(frame.jet(p, need))
+            yield tuple(gens)
 
-    # nu at a point is the least of the (ord g + exponents left)/mu: its values
-    # are among these numbers, for the orders that occur.
-    values = {Fraction(0)}
-    for e, p, w in rest:
-        for chosen in strata:
-            c, order = sum(e[h] for h in chosen), 0
-            divisor = tuple(new[h] for h in chosen)
+    bounds = []
+    for chosen in strata:
+        divisor = tuple(new[h] for h in chosen)
+        orders = []
+        for _, p, _ in rest:
+            order = 0
             while here((*divisor, *frame.jet(p, order + 1))):
                 order += 1
                 if order > 64:
                     raise GiveUp("An order is beyond the limit.")
-            values.update((k + c)/w for k in range(order + 1))
-    values = sorted(values)
+            orders.append(order)
+        bounds.append(orders)
+    values = table.candidate_values(indices, bounds)
     low, high = 0, len(values) - 1     # the locus of values[low] is not empty
     while low < high:
         ctx.check()
         middle = (low + high + 1)//2
-        if any(here(conditions(chosen, values[middle])) for chosen in strata):
+        if any(here(gens) for gens in conditions(values[middle])):
             low = middle
         else:
             high = middle - 1
@@ -588,10 +649,9 @@ def _residue(st, ctx):
         return [Found((*st.prefix, Fraction(0)), ctx.key(chosen), (*st.locus, *(new[h] for h in chosen)), st)]
     coll = [(e, p, w*value) for e, p, w in rest]
     if value < 1:
-        coll.append((dict(alpha), sp.Integer(1), 1 - value))
+        coll.append((dict(alpha), chart_expressions(frame.variables).sympify(1), 1 - value))
     out = []
-    for chosen in strata:
-        gens = conditions(chosen, value)
+    for gens in conditions(value):
         working = tuple(w for w in st.working if not frame.empty(*st.locus, *gens, *w))
         if working:
             out.extend(_level(replace(st, coll=tuple(coll), locus=(*st.locus, *gens), working=working,
@@ -602,7 +662,7 @@ def _residue(st, ctx):
 def _principal(variables, ambient, ideal):
     """A single generator of the ideal of a divisor on the chart."""
     gens = [g for g in ideal if not ideal_subset(variables, (g,), ambient)]
-    for g in sorted(gens, key=lambda g: (g not in variables, sp.count_ops(g))):
+    for g in sorted(gens, key=lambda g: (g not in variables, chart_expressions(variables).count_ops(g))):
         if ideal_subset(variables, gens, (*ambient, g)):
             return g
     raise GiveUp("A divisor is not given by one equation on a chart.")
@@ -629,7 +689,7 @@ def _frames(variables, ambient, dimension, divisors, working, eliminate=False, u
         yield (frame, list(working), _same) if eliminate else (frame, list(working))
         return
     remaining = list(working)
-    gate = sp.expand(sp.Mul(*units)) if units else None
+    gate = frame_function(variables, chart_expressions(variables).prod(units)) if units else None
 
     def left(w):
         # Only the points where the units given are invertible are to be covered.
@@ -639,18 +699,18 @@ def _frames(variables, ambient, dimension, divisors, working, eliminate=False, u
     choices = sorted(combinations(variables, count), key=lambda chosen: sum(v in divisors for v in chosen))
     for dependent in choices:
         for rows in combinations(ambient, count):
-            minor = sp.expand(sp.Matrix([[sp.diff(g, v) for v in dependent] for g in rows]).det(method="berkowitz"))
+            minor = frame_minor(variables, rows, dependent)
             if minor == 0:
                 continue
-            away = sp.expand(minor*sp.Mul(*(v for v in dependent if v in divisors))*sp.Mul(*units))
+            away = frame_function(variables, minor*chart_expressions(variables).prod((v for v in dependent if v in divisors))*chart_expressions(variables).prod(units))
             hit = [w for w in remaining if not radical_subset(variables, (away,), (*ambient, *w))]
             if not hit:
                 continue
             frame = Frame(variables, tuple(v for v in variables if v not in dependent), rows, (away,))
             if not eliminate:
                 yield frame, hit
-            elif count == 1 and len(ambient) == 1 and sp.Poly(rows[0], dependent[0]).degree() == 1:
-                inside, move = Frame(variables, variables).eliminated(rows[0], dependent[0])
+            elif count == 1 and len(ambient) == 1 and (coefs := frame_linear(variables, rows[0], dependent[0])) is not None:
+                inside, move = Frame(variables, variables).eliminated(rows[0], dependent[0], coefs)
                 off = (move(dependent[0]),) if dependent[0] in divisors else ()
                 yield Frame(inside.variables, inside.coords, inside.rows, (*inside.units, *off, *map(move, units)),
                             inside.solved), hit, move
@@ -665,7 +725,7 @@ def _frames(variables, ambient, dimension, divisors, working, eliminate=False, u
 
 def _intersection(variables, first, second):
     """The intersection of two ideals."""
-    t = sp.Dummy("t")
+    t = chart_expressions(variables).Dummy("t")
     basis = groebner([t*g for g in first] + [(1 - t)*g for g in second], (t, *variables), order="lex")
     return tuple(g for g in basis.exprs if t not in g.free_symbols)
 
@@ -701,17 +761,17 @@ def maximum(variables, ambient, dimension, strict, divisors, working, records, b
             continue
         g = _principal(original, chart, ideal)
         if g not in original:
-            name = sp.Dummy(f"divisor_{label}")
+            name = chart_expressions(variables).Dummy(f"divisor_{label}")
             variables, graph[name] = (*variables, name), g
             ambient.append(name - g)
             g = name
         names[label] = g
     ctx = _Context(records, births, names.values(), deadline)
     found = []
-    covers = [sp.Integer(1)]
+    covers = [chart_expressions(variables).sympify(1)]
     for ideal in away:
         if any(not empty_locus(original, (*chart, *strict, *ideal, *w)) for w in working):
-            covers = [sp.expand(u*g) for u in covers for g in ideal]
+            covers = [frame_function(original, u*g) for u in covers for g in ideal]
     pieces, left = [], list(working)
     for unit in dict.fromkeys(covers):
         if unit == 1:
@@ -750,8 +810,8 @@ def maximum(variables, ambient, dimension, strict, divisors, working, records, b
 
         def back(gens):
             for swap in reversed(item.state.undo):
-                gens = [sp.expand(sp.sympify(g).xreplace(swap)) for g in gens]
-            return [g for g in (sp.expand(sp.sympify(g).xreplace(graph)) for g in gens) if g != 0]
+                gens = [frame_function(variables, chart_expressions(variables).sympify(g).xreplace(swap)) for g in gens]
+            return [g for g in (frame_function(original, chart_expressions(variables).sympify(g).xreplace(graph)) for g in gens) if g != 0]
 
         # The locus on the open set, then its closure in the chart.
         gens = ideal_basis(original, (*chart, *back((*item.centre, *frame.rows, *frame.solved))))

@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 
 import sympy as sp
 from sympy import QQ
@@ -22,6 +23,55 @@ def candidate(variables, center, boundary=None):
 @unittest.skipUnless(_kernel() and os.getenv("ATLAS_GROEBNER") != "sympy", "the native kernel is not in use")
 class KernelIdealTests(unittest.TestCase):
     """Each kernel routine against the SymPy route it replaces."""
+
+    def test_finite_radical(self):
+        from engine.centres import GiveUp
+        self.assertEqual(kernel.finite_radical((x, y), (y, y - x**2)), (x, y))
+        self.assertEqual(kernel.finite_radical((x, y), ((2*x+1)**2 * (x-2), y**4)),
+                         (x**2 - 3*x/2 - 1, y))
+        self.assertEqual(kernel.finite_radical((x, y), (1,)), (1,))
+        with self.assertRaises(GiveUp):
+            kernel.finite_radical((x, y), (x*y,))
+
+    def test_monomial_finite_radical(self):
+        from engine.centres import GiveUp
+        variables = (z, x, y)
+        generators = (0, x*y, -3*z**7, x*y, y**2/5, x**4)
+        self.assertEqual(kernel.finite_radical(variables, generators), variables)
+        self.assertEqual(kernel.finite_radical(variables, (*generators, -2)), (1,))
+        for positive_dimensional in ((), (0,), (x**2, y*z)):
+            with self.subTest(ideal=positive_dimensional), self.assertRaises(GiveUp):
+                kernel.finite_radical(variables, positive_dimensional)
+
+    def test_resolution_dispatches_finite_radical(self):
+        from engine import local_blowups
+        variables, ideal = (x, y), (x**2, y-x)
+        with patch.object(kernel, "finite_radical", wraps=kernel.finite_radical) as native:
+            with patch.object(local_blowups, "_point_factor_rows", side_effect=AssertionError):
+                self.assertEqual(local_blowups._radical_points(variables, ideal), (x, y))
+            native.assert_called_once_with(variables, ideal)
+        with patch.object(kernel, "finite_radical", return_value=None):
+            self.assertEqual(local_blowups._radical_points(variables, ideal), (x, y))
+
+    def test_strata_reduce_only_on_the_owned_fibre(self):
+        # The base is the two axes. The strict equation restricts to
+        # 1+x+y, with two zeros, and the deleted origin belongs to both
+        # axes. Terms divisible by xy cannot affect any of these counts.
+        cuts = [(x,), (y,), (1+x+y+(x*y)**1000,)]
+        base = (x**5*y**7,)
+        self.assertEqual(kernel.strata((x,y), base, cuts, ((x,y),)),
+                         {(0,): -1, (1,): -1, (0,2): 1, (1,2): 1})
+
+    def test_geometric_plane_factors_in_owned_regions(self):
+        q = x**2 + y**2
+        f = (q * (x*y - 1))**2
+        for region, removed, expected in (
+                ((), (), (3, 2)), ((q+z,), (), (2, 1)),
+                ((), ((q+z,),), (1, 1)), ((), ((),), (0, 0))):
+            with self.subTest(region=region, removed=removed):
+                args = ((x, y, z), (2*z, f), region, removed)
+                self.assertEqual(kernel.plane_components(*args), expected)
+                self.assertEqual(kernel._plane_components_reference(*args), expected)
 
     def test_saturation_is_the_lexicographic_basis(self):
         cases = [((x, y), (x*y,), x), ((x, y, z), (x*z - y**2, x**3 - y*z), x),

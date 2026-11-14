@@ -22,6 +22,33 @@ def shear(poly, donor, axis, scalar=1):
     """Pull back by x_donor = v_donor + scalar*v_axis."""
     if sum(e[donor]+1 for e in poly)>100_000:
         raise LimitError('The trial coordinate substitution exceeds its expansion budget.')
+    from .native_library import affine_request
+    from .polynomial import checked_native, sparse_row
+    n = len(next(iter(poly)))
+    names = [f"v{i}" for i in range(n)]
+    def native():
+        images = names.copy()
+        images[donor] = f"({names[donor]}+({scalar})*{names[axis]})"
+        ring = " ".join(names)
+        row, = affine_request(["pullbacks", ring, ring, *images, "0", format_poly(poly, names)])
+        return sparse_row(row)
+    return checked_native(native, lambda: _shear_reference(poly, donor, axis, scalar))
+
+
+def _valuations(rays, exponents):
+    """Pair every Newton ray with the complete support in one integer matrix product."""
+    from .native_library import affine_request, _kernel, Unavailable
+    from .polynomial import checked_native
+    def native():
+        if not hasattr(_kernel(), "atlas_valuations_abi"):
+            raise Unavailable("The lattice pairing kernel is unavailable.")
+        rows = affine_request(["lattice_valuations", str(len(rays[0])), str(len(rays)),
+                               *(" ".join(map(str, r)) for r in (*rays, *exponents))])
+        return [list(map(int, row.split())) for row in rows]
+    return checked_native(native, lambda: [[pairing(v, e) for e in exponents] for v in rays])
+
+
+def _shear_reference(poly, donor, axis, scalar):
     result = {}
     for exponent, coefficient in poly.items():
         for k in range(exponent[donor]+1):
@@ -91,7 +118,7 @@ def _label_roots(index, edge):
     }
 
 
-def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
+def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False):
     n=len(variables)
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
@@ -103,7 +130,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
     # by the common minimizers of their rays. A positive sum of the rays picks
     # exactly this common face, including strata over the origin with some
     # original coordinate rays as generators.
-    valuations = [[pairing(v,e) for e in exponents] for v in rays]
+    valuations = _valuations(rays, exponents)
     orders = list(map(min,valuations))
     minima = [frozenset(i for i,h in enumerate(values) if h==order)
               for values,order in zip(valuations,orders)]
@@ -149,7 +176,10 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
     strata={}
     vertices=[]
     cells=[]
-    for subset in sorted(intersection_cones,key=lambda s:(len(s),s)):
+    # A degenerate fan is an intermediate modification. Its boundary will
+    # be computed once the local blowups have completed the atlas.
+    boundary_cones = () if degenerate else sorted(intersection_cones, key=lambda s: (len(s), s))
+    for subset in boundary_cones:
         proof=faces[face_masks[subset]]
         dim=proof['face_dimension']
         split=mode=='intrinsic' and dim==1
@@ -188,6 +218,9 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
         batch = {'backend':'cpu','arithmetic':'arbitrary precision',
                  'dimension':n,'chart_term_pairs':len(cones)*len(exponents)}
     coefficients = [poly[e] for e in exponents]
+    directions = list(dict.fromkeys(tuple(proof["edge"]["direction"]) for proof in faces.values()
+                      if not degenerate and mode == "intrinsic" and proof["face_dimension"] == 1))
+    direction_orders = dict(zip(directions, zip(*_valuations(rays, directions)))) if directions else {}
     charts=[]
     for index,(cone,powers) in enumerate(zip(cones,powers_by_chart),1):
         rr=[rays[i] for i in cone]
@@ -200,13 +233,16 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
         for position,i in enumerate(cone):
             if i<n:
                 continue
+            if degenerate:
+                divisors.append({"id": f"E{i-n+1}", "equation": coords[position]})
+                continue
             proof=faces[minima[i]]
             ids=strata[(i,)]
             if mode=='embedded' or proof['face_dimension']!=1:
                 divisors.extend({'id':ident,'equation':coords[position]} for ident in ids)
                 continue
-            direction=proof['edge']['direction']
-            powers=[pairing(ray,direction) for ray in rr]
+            values = direction_orders[tuple(proof['edge']['direction'])]
+            powers = [values[r] for r in cone]
             positive=monomial(coords,[max(0,v) for v in powers])
             negative=monomial(coords,[max(0,-v) for v in powers])
             for k,ident in enumerate(ids,1):
@@ -227,67 +263,39 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None):
                 'chart_batch':batch,'linear_map_to_input':matrix,'face_coordinates':variables,
                 'adapted_polynomial':format_poly(poly,variables),'compact_faces':list(faces.values()),
                 'description':'The map is an isomorphism off the origin. All compact faces are nondegenerate and every maximal cone has lattice determinant one. The strict transform is smooth and transverse to the toric strata in a neighborhood of the fiber over the origin.'}}
-    return _blow_up_failures(result,poly,variables,mode,fan,deadline) if degenerate else result
+    return _blow_up_failures(result,poly,variables,mode,fan,deadline,original,defer_outputs) if degenerate else result
 
 
-def _blow_up_failures(result, poly, variables, mode, fan, deadline=None):
+def _blow_up_failures(result, poly, variables, mode, fan, deadline, original, defer_outputs):
     """Complete a Newton modification with degenerate faces by blowing up the
     points of the fiber over the origin where normal crossings fail."""
-    from .newton_repair import records, strata
-    answer = strata(poly,variables,fan,deadline=deadline)
+    from .newton_repair import patch_record, records, strata
+    from .groebner import CHECK
+    answer = strata(poly,variables,fan,deadline=deadline,count_strata=CHECK)
     if answer is None or not answer['repairs']:
         return None
     repairs = answer['repairs']
-    data, listed = records(answer)
-    import sympy as sp
     names = {chart['id']:chart for chart in result['charts']}
     blowups = sum(len(r['blowups']) for r in repairs)
     points = sum(r['points'] for r in repairs)
     for r in repairs:
         parent = names[r['chart']]
         parent.setdefault('blown_up',[]).append({'id':r['id'],'ideal':r['ideal']})
-        symbols = {name:sp.Symbol(name) for name in parent['coordinates']}
-        for chart in r['charts']:
-            inside = {symbols[old]:sp.sympify(text.replace('^','**')) for old,text in chart['parent_coordinates'].items()}
-            maps = {name:str(sp.expand(sp.sympify(text.replace('^','**'),locals=symbols).xreplace(inside))).replace('**','^')
-                    for name,text in parent['map'].items()}
-            strict = [d['ideal'] for d in chart['divisors'] if d['id']=='strict']
-            result['charts'].append({'id':chart['id'],'parent':chart['parent'],'coordinates':chart['coordinates'],
-                'ambient_ideal':chart['ambient_ideal'],'map':maps,
-                'exceptional':[{'id':d['id'],'ideal':d['ideal'],'equation':', '.join(d['ideal']),
-                                'total_multiplicity':d['multiplicity']} for d in chart['divisors'] if d['id']!='strict'],
-                'strict_transform':strict[0] if strict else ['1']})
+        for k, chart in enumerate(r['charts'], 1):
+            result['charts'].append(patch_record(chart, parent, f"{r['id']}.{k}"))
         result['steps'].append({'id':r['id'],'type':'blowups where a Newton face is degenerate','chart':r['chart'],
                                 'points':r['points'],'ideal':r['ideal'],'centers':r['blowups']})
-    created = [row for row in data if row['component'].startswith('P')]
-    dual = result['dual_complex']
-    if mode=='embedded':
-        # The cells of the fan stay: a toric intersection through a blown-up
-        # point is a curve or a surface, the centres lie over the point, and
-        # its strict transform still meets the fibre over the point. The
-        # cells with a new divisor come from the charts of the blowups.
-        from .local_blowups import dual_cells
-        fixed = {frozenset((v['id'],)):v['id'] for v in dual['vertices']}
-        fixed.update({frozenset(c['vertices']):c['id'] for c in dual['cells']})
-        added, reason = [], None
-        for r in repairs:
-            if r['cells'] is None:
-                reason = 'The blowups over conjugate points are computed on a cover, which does not give the components of the intersections.'
-                break
-            births = [v['id'] for v in dual['vertices']] + r['births']
-            found, reason = dual_cells({frozenset(labels):count for labels,count in r['cells']}, births.index, fixed)
-            if found is None:
-                break
-            added.extend(found)
-        if reason is None:
-            dual['cells'] = [*dual['cells'],*added]
-        else:
-            dual['status'] = 'partial'
-            dual['reason'] = reason+' The cells shown are those of the toric divisors. The divisors created by the later blowups are listed as vertices without their incidences.'
-        dual['vertices'] = [*dual['vertices'],*({'id':row['component'],'ambient_order':row['multiplicity']} for row in created)]
-    else:
-        result['dual_complex'] = {'status':'unavailable','convention':dual['convention'],'vertices':[],'cells':[],
-            'reason':'A Newton face is degenerate. The exceptional components on the strict transform are not computed after the additional blowups.'}
+    # The fan before the blowups describes a different boundary. Its labels
+    # are kept in the charts; incidences come from the completed atlas.
+    result['dual_complex'] = {'status':'unavailable', 'convention':result['dual_complex']['convention'],
+                              'vertices':[], 'cells':[]}
+    result.update(variables=list(variables), mode=mode)
+    if not defer_outputs:
+        from .atlas import boundary_complex, from_record, to_json
+        from .native_library import _MODE
+        charts = from_record(result, original, native=_MODE == "native")
+        result['atlas'] = to_json(charts)
+        result['dual_complex'] = boundary_complex(charts, len(variables), mode == 'intrinsic')
     result['summary'] = (f"Regular Newton modification with {len(names)} charts, then {blowups} blowups over "
                          f"{points} point{'s' if points!=1 else ''} where a face is degenerate.")
     proof = result['certificate']
@@ -295,12 +303,12 @@ def _blow_up_failures(result, poly, variables, mode, fan, deadline=None):
     proof['description'] = ('The map is an isomorphism off the origin and every maximal cone has lattice determinant one. '
         'Some compact face is degenerate: on the fiber over the origin the total transform has normal crossings except at the listed points, '
         'which are blown up until it has. Normal crossings are verified in every final chart.')
-    proof['numerical_data'] = data
-    proof['strata'] = listed
+    if CHECK:
+        proof['numerical_data'], proof['strata'] = records(answer)
     return result
 
 
-def resolve_newton(poly, variables, mode, compute=None, seconds=120):
+def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False):
     """A regular Newton modification, completed by blowups where a face is
     degenerate. Those blowups may use `seconds` in all, over the coordinate
     choices tried; past that the degenerate choices give no answer."""
@@ -312,7 +320,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120):
             fan=build_fan(transformed)
             if not fan['isomorphism_off_origin']:
                 continue
-            result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline)
+            result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,defer_outputs=defer_outputs)
         except LimitError as error:
             last_limit = error
             continue

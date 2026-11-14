@@ -1,10 +1,9 @@
 """Dispatch only to algorithms whose hypotheses have been checked."""
-import os
 from pathlib import Path
 from time import perf_counter
 import subprocess
 import sys
-from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly
+from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text
 from .native_backend import resolve_native
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,17 +29,61 @@ def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
 def resolve(request):
     if not isinstance(request, dict):
         raise InputError("Expected an object containing polynomial, variables, and mode.")
+    compute = request.get('compute')
+    if compute is not None and compute not in ('cpu','auto','gpu'):
+        raise InputError('Compute must be cpu, auto, or gpu.')
+    from .native_library import replay_scope
+    with replay_scope(compute) as replay:
+        proofs = []
+        result = _resolve(request, proofs)
+        result['execution'] = _execution(compute, proofs, replay.report())
+        return result
+
+
+def _execution(compute, proofs, replay):
+    # The companion embedded resolution can supply both zetas for an intrinsic
+    # atlas. Keep its successful work visible alongside the primary resolution.
+    stages = []
+    for role, proof in proofs:
+        batch = proof.get('chart_batch')
+        if batch:
+            stages.append(dict(operation='chart_transform', resolution=role, **batch))
+        if 'rank_backend' in proof:
+            stage = dict(operation='jacobian_rank', resolution=role, backend=proof['rank_backend'])
+            for key in ('device', 'rows', 'rank', 'rank_elapsed_ms', 'rank_fallback_reason'):
+                if key in proof:
+                    stage[key] = proof[key]
+            stages.append(stage)
+    proof = proofs[0][1] if proofs else {}
+    execution = {'requested': compute or 'environment', 'rank_backend': proof.get('rank_backend'),
+                 'chart_backend': proof.get('chart_batch', {}).get('backend'), 'stages': stages}
+    backends = {stage['backend'] for stage in stages}
+    if replay:
+        for backend, count in replay.get('trace', {}).get('backends', {}).items():
+            stage = dict(operation='groebner_trace', backend=backend, **count)
+            if replay.get('device', {}).get('backend') == backend:
+                stage['device'] = replay['device']
+            stages.append(stage)
+            backends.add(backend)
+        if replay['batches']:
+            details = {key: value for key, value in replay.items() if key != 'trace'}
+            if details.get('device', {}).get('backend') not in details['backends']:
+                details.pop('device', None)
+            stages.append(dict(operation='groebner_replay', **details))
+        backends.update(replay['backends'])
+    device_names = [name for key, name in [('triton', 'Triton GPU'), ('opencl', 'OpenCL GPU')] if key in backends]
+    execution['device'] = ' and '.join([*device_names, 'CPU'])
+    if compute == 'gpu' and not device_names:
+        execution['note'] = ('The eligible GPU stages used CPU fallback. See stages for details.' if stages
+                             else 'This resolution used CPU algorithms and had no eligible GPU stage.')
+    return execution
+
+
+def _resolve(request, proofs):
     variables = request.get('variables')
     mode = request.get('mode','embedded')
     if mode not in ('embedded','intrinsic'):
         raise InputError("Mode must be embedded or intrinsic.")
-    compute = request.get('compute')
-    if compute is not None and compute not in ('cpu','auto','gpu'):
-        raise InputError('Compute must be cpu, auto, or gpu.')
-    if compute == 'gpu':
-        # Read when the Groebner kernel is loaded, here or in a verification
-        # worker: its modular replays then run on the OpenCL device.
-        os.environ['ATLAS_GROEBNER_GPU'] = '1'
     policy = request.get('search','exhaustive')
     if policy not in ('quick','exhaustive'):
         raise InputError('Search must be quick or exhaustive.')
@@ -60,29 +103,63 @@ def resolve(request):
     except NonReducedError:
         if mode=='intrinsic':
             raise
-        from .nonreduced import nonreduced_resolution
+        from .weighted_record import nonreduced_resolution
         result=nonreduced_resolution(p,variables,mode,lambda support:_resolve_polynomial(support,request,start))
         if result is None:
             raise
         result.update(polynomial=format_poly(p,variables),elapsed_ms=round((perf_counter()-start)*1000,3))
+    from .strata import annotate_complex, rational_chart_outputs, resolution_strata
+
+    def attach(record):
+        if record["status"] != "resolved":
+            return
+        intrinsic = record["mode"] == "intrinsic"
+        certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_monodromy)
+        if certified is not None:
+            record["atlas"], output = certified
+            record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
+        else:
+            from . import atlas
+            from .local_blowups import GiveUp
+            from .native_library import _MODE
+            charts = atlas.from_record(record, p, native=_MODE not in ("check", "sympy"))
+            if charts is None:
+                raise RuntimeError("The resolution engine did not supply its chart ownership data.")
+            try:
+                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_monodromy)
+            except GiveUp:
+                if not intrinsic or not wants_monodromy:
+                    raise
+                # A smooth strict transform can need a further embedded resolution.
+                output = atlas.outputs(charts, len(variables), intrinsic=True, integrals=False)
+            record["atlas"] = atlas.to_json(charts)
+            record["dual_complex"] = atlas.record_complex(record, charts, output["dual_complex"])
+        record.setdefault("certificate", {})["atlas_verification"] = (
+            "Strict transform on the owned origin fibre" if intrinsic and "strata" not in output
+            else "Embedded normal crossings on the owned origin fibre")
+        if "strata" in output:
+            return resolution_strata(record, p, computed=output)
+
+    proofs.append(('primary', result.get('certificate', {})))
+    found = attach(result)
     if wants_monodromy:
         from .monodromy import monodromy_zeta
         from .topological import topological_zeta
-        zeta = monodromy_zeta(result, polynomial=p)
-        topological = topological_zeta(result, polynomial=p, monodromy=zeta)
-        if mode == 'intrinsic' and result['status'] == 'resolved' and 'unavailable' in (zeta['status'], topological['status']):
-            # An intrinsic resolution can stop while the embedded divisor is
-            # still tangent to the boundary. Both formulas need an embedded one.
-            embedded = _resolve_polynomial(p, dict(request, mode='embedded'), start)
-            if zeta['status'] == 'unavailable':
-                zeta = monodromy_zeta(embedded, polynomial=p)
-                zeta['source'] = 'companion embedded resolution'
-            if topological['status'] == 'unavailable':
-                topological = topological_zeta(embedded, polynomial=p, monodromy=zeta)
-                topological['source'] = 'companion embedded resolution'
-        result['monodromy_zeta'] = zeta
-        result['topological_zeta'] = topological
-        result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
+        record = result
+        companion = found is None and mode == "intrinsic" and result["status"] == "resolved"
+        if companion:
+            record = _resolve_polynomial(p, dict(request, mode="embedded"), start)
+            proofs.append(('companion', record.get('certificate', {})))
+            found = attach(record)
+            if found is not None:
+                result["embedded_companion"] = {"atlas": record["atlas"]}
+        zeta = monodromy_zeta(record, polynomial=p, strata=found)
+        topological = topological_zeta(record, polynomial=p, monodromy=zeta, strata=found)
+        if companion:
+            zeta["source"] = topological["source"] = "companion embedded resolution"
+        result["monodromy_zeta"] = zeta
+        result["topological_zeta"] = topological
+    result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
 
 
@@ -117,7 +194,6 @@ def _resolve_polynomial(p, request, start):
             r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
                      mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
                      origin=[0]*len(variables), elapsed_ms=round((perf_counter()-start)*1000,3))
-            r['execution'] = {'requested':compute or 'environment','rank_backend':None,'chart_backend':None,'device':'CPU'}
             return r
     try:
         if len(variables)==2 and singular:
@@ -135,7 +211,7 @@ def _resolve_polynomial(p, request, start):
         elif native_range:
             if not (BUILD / ('libresolution.dylib' if sys.platform=='darwin' else 'libresolution.so')).is_file():
                 raise RuntimeError('Native engine is not built. Run make in the project directory.')
-            terms = [(k,str(c)) for k,c in p.items()]
+            terms = [(k, rational_text(c)) for k,c in p.items()]
             from .chain_backend import resolve_chain
             r = resolve_chain(p,variables,mode) if singular and len(variables)==3 else None
             if r is None:
@@ -149,7 +225,8 @@ def _resolve_polynomial(p, request, start):
         if r is None and native_range:
             from .newton_backend import resolve_newton
             # A quick request is given 55 seconds in all by the worker.
-            r = resolve_newton(p,variables,mode,compute=compute,seconds=1200 if exhaustive else 20)
+            r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
+                               defer_outputs=True)
         few = len(variables) == 3
         if r is None and native_range and singular and (few or exhaustive and len(variables) > 3):
             # No hypothesis on the Newton polyhedron: blowups with the centres
@@ -169,12 +246,4 @@ def _resolve_polynomial(p, request, start):
     r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
              mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
              origin=[0]*len(variables), elapsed_ms=round((perf_counter()-start)*1000,3))
-    proof = r.get('certificate',{})
-    rank = proof.get('rank_backend')
-    chart_backend = proof.get('chart_batch',{}).get('backend')
-    backend = chart_backend or rank or 'cpu'
-    r['execution'] = {'requested':compute or 'environment','rank_backend':rank,'chart_backend':chart_backend,
-        'device':'OpenCL GPU and CPU' if backend=='opencl' else 'CPU'}
-    if compute=='gpu' and backend!='opencl':
-        r['execution']['note']='No GPU computation was used: this path has no suitable GPU work or the requested device was unavailable. The result uses the CPU.'
     return r

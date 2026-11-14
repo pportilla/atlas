@@ -1,7 +1,25 @@
 import unittest
+from fractions import Fraction
 from engine.newton_faces import certify_face
 
 class NewtonFaceTests(unittest.TestCase):
+    def test_primitive_input_budget_and_signed_laurent_translation(self):
+        face = {(-9,4):Fraction(-1,5), (-8,3):Fraction(-2,5), (-7,2):Fraction(-1,5)}
+        cert = certify_face(face)
+        self.assertEqual(cert["edge"]["direction"], [1,-1])
+        self.assertEqual(cert["status"], "degenerate")
+        scaled = {e:c*(2**8300) for e,c in face.items()}
+        self.assertEqual(certify_face(scaled)["gcd_degree"], 1)
+        bad = {**face,(-8,3):Fraction(1,2**8192)}
+        self.assertIn("denominators", certify_face(bad)["reason"])
+        bad = {**face,(-8,3):2**8192}
+        self.assertIn("coefficient or exponent", certify_face(bad)["reason"])
+    def test_pivots_with_constant_and_dependent_coordinates(self):
+        offset = 2**99
+        face = {(offset,1,3,4):1, (offset,1,3,6):1, (offset,3,7,4):1}
+        self.assertEqual(certify_face(face)["projection_axes"], [1,3])
+        self.assertEqual(certify_face({(offset,1,3,4):1})["projection_axes"], [])
+
     def test_projected_nonsimplex_faces(self):
         # After extracting a monomial, the first is (1+x)(1+y);
         # changing the last coefficient removes its torus singularity.

@@ -1,10 +1,12 @@
 """Strata of a certified embedded projective ideal blowup, for A'Campo's
 formula and for the topological zeta function."""
+import ast
 from collections import Counter
+from functools import lru_cache
 from itertools import combinations
 import re
 
-import sympy as sp
+from .reference import sp
 
 from .blowup_ideal import ideal_subset
 from .general_resolution import expression
@@ -12,36 +14,89 @@ from .nonreduced import _valuation
 from .polynomial import InputError, parse_expression
 
 
-def _field(record):
-    field = record.get("coefficient_field", {})
-    name = field.get("generator")
-    if not name:
-        return sp.QQ, {}
-    # The Euler calculation uses only field operations and geometric root
-    # counts. Any one consistent embedding of this coefficient field suffices.
-    x = sp.Symbol("x")
+def _algebraic_literal(source):
+    """Read an exact scalar expression printed in a historical weighted chart."""
+    functions = {"sqrt": sp.sqrt, "CRootOf": sp.CRootOf, "cos": sp.cos, "sin": sp.sin,
+                 "tan": sp.tan, "cot": sp.cot, "sec": sp.sec, "csc": sp.csc, "exp": sp.exp, "Rational": sp.Rational}
+    constants = {"I": sp.I, "pi": sp.pi}
+    def read(node, polynomial=False):
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            return sp.Integer(node.value)
+        if isinstance(node, ast.Name):
+            if node.id in constants:
+                return constants[node.id]
+            if polynomial and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", node.id):
+                return sp.Symbol(node.id)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = read(node.operand, polynomial)
+            return value if isinstance(node.op, ast.UAdd) else -value
+        if isinstance(node, ast.BinOp):
+            from operator import add, mul, pow, sub, truediv
+            operation = {ast.Add: add, ast.Sub: sub, ast.Mult: mul, ast.Div: truediv, ast.Pow: pow}.get(type(node.op))
+            if operation:
+                return operation(read(node.left, polynomial), read(node.right, polynomial))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
+            name = node.func.id
+            if name in functions:
+                return functions[name](*(read(child, name == "CRootOf" and i == 0)
+                                         for i, child in enumerate(node.args)))
+        raise InputError("Unrecognized algebraic number in the archived graph.")
+    try:
+        return read(ast.parse(source.replace("^", "**"), mode="eval").body)
+    except (SyntaxError, TypeError, IndexError) as error:
+        raise InputError("Invalid algebraic number in the archived graph.") from error
+
+
+@lru_cache(maxsize=128)
+def _archived_field(exact):
+    """Recover the defining polynomial and marked root from a historical graph literal."""
+    from .field_coefficient import indexed_field, marked_root_display
+    from .marked_field import description
+    from .native_library import CHECK, _MODE
+
+    def reference():
+        root = _algebraic_literal(exact)
+        return sp.QQ.algebraic_field(root), root
+    if _MODE == "sympy":
+        return reference()
+    coefficients, flint_index = description(exact)
+    order = marked_root_display(tuple(reversed(coefficients)))[2]
+    result = indexed_field(coefficients, sp.Symbol("x"), order[flint_index-1])
+    if CHECK:
+        field, original = reference()
+        comparison = field.ext.minpoly
+        if (tuple(comparison.all_coeffs()) != coefficients or
+                (original != result[1] if len(coefficients) == 2 else not comparison.same_root(original, result[1]))):
+            raise AssertionError("The native marked field differs from its historical expression.")
+    return result
+
+
+def _field_coefficients(field):
     coefficients = field.get("minimal_polynomial_coefficients")
     if coefficients:
         if not isinstance(coefficients, list) or not all(
                 re.fullmatch(r"-?\d+(?:/[1-9]\d*)?", str(c)) for c in coefficients):
             raise InputError("Expected rational coefficients for the graph's number field.")
-        polynomial = sp.Poly.from_list([sp.Rational(c) for c in coefficients], x)
+        return tuple(map(sp.Rational, coefficients))
+    exact = field.get("exact_root", "")
+    if not isinstance(exact, str):
+        raise InputError("Expected an exact root for the archived graph.")
+    return tuple(_archived_field(exact)[0].ext.minpoly.all_coeffs())
+
+
+def _field(record):
+    field = record.get("coefficient_field", {})
+    name = field.get("generator")
+    if not name:
+        return sp.QQ, {}
+    if field.get("minimal_polynomial_coefficients"):
+        # The Euler reference needs any one embedding of the certified field.
+        x = sp.Symbol("x")
+        polynomial = sp.Poly.from_list(_field_coefficients(field), x)
         root = sp.CRootOf(polynomial.as_expr(), 0)
-    else:
-        # The older graph exporter stored the exact SymPy root as text.
-        exact = field.get("exact_root", "")
-        indexed = re.fullmatch(r"CRootOf\((.+),\s*(\d+)\)", exact)
-        radical = re.fullmatch(r"(-?)sqrt\(([-\d/]+)\)", exact)
-        if indexed:
-            p = parse_expression(indexed[1], ["x"])
-            root = sp.CRootOf(expression(p, (x,)), int(indexed[2]))
-        elif radical:
-            root = (-1 if radical[1] else 1) * sp.sqrt(sp.Rational(radical[2]))
-        elif exact in ("I", "-I"):
-            root = sp.I if exact == "I" else -sp.I
-        else:
-            raise InputError("The archived graph needs its coefficient field's minimal polynomial.")
-    return sp.QQ.algebraic_field(root), {name: root}
+        return sp.QQ.algebraic_field(root), {name: root}
+    domain, root = _archived_field(field.get("exact_root", ""))
+    return domain, {name: root}
 
 
 def graph_contributions(record, polynomial):
@@ -118,10 +173,21 @@ def _jacobian_order(coords, base, ambient, prime, domain):
     extra = [v for v in coords if v not in base]
     if not extra:
         return 0
-    rows = [[sp.diff(h, t) for t in extra] for h in ambient]
+    from .affine_kernel import frame_minor
+    from .groebner import _MODE
+    rows = [[sp.diff(h, t) for t in extra] for h in ambient] if _MODE != "native" else None
     best = None
-    for chosen in combinations(range(len(rows)), len(extra)):
-        minor = sp.expand(sp.Matrix([rows[i] for i in chosen]).det())
+    for chosen in combinations(range(len(ambient)), len(extra)):
+        if rows is not None:
+            minor = sp.expand(sp.Matrix([rows[i] for i in chosen]).det())
+        elif domain.is_AlgebraicField:
+            from .chart_expressions import chart_expressions
+            from .field_polynomial import lift, lower
+            theta = chart_expressions(coords).Dummy("relative_jacobian")
+            lifted = tuple(lift(ambient[i], coords, domain, theta) for i in chosen)
+            minor = lower(frame_minor((*coords,theta), lifted, extra), coords, domain, theta)
+        else:
+            minor = frame_minor(coords, tuple(ambient[i] for i in chosen), extra)
         if minor == 0 or ideal_subset(coords, (minor,), ambient, domain=domain):
             continue
         order = _valuation(coords, ambient, prime, minor, domain)

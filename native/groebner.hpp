@@ -44,6 +44,7 @@ struct Ring {
     bool lex = false;
     bool eliminate = false;  // compare the first variable before grevlex
     bool graded = false;     // compare the total degree before anything else
+    bool coefficient_last = false;  // compare x-monomials, then the coefficient generator theta
 
     // order: 0 grevlex, 1 lex, 2 the first variable and then grevlex. With
     // `by_degree` the total degree is compared first; on homogeneous
@@ -52,8 +53,10 @@ struct Ring {
     void init(int variables, int order, bool by_degree = false) {
         if (variables < 1 || variables > MAX_VARIABLES) throw Limit("Unsupported number of variables.");
         n = variables;
-        lex = order == 1;
-        eliminate = order == 2;
+        coefficient_last = order >= 3;
+        const int base_order = coefficient_last ? order-3 : order;
+        lex = base_order == 1;
+        eliminate = base_order == 2;
         graded = by_degree;
         words = (n + 3) / 4;
         stride = words + 1;
@@ -86,6 +89,18 @@ struct Ring {
             if (ea != eb) return ea > eb ? 1 : -1;
         }
         if (!lex) {
+            if (coefficient_last) {
+                // theta is the last variable, hence the first grevlex packed
+                // field. Compare only x-degree and x-exponents before theta.
+                const u64 ta = field(a, 0), tb = field(b, 0);
+                const u64 da = a[0]-ta, db = b[0]-tb;
+                if (da != db) return da > db ? 1 : -1;
+                const u64 low = 0x0000ffffffffffffULL;
+                if ((a[1] & low) != (b[1] & low)) return (a[1] & low) < (b[1] & low) ? 1 : -1;
+                for (int i = 2; i < stride; ++i)
+                    if (a[i] != b[i]) return a[i] < b[i] ? 1 : -1;
+                return ta == tb ? 0 : ta > tb ? 1 : -1;
+            }
             if (a[0] != b[0]) return a[0] > b[0] ? 1 : -1;
             for (int i = 1; i < stride; ++i)
                 if (a[i] != b[i]) return a[i] < b[i] ? 1 : -1;
@@ -210,6 +225,7 @@ public:
     // `keep` are left alone. With num and den the exact remainder is f*num/den.
     // With a bound, a reducer is used only when it keeps the sugar within it.
     void reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar = nullptr, long bound = LONG_MAX);
+    std::string division(Poly& f, Rational& scale);
     // Buchberger's algorithm for homogeneous generators when the Hilbert
     // series of the ideal they generate is known (its numerator, for the
     // denominator (1-t)^n): in a degree where the leading monomials found
@@ -331,17 +347,24 @@ void hilbert_value(fmpz* out, const std::vector<Z>& numerator, int m, long d);
 // False when the route does not apply or exceeds the limits.
 bool hilbert_basis(const Ring& R, const std::vector<Poly>& input, Engine& result, size_t bit_limit, double work_limit);
 
+// Emptiness or the contracted ideal of the part of V(equations) where the units are nonzero.
+std::string frame_locus(const Ring& R, const std::vector<Poly>& equations,
+                        const std::vector<Poly>& units, bool closure);
+
 // Euler characteristics with compact supports of constructible sets of an
 // affine space over the complex numbers (euler.cpp). One object keeps what it
 // has computed, for the sets of one chart.
 class Euler {
 public:
     explicit Euler(const Ring& R);
+    static Z from_text(const std::string& input);
     ~Euler();
     Euler(const Euler&) = delete;
     Euler& operator=(const Euler&) = delete;
     // Of V(equations) minus the union of the V(I) for the ideals I given.
-    long characteristic(const std::vector<Poly>& equations, const std::vector<std::vector<Poly>>& excluded);
+    std::pair<long, long> plane_components(const Poly& equation, int x, int y,
+        const std::vector<Poly>& region, const std::vector<std::vector<Poly>>& removed);
+    Z characteristic(const std::vector<Poly>& equations, const std::vector<std::vector<Poly>>& excluded);
 
 private:
     struct State;

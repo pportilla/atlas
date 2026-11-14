@@ -1,0 +1,1650 @@
+{
+  "measured_at": "2026-11-14T05:22:06+00:00",
+  "input": "Katsura-7, eight generators in eight variables over Q, grevlex, known basis prefix 0",
+  "backend": "opencl",
+  "device_index": 0,
+  "hardware": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+    "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "devices": [
+      {
+        "index": 0,
+        "name": "AMD Radeon 680M (radeonsi, rembrandt, ACO, DRM 3.64, 7.0.0-43-generic)",
+        "vendor": "AMD",
+        "version": "OpenCL 3.0 ",
+        "driver": "26.0.8-1ubuntu0.3",
+        "backend": "opencl"
+      }
+    ]
+  },
+  "builds": {
+    "baseline": {
+      "source_tree_sha256": "a6a9b1fca2c9798845b421e7e0a4fd3e5d17b21e23a3d7b61670a3c2266e51c5",
+      "libraries_sha256": {
+        "libgroebner.so": "7259926cb6cb386f2d4248063527a923a50ce55e5b0c33fb04af50a8b7f6dafd",
+        "libgroebner_opencl.so": "b937949d895decf394bdfb086868fabbdf13281c0787c9ab16fd0f2318a26b8e",
+        "libresolution_opencl.so": "2bffd4860ee759d3db939d8c4eeac4e99e8f3e541cc4babbbfa8eff58fcd7d36"
+      }
+    },
+    "candidate": {
+      "source_tree_sha256": "502b42409044231dc0e61c40dbe8fc08a75ca8ca7332bbf2316a688e10e7483b",
+      "libraries_sha256": {
+        "libgroebner.so": "85faefd4f144994307d053096e33ef2733db0dc89a8eac1f1d3a8d2e69d84c87",
+        "libgroebner_opencl.so": "fa68f1a243edd99c92421bdddc1f18ba07974000a5099de4c56792aba610f9f7",
+        "libresolution_opencl.so": "2bffd4860ee759d3db939d8c4eeac4e99e8f3e541cc4babbbfa8eff58fcd7d36"
+      }
+    }
+  },
+  "repetitions": 7,
+  "require_gpu_trace": true,
+  "driver_sha256": "f348ee47d415f01ca5a899a686c6cde54aae71172d1330ca76174c132d3cb114",
+  "generator_sha256": "713e30cda1b34c4a59baf1fbb91abe3a06952872efee234d64161b7f52b2e68f",
+  "timing": {
+    "warm": "One untimed full solve per persistent worker; wall time inside the worker from compute selection and input construction through native route selection, certification, complete reduced basis text, freeing its handle and collecting the execution report.",
+    "fresh": "Fresh interpreter from parent process launch to receipt of the full basis via stdout and process exit. Filesystem and device compiler caches may be warm.",
+    "phase_ms": "Separate diagnostic runs call atlas_groebner_modular directly; the native phase times do not include work performed before the default route switches to modular.",
+    "order": "Each round rotates the starting case; each complete rotation reverses direction. Solves run one at a time. OS activity is uncontrolled."
+  },
+  "samples": {
+    "baseline_cpu": [
+      {
+        "round": 1,
+        "warm_ms": 309.798243,
+        "fresh_ms": 353.097504,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 153.468733,
+          "replay": 2.906124,
+          "lift": 17.50728,
+          "verify": 96.578745
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 2,
+        "warm_ms": 286.482073,
+        "fresh_ms": 344.233239,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 152.018882,
+          "replay": 2.760077,
+          "lift": 17.251648000000003,
+          "verify": 96.175632
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 3,
+        "warm_ms": 291.725594,
+        "fresh_ms": 342.298532,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 151.566768,
+          "replay": 2.873212,
+          "lift": 17.483596000000002,
+          "verify": 96.14998399999999
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 4,
+        "warm_ms": 283.436787,
+        "fresh_ms": 345.351914,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 149.859933,
+          "replay": 2.9099,
+          "lift": 17.546635,
+          "verify": 96.854566
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 5,
+        "warm_ms": 286.301613,
+        "fresh_ms": 346.795743,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 154.937109,
+          "replay": 2.9036679999999997,
+          "lift": 18.246167,
+          "verify": 96.970335
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 6,
+        "warm_ms": 284.385751,
+        "fresh_ms": 345.904879,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 154.425852,
+          "replay": 2.424512,
+          "lift": 18.854738,
+          "verify": 99.547135
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 7,
+        "warm_ms": 279.998529,
+        "fresh_ms": 344.9526,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 153.90368600000002,
+          "replay": 2.905091,
+          "lift": 17.970916,
+          "verify": 95.886677
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      }
+    ],
+    "baseline_gpu": [
+      {
+        "round": 1,
+        "warm_ms": 582.484972,
+        "fresh_ms": 725.973411,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 152.05884799999998,
+          "replay": 300.884796,
+          "lift": 19.774827000000002,
+          "verify": 93.35502199999999
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 2,
+        "warm_ms": 588.307768,
+        "fresh_ms": 729.404005,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 153.342795,
+          "replay": 301.003018,
+          "lift": 19.239564,
+          "verify": 97.039235
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 3,
+        "warm_ms": 585.451339,
+        "fresh_ms": 728.677522,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 149.509309,
+          "replay": 300.12264600000003,
+          "lift": 21.740130999999998,
+          "verify": 105.24943300000001
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 4,
+        "warm_ms": 585.442963,
+        "fresh_ms": 724.175813,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 149.826358,
+          "replay": 298.80719,
+          "lift": 19.855509,
+          "verify": 94.765898
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 5,
+        "warm_ms": 582.857747,
+        "fresh_ms": 736.868624,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 152.36349399999997,
+          "replay": 303.68440799999996,
+          "lift": 18.964807,
+          "verify": 94.585026
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 6,
+        "warm_ms": 584.824624,
+        "fresh_ms": 734.941021,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 151.33844699999997,
+          "replay": 303.179282,
+          "lift": 19.549030000000002,
+          "verify": 94.749788
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      },
+      {
+        "round": 7,
+        "warm_ms": 585.08682,
+        "fresh_ms": 726.028535,
+        "warm_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "fresh_execution": {
+          "backend": "opencl",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "opencl": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          }
+        },
+        "phase_ms": {
+          "trace": 151.77294799999999,
+          "replay": 302.320901,
+          "lift": 19.314798,
+          "verify": 93.111892
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 1
+        }
+      }
+    ],
+    "candidate_cpu": [
+      {
+        "round": 1,
+        "warm_ms": 80.665637,
+        "fresh_ms": 152.589622,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 22.531477000000002,
+          "replay": 2.613621,
+          "lift": 17.208917,
+          "verify": 23.482234000000002
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 2,
+        "warm_ms": 81.571109,
+        "fresh_ms": 151.91706,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 26.241919999999997,
+          "replay": 2.398624,
+          "lift": 16.874795000000002,
+          "verify": 23.240607
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 3,
+        "warm_ms": 81.229644,
+        "fresh_ms": 152.764152,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 22.4647,
+          "replay": 2.522067,
+          "lift": 17.124297,
+          "verify": 23.977791
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 4,
+        "warm_ms": 85.797226,
+        "fresh_ms": 151.743582,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 22.110611,
+          "replay": 2.425665,
+          "lift": 17.012264,
+          "verify": 23.574207
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 5,
+        "warm_ms": 85.080201,
+        "fresh_ms": 153.784289,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 21.970556,
+          "replay": 2.770476,
+          "lift": 17.498913,
+          "verify": 24.136401
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 6,
+        "warm_ms": 82.492941,
+        "fresh_ms": 154.768219,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 22.486201,
+          "replay": 2.48128,
+          "lift": 17.424656,
+          "verify": 25.357629
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 7,
+        "warm_ms": 82.553445,
+        "fresh_ms": 152.726971,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "trace": {
+            "backends": {
+              "cpu": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 22.664938999999997,
+          "replay": 2.7321239999999998,
+          "lift": 18.532767999999997,
+          "verify": 25.909913
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      }
+    ],
+    "candidate_gpu": [
+      {
+        "round": 1,
+        "warm_ms": 100.176986,
+        "fresh_ms": 259.558575,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 38.305021,
+          "replay": 2.8391070000000003,
+          "lift": 16.910933,
+          "verify": 23.029819
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 2,
+        "warm_ms": 99.740611,
+        "fresh_ms": 263.871557,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 39.878555000000006,
+          "replay": 2.318713,
+          "lift": 18.04153,
+          "verify": 23.583406
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 3,
+        "warm_ms": 102.629191,
+        "fresh_ms": 260.684653,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 38.334526000000004,
+          "replay": 2.815081,
+          "lift": 18.734101,
+          "verify": 23.688614
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 4,
+        "warm_ms": 102.475711,
+        "fresh_ms": 267.309355,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 38.184293000000004,
+          "replay": 2.8194090000000003,
+          "lift": 16.993168999999998,
+          "verify": 24.005592999999998
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 5,
+        "warm_ms": 96.59787,
+        "fresh_ms": 258.214074,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 36.037454,
+          "replay": 2.762813,
+          "lift": 17.200541,
+          "verify": 23.914571
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 6,
+        "warm_ms": 98.936872,
+        "fresh_ms": 257.68323,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 37.951422,
+          "replay": 2.8696340000000005,
+          "lift": 19.777893,
+          "verify": 24.079303
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      },
+      {
+        "round": 7,
+        "warm_ms": 100.271374,
+        "fresh_ms": 266.198335,
+        "warm_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "fresh_execution": {
+          "backend": "cpu",
+          "batches": 3,
+          "primes": 14,
+          "backends": {
+            "cpu": {
+              "batches": 3,
+              "primes": 14
+            }
+          },
+          "device": {
+            "backend": "opencl",
+            "index": 0
+          },
+          "trace": {
+            "backends": {
+              "opencl": {
+                "batches": 6,
+                "pairs": 367
+              }
+            }
+          }
+        },
+        "phase_ms": {
+          "trace": 37.123006,
+          "replay": 2.7709170000000003,
+          "lift": 17.265103,
+          "verify": 23.986337
+        },
+        "counts": {
+          "primes": 15,
+          "rejected": 0,
+          "traces": 1,
+          "verifications": 1,
+          "trace_words": 412137,
+          "basis_size": 74,
+          "replay_callback_used": 0
+        }
+      }
+    ]
+  },
+  "summary": {
+    "baseline_cpu": {
+      "warm_ms": 286.301613,
+      "fresh_ms": 345.351914,
+      "phase_ms": {
+        "trace": 153.468733,
+        "replay": 2.9036679999999997,
+        "lift": 17.546635,
+        "verify": 96.578745
+      }
+    },
+    "baseline_gpu": {
+      "warm_ms": 585.08682,
+      "fresh_ms": 728.677522,
+      "phase_ms": {
+        "trace": 151.77294799999999,
+        "replay": 301.003018,
+        "lift": 19.549030000000002,
+        "verify": 94.749788
+      }
+    },
+    "candidate_cpu": {
+      "warm_ms": 82.492941,
+      "fresh_ms": 152.726971,
+      "phase_ms": {
+        "trace": 22.486201,
+        "replay": 2.522067,
+        "lift": 17.208917,
+        "verify": 23.977791
+      }
+    },
+    "candidate_gpu": {
+      "warm_ms": 100.176986,
+      "fresh_ms": 260.684653,
+      "phase_ms": {
+        "trace": 38.184293000000004,
+        "replay": 2.815081,
+        "lift": 17.265103,
+        "verify": 23.914571
+      }
+    }
+  },
+  "basis": {
+    "sha256": "6ee3a05b370398de771a2a95a81b776870cf2464e7799dad97e5192e591d9dc9",
+    "bytes": 352915,
+    "polynomials": 74
+  },
+  "speedup": {
+    "warm_ms": {
+      "baseline_gpu_over_candidate_gpu": 5.840531277313533,
+      "baseline_cpu_over_candidate_gpu": 2.8579579445522545,
+      "candidate_cpu_over_candidate_gpu": 0.8234719798816866,
+      "baseline_cpu_over_candidate_cpu": 3.470619540646514
+    },
+    "fresh_ms": {
+      "baseline_gpu_over_candidate_gpu": 2.7952451884461333,
+      "baseline_cpu_over_candidate_gpu": 1.3247880534033585,
+      "candidate_cpu_over_candidate_gpu": 0.5858686702204904,
+      "baseline_cpu_over_candidate_cpu": 2.261237237527614
+    }
+  }
+}

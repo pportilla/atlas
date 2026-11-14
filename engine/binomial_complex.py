@@ -6,16 +6,16 @@ with the exceptional coordinate hyperplanes, then glued across the toric
 chart cover. All claims are over the algebraic closure of Q.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from fractions import Fraction
 from itertools import combinations
-from math import gcd
 
 from .polynomial import LimitError
+from .binomial_kernel import _encode, pairings, primitive_character
 
 
 def _monomial(coordinates, powers):
-    return "*".join(name if power == 1 else f"{name}^{power}"
+    return "*".join(name if power == 1 else f"{name}^{_encode(power)}"
                     for name, power in zip(coordinates,powers) if power) or "1"
 
 
@@ -33,20 +33,20 @@ def _root_equation(coordinates, values, root):
     return f"{left}-{root}" if right=="1" else f"{left}-{root}*{right}"
 
 
-def binomial_branch_equations(rays, cone, delta, coefficient):
+def binomial_branch_equations(rays, cone, delta, coefficient, *, values=None):
     """Geometric strict branch equations for a nonprimitive terminal chart.
 
     The coefficient occurs in the defining equation of the common root family.
     Using the same oriented primitive character in every chart fixes the branch
     labels across overlaps, including when the unit monomial switches sides.
     """
-    d = gcd(*delta)
+    d, direction = primitive_character(delta)
     if not Fraction(coefficient) or d == 0:
         raise ValueError("Expected a nonzero binomial coefficient and exponent difference.")
     if d == 1:
         return []
-    direction = tuple(e//d for e in delta)
-    values = tuple(sum(a*b for a,b in zip(rays[i],direction)) for i in cone)
+    if values is None:
+        values = tuple(q for q, in pairings([rays[i] for i in cone],(direction,)))
     if min(values)<0<max(values):
         raise ValueError("A split terminal binomial chart must have a unit monomial.")
     coordinates = [f"u{i+1}" for i in range(len(delta))]
@@ -59,20 +59,19 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
     """Return the dual complex and the list of exceptional ideals per affine chart."""
     if len(delta)<2 or any(not isinstance(q,int) for q in delta):
         raise ValueError("The exponent difference must be an integer vector.")
-    degree = gcd(*delta)
+    degree, direction = primitive_character(delta)
     if degree<=1:
         return _primitive_complex(rays,cones,delta,coefficient,mode,
                                   exceptional_rays=exceptional_rays,orders=orders)
     coefficient = Fraction(coefficient)
     if not coefficient:
         raise ValueError("A torus binomial must have two nonzero coefficients.")
-    direction = tuple(e//degree for e in delta)
     exceptional = frozenset(range(len(delta),len(rays)) if exceptional_rays is None else exceptional_rays)
     cones = tuple(tuple(c) for c in cones)
     pairs = sum(2**len(exceptional.intersection(c))-1 for c in cones)
     if pairs*(degree if mode=="intrinsic" else 1)>1_000_000:
         raise LimitError("The split binomial exceeds the geometric intersection-stratum budget.")
-    signs = [sum(a*b for a,b in zip(ray,direction)) for ray in rays]
+    signs = tuple(q for q, in pairings(rays,(direction,)))
     for cone in cones:
         values = [signs[i] for i in cone]
         if min(values)<0<max(values):
@@ -104,7 +103,7 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
     for ci,divisors in enumerate(chart_divisors):
         if not divisors:
             continue
-        branches=binomial_branch_equations(rays,cones[ci],delta,coefficient)
+        branches=binomial_branch_equations(rays,cones[ci],delta,coefficient,values=tuple(signs[r] for r in cones[ci]))
         expanded=[]
         for component in divisors:
             for branch in branches:
@@ -137,7 +136,7 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
     n = len(delta)
     if mode not in ("embedded","intrinsic"):
         raise ValueError("Resolution mode must be embedded or intrinsic.")
-    if n < 2 or any(not isinstance(q,int) for q in delta) or gcd(*delta) != 1:
+    if n < 2 or any(not isinstance(q,int) for q in delta) or primitive_character(delta)[0] != 1:
         raise ValueError("The exponent difference must be a primitive integer vector.")
     coefficient = Fraction(coefficient)
     if not coefficient:
@@ -157,6 +156,60 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
         raise LimitError("The binomial fan exceeds the intersection-stratum budget.")
 
     coords = [f"u{i+1}" for i in range(n)]
+    from . import binomial_kernel
+    from .native_library import CHECK
+    rows = binomial_kernel.run(f"incidence {n} {len(rays)} {len(cones)} {len(exceptional)} {int(mode=='intrinsic')}",
+                               delta, sorted(exceptional), *rays, *cones)
+    if rows is None:
+        data = _incidence_reference(n,rays,cones,delta,mode,exceptional)
+    else:
+        data = binomial_kernel.incidence(rows)
+        if CHECK and data != _incidence_reference(n,rays,cones,delta,mode,exceptional):
+            raise AssertionError("The binomial orbit incidences differ from their reference.")
+    pairings, pieces, charts = data
+    counts = Counter(subset[0] for subset, *_ in pieces if len(subset)==1)
+    local_numbers = Counter()
+    names, vertices, cells = [], [], []
+    ray_number = {r:i+1 for i,r in enumerate(sorted(exceptional))}
+    for subset, zeros, ends, faces in pieces:
+        if len(subset)==1:
+            ray, = subset
+            local_numbers[ray] += 1
+            ident = f"E{ray_number[ray]}" + (f".{local_numbers[ray]}" if counts[ray]>1 else "")
+            vertex = {"id":ident, "ray_index":ray, "ray":list(rays[ray]),
+                      "dimension":n-1-int(mode=="intrinsic"), "generic_zero_rays":list(zeros)}
+            if orders is not None:
+                vertex["ambient_order"] = orders[ray]
+            vertices.append(vertex)
+        else:
+            ident = f"C{len(cells)+1}"
+            cells.append({"id":ident, "dimension":len(subset)-1, "vertices":[names[i] for i in ends],
+                          "faces":[names[i] for i in faces], "generic_zero_rays":list(zeros)})
+        names.append(ident)
+    chart_divisors = []
+    for cone, visible in zip(cones,charts):
+        divisors = []
+        equation = _equation(coords,tuple(pairings[r] for r in cone),coefficient)
+        for axis,ray in enumerate(cone):
+            if ray not in visible:
+                continue
+            number = visible[ray]
+            zeros = pieces[number][1]
+            extra = [r for r in zeros if r!=ray]
+            ideal = [coords[axis], *(coords[cone.index(r)] for r in extra)]
+            ambient = [*ideal, equation] if mode=="intrinsic" and not extra else ideal.copy()
+            divisors.append({"id":names[number], "ray_index":ray, "equation":", ".join(ideal),
+                             "ideal":ideal, "ambient_ideal":ambient})
+        chart_divisors.append(divisors)
+    convention = ("Reduced ambient exceptional divisor" if mode=="embedded" else
+                  "Reduced exceptional divisor on the smooth strict transform")
+    dual = {"status":"complete","convention":convention+
+            " in the algebraic germ over Qbar; cells are geometric strata whose closures meet the origin fiber.",
+            "vertices":vertices,"cells":cells}
+    return dual,chart_divisors
+
+
+def _incidence_reference(n,rays,cones,delta,mode,exceptional):
     pairings = tuple(sum(a*b for a,b in zip(r,delta)) for r in rays)
     ray_support = [sum(1<<i for i,v in enumerate(r) if v) for r in rays]
     full_support = (1<<n)-1
@@ -166,7 +219,6 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
     # a point to the base origin iff its zero rays cover every base coordinate.
     strata = defaultdict(dict)  # subset -> generic zero-ray set -> hits origin
     chart_pieces = []
-    chart_equations = []
     witnesses = {}
     for ci, cone in enumerate(cones):
         positives = tuple(i for i in cone if pairings[i]>0)
@@ -177,8 +229,6 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
         for ray in allowed_zero:
             support |= ray_support[ray]
         meets_origin = support == full_support
-        values = tuple(pairings[i] for i in cone)
-        chart_equations.append(_equation(coords,values,coefficient))
         indices = sorted(exceptional.intersection(cone))
         pieces = {}
         for size in range(1,len(indices)+1):
@@ -202,54 +252,13 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
         chart_pieces.append(pieces)
 
     ids = {}
-    vertices, cells = [], []
-    ray_number = {r:i+1 for i,r in enumerate(sorted(exceptional))}
-    for subset in sorted(strata,key=lambda t:(len(t),t)):
-        zero_sets = sorted(z for z,hits in strata[subset].items() if hits)
-        for local_no, zeros in enumerate(zero_sets,1):
-            if len(subset)==1:
-                ray, = subset
-                ident = f"E{ray_number[ray]}" + (f".{local_no}" if len(zero_sets)>1 else "")
-                vertex = {"id":ident, "ray_index":ray, "ray":list(rays[ray]),
-                          "dimension":n-1-int(mode=="intrinsic"), "generic_zero_rays":list(zeros)}
-                if orders is not None:
-                    vertex["ambient_order"] = orders[ray]
-                vertices.append(vertex)
-            else:
-                ident = f"C{len(cells)+1}"
-                local = chart_pieces[witnesses[(subset,zeros)]]
-
-                def parent(face):
-                    return ids[face,local[face]]
-
-                cells.append({"id":ident, "dimension":len(subset)-1,
-                              "vertices":[parent((i,)) for i in subset],
-                              "faces":[parent(face) for face in combinations(subset,len(subset)-1)],
-                              "generic_zero_rays":list(zeros)})
-            ids[(subset,zeros)] = ident
-
-    chart_divisors = []
-    for ci,(cone,pieces) in enumerate(zip(cones,chart_pieces)):
-        divisors = []
-        for axis, ray in enumerate(cone):
-            subset = (ray,)
-            zeros = pieces.get(subset)
-            if zeros is None or (subset,zeros) not in ids:
-                continue
-            ideal = [coords[axis]]
-            extra = [i for i in zeros if i!=ray]
-            if extra:
-                ideal.append(coords[cone.index(extra[0])])
-            # 'ideal' is in the chart's strict ring for intrinsic mode. An
-            # additional ambient presentation removes any ambiguity for reuse.
-            ambient_ideal = ideal + ([chart_equations[ci]] if mode=="intrinsic" and not extra else [])
-            divisors.append({"id":ids[(subset,zeros)], "ray_index":ray,
-                             "equation":", ".join(ideal), "ideal":ideal,
-                             "ambient_ideal":ambient_ideal})
-        chart_divisors.append(divisors)
-    convention = ("Reduced ambient exceptional divisor" if mode=="embedded" else
-                  "Reduced exceptional divisor on the smooth strict transform")
-    dual = {"status":"complete","convention":convention+
-            " in the algebraic germ over Qbar; cells are geometric strata whose closures meet the origin fiber.",
-            "vertices":vertices,"cells":cells}
-    return dual,chart_divisors
+    pieces = []
+    for subset in sorted(strata, key=lambda t:(len(t),t)):
+        for zeros in sorted(z for z,hits in strata[subset].items() if hits):
+            local = chart_pieces[witnesses[(subset,zeros)]]
+            vertices = [ids[(i,),local[(i,)]] for i in subset] if len(subset)>1 else []
+            faces = [ids[face,local[face]] for face in combinations(subset,len(subset)-1)] if len(subset)>1 else []
+            ids[subset,zeros] = len(pieces)
+            pieces.append((subset,zeros,vertices,faces))
+    charts = [{s[0]:ids[s,z] for s,z in chart.items() if len(s)==1 and (s,z) in ids} for chart in chart_pieces]
+    return pairings, pieces, charts

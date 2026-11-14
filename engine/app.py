@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import signal
 import subprocess
 import sys
@@ -153,7 +154,7 @@ def show(r):
     if r['charts']: print('\nUse --json for full chart domains, certificates, and incidence data.')
 
 
-def main():
+def make_parser():
     parser=argparse.ArgumentParser(prog='atlas',description='Exact local resolutions of hypersurface germs over Q.')
     sub=parser.add_subparsers(dest='command',required=True)
     calc=sub.add_parser('resolve',help='resolve at the origin')
@@ -167,18 +168,27 @@ def main():
     calc.set_defaults(search='exhaustive')
     calc.add_argument('--json',action='store_true',help='print the full machine-readable atlas')
     calc.add_argument('--monodromy',action='store_true',help="compute the local monodromy zeta function of the complex Milnor fiber")
-    calc.add_argument('--compute',choices=['cpu','auto','gpu'],help='select CPU or portable OpenCL for eligible rank tests and chart transforms')
-    sub.add_parser('devices',help='list available OpenCL GPUs')
+    compute=calc.add_mutually_exclusive_group()
+    compute.add_argument('--compute',choices=['cpu','auto','gpu'],help='select the CPU, automatic dispatch, or GPU acceleration')
+    compute.add_argument('--gpu',dest='compute',action='store_const',const='gpu',
+                         help='use available GPU kernels (equivalent to --compute gpu)')
+    sub.add_parser('devices',help='list available Triton and OpenCL GPU backends')
     zeta=sub.add_parser('monodromy',help='compute the local monodromy zeta function from a saved resolution')
     zeta.add_argument('record',help='Atlas resolution JSON file, or - for standard input')
     zeta.add_argument('--json',action='store_true',help="print factors and A'Campo contributions")
     server=sub.add_parser('serve',help='start the local web interface')
     server.add_argument('--port',type=int,default=8765)
-    argv=sys.argv[1:]
-    if len(argv)>1 and argv[0]=='resolve' and argv[1].startswith('-') and argv[1] not in {
-        '--vars','--mode','--compute','--quick','--exhaustive','--json','--monodromy','--help','-h','--'}:
-        # argparse otherwise treats a leading unary minus as an option name.
-        argv=[argv[0],*argv[2:],'--',argv[1]]
+    return parser
+
+
+def run_command(parser, argv):
+    if argv and argv[0]=='resolve' and '--' not in argv:
+        # Protect a leading unary minus even when flags precede the polynomial.
+        options={'--vars','--mode','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
+        for pos, token in enumerate(argv[1:], 1):
+            if token.startswith('-') and token.partition('=')[0] not in options:
+                argv=[*argv[:pos],*argv[pos+1:],'--',token]
+                break
     args=parser.parse_args(argv)
     if args.command=='monodromy':
         from .monodromy import monodromy_zeta
@@ -198,8 +208,8 @@ def main():
         else: show_zeta(zeta)
         return 0 if zeta['status']=='computed' else 3
     if args.command=='devices':
-        from .native_backend import gpu_devices
-        print(json.dumps(gpu_devices(),indent=2))
+        from .gpu_devices import available_devices
+        print(json.dumps(available_devices(),indent=2))
         return 0
     if args.command=='serve':
         if not 0<=args.port<=65535: parser.error('invalid port')
@@ -227,3 +237,56 @@ def main():
     else: show(r)
     return 2 if status!=200 else 0 if (r['status']=='resolved' and
         (not args.monodromy or r.get('monodromy_zeta',{}).get('status')=='computed')) else 3
+
+
+def run_session(parser):
+    try:
+        import readline  # Enable arrow-key editing and in-session history for input().
+    except ImportError:
+        pass
+
+    while True:
+        try:
+            line = input('atlas> ')
+            try:
+                argv = shlex.split(line)
+            except ValueError as error:
+                print(f'Cannot read command: {error}', file=sys.stderr)
+                continue
+            if not argv:
+                continue
+            if argv in (['quit'], ['exit']):
+                return 0
+            if argv == ['help']:
+                parser.print_help()
+                print('\nType help COMMAND for its options or quit to leave Atlas.')
+                continue
+            if argv[0] == 'help':
+                if len(argv) != 2:
+                    print('Usage: help [COMMAND]', file=sys.stderr)
+                    continue
+                argv = [argv[1], '--help']
+            try:
+                run_command(parser, argv)
+            except SystemExit:
+                # argparse has already printed the requested help or usage error.
+                pass
+        except EOFError:
+            print()
+            return 0
+        except KeyboardInterrupt:
+            print()
+
+
+def main():
+    parser = make_parser()
+    argv = sys.argv[1:]
+    if argv:
+        return run_command(parser, argv)
+
+    from .welcome import print_welcome
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    print_welcome(interactive=interactive)
+    if interactive:
+        return run_session(parser)
+    return 0

@@ -84,6 +84,44 @@ class GeneralResolutionTests(unittest.TestCase):
         self.assertEqual(record["coefficient_field"]["generator"],"field_generator_")
         self.assertIn("field_generator",record["charts"][0]["map"])
 
+    def test_graph_coefficients_written_in_the_marked_primitive_basis(self):
+        from engine.affine_kernel import decode
+        from engine.general_resolution import _text
+        x,t = sp.symbols("x field_generator")
+        field = sp.QQ.algebraic_field(sp.sqrt(2),sp.sqrt(3))
+        f = sp.sqrt(3)*x + sp.sqrt(2)
+        reported = decode((x,t), _text(f, field))
+        self.assertEqual(sp.Poly(reported.subs(t, field.ext.as_expr())-f, x, domain=field).as_expr(), 0)
+
+    def test_candidate_field_and_sparse_coefficients_survive_worker_transport(self):
+        from engine.field_coefficient import indexed_field, root_position
+        from engine.general_resolution import _read_candidate, _wire_candidate
+        x,u = sp.symbols("x U")
+        alpha = sp.sqrt(2) + sp.sqrt(3)
+        field = sp.QQ.algebraic_field(alpha)
+        # The coefficient sqrt(3) is not a literal power of the generator.
+        boundary = ((u * (x + sp.sqrt(3))**3, sp.S.Zero),)
+        original = ResolutionCandidate((x,), (u,), boundary, field, alpha, "round trip")
+        wire = _wire_candidate((x,), x**2, original, "embedded", 1)
+        variables, f, restored, mode, effort = _read_candidate(wire)
+        self.assertEqual(_wire_candidate(variables, f, restored, mode, effort), wire)
+        self.assertIs(_read_candidate(wire)[2].domain, restored.domain)
+        self.assertEqual(wire["field"][1], 3)
+        self.assertEqual(wire["boundary"][0][1], [])
+
+        # Historical ordering puts the lower member of each conjugate pair first.
+        for generator, index in ((-sp.sqrt(2),0), (1+sp.I,1),
+                                 (sp.exp(sp.I*sp.pi/4),3), (-sp.exp(sp.I*sp.pi/4),0)):
+            with self.subTest(generator=generator):
+                poly = sp.QQ.algebraic_field(generator).ext.minpoly
+                self.assertEqual(root_position(poly, generator), index)
+        # CRootOf normalizes some input polynomials by rescaling the variable.
+        coeffs = (1,0,0,0,512,1024)
+        root = sp.CRootOf(sp.Poly.from_list(coeffs, x).as_expr(), 2)
+        rebuilt, actual = indexed_field(coeffs, x, 2)
+        self.assertEqual(actual, root)
+        self.assertEqual(rebuilt, sp.QQ.algebraic_field(root))
+
     def test_removed_unit_exposes_open_domain_in_each_chart(self):
         names=list("xyz")
         poly=parse("(1+z)*(x^2-y^2*z)",names)
@@ -92,6 +130,16 @@ class GeneralResolutionTests(unittest.TestCase):
         self.assertEqual(r["base_domain"]["invert"],["z + 1"])
         self.assertTrue(all(c["base_domain"]==r["base_domain"] and c["invert"]==["z + 1"]
                             for c in r["charts"]))
+
+    def test_nonconstant_unit_keeps_its_scalar_and_power(self):
+        names = list("xyz")
+        record = search(parse("-(3/2)*(1+z)^2*(x^2-y^2*z)", names), names, "embedded", seconds=10)
+        x, y, z = sp.symbols("x y z")
+        cert = record["certificate"]
+        unit = sp.sympify(cert["unit_removed_at_origin"].replace("^", "**"))
+        active = sp.sympify(cert["resolved_equation"].replace("^", "**"))
+        self.assertEqual(unit, -3*z**2/2 - 3*z - sp.Rational(3, 2))
+        self.assertEqual(active, x**2-y**2*z)
 
     def test_a_chart_cover_or_a_smooth_strict_transform_is_insufficient(self):
         x,y=sp.symbols("x y")

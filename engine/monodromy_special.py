@@ -10,7 +10,7 @@ See N. A'Campo, La fonction zêta d'une monodromie, Comment. Math. Helv. 50
 
 import re
 
-from .polynomial import InputError, LimitError, parse
+from .polynomial import InputError, LimitError, format_poly, parse
 
 
 def _term(component, multiplicity, chi, method):
@@ -84,30 +84,22 @@ def _simple_coordinates(p, names):
 
 
 def _factor_snc(p, names):
-    # This optional recognizer has a bounded workload. A QQ factor smooth
-    # through the origin is a single geometric local branch. Independent
-    # differentials make the active factors part of local analytic coordinates.
-    import sympy as sp
-    if len(p)>192 or len(names)>8 or max(map(sum,p))>24:
+    # A smooth rational factor through the origin gives a single geometric
+    # branch there. Independent differentials give normal crossings.
+    if len(p) > 192 or len(names) > 8 or max(map(sum, p)) > 24:
         return None
-    xs=tuple(map(sp.Symbol,names))
-    function=sp.Poly.from_dict(p,*xs,domain=sp.QQ)
-    factors=[]
-    gradients=[]
-    zero=(0,)*len(xs)
-    for factor, power in function.factor_list()[1]:
-        if factor.coeff_monomial(zero):
-            continue
-        gradients.append([factor.diff(x).coeff_monomial(zero) for x in xs])
-        factors.append((str(factor.as_expr()).replace("**","^"),power))
-    if not factors or len(factors)>len(xs) or sp.Matrix(gradients).rank()!=len(factors):
-        return None
-    return factors
+    from .identity_atlas import branch_order, independent, rational_factors
+    zero = (0,) * len(names)
+    active = [(f, m) for f, m in rational_factors(p, names) if zero not in f]
+    if independent([f for f, _ in active], len(names)):
+        active.sort(key=lambda pair: (max(e[0] for e in pair[0]), pair[1], branch_order(pair[0], len(names))))
+        return [(format_poly(f, names), m) for f, m in active]
+    return None
 
 
 def _recorded_snc(factors, names):
     """Test transversality using the exact factorization retained by the divisor lift."""
-    import sympy as sp
+    from .identity_atlas import independent
     if not isinstance(factors,list) or not factors or not isinstance(names,list) or len(factors)>len(names):
         return None
     rows, data = [], []
@@ -119,9 +111,9 @@ def _recorded_snc(factors, names):
             factor=parse(name,names)
         except (InputError,LimitError,TypeError,RecursionError):
             return None
-        rows.append([factor.get(tuple(int(a==j) for a in range(len(names))),0) for j in range(len(names))])
+        rows.append(factor)
         data.append((name,item["multiplicity"]))
-    return data if sp.Matrix(rows).rank()==len(data) else None
+    return data if independent(rows, len(names)) else None
 
 
 def crossing_components(result):

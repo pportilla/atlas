@@ -11,13 +11,15 @@ charts (`Chart`, from engine/local_blowups.py). A chart has
   region,       the part of the chart that is its own: the zero set of
   removed       `region` minus the zero sets of the ideals in `removed`. The
                 own parts of the charts partition the points over the origin,
-  coordinates   the original variables as polynomials in the chart's.
+  coordinates   the original variables as polynomials in the chart's,
+  coefficient_field  an optional parameter, minimal polynomial, degree and
+                marked embedding, for charts representing a single sheet.
 
-Everything else is computed from the atlas by the same algorithms for every
-engine (`outputs`): that the total transform has normal crossings at every
-point that a chart owns over the origin, the numerical data, the Euler
-characteristics of the strata (hence both zeta functions), and the numbers
-of components of the intersections of divisors (hence the dual complex).
+`outputs` checks normal crossings over the owned fibre, computes the
+numerical data and Euler characteristics for both zeta functions, and
+constructs the requested boundary. An intrinsic resolution can make the
+strict transform smooth before its boundary is transverse. In this case
+`resolve` computes the integrals on an embedded companion.
 
 What a producer needs to know is little. For a chart that is an affine
 space with a map to the original space, `chart` computes the rest from the
@@ -35,156 +37,445 @@ map alone:
           charts: the common zeros of those denominators, one product for
           each earlier chart.
 
-State of the restructuring (2026-11-14). Done: this module; `from_record`
-for the engines whose charts are affine spaces with monomial maps (the toric
-ones, the binomial one, the ordinary point), `to_json`/`from_json`, and
-`outputs` on any atlas, checked against each engine's own zeta functions in
-tests/test_atlas.py. Not done yet: producers for charts with maps that are
-not monomial (plane curves, the A-series, a Newton fan after a linear change
-of coordinates: the transition needs the inverse of the map by elimination
-and a greatest common divisor), the Newton modification completed by
-blowups (toric charts with the blown-up points removed, joined to the charts
-of engine/local_blowups.py), the switch of engine/resolve.py to these
-outputs, the dual complex in intrinsic mode (the same count with the strict
-transform among the divisors) and the identification of components across
-charts by the transitions. The polynomial arithmetic of `chart` (pullback,
-orders, Jacobian) is still SymPy's and belongs in the kernel, as do
-`geometric_components` and the invariant of engine/centres.py; `outputs`
-itself only calls kernel operations.
+Affine maps, including translated point blowups and sheared fans, use native
+pullbacks and orders. A regular fan supplies its common faces for overlaps.
+The kernel's sparse exponent and coefficient lists also supply the torus
+orbit sections and the polynomials in the serialized charts. An affine
+strict transform need not be converted into a dense coefficient array.
+Plane blowups partition each new exceptional line and retain the old charts
+off the centres. Coefficients in a number field use one marked embedding of
+a finite étale cover. See native/KERNEL.md section 9. Serialized atlases
+and the charts retained by the local blowup engine use this same format.
+Projective graph charts use the relative Jacobian and Cartier ideals.
+After Newton repairs the toric parents omit the closed centres and the
+children own their inverse images. The local cover of conjugate centres
+counts all lifts of the selected points.
+
+Intrinsic boundaries restrict to the strict transform. On smooth surfaces
+the overlap diagonal identifies geometric prime curves and transverse
+intersection points give the edges, also within a single divisor label.
+Counts on conjugate plane curves can determine incidence by Galois symmetry.
+On a finite centre a common ratio of base coordinates can label the roots of
+a split divisor across its charts when each root has one generic owner.
+Regular fan charts also carry a common torus basis. Its characters identify
+split components of arbitrary degree in any dimension, including after an
+invertible linear change of coordinates. When higher intersections or
+conjugate primes cannot be identified, `boundary_complex` returns a partial
+complex. `record_complex` adds the original chart labels and annotations
+when they match the computed incidence.
+Identity maps, ordinary point blowups, rational plane blowups and regular
+fan charts can exchange sparse equation rows directly with the shared
+crossings and Euler operations. A plane blowup pair stores its parent and
+centre so that its projection and region can be verified again after a
+JSON round trip. General gluing and canonical blowups carry sparse rational values backed by
+FLINT. A marked coefficient is a polynomial modulo its irreducible relation.
+Direct symbolic callers and comparison runs can request the symbolic chart view.
 """
-import sympy as sp
+from functools import lru_cache
+from dataclasses import replace
+from math import prod
+import re
+
+from . import native_polynomial as np
+from .chart_expressions import chart_expressions
+from .reference import sp
 
 from .local_blowups import Chart, GiveUp, _own_failures, _strata, cells, dual_cells
-from .newton_repair import _text, records
+from .strata import records
+from .fan_geometry import split_cone
+from .polynomial import InputError, format_poly
+
+
+def _polynomial(terms, variables):
+    if np.native_ring(variables):
+        return np.from_terms(variables, terms)
+    return sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(v**k for v, k in zip(variables, powers) if k))
+                    for powers, c in terms.items()))
+
+
+@lru_cache(maxsize=16384)
+def _read_polynomial(text, names, native=False):
+    from .affine_kernel import decode
+    api = np if native else sp
+    if not names:
+        from .polynomial import parse_expression
+        return api.Rational(parse_expression(text, ()).get((), 0))
+    return decode(tuple(map(api.Symbol, names)), text)
 
 
 def _expression(text, symbols):
-    return sp.sympify(str(text).replace("^", "**"), locals=symbols)
+    native = np.native_ring(tuple(symbols.values()))
+    symbol = np.Symbol if native else sp.Symbol
+    expr = _read_polynomial(str(text), tuple(symbols), native)
+    return expr.xreplace({symbol(name): value for name, value in symbols.items() if symbol(name) != value})
 
 
-def _exponents(expr, variables):
-    """The exponents of a map component that is a monomial, or None."""
-    poly = sp.Poly(expr, *variables)
-    terms = poly.monoms()
-    return terms[0] if len(terms) == 1 else None
+def _affine(variables, mapping, divisors, parts, base, region, removed=(), field=()):
+    from .affine_kernel import chart_data
+    axes = tuple(v for _, v in divisors)
+    # Adjoin the parameter identically to the map. The block triangular
+    # Jacobian has the determinant of the original map on each sheet.
+    source, target, images = variables, base, mapping
+    modulus = None
+    if field:
+        parameter, modulus, _, _ = field
+        source, target, images = (*source, parameter), (*target, parameter), (*images, parameter)
+    total_orders = [0] * len(divisors)
+    components = []
+    for label, weight, equation in parts:
+        data, strict = chart_data(source, images, axes, equation, target, modulus=modulus)
+        for i, (order, _) in enumerate(data):
+            total_orders[i] += weight * order
+        if not strict.is_number:
+            components.append((label, weight, 1, (strict,)))
+    exceptional = [(label, order, nu, (v,)) for (label, v), order, (_, nu) in zip(divisors, total_orders, data)]
+    return Chart(source, (modulus,) if field else (), tuple(exceptional + components), mapping,
+                 tuple(region), tuple((v.name, g) for v, g in zip(base, mapping)), (), removed, field)
 
 
 def chart(variables, mapping, divisors, equation, base, earlier=()):
-    """The chart of an atlas for an affine space with coordinates `variables`
-    and the map `mapping` (the original variables `base`, in order, as
-    polynomials in them). `divisors` lists (label, coordinate) for the
-    exceptional divisors that meet the chart, `equation` is the original
-    equation in the variables `base`, and `earlier` the exponent matrices of
-    the charts that come before (for the region). Returns (chart, exponent
-    matrix), or None when the map is not monomial."""
-    variables = tuple(variables)
-    rows = [_exponents(expr, variables) for expr in mapping]
-    if any(row is None for row in rows):
-        return None
-    exponents = sp.Matrix(rows)
-    pullback = sp.Poly(sp.sympify(equation).xreplace(dict(zip(base, mapping))), *variables)
-    jacobian = sp.Poly(sp.Matrix([[sp.diff(expr, v) for v in variables] for expr in mapping]).det(), *variables)
-
-    def order(poly, v):
-        position = variables.index(v)
-        return min(monomial[position] for monomial in poly.monoms())
-
-    components, strict = [], pullback.as_expr()
-    for label, v in divisors:
-        n = order(pullback, v)
-        components.append((label, n, order(jacobian, v) + 1, (v,)))
-        strict = sp.cancel(strict/v**n)
-    strict = sp.expand(strict)
-    if not strict.is_number:
-        components.append(("strict", 1, 1, (strict,)))
-    region = []
-    for other in earlier:
-        # u_other = u^(other^-1 * exponents): the transition is regular where the
-        # coordinates with a negative exponent do not vanish.
-        transition = other.inv()*exponents
-        poles = [v for j, v in enumerate(variables) if any(transition[i, j] < 0 for i in range(transition.rows))]
-        region.append(sp.Mul(*poles))
-    # A product without factors is 1: the chart lies inside an earlier one and owns nothing.
-    region = (sp.Integer(1),) if any(g == 1 for g in region) else tuple(dict.fromkeys(region))
-    return Chart(variables, (), tuple(components), tuple(mapping), region,
-                 tuple((name.name, expr) for name, expr in zip(base, mapping)), ()), exponents
+    """An affine birational chart and its rational inverse. Pass the inverses
+    of earlier charts in the same affine cover to partition the fibre."""
+    from .affine_kernel import inverse_map, transition_pole
+    variables, mapping, base = tuple(variables), tuple(mapping), tuple(base)
+    poles = tuple(dict.fromkeys(transition_pole(variables, mapping, base, inverse) for inverse in earlier))
+    result = _affine(variables, mapping, divisors, [("strict", 1, equation)], base, poles)
+    return result, inverse_map(variables, mapping, base)
 
 
-def from_record(record, polynomial):
-    """The atlas of a resolution record whose charts are affine spaces with
-    monomial maps, or None when some chart is not of that kind. `polynomial`
-    maps exponents to the coefficients of the equation."""
-    names = list(record["variables"])
-    base = tuple(sp.Symbol(name) for name in names)
-    equation = sp.Add(*(sp.Rational(c.numerator, c.denominator)*sp.Mul(*(s**e for s, e in zip(base, exponents)))
-                        for exponents, c in polynomial.items()))
-    charts, earlier = [], []
-    for item in record.get("charts", []):
-        if item.get("ambient_ideal") or item.get("blown_up") or "map" not in item:
+def _fan_region(variables, cone, earlier):
+    """U_sigma intersects U_tau on the principal open where the coordinates
+    outside their common face are invertible. Only maximal common faces
+    are needed to describe the union of earlier chart overlaps."""
+    from .fan_geometry import excluded_faces
+    minimal = excluded_faces(cone, earlier)
+    return tuple(prod((variables[i] for i in sorted(indices)), start=chart_expressions(variables).S.One) for indices in minimal)
+
+
+def _field(record, item, symbols, base):
+    """Put chart coefficients in a single marked embedding of a number field."""
+    api = chart_expressions(base)
+    parameter = api.Symbol("atlas_field")
+    while parameter in (*symbols.values(), *base):
+        parameter = api.Symbol(parameter.name + "_")
+    data = record.get("coefficient_field", {})
+    if "generator" in data:
+        name = data["generator"]
+        minimal = _expression(data["minimal_polynomial"], {name: parameter})
+        symbols[name] = parameter
+        # The A-series map may use either root of its quadratic. Fix the
+        # first root in FLINT's exact ordering in every chart.
+        return (parameter, minimal, 2, "root 1 (FLINT order)")
+    algebraics = record.get("algebraic_numbers", {})
+    if not algebraics:
+        return ()
+    from .plane_backend import coefficient_field
+    words = " ".join([*item["map"].values(), *(g for point in item.get("exclude_points", ()) for g in point)])
+    used = sorted(set(re.findall(r"[A-Za-z][A-Za-z0-9_]*", words)) & algebraics.keys())
+    if not used:
+        return ()
+    field = coefficient_field(tuple(algebraics[name]["exact"] for name in used))
+    local = {"T": parameter}
+    symbols.update((name, _expression(value, local)) for name, value in zip(used, field["values"]))
+    return (parameter, _expression(field["minimal_polynomial"], local), field["degree"], field["exact"])
+
+
+def _plane_region(item, variables):
+    # Earlier stages own the points off later centres. The two affine
+    # blowup charts own respectively A^1 and its missing projective point.
+    # Restricting children to the new divisor also excludes every sibling
+    # centre and every divisor that the parent domain required to be a unit.
+    return (variables[0],) if item["id"].endswith(".u") else (variables[1], variables[0])
+
+
+def _use_native(native):
+    if native is not None:
+        return native
+    from .native_library import _MODE
+    return _MODE == "native"
+
+
+def from_record(record, polynomial, *, native=None):
+    """Build the atlas of a resolution record, including its original map,
+    coefficient field, removed centres and the owned part of each chart."""
+    native = _use_native(native)
+    if record.get("atlas"):
+        return from_json(record["atlas"], native=native)
+    engine = record.get("engine")
+    if engine == "verified-ideal-blowup":
+        if native:
+            from .graph_record import graph_record_charts
+            return from_json(graph_record_charts(record, polynomial), native=True)
+        from .graph_atlas import graph_charts
+        return graph_charts(record, polynomial)
+    if engine == "normal-crossings-at-origin":
+        from .graph_atlas import identity_atlas
+        return identity_atlas(record, polynomial, native=native)
+    names = tuple(record["variables"])
+    api = np if native else sp
+    base = tuple(map(api.Symbol, names))
+    factors = record.get("input_divisor", {}).get("factors")
+    if factors:
+        parts = [("strict" if len(factors) == 1 else f"S{i}", f["multiplicity"],
+                  _expression(f["equation"], dict(zip(names, base)))) for i, f in enumerate(factors, 1)]
+    else:
+        parts = [("strict", 1, _polynomial(polynomial, base))]
+    charts, cones, inverses = [], [], []
+    items = record.get("charts", ())
+    fan = record.get("fan")
+    for item in items:
+        if fan and "ray_indices" not in item:
+            continue  # the local charts follow their removed centres in join_atlas
+        if item.get("ambient_ideal") or (item.get("blown_up") and not fan) or "map" not in item:
             return None
-        symbols = {name: sp.Symbol(name) for name in item["coordinates"]}
-        variables = tuple(symbols.values())
-        try:
-            mapping = [_expression(item["map"][name], symbols) for name in names]
-        except (KeyError, sp.SympifyError):
-            return None
-        divisors = []
-        for divisor in item.get("ambient_components") or item.get("exceptional") or []:
-            gens = divisor.get("ideal") or [divisor.get("equation")]
-            if len(gens) != 1 or _expression(gens[0], symbols) not in variables:
-                return None  # not an ambient divisor that is a coordinate hyperplane
-            divisors.append((str(divisor["id"]).split(".")[0], _expression(gens[0], symbols)))
-        made = chart(variables, mapping, list(dict.fromkeys(divisors)), equation, base, earlier)
-        if made is None:
-            return None
-        charts.append(made[0])
-        earlier.append(made[1])
+        variables = tuple(map(api.Symbol, item["coordinates"]))
+        symbols = {v.name: v for v in variables}
+        field = _field(record, item, symbols, base)
+        mapping = tuple(_expression(item["map"][name], symbols) for name in names)
+        if "ray_indices" in item:
+            cone = item["ray_indices"]
+            divisors = [(f"E{ray-len(base)+1}", v) for ray, v in zip(cone, variables) if ray >= len(base)]
+        else:
+            divisors = []
+            for divisor in item.get("ambient_components", item.get("exceptional", ())):
+                gens = divisor.get("ideal") or [divisor.get("equation")]
+                if len(gens) != 1 or gens[0] not in symbols or symbols[gens[0]] not in variables:
+                    return None
+                divisors.append((divisor["id"], symbols[gens[0]]))
+        removed = ()
+        if "ray_indices" in item or "split_cone" in item:
+            cone = split_cone(item, len(base)) if "split_cone" in item else tuple(item["ray_indices"])
+            region = _fan_region(variables, cone, cones)
+            cones.append(frozenset(cone))
+        elif "exclude_points" in item:
+            region = _plane_region(item, variables)
+            removed = tuple(tuple(v - _expression(a, symbols) for v, a in zip(variables, point))
+                            for point in item["exclude_points"])
+        elif item.get("pivot") in names and item.get("ambient_exceptional"):
+            # First nonzero homogeneous coordinate of the ordinary point blowup.
+            region = variables[:names.index(item["pivot"])]
+        else:
+            from .affine_kernel import inverse_map, transition_pole
+            coords, images, target = variables, mapping, base
+            if field:
+                if engine != "native-a-series":
+                    return None
+                # Older A-series exporters omit split_cone. All charts use
+                # the same invertible linear change over Q(theta); it cancels
+                # in each transition before specializing its coefficient.
+                theta = field[0]
+                coords, images, target = (*coords, theta), (*images, theta), (*target, theta)
+            region = tuple(dict.fromkeys(transition_pole(coords, images, target, inv) for inv in inverses))
+            if len(items) > 1:
+                inverses.append(inverse_map(coords, images, target))
+        affine = _affine(variables, mapping, divisors, parts, base, region, removed, field)
+        if "split_cone" in item:
+            affine = replace(affine, split_cone=cone)
+        if fan and "ray_indices" in item and not field:
+            rays = tuple(tuple(fan["rays"][i]) for i in item["ray_indices"])
+            linear = record.get("certificate", {}).get("linear_map_to_input")
+            linear = tuple(tuple(row) for row in linear) if linear else tuple(
+                tuple(int(i == j) for j in range(len(base))) for i in range(len(base)))
+            affine = replace(affine, torus=(rays, linear))
+        charts.append(affine)
+    if fan and any("blown_up" in item or "ray_indices" not in item for item in items):
+        from .newton_repair import join_atlas
+        return join_atlas(record, charts)
     return charts or None
+
+
+@lru_cache(maxsize=16384)
+def _record_text(expr, variables):
+    from .affine_kernel import sparse_terms
+    return format_poly(dict(sparse_terms(variables, expr)), [v.name for v in variables])
 
 
 def to_json(charts):
     """The atlas as plain data."""
-    return [{"coordinates": [v.name for v in c.variables], "ambient_ideal": [_text(g) for g in c.ambient],
-             "components": [{"id": label, "multiplicity": n, "nu": nu, "ideal": [_text(g) for g in ideal]}
+    return [{"coordinates": [v.name for v in c.variables], "ambient_ideal": [_record_text(g, c.variables) for g in c.ambient],
+             "components": [{"id": label, "multiplicity": n, "nu": nu, "ideal": [_record_text(g, c.variables) for g in ideal]}
                             for label, n, nu, ideal in c.components],
-             "fibre": [_text(g) for g in c.fibre], "region": [_text(g) for g in c.region],
-             "removed": [[_text(g) for g in z] for z in c.removed],
-             "map": {name: _text(expr) for name, expr in c.coordinates}} for c in charts]
+             "fibre": [_record_text(g, c.variables) for g in c.fibre], "region": [_record_text(g, c.variables) for g in c.region],
+             "removed": [[_record_text(g, c.variables) for g in z] for z in c.removed],
+             "map": {name: _record_text(expr, c.variables) for name, expr in c.coordinates},
+             **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1]}} if c.torus else {}),
+             **({"split_cone": c.split_cone} if c.split_cone else {}),
+             **({"point_blowup": {"parent": c.point_blowup[0], "center": list(c.point_blowup[1])}}
+                if c.point_blowup else {}),
+             **({"coefficient_field": {"generator": c.coefficient_field[0].name,
+                                       "minimal_polynomial": _record_text(c.coefficient_field[1], c.variables),
+                                       "degree": c.coefficient_field[2], "embedding": c.coefficient_field[3]}}
+                if c.coefficient_field else {})} for c in charts]
 
 
-def from_json(data):
+def from_json(data, *, native=None):
+    """Read saved charts in the runtime's representation. Pass native=False for symbolic display."""
+    api = np if _use_native(native) else sp
     charts = []
     for item in data:
-        symbols = {name: sp.Symbol(name) for name in item["coordinates"]}
+        names = item["coordinates"]
+        if not names or len(set(names)) != len(names):
+            raise InputError("Each chart needs distinct coordinate names.")
+        symbols = {name: api.Symbol(name) for name in names}
 
         def ideal(gens):
             return tuple(_expression(g, symbols) for g in gens)
 
-        charts.append(Chart(tuple(symbols.values()), ideal(item["ambient_ideal"]),
+        field = item.get("coefficient_field")
+        coefficient_field = ()
+        ambient = ideal(item["ambient_ideal"])
+        if field:
+            if field.get("generator") not in symbols:
+                raise InputError("The coefficient field needs a chart parameter.")
+            t = symbols[field["generator"]]
+            relation = _expression(field["minimal_polynomial"], {t.name: t})
+            degree = field["degree"]
+            if (type(degree) is not int or degree < 1 or relation not in ambient or
+                    not _field_relation(t, relation, degree)):
+                raise InputError("The coefficient field needs its irreducible relation of the stated degree.")
+            coefficient_field = (t, relation, degree, field["embedding"])
+        charts.append(Chart(tuple(symbols.values()), ambient,
                             tuple((c["id"], c["multiplicity"], c["nu"], ideal(c["ideal"])) for c in item["components"]),
                             ideal(item["fibre"]), ideal(item["region"]),
                             tuple((name, _expression(expr, symbols)) for name, expr in item["map"].items()), (),
-                            tuple(ideal(z) for z in item["removed"])))
+                            tuple(ideal(z) for z in item["removed"]), coefficient_field,
+                            (tuple(map(tuple, item["torus"]["rays"])), tuple(map(tuple, item["torus"]["linear_map"])))
+                            if item.get("torus") else (),
+                            (item["point_blowup"]["parent"], tuple(item["point_blowup"]["center"]))
+                            if "point_blowup" in item else (), split_cone(item, len(item["map"]))))
     return charts
 
 
-def outputs(charts, dimension, complex=True):
+@lru_cache(maxsize=256)
+def _field_relation(t, relation, degree):
+    from .affine_kernel import rational_factor_rows, sparse_terms
+    terms = sparse_terms((t,), relation)
+    if not terms or terms[0][0][0] != degree:
+        return False
+    factors = rational_factor_rows((t,), relation)[1]
+    return len(factors) == 1 and factors[0][1] == 1
+
+
+def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True):
     """What the atlas determines, by the same computations for every engine.
 
-    Returns {"numerical_data": rows, "strata": rows, "cells": [...] or None,
-    "reason": text or None}. Raises GiveUp when a chart owns a point over the
+    Returns numerical data, strata, and, if requested, the full dual complex
+    in the specified mode. With integrals=False only certify the requested
+    resolution and compute its boundary. An intrinsic resolution alone
+    need not have embedded normal crossings.
+    Raises GiveUp when a chart owns a point over the
     origin where the total transform fails normal crossings (the atlas is
     then not that of an embedded resolution) or when a component has two
     sets of numerical data.
     """
+    from dataclasses import replace
+    from itertools import combinations
+    from .local_blowups import _is_strict, _present
     known = {}
     for item in charts:
-        if _own_failures(item, dimension, known)[0]:
+        # Only points on the owned region enter the certificate. Put its
+        # equations in the Jacobian test from the outset so its quotient
+        # ring never includes the unconstrained toric fibre on other sheets.
+        owned = replace(item, fibre=tuple(dict.fromkeys((*item.region, *item.fibre))), region=())
+        if intrinsic:
+            strict = tuple(row for row in owned.components if _is_strict(row[0]))
+            if any(_present(owned.variables, (*owned.ambient, *owned.fibre, *a[3], *b[3]), owned.removed)
+                   for a, b in combinations(strict, 2)):
+                raise GiveUp("Distinct strict components meet over the origin on the proposed smooth transform.")
+            if not integrals:
+                owned = replace(owned, components=strict)
+        if _own_failures(owned, dimension, known)[0]:
             raise GiveUp("The total transform fails normal crossings at a point of a chart.")
-    data, strata = _strata(charts)
-    rows, listed = records({"data": data, "strata": strata})
+    answer = {}
+    if integrals:
+        data, strata = _strata(charts)
+        rows, listed = records({"data": data, "strata": strata})
+        answer.update(numerical_data=rows, strata=listed)
     found, reason = None, None
     if complex:
-        order = [row["component"] for row in rows]
-        found, reason = dual_cells(cells(charts, dimension), order.index)
-    return {"numerical_data": rows, "strata": listed, "cells": found, "reason": reason}
+        boundary = boundary_complex(charts, dimension, intrinsic)
+        answer["dual_complex"] = boundary
+        found, reason = boundary["cells"], boundary.get("reason")
+        if reason:
+            found = None
+    return {**answer, "cells": found, "reason": reason}
+
+
+def boundary_complex(charts, dimension, intrinsic=False):
+    """The exceptional intersections meeting the origin. Restriction to each
+    smooth strict component computes its boundary in intrinsic mode."""
+    from dataclasses import replace
+    from .local_blowups import _is_strict
+    if all(c.torus for c in charts):
+        from .atlas_torus import torus_complex
+        toric = torus_complex(charts, dimension, intrinsic)
+        if toric is not None:
+            return toric
+    ambient_charts = charts
+    if intrinsic:
+        charts = [replace(c, ambient=(*c.ambient, *ideal),
+                          components=tuple(row for row in c.components if not _is_strict(row[0])))
+                  for c in charts for name, _, _, ideal in c.components if _is_strict(name)]
+        dimension -= 1
+    orbits = {}
+    counts = cells(charts, dimension, rational_counts=orbits)
+    labels = [next(iter(key)) for key in counts if len(key) == 1]
+    vertices = []
+    ids = {}
+    for label in labels:
+        key = frozenset((label,))
+        n = counts[key]
+        ids[label] = ([f"{label}.{i+1}" for i in range(n)] if intrinsic and n and n > 1 else [label])
+        vertices.extend({"id": name, "dimension": dimension-1} for name in ids[label])
+    convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else
+                  "Ambient exceptional divisor") + " in the germ over the origin over Qbar."
+    order = labels.index
+    reason = None
+    edges = []
+    if intrinsic and dimension <= 2:
+        # When an end is one rational orbit and the other is a single
+        # geometric component, Galois symmetry fixes the incidence numbers.
+        for label in labels:
+            if counts[frozenset((label,))] is None:
+                reason = f"The number of components of {label} was not determined."
+                break
+        for key, count in counts.items():
+            if reason or len(key) != 2:
+                continue
+            a, b = sorted(key, key=order)
+            split = a if len(ids[a]) > 1 else b
+            pairs = [(u, v) for u in ids[a] for v in ids[b]]
+            if (count is None or count % len(pairs) or
+                    (len(pairs) > 1 and (min(len(ids[a]), len(ids[b])) > 1 or
+                                         orbits[frozenset((split,))] != 1 or
+                                         any(c.coefficient_field for c in charts)))):
+                reason = f"The incidences between the components of {a} and {b} were not determined."
+                break
+            for u, v in pairs:
+                edges.extend({"id": f"C{u}-{v}.{i+1}", "dimension": 1, "vertices": [u, v], "faces": [u, v]}
+                             for i in range(count // len(pairs)))
+        if not reason and dimension == 2:
+            known = {}
+            for c in charts:
+                owned = replace(c, fibre=tuple(dict.fromkeys((*c.region, *c.fibre))), region=())
+                if _own_failures(owned, dimension, known)[0]:
+                    reason = "The local branches of a restricted exceptional divisor need separate incidences."
+                    break
+    else:
+        edges, reason = dual_cells(counts, order)
+    if reason:
+        from .atlas_gluing import glued_complex
+        glued = glued_complex(ambient_charts, dimension + int(intrinsic), intrinsic,
+                              counts=None if intrinsic else counts)
+        if glued is not None:
+            return glued
+    return {"status": "partial" if reason else "complete", "convention": convention, "vertices": vertices,
+            "cells": edges or [], **({"reason": reason} if reason else {})}
+
+
+def record_complex(result, charts, computed=None):
+    """Use the computed incidence, retaining compatible labels and annotations."""
+    from .strata import annotate_complex
+    found = computed if computed is not None else boundary_complex(
+        charts, len(result["variables"]), result["mode"] == "intrinsic")
+    return annotate_complex(result["dual_complex"], found)

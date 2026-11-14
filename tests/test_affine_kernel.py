@@ -1,0 +1,170 @@
+import unittest
+from unittest.mock import patch
+
+import sympy as sp
+
+from engine import affine_kernel
+from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, frame_derivative,
+                                 frame_linear, frame_locus, frame_quotient, frame_restrict,
+                                 inverse_map, lattice_characters, lattice_dimension, pullbacks,
+                                 rational_factors, sparse_terms, transition_pole)
+
+
+class AffineMaps(unittest.TestCase):
+    def test_common_characters_with_arbitrary_signed_coordinates(self):
+        # Nonsymmetric, orientation reversing, and too large for a machine integer.
+        shear = 2**100
+        rays = ((-1, shear), (0, 1))
+        self.assertEqual(lattice_characters(rays, ((-2*shear-5, -2), (3*shear+1, 3))),
+                         ((5, -2), (-1, 3)))
+        self.assertEqual(lattice_characters(rays, ()), ())
+        for bad in (((2,0), (0,1)), ((1,0), (-2,0))):
+            with self.assertRaisesRegex(ArithmeticError, "unimodular"):
+                lattice_characters(bad, ())
+        with self.assertRaises(ValueError):
+            lattice_characters(rays, ((0,1,2),))
+        with self.assertRaises(TypeError):
+            lattice_characters(rays, ((1.5,0),))
+
+    def test_laurent_translation_and_affine_rank(self):
+        rays = ((1,1), (0,1))
+        terms = {(0,0): 3, (4,2): sp.Rational(-2,3), (-1,1): 7, (9,9): 0}
+        moved = {(x-3,y+11):c for (x,y),c in terms.items()}
+        expected = {(2,0): 3, (4,2): sp.Rational(-2,3), (0,1): 7}
+        self.assertEqual(canonical_laurent_terms(rays, terms), expected)
+        self.assertEqual(canonical_laurent_terms(rays, moved), expected)
+        self.assertEqual(canonical_laurent_terms(rays, {}), {})
+        self.assertEqual(lattice_dimension(expected), 2)
+        self.assertEqual(lattice_dimension(((0,1), (2,3), (-5,-4))), 1)
+        self.assertEqual(lattice_dimension(((-111,321),)), 0)
+        with self.assertRaises(ValueError):
+            lattice_dimension(())
+
+    def test_rational_coefficients_and_coordinate_orders(self):
+        x, y, u, v = sp.symbols("x y u v")
+        result = chart_data((u, v), (u, (u*v + 1)/2), (u,), ((2*y - 1)**2 - x**3)/3, (x, y))
+        self.assertEqual(result, (((2, 2),), (v**2 - u).expand()/3))
+
+    def test_reduction_before_orders_on_a_finite_cover(self):
+        x, y, u, v, a = sp.symbols("x y u v a")
+        # The coefficient of u**2 vanishes over the coefficient field.
+        result = chart_data((u, v, a), (u, u*(a + u*v), a), (u,), x**2 + y**2,
+                            (x, y, a), modulus=a**2 + 1)
+        self.assertEqual(result, (((3, 3),), 2*a*v + u*v**2))
+
+    def test_composition_between_spaces_of_different_dimensions(self):
+        x, y, a = sp.symbols("x y a")
+        self.assertEqual(pullbacks((x, y, a), (a*x + y, a*y), (x, y),
+                                   (x*y, 0), modulus=a**2 + 1), (a*y**2 - x*y, 0))
+
+    def test_transition_cancels_common_factors(self):
+        x, y, u, v = sp.symbols("x y u v")
+        # Overlap with a translated chart of a blowup. The common v cancels.
+        inverse = inverse_map((u, v), (u, u*(v + sp.Rational(1, 2))), (x, y))
+        self.assertEqual(inverse, ((x, 1), (y - x/2, x)))
+        self.assertEqual(transition_pole((u, v), (u*v, v), (x, y), inverse), u)
+        self.assertEqual(transition_pole((u, v), (u, u*(v - 1)), (x, y), inverse), 1)
+
+    def test_nonlinear_elimination_and_same_named_rings(self):
+        x, y = sp.symbols("x y")
+        mapping = (y + x**2, x*y + x**3 + sp.Rational(3, 5))
+        inv = inverse_map((x, y), mapping, (x, y))
+        self.assertEqual(transition_pole((x, y), mapping, (x, y), inv), 1)
+        # Both coordinates have a pole at x=0, with different orders.
+        self.assertEqual(transition_pole((x, y), (x, y), (x, y), inv), x)
+
+    def test_distinct_coordinates_with_identical_display_names(self):
+        a, b, x, y = (sp.Dummy("v") for _ in range(4))
+        variables, base = (a, b), (x, y)
+        self.assertEqual(pullbacks(variables, (b, a), base, (x-y,)), (b-a,))
+        self.assertEqual(chart_data(variables, (a, a*b), (a,), x**2+y, base),
+                         (((1, 2),), a+b))
+        inverse = inverse_map(variables, (a, a*b), base)
+        self.assertEqual(inverse, ((x, 1), (y, x)))
+        self.assertEqual(transition_pole(variables, (a*b, b), base, inverse), a)
+        self.assertEqual(frame_linear(variables, a*b+2*b, b), (a+2, 0))
+        self.assertEqual(frame_restrict(variables, a+b, a, sp.S.One, b), 0)
+        self.assertEqual(frame_quotient(variables, a**2*b, a), a*b)
+        self.assertTrue(frame_locus(variables, (a, b-1), (a+b-1,)))
+        self.assertEqual(frame_derivative(variables, a**2*b, {b: 2}), 2*a**2)
+        p = sp.Poly((a+b)*(a-b)**2, *variables, domain=sp.QQ)
+        self.assertEqual(rational_factors(p), p.factor_list())
+
+    def test_nonidentifier_coordinate_and_generated_name_collision(self):
+        a, b = sp.Symbol("x*y"), sp.Symbol("atlasVar0")
+        self.assertEqual(frame_derivative((a,b), a**2*b, {a:b}), 2*a*b**2)
+
+    def test_nonbirational_map(self):
+        x, u = sp.symbols("x u")
+        with self.assertRaisesRegex(ArithmeticError, "rational inverse"):
+            inverse_map((u,), (u**2,), (x,))
+
+    def test_unbounded_sparse_degree_and_dimension(self):
+        variables = sp.symbols("v:34")
+        x, y = variables[0], variables[-1]
+        degree = 10**22
+        self.assertEqual(sparse_terms((x, y), (x**degree + y**degree)**2),
+                         (((2*degree, 0), 1), ((degree, degree), 2), ((0, 2*degree), 1)))
+        self.assertEqual(decode((x,), f"{x}^{degree}"), x**degree)
+        self.assertEqual(pullbacks((x,), (x,), (y,), (y**degree + 1,)), (x**degree + 1,))
+        self.assertEqual(chart_data(variables, variables, (x,), x**degree * (1+y), variables),
+                         (((degree, 1),), 1+y))
+        self.assertEqual(inverse_map(variables, variables, variables), tuple((v, 1) for v in variables))
+
+    def test_wide_dimension_and_chart_contraction(self):
+        from engine.local_blowups import _dimension
+        variables = sp.symbols("v:70")
+        a, b, c = variables[:3]
+        self.assertEqual(_dimension(variables, (a*b, b*c, c*a)), 68)
+        self.assertEqual(_dimension(variables, ()), 70)
+        self.assertEqual(_dimension(variables, (sp.S.One,)), -1)
+        self.assertEqual(frame_locus(variables, (a*b,), (b,), closure=True), (a,))
+        self.assertTrue(frame_locus(variables, (a*b,), (a, b)))
+
+    def test_inverse_wider_than_packed_graph(self):
+        local, base = sp.symbols("u:17"), sp.symbols("x:17")
+        result = inverse_map(local, (local[0]*local[1], *local[1:]), base)
+        self.assertEqual(result, ((base[0], base[1]), *((x, 1) for x in base[1:])))
+
+    def test_large_smooth_germ_and_saved_chart(self):
+        from engine.atlas import from_json, to_json
+        from engine.resolve import resolve
+        variables = [f"x{i}" for i in range(34)]
+        result = resolve({"polynomial": "x0 + x33", "variables": variables})
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(to_json(from_json(result["atlas"])), result["atlas"])
+
+    def test_unavailable_binary_and_explicit_reference(self):
+        x, u = sp.symbols("x u")
+        from engine.polynomial import InputError
+        with patch("engine.native_library._kernel", return_value=None):
+            affine_kernel._library.cache_clear()
+            try:
+                with patch.object(affine_kernel.gb, "_MODE", "native"):
+                    with self.assertRaises(affine_kernel._AffineUnavailable):
+                        decode((x,), "1/3+x")
+                with patch.object(affine_kernel.gb, "_MODE", "sympy"):
+                    self.assertEqual(decode((x,), "1/3+x"), x+sp.Rational(1, 3))
+                    self.assertEqual(frame_linear((x,), x+4, x), (1, 4))
+                    p = sp.Poly((x+1)**2, x, domain=sp.QQ)
+                    self.assertEqual(rational_factors(p), p.factor_list())
+                    with self.assertRaises(InputError):
+                        decode((x,), "1/x")
+                    with self.assertRaisesRegex(ArithmeticError, "rational inverse"):
+                        inverse_map((u,), (u**2,), (x,))
+            finally:
+                affine_kernel._library.cache_clear()
+
+    def test_native_errors_and_comparison_failures_propagate(self):
+        x = sp.Symbol("x")
+        with patch.object(affine_kernel.gb, "_MODE", "native"):
+            with patch.object(affine_kernel, "_request", side_effect=ArithmeticError("invalid operation")):
+                with self.assertRaisesRegex(ArithmeticError, "invalid operation"):
+                    frame_linear((x,), x+1, x)
+            with patch.object(affine_kernel, "_request", return_value=["none"]), patch.object(affine_kernel.gb, "CHECK", True):
+                with self.assertRaises(AssertionError):
+                    frame_linear((x,), x+1, x)
+
+
+if __name__ == "__main__":
+    unittest.main()

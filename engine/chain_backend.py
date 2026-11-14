@@ -33,6 +33,8 @@ def _read_atlas(lines, variables, unit, mode):
             atlas[name] = chart
         elif kind == "map":
             chart["map"][variables[len(chart["map"])]] = args[0]
+        elif kind == "ray":
+            chart.setdefault("split_cone", []).append(list(map(int, args)))
         elif kind == "parentmap":
             chart["map_to_parent"][_COORDS[len(chart["map_to_parent"])]] = args[0]
         elif kind == "strict":

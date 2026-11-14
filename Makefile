@@ -1,4 +1,4 @@
-.PHONY: all ordinary plane chain toric newton groebner gpu test test-gpu bench clean
+.PHONY: all ordinary plane chain toric newton groebner gpu test test-gpu test-triton bench clean
 all: ordinary plane chain toric newton groebner
 ordinary:
 	$(MAKE) -C native
@@ -19,7 +19,18 @@ gpu: all
 test-gpu: gpu
 	python3 native/test_opencl.py
 	python3 native/test_chart_batch.py
+	python3 -m unittest discover -s tests -p 'test_gpu_trace_rows.py'
+	python3 -m unittest discover -s tests -p 'test_replay_scope.py'
+	python3 -m unittest discover -s tests -p 'test_gpu_resolution.py'
+test-triton: all
+	python3 -c 'import sys; from engine.gpu_replay import triton_available; sys.exit(0 if triton_available() else "No usable physical Triton device at the selected index")'
+	python3 native/test_chart_batch.py
+	python3 -m unittest discover -s tests -p 'test_gpu_trace_rows.py'
+	python3 -m unittest discover -s tests -p 'test_gpu_rank.py'
+	python3 -m unittest discover -s tests -p 'test_gpu_replay.py'
+	python3 -m unittest discover -s tests -p 'test_gpu_resolution.py'
 test: all
+	$(MAKE) -C native -f groebner.mk test-verify
 	python3 -m unittest discover -s tests -v
 	python3 native/test_ordinary.py
 	python3 native/test_chain.py

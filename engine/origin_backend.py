@@ -23,10 +23,8 @@ from fractions import Fraction
 from pathlib import Path
 from time import monotonic
 
-import sympy as sp
-
-from .local_blowups import GiveUp, acampo_over, cells, dual_cells
-from .newton_repair import _text, records
+def _text(expr):
+    return str(expr).replace("**", "^")
 
 
 def resolve_origin(poly, variables, mode, seconds=120):
@@ -52,15 +50,23 @@ def resolve_origin(poly, variables, mode, seconds=120):
 def _resolve(poly, variables, mode, seconds):
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
-    symbols = tuple(sp.Symbol(name) for name in names)
-    equation = sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(s**e for s, e in zip(symbols, exponents)))
-                        for exponents, c in poly.items()))
+    from . import native_library
+    from .atlas import to_json
+    from .local_blowups import GiveUp, acampo_over, cells, dual_cells
+    from .strata import records
+    if native_library._MODE == "native" and native_library._kernel() is not None:
+        from . import native_polynomial
+        symbols = tuple(map(native_polynomial.Symbol, names))
+        equation = native_polynomial.from_terms(symbols, poly)
+    else:
+        import sympy as sp
+        from .atlas import _polynomial
+        symbols = tuple(map(sp.Symbol, names))
+        equation = _polynomial(poly, symbols)
     # The rule is for a reduced equation: a repeated factor is left to the
     # treatment of divisors with multiplicities.
-    repeated = equation
-    for s in symbols:
-        repeated = sp.gcd(repeated, sp.diff(equation, s))
-    if repeated.free_symbols:
+    from .affine_kernel import rational_factor_rows
+    if any(power > 1 for _, power, _ in rational_factor_rows(symbols, equation)[1]):
         return None
     try:
         data, strata, charts, centres = acampo_over(symbols, [("strict", 1, 1, (equation,))], symbols,
@@ -102,7 +108,7 @@ def _resolve(poly, variables, mode, seconds):
         "status": "resolved", "engine": "canonical-blowups",
         "summary": f"{len(centres)} blowup{'s' if len(centres) != 1 else ''} with smooth centres ({kinds}); "
                    f"{len(final)} final charts.",
-        "steps": steps, "charts": final,
+        "steps": steps, "charts": final, "atlas": to_json(charts),
         "dual_complex": {
             "status": "complete" if found is not None else "partial",
             "convention": "Ambient exceptional divisor over the origin over Qbar.",

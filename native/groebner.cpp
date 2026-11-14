@@ -129,6 +129,76 @@ void Engine::reduce(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, lon
     f.swap(done);
 }
 
+// Ordered division returns the same quotient list as multivariate division
+// over K: all lifted K heads are theta-free and appear first, in the order
+// of the reduced K-basis. Division by m last only changes coefficients.
+std::string Engine::division(Poly& f, Rational& scale) {
+    if (f.empty()) return "\n";  // division of the zero polynomial has no quotients
+    std::vector<std::string> quotients(G.size());
+    const int stride = R.stride;
+    Poly done, next;
+    size_t at = 0;
+    while (at < f.size()) {
+        const u64* monomial = f.m.data() + at*stride;
+        size_t k = 0;
+        while (k < G.size() && !R.divides(G[k].p.m.data(), monomial)) ++k;
+        if (k == G.size()) {
+            done.c.push_back(std::move(f.c[at]));
+            done.m.insert(done.m.end(), monomial, monomial+stride);
+            ++at;
+            continue;
+        }
+        const Poly& g = G[k].p;
+        Z coefficient;
+        fmpz_mul(&coefficient.v, &scale.num.v, &f.c[at].v);
+        Poly term;
+        term.c.emplace_back();
+        fmpz_one(&term.c[0].v);
+        term.m.resize(stride);
+        R.divide(term.m.data(), monomial, g.m.data());
+        // G is output monic. The quotient coefficient on that generator is
+        // the current leading coefficient, regardless of primitive scaling.
+        std::string word;
+        write(R, word, term, &coefficient.v, &scale.den.v);
+        word.pop_back();
+        if (!quotients[k].empty()) quotients[k] += ';';
+        quotients[k] += word;
+        Z common, left, right;
+        fmpz_gcd(&common.v, &f.c[at].v, &g.c[0].v);
+        fmpz_divexact(&left.v, &g.c[0].v, &common.v);
+        fmpz_divexact(&right.v, &f.c[at].v, &common.v);
+        fmpz_neg(&right.v, &right.v);
+        merge(next, f, at+1, &left.v, nullptr, g, 1, &right.v, term.m.data());
+        f.swap(next);
+        // Multiplying the held remainder by left is offset in its denominator.
+        if (!fmpz_is_one(&left.v)) {
+            for (Z& c : done.c) fmpz_mul(&c.v, &c.v, &left.v);
+            fmpz_mul(&scale.den.v, &scale.den.v, &left.v);
+        }
+        at = 0;
+    }
+    std::string result;
+    // Quotients accumulate in Q[x,theta]. Reduce their coefficients modulo
+    // m, which is the last basis row for every proper ideal.
+    const bool proper = !G.empty() && G.back().p.m[0] > 0;
+    Engine coefficients;
+    if (proper) {
+        coefficients.R = R;
+        coefficients.compute({G.back().p}, 1);
+    }
+    for (size_t k = 0; k < G.size() - static_cast<size_t>(proper); ++k) {
+        const std::string word = quotients[k] + "\n";
+        if (!proper) { result += word; continue; }
+        const char* cursor = word.data();
+        Rational factor;
+        Poly q = parse(R, cursor, cursor + word.size(), &factor);
+        coefficients.reduce(q, 0, &factor.num.v, &factor.den.v);
+        write(R, result, q, &factor.num.v, &factor.den.v);
+    }
+    write(R, result, done, &scale.num.v, &scale.den.v);
+    return result;
+}
+
 Poly Engine::spoly(const Pair& pair) const {
     const Poly &f = G[pair.i].p, &g = G[pair.j].p;
     u64 shift_f[MAX_STRIDE], shift_g[MAX_STRIDE];
@@ -372,7 +442,9 @@ void Engine::compute(const std::vector<Poly>& input, size_t known) {
         // does not compare degrees first: the homogenized ideal with its
         // Hilbert function, which makes every useless pair disappear. For any
         // order: modular images, which avoid swelling coefficients.
-        if (round % 3 == 0 && R.n < MAX_VARIABLES) {
+        // The homogenized auxiliary routes implement the QQ orders. The
+        // coefficient-block order uses the exact Buchberger strategies.
+        if (round % 3 == 0 && R.n < MAX_VARIABLES && !R.coefficient_last) {
             Engine other;
             const long before = restarts;
             if ((R.lex || R.eliminate) && !R.graded &&
@@ -719,8 +791,27 @@ using namespace atlas;
 
 extern "C" {
 
+int atlas_coefficient_block_abi() noexcept { return 1; }
+
+char* atlas_field_division(void* basis, const char* input, size_t length) noexcept {
+    try {
+        Engine* engine = static_cast<Engine*>(basis);
+        if (!engine->R.coefficient_last) throw std::invalid_argument("Expected a coefficient-block basis.");
+        const char* end = input + length;
+        Rational scale;
+        Poly f = parse(engine->R, input, end, &scale);
+        return copy_text(engine->division(f, scale));
+    } catch (const std::exception& error) {
+        set_error(error.what());
+    } catch (...) {
+        set_error("Unknown number-field division failure.");
+    }
+    return nullptr;
+}
+
 // Input: a header line "n order known" (order 0 grevlex, 1 lex, 2 the first
-// variable before the others and grevlex after that; the first
+// variable before the others and grevlex after that; adding 3 places a
+// coefficient-generator block after those variables. The first
 // `known` generators are declared to be a Groebner basis), then one
 // polynomial per line. Returns a basis handle, or null with an error set.
 void* atlas_groebner(const char* input, size_t length) noexcept {
@@ -732,7 +823,7 @@ void* atlas_groebner(const char* input, size_t length) noexcept {
         const long order = std::strtol(stop, &stop, 10);
         const long known = std::strtol(stop, &stop, 10);
         at = stop;
-        if (at >= end || *at != '\n' || order < 0 || order > 2 || known < 0)
+        if (at >= end || *at != '\n' || order < 0 || order > 5 || known < 0)
             throw std::invalid_argument("Bad header.");
         ++at;
         auto engine = std::make_unique<Engine>();

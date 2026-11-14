@@ -6,6 +6,7 @@
 // Every routine follows engine/blowup_ideal.py step by step and returns the
 // same generators, so the two implementations can be compared exactly.
 #include "groebner.hpp"
+#include <flint/fmpz_poly.h>
 
 #include <chrono>
 #include <cstdio>
@@ -952,6 +953,146 @@ Ring grevlex(long n) {
     return R;
 }
 
+struct CoordinatePolynomial {
+    fmpz_poly_t p;
+    CoordinatePolynomial() { fmpz_poly_init(p); }
+    ~CoordinatePolynomial() { fmpz_poly_clear(p); }
+    CoordinatePolynomial(const CoordinatePolynomial&) = delete;
+};
+
+// A proper monomial ideal is finite exactly when it contains a pure power
+// of each variable. Its radical then has the coordinates as its reduced basis.
+std::string finite_monomial_radical(const Ring& R, const std::vector<Poly>& ideal) {
+    u64 pure_powers = 0;
+    for (const Poly& f : ideal) {
+        if (f.empty()) continue;
+        if (constant(f)) {
+            std::string out;
+            put(R, out, unit_ideal(R));
+            return out;
+        }
+        const u64* m = f.m.data();
+        for (int v = 0; v < R.n; ++v) {
+            if (Ring::field(m, R.position(v)) == m[0]) {
+                pure_powers |= u64(1) << v;
+                break;
+            }
+        }
+    }
+    if (pure_powers != (u64(1) << R.n) - 1) return "positive_dimension\n";
+
+    std::string out;
+    Gen coordinate = normal(one(R));
+    for (int v = 0; v < R.n; ++v) {
+        variable(R, coordinate.p.m.data(), v);
+        write(R, out, coordinate.p, &coordinate.num.v, &coordinate.den.v);
+    }
+    return out;
+}
+
+// Seidenberg's criterion over Q: adjoin the squarefree parts of the
+// coordinate eliminants, then compute the reduced basis in the original ring.
+std::string op_finite_radical(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    std::vector<Poly> input;
+    while (in.at < in.end) input.push_back(parse(R, in.at, in.end, nullptr));
+    if (std::all_of(input.begin(), input.end(), [](const Poly& f) { return f.size() <= 1; }))
+        return finite_monomial_radical(R, input);
+    std::vector<Poly> generators = input;
+    Ring lex;
+    lex.init(R.n, 1);
+    for (int v = 0; v < R.n; ++v) {
+        int permutation[MAX_VARIABLES];
+        for (int j = 0; j < R.n; ++j) permutation[j] = j == v ? R.n-1 : j - (j > v);
+        std::vector<Poly> reordered;
+        for (const Poly& f : input) reordered.push_back(convert(R, lex, f, permutation));
+        Basis basis(lex, reordered);
+        if (basis.unit()) {
+            std::string out;
+            put(R, out, unit_ideal(R));
+            return out;
+        }
+        // In lex order with v last, a pure v leading power implies every term is in Q[v].
+        const Poly* eliminant = nullptr;
+        for (const auto& e : basis.engine.G) {
+            if (e.p.m[0] == Ring::field(e.p.m.data(), lex.position(R.n-1))) {
+                eliminant = &e.p;
+                break;
+            }
+        }
+        if (!eliminant) return "positive_dimension\n";
+        CoordinatePolynomial p, derivative, divisor, squarefree;
+        for (size_t i = 0; i < eliminant->size(); ++i)
+            fmpz_poly_set_coeff_fmpz(p.p, eliminant->m[i*lex.stride], &eliminant->c[i].v);
+        fmpz_poly_derivative(derivative.p, p.p);
+        fmpz_poly_gcd(divisor.p, p.p, derivative.p);
+        if (fmpz_poly_degree(divisor.p) == 0) continue;
+        if (!fmpz_poly_divides(squarefree.p, p.p, divisor.p))
+            throw std::logic_error("Inexact squarefree quotient.");
+        Poly relation;
+        long powers[MAX_VARIABLES] = {};
+        for (long degree = fmpz_poly_degree(squarefree.p); degree >= 0; --degree) {
+            const fmpz* coefficient = fmpz_poly_get_coeff_ptr(squarefree.p, degree);
+            if (fmpz_is_zero(coefficient)) continue;
+            powers[v] = degree;
+            relation.m.resize(relation.m.size() + R.stride);
+            R.pack(relation.m.data() + relation.m.size() - R.stride, powers);
+            relation.c.emplace_back();
+            fmpz_set(&relation.c.back().v, coefficient);
+        }
+        generators.push_back(std::move(relation));
+    }
+    std::string out;
+    put(R, out, Basis(R, generators).monic());
+    return out;
+}
+
+// A prime over the leading monomial ideal must contain at least one
+// variable from each leading support. Its least possible height is the
+// minimum hitting set size, attained by the corresponding coordinate prime.
+// Branch on a smallest support not hit yet. Disjoint supports give a lower
+// bound for the remaining height; this avoids enumerating every coordinate
+// subset even for coordinate flats in large ambient spaces.
+int minimum_height(const std::vector<u64>& supports, u64 selected, int height, int best) {
+    u64 branch = 0, disjoint = 0;
+    int bound = height;
+    for (auto support : supports) {
+        if (support & selected) continue;
+        if (!branch) branch = support;
+        if (!(disjoint & support)) {
+            disjoint |= support;
+            if (++bound >= best) return best;
+        }
+    }
+    if (!branch) return height;
+    while (branch) {
+        const u64 bit = branch & (0 - branch);
+        best = minimum_height(supports, selected | bit, height + 1, best);
+        if (best == bound) break;
+        branch ^= bit;
+    }
+    return best;
+}
+
+std::string op_dimension(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const Basis basis(R, polys(in.rest(R)));
+    if (basis.unit()) return "-1\n";
+    std::vector<u64> supports;
+    for (const auto& e : basis.engine.G) {
+        u64 support = 0;
+        for (int j = 0; j < R.n; ++j)
+            if (R.field(e.p.m.data(), R.position(j))) support |= u64(1) << j;
+        supports.push_back(support);
+    }
+    std::sort(supports.begin(), supports.end(), [](u64 a, u64 b) {
+        const auto count_a = __builtin_popcountll(a), count_b = __builtin_popcountll(b);
+        return count_a == count_b ? a < b : count_a < count_b;
+    });
+    supports.erase(std::unique(supports.begin(), supports.end()), supports.end());
+    return std::to_string(R.n - minimum_height(supports, 0, 0, R.n)) + "\n";
+}
+
 // "saturate n s": s generators, then the element to saturate by.
 std::string op_saturate(Reader& in) {
     const Ring R = grevlex(in.number(0));
@@ -1262,25 +1403,25 @@ Fraction plus(const Ring& R, const Fraction& a, const Fraction& b, bool subtract
     return out;
 }
 
-// Whether the ideal has no zero where the function u is not zero: u lies in
-// its radical. u is reduced modulo the ideal first, so that a large u does
-// not enter a basis: I + (t*u - 1) = I + (t*r - 1) for r congruent to u.
-bool empty_off(const Ring& R, const std::vector<Poly>& gens, const Poly& u) {
-    const std::vector<Poly> input = present(gens);
-    if (input.empty()) return u.empty();
-    Basis basis(R, input);
-    if (basis.unit()) return true;
-    if (constant(u)) return u.empty();
-    const Poly r = basis.remainder(u);
-    if (r.empty()) return true;
-    if (constant(r)) return false;
+// The Rabinowitsch test with a unit already reduced modulo the basis.
+bool empty_off_basis(const Ring& R, const Basis& basis, const Poly& unit) {
+    if (unit.empty() || basis.unit()) return true;
+    if (constant(unit) || basis.engine.G.empty()) return false;
     Ring T;
     T.init(R.n + 1, 0);
     const std::vector<int> up = shifted(R.n, 1);
     std::vector<Poly> wide;
     for (const Poly& g : basis.elements()) wide.push_back(convert(R, T, g, up.data()));
-    wide.push_back(inverse_relation(R, T, r));
-    return Basis(T, wide).unit();
+    wide.push_back(inverse_relation(R, T, unit));
+    return Basis(T, wide, wide.size() - 1).unit();
+}
+
+// Congruent units determine the same open set of V(gens).
+bool empty_off(const Ring& R, const std::vector<Poly>& gens, const Poly& u) {
+    const std::vector<Poly> input = present(gens);
+    if (input.empty()) return u.empty();
+    Basis basis(R, input);
+    return empty_off_basis(R, basis, basis.remainder(u));
 }
 
 class Surface {
@@ -1785,6 +1926,49 @@ std::string op_surface(Reader& in) {
 }
 
 
+// Only zero sets enter the constructible Euler computation. A monomial
+// base equation has the same zero set as the product of its distinct
+// variables. Every multiple of that squarefree product vanishes there,
+// so remove such terms from all other conditions *before* factorization
+// or fibre projection. Keep these reductions out of the Jacobian test.
+void restrict_to_base_monomials(const Ring& R, std::vector<Poly>& base,
+                                std::vector<std::vector<Poly>>& ideals,
+                                std::vector<std::vector<Poly>>& removed) {
+    std::vector<Poly> divisors, other;
+    for (auto& f : base) {
+        if (f.size() != 1) { other.push_back(std::move(f)); continue; }
+        long powers[MAX_VARIABLES];
+        R.unpack(f.m.data(), powers);
+        for (int j = 0; j < R.n; ++j) powers[j] = powers[j] != 0;
+        R.pack(f.m.data(), powers);
+        if (std::any_of(divisors.begin(), divisors.end(), [&](const Poly& p) {
+                return R.divides(p.m.data(), f.m.data()); })) continue;
+        divisors.erase(std::remove_if(divisors.begin(), divisors.end(), [&](const Poly& p) {
+            return R.divides(f.m.data(), p.m.data()); }), divisors.end());
+        divisors.push_back(std::move(f));
+    }
+    base = std::move(other);
+    if (divisors.empty()) return;
+    auto restrict = [&](std::vector<Poly>& equations) {
+        for (auto& f : equations) {
+            Poly out;
+            for (size_t i = 0; i < f.size(); ++i) {
+                auto m = f.m.data() + i*R.stride;
+                if (std::any_of(divisors.begin(), divisors.end(), [&](const Poly& p) {
+                        return R.divides(p.m.data(), m); })) continue;
+                out.m.insert(out.m.end(), m, m+R.stride);
+                out.c.push_back(std::move(f.c[i]));
+            }
+            f.swap(out);
+        }
+        equations = present(std::move(equations));
+    };
+    restrict(base);
+    for (auto& ideal : ideals) restrict(ideal);
+    for (auto& ideal : removed) restrict(ideal);
+    for (auto& p : divisors) base.push_back(std::move(p));
+}
+
 // "strata n b k s_1 ... s_k [r t_1 ... t_r]": b equations of a part of a
 // chart, then k ideals of closed sets, then r ideals of closed sets that are
 // left out of the part. For every set J of the k whose common part there is
@@ -1799,10 +1983,11 @@ std::string op_strata(Reader& in) {
     const size_t r = in.numbers.size() > 3 + k ? in.count(3 + k) : 0;
     std::vector<size_t> left(r);
     for (size_t i = 0; i < r; ++i) left[i] = in.count(4 + k + i);
-    const std::vector<Poly> base = present(polys(in.ideal(R, b)));
+    std::vector<Poly> base = present(polys(in.ideal(R, b)));
     std::vector<std::vector<Poly>> ideals, removed;
     for (size_t i = 0; i < k; ++i) ideals.push_back(present(polys(in.ideal(R, sizes[i]))));
     for (size_t i = 0; i < r; ++i) removed.push_back(present(polys(in.ideal(R, left[i]))));
+    restrict_to_base_monomials(R, base, ideals, removed);
     Euler euler(R);
     std::vector<std::vector<size_t>> alive = {{}};
     std::string out;
@@ -1826,11 +2011,13 @@ std::string op_strata(Reader& in) {
                     std::vector<std::vector<Poly>> others = removed;
                     for (size_t j = 0; j < k; ++j)
                         if (std::find(subset.begin(), subset.end(), j) == subset.end()) others.push_back(ideals[j]);
-                    const long chi = euler.characteristic(equations, others);
-                    if (chi) {
+                    const auto chi = euler.characteristic(equations, others);
+                    if (!fmpz_is_zero(&chi.v)) {
                         out += "stratum " + std::to_string(size);
                         for (size_t j : subset) out += " " + std::to_string(j);
-                        out += " " + std::to_string(chi) + "\n";
+                        char* decimal = fmpz_get_str(nullptr, 10, &chi.v);
+                        out += " "; out += decimal; out += '\n';
+                        flint_free(decimal);
                     }
                 }
             }
@@ -2120,7 +2307,180 @@ std::string op_blowup(Reader& in) {
     return out;
 }
 
+// Remove the exceptional part from the divisor of a nonzero function.
+// On a smooth chart the ideal of each Cartier divisor is invertible.
+// If the residual ideal is contained in that ideal, quotienting by it
+// subtracts one copy of the divisor. Repeat until its order is zero.
+std::string op_strict_parts(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const auto ambient = polys(in.ideal(R, in.count(1)));
+    const size_t count = in.count(2);
+    Basis chart(R, ambient);
+    std::vector<std::vector<Poly>> divisors;
+    std::vector<std::unique_ptr<Basis>> tests;
+    for (size_t i = 0; i < count; ++i) {
+        divisors.push_back(polys(in.ideal(R, in.count(3 + i))));
+        auto test = std::make_unique<Basis>(R, joined(ambient, divisors.back()));
+        if (test->unit() || std::all_of(divisors.back().begin(), divisors.back().end(),
+                                       [&](const Poly& f) { return chart.contains(f); }))
+            throw std::invalid_argument("Expected a nonempty divisor of positive codimension.");
+        tests.push_back(std::move(test));
+    }
+    Quotient quotient(R);
+    std::string out;
+    for (const Gen& f : in.rest(R)) {
+        if (chart.contains(f.p))
+            throw std::invalid_argument("A factor vanishes identically on a chart component.");
+        std::vector<Poly> residual = joined(ambient, {f.p});
+        for (size_t i = 0; i < count; ++i) {
+            int order = 0;
+            while (std::all_of(residual.begin(), residual.end(),
+                               [&](const Poly& g) { return tests[i]->contains(g); })) {
+                Basis before(R, residual);
+                residual = Basis(R, quotient.colon(residual, divisors[i])).elements();
+                if (std::all_of(residual.begin(), residual.end(),
+                                [&](const Poly& g) { return before.contains(g); }))
+                    throw std::invalid_argument("A factor has no finite order on a divisor.");
+                ++order;
+            }
+            out += std::to_string(order) + " ";
+        }
+        const Ideal strict = Basis(R, residual).monic();
+        out += std::to_string(strict.size()) + "\n";
+        put(R, out, strict);
+    }
+    return out;
+}
+
+// Count the owned irreducible components when setting coordinate variables to
+// zero leaves one equation in two free coordinates. Other presentations defer.
+std::string op_plane_components(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const auto equations = polys(in.ideal(R, in.count(1)));
+    auto region = polys(in.ideal(R, in.count(2)));
+    std::vector<std::vector<Poly>> removed;
+    for (size_t i = 3; i < in.numbers.size(); ++i)
+        removed.push_back(polys(in.ideal(R, in.count(i))));
+    std::vector<bool> zero(R.n, false);
+    long powers[MAX_VARIABLES];
+    for (const Poly& f : equations) {
+        if (f.size() == 1 && f.m[0] == 1) {
+            R.unpack(f.m.data(), powers);
+            zero[std::find(powers, powers + R.n, 1L) - powers] = true;
+        }
+    }
+    std::vector<int> free;
+    for (int i = 0; i < R.n; ++i) if (!zero[i]) free.push_back(i);
+    if (free.size() != 2) return "unsupported\n";
+    auto restrict = [&](const Poly& f) {
+        Poly out;
+        for (size_t j = 0; j < f.size(); ++j) {
+            const u64* mon = f.m.data() + j * R.stride;
+            R.unpack(mon, powers);
+            bool vanishes = false;
+            for (int k = 0; k < R.n; ++k) if (zero[k] && powers[k]) vanishes = true;
+            if (!vanishes) {
+                out.m.insert(out.m.end(), mon, mon + R.stride);
+                out.c.push_back(f.c[j]);
+            }
+        }
+        return out;
+    };
+    Poly equation;
+    for (const Poly& g : equations) {
+        Poly f = restrict(g);
+        if (f.empty()) continue;
+        if (!equation.empty()) return "unsupported\n";
+        equation = std::move(f);
+    }
+    if (equation.empty()) return "unsupported\n";
+    for (Poly& g : region) g = restrict(g);
+    for (auto& z : removed) for (Poly& g : z) g = restrict(g);
+    const auto counts = Euler(R).plane_components(equation, free[0], free[1], region, removed);
+    return std::to_string(counts.first) + " " + std::to_string(counts.second) + "\n";
+}
+
+// Orders of the equation and of the relative Jacobian on a smooth graph
+// chart. The first d coordinates are the coordinates of the projection.
+std::string op_graph_orders(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const int d = static_cast<int>(in.number(1));
+    if (d < 1 || d > R.n) throw std::invalid_argument("Bad projection dimension.");
+    const auto ambient = polys(in.ideal(R, in.count(2)));
+    const auto prime = polys(in.ideal(R, in.count(3)));
+    const auto equation = in.gen(R).p;
+    Basis chart(R, ambient);
+    if (chart.contains(equation)) throw std::invalid_argument("Zero pullback on the chart.");
+    auto divisor = joined(ambient, prime);
+    Basis first(R, divisor);
+    if (first.unit()) throw std::invalid_argument("Empty divisor.");
+    std::vector<Poly> generators;
+    for (const Poly& g : prime)
+        if (!chart.contains(g)) generators.push_back(g);
+    if (generators.empty()) throw std::invalid_argument("Missing divisor ideal.");
+
+    const int extra = R.n - d;
+    std::vector<Poly> jac;
+    if (extra == 0) {
+        jac.push_back(one(R));
+    } else {
+        Matrix relative;
+        relative.rows = ambient.size();
+        relative.columns = extra;
+        if (relative.rows < static_cast<size_t>(extra)) throw std::invalid_argument("Missing graph equations.");
+        for (const Poly& g : ambient)
+            for (int j = d; j < R.n; ++j)
+                relative.entries.push_back(derivative(R, g, j));
+        Minors minors(R, std::move(relative), extra);
+        do {
+            for (const auto& pair : minors.current())
+                if (!chart.contains(pair.second)) jac.push_back(pair.second);
+        } while (minors.next());
+        if (jac.empty()) throw std::invalid_argument("The graph projection is not generically etale.");
+    }
+    int order = -1, discrepancy = -1;
+    auto power = generators;
+    for (int k = 1; order < 0 || discrepancy < 0; ++k) {
+        Basis test(R, joined(ambient, power));
+        if (order < 0 && !test.contains(equation)) order = k - 1;
+        if (discrepancy < 0 && std::any_of(jac.begin(), jac.end(), [&](const Poly& h) {
+                return !test.contains(h);
+            })) discrepancy = k - 1;
+        if (order < 0 || discrepancy < 0) {
+            power.clear();
+            for (const Poly& h : test.elements())
+                if (!chart.contains(h))
+                    for (const Poly& g : generators) power.push_back(multiply(R, g, h));
+        }
+    }
+    return std::to_string(order) + " " + std::to_string(discrepancy + 1) + "\n";
+}
+
 }  // namespace
+// Work with a frame on the open set where every specified unit is nonzero.
+std::string frame_locus(const Ring& input_ring, const std::vector<Poly>& equations,
+                        const std::vector<Poly>& units, bool closure) {
+    const Ring R = grevlex(input_ring.n);
+    const auto positions = shifted(R.n, 0);
+    std::vector<Poly> generators;
+    for (const Poly& g : equations)
+        if (!g.empty()) generators.push_back(convert(input_ring, R, g, positions.data()));
+    Basis basis(R, generators);
+    Poly unit = one(R);
+    for (const Poly& u : units) {
+        if (unit.empty() || basis.unit()) break;
+        Poly factor = basis.remainder(convert(input_ring, R, u, positions.data()));
+        if (constant(factor)) continue;
+        if (factor.empty() || constant(unit)) unit = std::move(factor);
+        else unit = basis.remainder(multiply(R, unit, factor));
+    }
+    if (!closure) return empty_off_basis(R, basis, unit) ? "1\n" : "0\n";
+    std::string out;
+    if (unit.empty() || basis.unit()) put(R, out, unit_ideal(R));
+    else if (constant(unit) || generators.empty()) put(R, out, basis.monic());
+    else put(R, out, monic(saturation(R, basis.elements(), unit)));
+    return out;
+}
 }  // namespace atlas
 
 using namespace atlas;
@@ -2135,7 +2495,12 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
     try {
         Reader in(input, length);
         std::string out;
-        if (in.op == "saturate") out = op_saturate(in);
+        if (in.op == "strict_parts") out = op_strict_parts(in);
+        else if (in.op == "plane_components") out = op_plane_components(in);
+        else if (in.op == "graph_orders") out = op_graph_orders(in);
+        else if (in.op == "dimension") out = op_dimension(in);
+        else if (in.op == "saturate") out = op_saturate(in);
+        else if (in.op == "finite_radical") out = op_finite_radical(in);
         else if (in.op == "radical") out = op_radical(in);
         else if (in.op == "smooth") out = op_smooth(in);
         else if (in.op == "snc") out = op_snc(in);

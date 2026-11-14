@@ -1,18 +1,46 @@
 """Exact Euler characteristics of open total-transform components over zero."""
+import ctypes
 from itertools import combinations
-
-import sympy as sp
+from operator import index
 
 from .polynomial import parse
 
 
 def _volume(points, dimension):
+    """Normalized Newton polytope volume in the full orbit lattice."""
+    from .groebner import CHECK, _MODE, _kernel
+    points = tuple(dict.fromkeys(tuple(map(index, p)) for p in points))
+    if any(len(p) != dimension for p in points):
+        raise ValueError("Each lattice point must have the stated dimension.")
+    if len(points) <= dimension:
+        return 0
+    library = _kernel()
+    if _MODE == "sympy" or dimension == 0 or not hasattr(library, "atlas_lattice_volume"):
+        return _volume_reference(points, dimension)
+    operation = library.atlas_lattice_volume
+    operation.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+    operation.restype = ctypes.c_void_p
+    payload = ("\n".join([str(dimension), *(" ".join(map(str, p)) for p in points)]) + "\n").encode()
+    result = operation(payload, len(payload))
+    if not result:
+        raise ArithmeticError("The kernel could not compute the lattice volume.")
+    try:
+        value = int(ctypes.string_at(result))
+    finally:
+        library.atlas_groebner_release(result)
+    if CHECK and value != _volume_reference(points, dimension):
+        raise AssertionError("The normalized lattice volumes differ.")
+    return value
+
+
+def _volume_reference(points, dimension):
     """Normalized volume in the full orbit character lattice Z^dimension.
 
     The incremental triangulation cones an outside point over every visible
     boundary simplex. Integer supporting forms evaluate to signed normalized
     simplex volumes, including the lattice index of each boundary simplex.
     """
+    import sympy as sp
     points = tuple(dict.fromkeys(points))
     if len(points) <= dimension:
         return 0
@@ -94,7 +122,8 @@ def toric_contributions(result, poly, variables):
             return [{"component":"smooth strict component", "multiplicity":min(map(sum,poly)),
                      "euler_characteristic":1}]
         return None
-    valuations = [[sum(r*t for r,t in zip(ray,e)) for e in exponents] for ray in rays]
+    from .binomial_kernel import pairings
+    valuations = pairings(rays, exponents)
     orders = [min(row) for row in valuations]
     if any(orders[:n]) or min(orders[n:]) < 1:
         return None

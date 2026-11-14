@@ -17,6 +17,53 @@ sys.path.insert(0, str(ROOT / "benchmarks"))
 
 @unittest.skipUnless(_kernel() and os.getenv("ATLAS_GROEBNER") != "sympy", "the native Groebner kernel is not in use")
 class GroebnerKernelTests(unittest.TestCase):
+    def test_graded_lex_and_its_ordered_quotients(self):
+        from unittest.mock import patch
+        from engine import groebner as gb
+        x,y,z = sp.symbols("x y z")
+        for field, coefficient in ((sp.QQ, 2), (sp.QQ.algebraic_field(sp.sqrt(2)), sp.sqrt(2))):
+            rows = (x*z-y**2, z**2-coefficient*x, x*y-3)
+            ref = sp.groebner(rows, x,y,z, order="grlex", domain=field)
+            f = x**2*z + y*z**3 + x*y
+            expected = ref.reduce(f)
+            with patch.object(gb, "_MODE", "native"), patch.object(sp, "groebner", side_effect=AssertionError):
+                actual = gb.groebner(rows, (x,y,z), order="grlex", domain=field)
+                self.assertEqual(actual.exprs, ref.exprs)
+                self.assertEqual(actual.reduce(f), expected)
+
+    def test_packed_basis_with_unpacked_remainder(self):
+        from unittest.mock import patch
+        from engine import groebner as gb
+        if not hasattr(_kernel(), "atlas_wide_abi"):
+            self.skipTest("the sparse QQ arithmetic ABI is unavailable")
+        x,t = sp.symbols("x t")
+        # A pre-existing small parameter relation receives a sparse
+        # polynomial of high degree after a chart pulls it back.
+        with patch.object(gb, "_MODE", "native"), patch.object(gb, "CHECK", False):
+            basis = groebner((t**2-2,), (x,t))
+            large = x**(10**10)
+            self.assertEqual(basis.reduce((t**2+t)*large)[1], t*large+2*large)
+            self.assertTrue(basis.contains(large*(t**2-2)))
+
+    def test_compound_qq_codec_with_colliding_names_and_invalid_input(self):
+        from engine.blowup_ideal import _expressions
+        from engine.groebner import _poly
+        from sympy.polys.polyerrors import BasePolynomialError
+        a,b = sp.Dummy("v"), sp.Dummy("v")
+        v = (a,b)
+        f = (a+2*b)**6 + a*(a-b)**3/2
+        expected = sp.Poly(f, *v, domain=QQ)
+        self.assertEqual(_poly(v, _line(v, f))[0], expected)
+        self.assertEqual(_expressions(v, (f,0), QQ), (expected.as_expr(),))
+        self.assertIn("*", _line(v, (a+b)*(a-b)))
+        # The QQ contract rejects a non-polynomial fraction even when its
+        # numerator and denominator cancel in a rational function field.
+        with self.assertRaises(BasePolynomialError):
+            _expressions(v, (f+(a**2-b**2)/(a-b),), QQ)
+        imaginary = sp.Symbol("I")
+        with self.assertRaises(BasePolynomialError):
+            _line((imaginary,a), (imaginary+a)**3 + sp.I)
+
     def assert_same(self, ideal, gens, order):
         native = groebner(ideal, gens, order=order)
         self.assertNotIsInstance(native, GroebnerBasis)  # the kernel answered
@@ -69,14 +116,23 @@ class GroebnerKernelTests(unittest.TestCase):
                 self.assertEqual(list(colon(ideal, by, gens)),
                                  list(sp.groebner(reference, *gens, order="grevlex", domain=QQ).exprs))
 
-    def test_sympy_takes_over_outside_the_kernel(self):
+    def test_native_limits_and_explicit_symbolic_fallback(self):
+        from unittest.mock import patch
+        from engine import groebner as gb
         x, y = sp.symbols("x y")
-        # Exponents beyond the packed range, and coefficients in a number field.
-        self.assertIsInstance(groebner((x**40000 - y,), (x, y)), GroebnerBasis)
-        field = QQ.algebraic_field(sp.sqrt(2))
-        basis = groebner((x**2 - 2, y - sp.sqrt(2)*x), (x, y), domain=field)
-        self.assertIsInstance(basis, GroebnerBasis)
-        self.assertEqual(len(basis.exprs), 2)
+        with patch.object(gb,"_MODE","native"), patch.object(sp,"groebner",side_effect=AssertionError):
+            # The unpacked FLINT ring accepts exponents above the packed limit.
+            self.assertNotIsInstance(groebner((x**40000-y,), (x,y)), GroebnerBasis)
+            with self.assertRaisesRegex(ArithmeticError,"ATLAS_GROEBNER=sympy"):
+                groebner((x+y,), (x,y), domain=sp.GF(3))
+            with self.assertRaisesRegex(ArithmeticError,"ATLAS_GROEBNER=sympy"):
+                groebner((x+y,), (x,y), order=sp.polys.orderings.lex)
+            with patch.object(gb,"_kernel",return_value=None):
+                with self.assertRaisesRegex(ArithmeticError,"make groebner"):
+                    groebner((x+y,), (x,y))
+        for mode in ("sympy","check"):
+            with patch.object(gb,"_MODE",mode), patch.object(gb,"_kernel",return_value=None):
+                self.assertEqual(groebner((x+y,), (x,y), domain=sp.GF(3)).exprs,[x+y])
 
     def test_recorded_verifier_bases(self):
         # Every basis the ideal-blowup verifier asked for on the benchmark germs.

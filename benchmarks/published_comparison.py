@@ -9,10 +9,12 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import statistics
 import subprocess
+import sys
 from time import perf_counter_ns
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,7 +54,7 @@ def cpu_name():
 def geometry(result):
     fields = ("variables", "polynomial", "mode", "charts", "dual_complex", "fan",
               "root_families", "coefficient_field", "algebraic_numbers")
-    selected = {k: result[k] for k in fields if k in result}
+    selected = {"atlas": result["atlas"], **{k: result[k] for k in fields if k in result}}
     return hashlib.sha256(json.dumps(selected, sort_keys=True,
                                      separators=(",", ":")).encode()).hexdigest()
 
@@ -80,12 +82,13 @@ def validate_a6(result):
         raise RuntimeError("Atlas's A6 graph differs from the published intersection matrix.")
 
 
-def sample(case, policy):
+def sample(case, policy, backend):
     eq, names, mode = CASES[case]
-    command = [str(ROOT/"atlas"), "resolve", eq, "--vars", names, "--mode", mode,
+    command = [sys.executable, str(ROOT/"atlas"), "resolve", eq, "--vars", names, "--mode", mode,
                "--compute", policy, "--quick", "--json"]
     start = perf_counter_ns()
-    proc = subprocess.run(command, capture_output=True, timeout=90)
+    proc = subprocess.run(command, env={**os.environ, "RESOLUTION_GPU_BACKEND": backend},
+                          capture_output=True, timeout=90)
     elapsed = (perf_counter_ns()-start)/1e6
     r = json.loads(proc.stdout)
     if proc.returncode not in (0,3) or r.get("status") not in ("resolved","inconclusive"):
@@ -95,8 +98,10 @@ def sample(case, policy):
     if case == "a6":
         validate_a6(r)
     batch = r.get("certificate", {}).get("chart_batch", {})
-    if policy == "gpu" and batch.get("backend") != "opencl":
-        raise RuntimeError(f"{case}: requested GPU was not used; no GPU timing recorded.")
+    if policy == "gpu" and batch.get("backend") != backend:
+        raise RuntimeError(f"{case}: requested {backend}, chart transforms used {batch.get('backend')}.")
+    if policy == "cpu" and batch and batch.get("backend") != "cpu":
+        raise RuntimeError(f"{case}: requested CPU, chart transforms used {batch.get('backend')}.")
     dual = r["dual_complex"]
     digest = geometry(r) if r["status"] == "resolved" else None
     counts = Counter(len(c["vertices"])-1 for c in dual["cells"])
@@ -118,7 +123,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--gpu-target", action="store_true",
-                    help="Also time actual OpenCL chart transforms on the four-variable case.")
+                    help="Also time GPU chart transforms on the four-variable case.")
+    ap.add_argument("--backend", choices=["opencl", "triton"], default="opencl",
+                    help="GPU backend for --gpu-target (default: opencl).")
     ap.add_argument("--output", type=Path)
     args=ap.parse_args()
     if not 1 <= args.repeats <= 50:
@@ -135,7 +142,7 @@ def main():
     if args.gpu_target: jobs.extend((c,"gpu") for c in CASES if c.startswith("target_"))
     reference = {}
     for c,policy in jobs:
-        record,_ = sample(c,policy)
+        record,_ = sample(c,policy,args.backend)
         key=f"{c}/{policy}"
         if c in reference and reference[c] != record["geometry_sha256"]:
             raise RuntimeError(f"{key}: CPU and GPU geometries differ.")
@@ -143,7 +150,7 @@ def main():
         data["atlas"][key] = record | {"samples": []}
     for i in range(args.repeats):
         for c,policy in jobs if i%2 == 0 else reversed(jobs):
-            record,measurement = sample(c,policy)
+            record,measurement = sample(c,policy,args.backend)
             prior = data["atlas"][f"{c}/{policy}"]
             if record["status"] != prior["status"] or record["geometry_sha256"] != prior["geometry_sha256"]:
                 raise RuntimeError(f"{c}/{policy}: outcomes differed between repetitions.")

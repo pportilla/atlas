@@ -22,6 +22,7 @@
 //
 // Nothing here is probabilistic: an unlucky prime can only cost time.
 #include "groebner.hpp"
+#include "groebner_verify.hpp"
 
 #include <flint/fmpq.h>
 #include <flint/ulong_extras.h>
@@ -30,6 +31,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <system_error>
 #include <thread>
 
 namespace atlas {
@@ -132,6 +134,12 @@ struct Slot {
     uint32_t offset = 0, length = 0;
 };
 
+using TraceScreen = int (*)(uint32_t, uint32_t, uint32_t, const uint32_t*, const uint32_t*,
+                            const uint32_t*, const uint32_t*, const uint32_t*, uint32_t*);
+thread_local TraceScreen trace_screen = nullptr;
+thread_local uint64_t cpu_trace_batches = 0, cpu_trace_pairs = 0;
+#include "trace_rows.inc"
+
 // The coefficients of f modulo p, divided by the leading one. False when p
 // divides the leading coefficient.
 bool monic_image(const Poly& f, uint32_t p, uint32_t* out) {
@@ -156,6 +164,7 @@ public:
     std::vector<std::vector<u64>> output_monomials;
 
     bool too_long = false;  // the program outgrew the budget
+    bool device_screened = false;  // a device completed a layer of this trace
 
     // False when the prime divides a leading coefficient of a generator, or
     // when the program exceeds `budget` words.
@@ -180,6 +189,7 @@ public:
             return generators[a].m[0] < generators[b].m[0];
         });
         size_t next = 0;
+        long screened_degree = -1;
         while (!unit) {
             if (code.size() + pool.size() > budget) { too_long = true; return false; }
             const bool input_ready = next < order.size();
@@ -190,6 +200,17 @@ public:
                 add_row(OP_ADD, inputs[k], generators[k].m.data(), 0, nullptr);
                 finish_block(static_cast<long>(generators[k].m[0]), false);
                 continue;
+            }
+            if (B.back().sugar != screened_degree) {
+                screened_degree = B.back().sugar;
+                try {
+                    screen_degree(budget);
+                } catch (const std::bad_alloc&) {
+                    // A layer spans more monomials than an individual pair.
+                    // Insufficient memory for the optional batch leaves the
+                    // original pair queue available to the scalar trace.
+                }
+                if (B.empty() || B.back().sugar != screened_degree) continue;
             }
             const Pair pair = B.back();
             B.pop_back();
@@ -280,6 +301,8 @@ private:
         }
         rows_.push_back(row);
     }
+
+#include "trace_screen.inc"
     // Reduce the rows entered so far, emit the block, run it for the trace
     // prime and insert the remainder. False when the remainder is zero; the
     // block is then dropped. With `keep`, the first column is not reduced and
@@ -393,7 +416,17 @@ private:
     }
 };
 
-ReplayBatch batch_hook = nullptr;
+// The standalone C API can set a process default. A solve may override it
+// (including selecting the CPU) for its own thread and restore it on exit.
+std::atomic<ReplayBatch> default_batch{nullptr};
+thread_local ReplayBatch scoped_batch = nullptr;
+thread_local int has_scoped_batch = 0;
+thread_local uint64_t cpu_batches = 0;
+thread_local uint64_t cpu_primes = 0;
+
+ReplayBatch active_batch() {
+    return has_scoped_batch ? scoped_batch : default_batch.load();
+}
 
 double since(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -508,7 +541,11 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
                 for (size_t k = 0; k < generators.size() && status[b]; ++k)
                     if (!monic_image(generators[k], fresh[b], pools.data() + b * pool_size + tracer.inputs[k].offset)) status[b] = 0;
             bool done = false;
-            if (batch_hook && !tracer.code.empty()) {
+            const ReplayBatch batch_hook = active_batch();
+            // After a device-built trace, the first few replay primes make
+            // smaller batches than the trace layer itself. Native threads
+            // avoid a second transfer of the full program for those batches.
+            if (batch_hook && !(tracer.device_screened && batch < 16) && !tracer.code.empty()) {
                 std::vector<uint32_t> answer(batch, 0);
                 if (batch_hook(tracer.code.data(), tracer.code.size(), pool_size, tracer.work_size, fresh.data(),
                                static_cast<uint32_t>(batch), pools.data(), answer.data()) == 0) {
@@ -518,6 +555,8 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
                 }
             }
             if (!done) {
+                ++cpu_batches;
+                cpu_primes += batch;
                 std::atomic<size_t> cursor{0};
                 auto worker = [&] {
                     std::vector<u64> work(tracer.work_size);
@@ -591,16 +630,19 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
             // Certification over Q.
             clock = std::chrono::steady_clock::now();
             ++stats.verifications;
-            Engine check;
-            check.R = H;
-            bool proved = check.is_basis(basis);
-            for (size_t k = 0; k < generators.size() && proved; ++k) {
-                Poly f = generators[k];
-                check.reduce(f, 0, nullptr, nullptr);
-                proved = f.empty();
+            std::optional<bool> proved = HomogeneousCertificate{}.check(H, basis, generators);
+            if (!proved.has_value()) {
+                Engine check;
+                check.R = H;
+                proved = check.is_basis(basis);
+                for (size_t k = 0; k < generators.size() && *proved; ++k) {
+                    Poly f = generators[k];
+                    check.reduce(f, 0, nullptr, nullptr);
+                    proved = f.empty();
+                }
             }
             stats.verify_seconds += since(clock);
-            if (!proved) continue;
+            if (!*proved) continue;
             std::vector<Poly> affine;
             for (const Poly& f : basis) affine.push_back(dehomogenize(H, R, f));
             // Every generator is declared part of a basis: no pair is formed,
@@ -619,9 +661,44 @@ using namespace atlas;
 
 extern "C" {
 
+// A solve can accelerate trace construction on this thread and restore its
+// previous setting. A null hook uses the native row reducer for large layers.
+void atlas_groebner_swap_trace_screen(TraceScreen* hook) noexcept { std::swap(trace_screen, *hook); }
+
+void atlas_groebner_cpu_trace_counts(uint64_t* batches, uint64_t* pairs) noexcept {
+    *batches = cpu_trace_batches;
+    *pairs = cpu_trace_pairs;
+}
+
+// Same shape and field arithmetic as the optional device kernels. Trace primes
+// are at most 31 bits and all input coefficients are canonical residues.
+int atlas_groebner_trace_rows_cpu(uint32_t prime, uint32_t jobs, uint32_t width,
+                                  const uint32_t* initial, const uint32_t* offsets, const uint32_t* pivots,
+                                  const uint32_t* targets, const uint32_t* coefficients, uint32_t* output) noexcept {
+    if (prime < 2 || prime > 0x7fffffffu) return 1;
+    if (!jobs || !width) return 0;
+    try {
+        return trace_rows_cpu(prime, jobs, width, initial, offsets, pivots, targets, coefficients, output);
+    } catch (...) {
+        return 1;
+    }
+}
+
 // A function that runs replay programs for several primes at once (a GPU),
 // or null for the threads of the host.
-void atlas_groebner_use_batch(ReplayBatch hook) noexcept { batch_hook = hook; }
+void atlas_groebner_use_batch(ReplayBatch hook) noexcept { default_batch.store(hook); }
+
+// Install a thread-local override and return its previous state in place.
+// An active null hook selects the host, even if the process has a default.
+void atlas_groebner_swap_batch(ReplayBatch* hook, int* active) noexcept {
+    std::swap(scoped_batch, *hook);
+    std::swap(has_scoped_batch, *active);
+}
+
+void atlas_groebner_cpu_replays(uint64_t* batches, uint64_t* primes) noexcept {
+    *batches = cpu_batches;
+    *primes = cpu_primes;
+}
 
 // For benchmarks and tests of a batch backend: trace the problem, then replay
 // it for `count` primes on the host's threads and through the hook. seconds
@@ -688,6 +765,7 @@ long atlas_groebner_replay_compare(const char* input, size_t length, uint32_t co
             for (std::thread& t : crew) t.join();
         }
         seconds[1] = since(clock);
+        const ReplayBatch batch_hook = active_batch();
         if (!batch_hook) return -1;
         clock = std::chrono::steady_clock::now();
         if (batch_hook(tracer->code.data(), tracer->code.size(), pool_size, tracer->work_size, primes.data(), count,

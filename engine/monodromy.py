@@ -1,7 +1,7 @@
 """Local Lefschetz zeta function of the complex Milnor fiber at the origin."""
 from collections import Counter
 
-from .polynomial import InputError, parse
+from .polynomial import InputError
 
 
 def _quotient(factors):
@@ -19,7 +19,7 @@ def _quotient(factors):
     return f"{top}/{bottom}" if len(denominator) == 1 else f"{top}/({bottom})"
 
 
-def monodromy_zeta(record, *, polynomial=None):
+def monodromy_zeta(record, *, polynomial=None, strata=None):
     """Compute from an Atlas record. Intrinsic-only data may need an embedded resolution."""
     if not isinstance(record, dict) or "status" not in record:
         raise InputError("Expected an Atlas resolution record.")
@@ -31,51 +31,19 @@ def monodromy_zeta(record, *, polynomial=None):
     if record.get("origin", [0]*len(variables)) != [0]*len(variables):
         raise InputError("The resolution must be at the origin.")
 
-    engine = record.get("engine")
-    if not engine or record.get("mode") not in ("embedded", "intrinsic") or not record.get("charts"):
-        raise InputError("The record needs a resolution mode, engine, and charts.")
-    try:
-        toric = engine in ("binomial-coordinate-blowups", "newton-polyhedron", "native-toric")
-        graph = engine == "verified-ideal-blowup" and record["mode"] == "embedded"
-        if (toric or graph) and polynomial is None:
-            polynomial = parse(record.get("polynomial"), variables, bounded=False)
-        if record.get("certificate", {}).get("strata"):
-            # The resolution was completed by blowups after a toric
-            # modification. A'Campo's formula uses the points of its strata
-            # that lie on a single component.
-            from .strata import resolution_strata
-            found = resolution_strata(record, polynomial)
-            rows = None
-            if found is not None:
-                orders = {row["component"]: row["multiplicity"] for row in found[0]}
-                rows = [{"component": row["components"][0], "multiplicity": orders[row["components"][0]],
-                         "euler_characteristic": row["euler_characteristic"]}
-                        for row in found[1] if len(row["components"]) == 1]
-            method = found[2] if found is not None else "Strata computed with the resolution"
-        elif toric:
-            from .monodromy_toric import toric_contributions
-            rows = toric_contributions(record, polynomial, variables)
-            method = "Euler characteristics on torus orbits of the regular fan"
-        elif graph:
-            from .monodromy_graph import graph_contributions
-            rows = graph_contributions(record, polynomial)
-            method = "Euler integration on disjoint pieces of the projective origin fiber"
-        else:
-            from .monodromy_blowups import blowup_contributions
-            rows = blowup_contributions(record)
-            method = "Open exceptional strata of the point blowups"
-        if rows is None and not record.get("certificate", {}).get("strata"):
-            from .monodromy_special import special_contributions
-            rows = special_contributions(record)
-            method = ("Open strata of the embedded A-series model" if engine == "native-a-series"
-                      else "Open strata of the normal crossing support at the origin")
-    except (KeyError, IndexError, TypeError) as exc:
-        raise InputError("Incomplete or inconsistent chart or divisor data in the resolution record.") from exc
-    if rows is None:
-        return {"status":"unavailable", "reason":
-                "This record does not certify the open ambient divisor strata needed by A'Campo's formula. "
-                "Run atlas resolve with --mode embedded --monodromy."}
-
+    saved = isinstance(record.get("atlas"), list) and bool(record["atlas"])
+    if record.get("mode") not in ("embedded", "intrinsic") or not (
+            saved or (record.get("engine") and record.get("charts"))):
+        raise InputError("The record needs its resolution mode and charts.")
+    from .strata import resolution_strata
+    found = resolution_strata(record, polynomial) if strata is None else strata
+    if found is None:
+        return {"status": "unavailable", "reason": "The atlas does not certify the embedded strata at the origin."}
+    data, strata, method = found
+    orders = {r["component"]: r["multiplicity"] for r in data}
+    rows = [{"component": row["components"][0], "multiplicity": orders[row["components"][0]],
+             "euler_characteristic": row["euler_characteristic"]}
+            for row in strata if len(row["components"]) == 1]
     powers = Counter()
     for row in rows:
         n, chi = row["multiplicity"], row["euler_characteristic"]
@@ -85,6 +53,6 @@ def monodromy_zeta(record, *, polynomial=None):
     factors = [{"multiplicity":n, "exponent":e} for n,e in sorted(powers.items()) if e]
     return {"status":"computed", "variable":"T", "convention":"prod_q det(I - T*h^* | H^q(F_0; Q))^((-1)^(q+1))",
             "formula":"prod_i (1-T^N_i)^(-chi_c(E_i^open intersect pi^(-1)(0)))",
-            "method":method, "resolution_engine":engine,
+            "method":method, "resolution_engine":record.get("engine"),
             "expression":_quotient(factors), "factors":factors, "contributions":rows,
             "milnor_fiber_euler_characteristic":-sum(n*e for n,e in powers.items())}

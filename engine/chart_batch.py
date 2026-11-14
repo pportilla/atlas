@@ -7,6 +7,7 @@ import os
 from struct import iter_unpack
 from time import perf_counter
 
+from .gpu_devices import gpu_preference, triton_device
 from .native_backend import _LIBRARY, _load, _gpu_config, _gpu_library, gpu_devices
 
 _I32_MAX = 2**31 - 1
@@ -50,6 +51,35 @@ def _validate_vectors(values, bound, name, dimension):
             raise ValueError(f"{name} must contain nonnegative integer {dimension}-tuples with entries <= {bound}.")
 
 
+def _accelerate(inputs, out, nt, nr, nc, dimension, index, stats):
+    preference = gpu_preference()
+    if preference != "opencl":
+        device = triton_device(index)
+        if device is not None:
+            try:
+                from .gpu_charts import transform
+                transform(inputs, out, nt, dimension, device["torch_device"])
+            except Exception as error:
+                # Optional runtimes can fail during compilation, launch or
+                # transfer. The next backend overwrites the entire buffer.
+                stats["triton_error"] = f"{type(error).__name__}: {error}"
+            else:
+                stats.update(backend="triton", device=device)
+                return True
+        if preference == "triton":
+            stats["backend"] = "cpu_after_triton"
+            stats.setdefault("triton_error", "Triton device unavailable at the selected index.")
+            return False
+    gpu = _gpu_function()
+    if gpu and gpu(*inputs, nt, nr, nc, dimension, index, out) == 0:
+        device = next((d for d in gpu_devices() if d["index"] == index), {"index": index})
+        stats.update(backend="opencl", device=device)
+        return True
+    stats["backend"] = "cpu_after_opencl"
+    stats["opencl_error"] = "OpenCL chart kernel or device unavailable at the selected index."
+    return False
+
+
 def transform_batch(exps, rays, cones, orders, compute=None):
     """Return strict exponent vectors by chart and term, plus execution timings.
 
@@ -88,18 +118,11 @@ def transform_batch(exps, rays, cones, orders, compute=None):
     attempt = policy != "cpu" and pairs >= threshold
     stats = {"chart_term_pairs": pairs, "dimension": dimension, "backend": "cpu"}
     native_start = perf_counter()
-    success = False
-    if attempt:
-        gpu = _gpu_function()
-        success = bool(gpu and gpu(*inputs, nt, nr, nc, dimension, index, out) == 0)
-        stats["backend"] = "opencl" if success else "cpu_after_opencl"
-    if not success:
+    if not attempt or not _accelerate(inputs, out, nt, nr, nc, dimension, index, stats):
         cpu(*inputs, nt, nc, dimension, out)
     if not valid(out, entries):
         raise ValueError("A ray order exceeds the valuation of an input monomial.")
     stats["native_elapsed_ms"] = (perf_counter()-native_start)*1000
-    if success:
-        stats["device"] = next((d for d in gpu_devices() if d["index"]==index), {"index":index})
     vectors = iter_unpack(f"={dimension}i", out)
     result = [list(islice(vectors, nt)) for _ in range(nc)]
     stats["elapsed_ms"] = (perf_counter()-started)*1000

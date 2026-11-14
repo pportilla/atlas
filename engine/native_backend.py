@@ -64,7 +64,7 @@ def _gpu_config(compute=None):
             raise ValueError("RESOLUTION_GPU must be auto or off.")
         compute = "auto" if active == "auto" else "cpu"
     if compute == "cpu":
-        return None, 0, 1
+        return False, 0, 1
     try:
         index = int(os.getenv("RESOLUTION_GPU_INDEX", 0))
         minimum_columns = 1 if compute == "gpu" else int(os.getenv("RESOLUTION_GPU_MIN_COLS", 256))
@@ -72,12 +72,57 @@ def _gpu_config(compute=None):
         raise ValueError("GPU index and minimum column count must be integers.") from exc
     if not 0 <= index < 2**31 or not 1 <= minimum_columns < 2**31:
         raise ValueError("GPU index must be nonnegative and minimum column count must be positive.")
-    plugin = _gpu_library()
-    kernel = ctypes.cast(plugin.resolution_gpu_rank, ctypes.c_void_p) if plugin else None
-    return kernel, index, minimum_columns
+    return True, index, minimum_columns
 
 
-def _certificate(line, index):
+_RANK = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(ctypes.c_uint32), ctypes.c_int, ctypes.c_int,
+                         ctypes.c_uint32, ctypes.c_int, ctypes.POINTER(ctypes.c_int))
+
+
+def _rank_callback(preference, attempt):
+    # The native classifier calls this only after constructing a matrix of eligible size.
+    @_RANK
+    def run(matrix, rows, cols, prime, index, minor):
+        attempt.clear()
+        errors = []
+        if preference != "opencl":
+            attempt["backend"] = "triton"
+            try:
+                from .gpu_devices import triton_device
+                device = triton_device(index)
+                if device is not None:
+                    from .gpu_rank import full_rank_rows
+                    result = full_rank_rows(matrix, rows, cols, prime, device)
+                    if result is None:
+                        return 0
+                    if len(result) != cols or any(not 0 <= value < rows for value in result):
+                        raise ValueError("Invalid GPU pivot rows.")
+                    for i, value in enumerate(result):
+                        minor[i] = value
+                    attempt["device"] = device
+                    return 1
+                errors.append("Triton device unavailable")
+            except Exception as error:
+                errors.append(f"Triton: {type(error).__name__}: {error}")
+        if preference != "triton":
+            attempt["backend"] = "opencl"
+            try:
+                plugin = _gpu_library()
+                if plugin:
+                    status = plugin.resolution_gpu_rank(matrix, rows, cols, prime, index, minor)
+                    if status >= 0:
+                        if errors:
+                            attempt["reason"] = ". ".join(errors)
+                        return status
+                errors.append("OpenCL rank kernel or device unavailable")
+            except Exception as error:
+                errors.append(f"OpenCL: {type(error).__name__}: {error}")
+        attempt["reason"] = ". ".join(errors)
+        return -1
+    return run
+
+
+def _certificate(line, index, attempt):
     if line == "diagonal":
         return {
             "method": "diagonal gradient",
@@ -91,6 +136,12 @@ def _certificate(line, index):
             "description": "The dehomogenized tangent form retains its degree and has unit gcd with its derivative modulo this prime. Its root at infinity, if present, is simple.",
         }
     _, prime, degree, rank, backend, micros, rows, minor = line.split()
+    # The native ABI calls any independently verified device witness "opencl".
+    # Preserve its verification decision and identify the actual producing kernel.
+    if backend == "opencl":
+        backend = attempt["backend"]
+    elif backend == "cpu_after_opencl":
+        backend = "cpu_after_" + attempt["backend"]
     proof = {
         "method": "projective Jacobian rank",
         "prime": int(prime),
@@ -103,9 +154,14 @@ def _certificate(line, index):
         "row_order": "Zero-based rows, grouped by partial derivative in input variable order, then monomial multiplier in ascending lexicographic exponent order.",
         "description": "Monomial multiples of the gradient span the entire recorded degree modulo this prime. A nonzero maximal minor lifts to Q.",
     }
-    if backend == "opencl":
-        proof["device"] = next((d for d in gpu_devices() if d["index"] == index), {"index": index})
+    if backend in ("opencl", "triton"):
+        proof["device"] = (attempt["device"] if backend == "triton" else
+                           next((d for d in gpu_devices() if d["index"] == index), {"index": index}))
         proof["verification"] = "CPU independently verified the reported full-rank minor modulo the recorded prime."
+    if backend.startswith("cpu_after_"):
+        proof["rank_fallback_reason"] = attempt.get("reason", "The GPU did not supply a verifiable full-rank minor.")
+    elif "reason" in attempt:
+        proof["rank_fallback_reason"] = attempt["reason"]
     return proof
 
 
@@ -196,7 +252,7 @@ def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str
         diagnostics.clear()
     if mode not in {"embedded", "intrinsic"}:
         raise ValueError("mode must be embedded or intrinsic")
-    kernel, device_index, minimum_columns = _gpu_config(compute)
+    use_gpu, device_index, minimum_columns = _gpu_config(compute)
     if not _LIBRARY.is_file():
         return None
     n = len(variables)
@@ -205,6 +261,11 @@ def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str
     payload = [f"{n} {len(terms)}"]
     payload.extend(f"{coeff} {' '.join(map(str, powers))}" for powers, coeff in terms)
     library = _load(_LIBRARY)
+    attempt = {}
+    kernel = None
+    if use_gpu:
+        from .gpu_devices import gpu_preference
+        kernel = _rank_callback(gpu_preference(), attempt)
     result = library.resolution_ordinary("\n".join(payload).encode("ascii"), kernel, device_index, minimum_columns)
     if result is None:
         raise RuntimeError("The native tangent-cone computation could not finish.")
@@ -232,7 +293,7 @@ def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str
         })
         return output
 
-    order, certificate, tangent = int(fields[1]), _certificate(fields[2], device_index), fields[3]
+    order, certificate, tangent = int(fields[1]), _certificate(fields[2], device_index, attempt), fields[3]
     output.update({
         "summary": f"One blowup at the origin resolves this ordinary point of multiplicity {order}.",
         "multiplicity": order, "tangent_cone": tangent, "tangent_coordinates": coordinates,

@@ -41,6 +41,30 @@ def no_plane(*arguments, **options):
 
 
 class SurfaceProcedure(unittest.TestCase):
+    def test_singular_slice_selects_the_step_but_does_not_cut_its_centre(self):
+        from engine.centres import Frame
+        frame = Frame((x, y, z), (x, y), (z-x*y,))
+        # The trace has cusps at 0 and 1 and a node at 2. The node on
+        # its own has lower priority. Once either cusp is in the working
+        # set, the centre's equations must include both cusps.
+        divisor = {"E": y**2 - x**3*(x-1)**3*(x-2)**2}
+        node = (x-2, y, z)
+        self.assertEqual(surface._implicit_step(frame, divisor, (node,))[0][0], 1)
+        key, kind, centre = surface._implicit_step(frame, divisor, (node, (x, y, z)))
+        self.assertEqual((key[0], kind), (3, "points"))
+        for value, on_centre in ((0, True), (1, True), (2, False)):
+            self.assertEqual(all(g.subs({x: value, y: 0, z: 0}) == 0 for g in centre), on_centre)
+
+    def test_linear_chart_covers_the_open_and_the_remaining_centre(self):
+        # (1+x)y-z=0 is a plane over (x,z) away from 1+x=0. Over
+        # x=-1,z=0 it must instead be read over (x,y).
+        models = list(surface._models((y, x, z), ((1+x)*y-z,), {"D": y+z}, [(x, y, z), (x+1, y, z)]))
+        self.assertEqual({m[0] for m in models}, {(x, z), (y, x)})
+        by_names = {m[0]: m for m in models}
+        self.assertIn(x+1, by_names[(x, z)][1])
+        self.assertEqual(by_names[(x, z)][2]["D"], x*z + 2*z)
+        self.assertEqual(by_names[(y, x)][2]["D"], -x*y - 2*y)
+
     def test_plane_and_implicit_forms_agree(self):
         models = surface._models
         for name, (components, fibre, kinds) in CASES.items():

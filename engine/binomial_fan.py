@@ -87,6 +87,21 @@ def build_binomial_fan(exponents, *, variables=None, max_steps=256, max_cones=10
     if not any(signed_orders):
         return None
 
+    from . import binomial_kernel
+    from .native_library import CHECK
+    rows = binomial_kernel.run(f"fan {dimension} {max_steps} {max_cones}", left, right)
+    if rows is not None:
+        output = binomial_kernel.fan(rows, dimension, names)
+        if CHECK and output != _reference(exponents, names, max_steps, max_cones):
+            raise AssertionError("The binomial fan differs from its reference subdivision.")
+        return output
+    return _reference(exponents, names, max_steps, max_cones)
+
+
+def _reference(exponents, names, max_steps, max_cones):
+    left, right = exponents
+    dimension = len(left)
+    signed_orders = [a - b for a, b in zip(left, right)]
     rays = [tuple(int(i == j) for j in range(dimension)) for i in range(dimension)]
     cones = [tuple(range(dimension))]
     steps = []

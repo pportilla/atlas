@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Exact affine blowup charts and fixed-dimension smoothness/SNC tests.
 
 All inputs are SymPy expressions representing polynomials in the listed
@@ -16,17 +17,19 @@ from dataclasses import dataclass
 from functools import lru_cache
 from itertools import combinations
 
-import sympy as sp
-from sympy import QQ
+from . import native_polynomial as np
+from .chart_expressions import chart_expressions
+from .reference import sp
+from .reference import QQ
 
 from . import kernel
-from .groebner import CHECK, colon, groebner
+from .groebner import CHECK, _MODE, _canonical_qq, colon, groebner
 
 
 def _ring(variables, domain):
     variables = tuple(variables)
-    if not variables or not all(isinstance(v, sp.Symbol) for v in variables):
-        raise ValueError("The polynomial ring needs one or more SymPy symbols.")
+    if not variables or not all(getattr(v, "is_Symbol", False) for v in variables):
+        raise ValueError("The polynomial ring needs one or more coordinate symbols.")
     if len(set(variables)) != len(variables):
         raise ValueError("Coordinates must be distinct symbols.")
     if not (domain == QQ or getattr(domain, "is_AlgebraicField", False)):
@@ -34,29 +37,29 @@ def _ring(variables, domain):
     return variables
 
 
-_canonical = {}
-_CANONICAL_LIMIT = 50_000
+@lru_cache(maxsize=50_000)
+def _canonical(variables, expr, domain):
+    """Canonical polynomial; preserve zero and the positions of chart generators."""
+    if isinstance(expr, str):
+        raise TypeError("Supply parsed polynomial expressions, not strings.")
+    if np.native_ring(variables) and domain == QQ:
+        return _canonical_qq(variables, expr)
+    expr = chart_expressions(variables).sympify(expr)
+    if domain == QQ:
+        value = _canonical_qq(variables, expr)
+        if value is not None:
+            return value
+    elif _MODE != "sympy":
+        from .field_factors import compose
+        value, = compose(variables, variables, variables, (expr,), domain)
+        return value
+    return sp.Poly(expr, *variables, domain=domain).as_expr()
 
 
 def _expressions(variables, ideal, domain):
     """Coerce coefficients explicitly; textual expressions are not accepted."""
-    result = []
-    for expr in ideal:
-        if isinstance(expr, str):
-            raise TypeError("Supply parsed polynomial expressions, not strings.")
-        # The same generators come back many times; their expanded form is kept.
-        key = (variables, domain, expr) if isinstance(expr, sp.Basic) else None
-        value = _canonical.get(key, False) if key is not None else False
-        if value is False:
-            poly = sp.Poly(expr, *variables, domain=domain)
-            value = None if poly.is_zero else poly.as_expr()
-            if key is not None:
-                if len(_canonical) >= _CANONICAL_LIMIT:
-                    _canonical.clear()
-                _canonical[key] = value
-        if value is not None:
-            result.append(value)
-    return tuple(dict.fromkeys(result))
+    rows = (_canonical(variables, expr, domain) for expr in ideal)
+    return tuple(dict.fromkeys(g for g in rows if g != 0))
 
 
 def _native(function, reference, domain, *arguments):
@@ -65,12 +68,49 @@ def _native(function, reference, domain, *arguments):
     The functions of engine/kernel.py return None for what they cannot take.
     With ATLAS_GROEBNER=check both are computed and must agree.
     """
-    answer = function(*arguments) if domain == QQ else None
+    if domain == QQ:
+        answer = function(*arguments)
+    elif domain.is_AlgebraicField and function in (kernel.smooth_locus, kernel.verify_snc):
+        answer = _field_smoothness(function, arguments, domain)
+    else:
+        answer = None
     if answer is None:
         return reference(*arguments, domain)
     if CHECK and answer != reference(*arguments, domain):
         raise AssertionError(f"The native {function.__name__} differs from SymPy's.")
     return answer
+
+
+def _field_smoothness(function, arguments, domain):
+    """Base change to Qbar splits Q[theta]/m as disjoint copies, one per
+    embedding of K. Since m is separable, adding m to the ambient equations
+    adds one variable and one independent Jacobian row on every sheet.
+    All dimensions and smoothness loci are therefore those of the K-chart.
+    """
+    from .field_polynomial import lift, lower, modulus
+    if _MODE == "sympy":
+        return None
+    variables, equations, *rest = arguments
+    theta = chart_expressions(variables).Dummy("smooth_field")
+    extended = (*variables, theta)
+    def move(ideal):
+        return tuple(lift(g, variables, domain, theta) for g in ideal)
+    ambient = (*move(equations), modulus(domain, theta))
+    if function is kernel.smooth_locus:
+        result = function(extended, ambient, *rest)
+        witnesses = [result]
+    else:
+        strict, exceptional, dimension = rest
+        result = function(extended, ambient, None if strict is None else move(strict),
+                          tuple(map(move, exceptional)), dimension)
+        witnesses = result["strata"] if result is not None else ()
+    if result is None:
+        return None
+    for item in witnesses:
+        if item["bad_ideal"] != (1,):
+            rows = tuple(lower(g, variables, domain, theta) for g in item["bad_ideal"])
+            item["bad_ideal"] = ideal_basis(variables, rows, domain=domain)
+    return result
 
 
 @lru_cache(maxsize=128)
@@ -110,7 +150,7 @@ def _radical_subset(variables, smaller, larger, domain):
     large = _expressions(variables, larger, domain)
     if ideal_subset(variables, small, large, domain=domain):
         return True
-    t = sp.Dummy("inverse")
+    t = chart_expressions(variables).Dummy("inverse")
     return all(_basis((t, *variables), (*large, 1 - t*f), domain) == (1,) for f in small)
 
 
@@ -124,14 +164,14 @@ def _saturate(variables, ideal, by, domain):
     generators = _expressions(variables, ideal, domain)
     if isinstance(by, str):
         raise TypeError("The saturating element must be a parsed expression.")
-    divisor = sp.Poly(by, *variables, domain=domain)
-    if divisor.is_zero:
-        return (sp.S.One,)
-    if divisor.total_degree() == 0 or not generators:
+    divisor = _canonical(variables, by, domain)
+    if divisor == 0:
+        return (chart_expressions(variables).S.One,)
+    if not divisor.free_symbols or not generators:
         return _basis(variables, generators, domain)
-    t = sp.Dummy("inverse")
-    basis = _gb((t, *variables), (*generators, 1 - t*divisor.as_expr()), domain, "lex")
-    return tuple(p.as_expr() for p in basis.polys if p.degree(t) == 0)
+    t = chart_expressions(variables).Dummy("inverse")
+    basis = _gb((t, *variables), (*generators, 1 - t*divisor), domain, "lex")
+    return tuple(g for g in basis.exprs if t not in g.free_symbols)
 
 
 @dataclass(frozen=True)
@@ -169,13 +209,13 @@ def chart_coordinates(variables, count, i):
     ratios = []
     for j in range(count):
         if j == i:
-            ratios.append(sp.S.One)
+            ratios.append(chart_expressions(variables).S.One)
             continue
         name = f"r{i+1}_{j+1}"
         while name in names:
             name += "_"
         names.add(name)
-        ratios.append(sp.Symbol(name))
+        ratios.append(chart_expressions(variables).Symbol(name))
     return tuple(ratios), variables + tuple(x for j, x in enumerate(ratios) if j != i)
 
 
@@ -187,7 +227,7 @@ def _kernel_charts(variables, ambient, strict, center, exceptional):
                                   [coordinates for _, coordinates in layout])
     if answer is None:
         return None
-    generators = tuple(sp.Poly(f, *variables, domain=QQ).as_expr() for f in center)
+    generators = tuple(_canonical(variables, f, QQ) for f in center)
     return tuple(BlowupChart(variables=coordinates, ambient=chart_ambient, strict=chart_strict,
                              exceptional=transforms + ((pivot,),), pivot=pivot, pivot_index=i,
                              ratios=ratios, projection=variables)
@@ -201,7 +241,7 @@ def _blowup_charts(variables, ambient, strict, center, exceptional, domain):
     exceptional = tuple(_expressions(variables, ideal, domain) for ideal in exceptional)
     if any(isinstance(f, str) for f in center):
         raise TypeError("Center generators must be parsed expressions.")
-    generators = tuple(sp.Poly(f, *variables, domain=domain).as_expr() for f in center)
+    generators = tuple(_canonical(variables, f, domain) for f in center)
     charts = []
     for i, pivot in enumerate(generators):
         ratios, coordinates = chart_coordinates(variables, len(generators), i)
@@ -241,7 +281,7 @@ def assemble_charts(variables, center, answer):
         return answer
     strata, rows = answer
     charts = []
-    generators = tuple(sp.Poly(g, *variables, domain=QQ).as_expr() for g in center)
+    generators = tuple(_canonical(variables, g, QQ) for g in center)
     for i, (pivot, (ambient, strict)) in enumerate(zip(generators, rows)):
         ratios, coordinates = chart_coordinates(variables, len(center), i)
         charts.append(BlowupChart(variables=coordinates, ambient=kernel.exprs(coordinates, ambient),
@@ -255,10 +295,12 @@ def _colon(variables, selected, ideal, domain):
     sub = _gb(variables, selected, domain)
     others = [g for g in ideal if not sub.contains(g)]
     if not others:
-        return (sp.S.One,)
+        return (chart_expressions(variables).S.One,)
     quotient = colon(selected, others, variables, domain=domain)
     if quotient is not None and not CHECK:
         return quotient
+    if np.native_ring(variables):
+        raise ArithmeticError("The native ideal quotient is unavailable for this ring.")
     # SymPy's ideal quotient uses exact module syzygies in a polynomial ring.
     ring = domain.old_poly_ring(*variables, order="grevlex")
     reference = tuple(ring.to_sympy(f) for f in ring.ideal(*selected).quotient(ring.ideal(*others)).gens)
@@ -300,19 +342,34 @@ def _smooth_locus(variables, ideal, expected_dimension, domain):
         return result()
     if codim == 0:
         if not generators:  # affine space is irreducible; its only open n-dimensional closed subscheme is itself
-            bad = (sp.S.One,)
+            bad = (chart_expressions(variables).S.One,)
         return result()
     # A shorter presentation can turn a smoothness check into one determinant.
     equations = raw if len(raw) < len(generators) else generators
     if len(equations) < codim:
         return result()
-    jacobian = sp.Matrix(equations).jacobian(variables)
+    from .affine_kernel import frame_minor
+    reference = sp.Matrix(equations).jacobian(variables) if _MODE == "sympy" else None
+    if domain == QQ or reference is not None:
+        lifted = equations
+        coordinates = variables
+    else:
+        from .field_polynomial import lift, lower
+        theta = chart_expressions(variables).Dummy("smooth_coefficient")
+        coordinates = (*variables, theta)
+        lifted = tuple(lift(f, variables, domain, theta) for f in equations)
     for rows in combinations(range(len(equations)), codim):
         selected = tuple(equations[r] for r in rows)
         current = _gb(variables, bad, domain)
         minors = []
-        for columns in combinations(range(n), codim):
-            minor = jacobian.extract(rows, columns).det()
+        active = set().union(*(g.free_symbols for g in selected))
+        for columns in combinations((j for j,v in enumerate(variables) if v in active), codim):
+            if reference is not None:
+                minor = reference.extract(rows, columns).det()
+            else:
+                minor = frame_minor(coordinates, tuple(lifted[r] for r in rows), tuple(variables[j] for j in columns))
+                if domain != QQ:
+                    minor = lower(minor, variables, domain, theta)
             if minor != 0:
                 remainder = current.reduce(minor)[1]
                 if remainder != 0 and remainder not in minors:

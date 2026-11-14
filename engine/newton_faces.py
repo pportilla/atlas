@@ -12,60 +12,55 @@ from math import gcd, lcm
 from pathlib import Path
 import subprocess
 
+from .fan_geometry import lattice_pivots as _pivot_axes
+from .binomial_kernel import _newton, edge_parameters, projected_support, _integer
+from .native_library import CHECK
+
 _KERNEL = Path(__file__).resolve().parents[1] / "native" / "build" / "face_gb"
-
-
-def _pivot_axes(support):
-    """Fraction-free echelon form of exponent differences. Return pivot columns."""
-    origin = support[0]
-    basis = {}
-    for exponent in support[1:]:
-        row = [v-u for u,v in zip(origin, exponent)]
-        for pivot, previous in sorted(basis.items()):
-            if row[pivot]:
-                a, b = previous[pivot], row[pivot]
-                row = [a*x-b*y for x,y in zip(row, previous)]
-                content = gcd(*row)
-                if content > 1:
-                    row = [x//content for x in row]
-        pivot = next((i for i,x in enumerate(row) if x), None)
-        if pivot is not None:
-            basis[pivot] = row
-            if len(basis) == len(origin):
-                break
-    return sorted(basis)
 
 
 def _edge(terms, support, axis):
     # Primitive in the ambient character lattice. For every face-normal ray
     # the difference is orthogonal to that ray, hence is also primitive in
     # the torus orbit's character lattice.
-    begin, end = support[0], support[-1]
-    diff = tuple(b-a for a,b in zip(begin,end))
-    length = gcd(*diff)
-    direction = tuple(v//length for v in diff)
-    polynomial = {(e[axis]-begin[axis])//direction[axis]:terms[e] for e in support}
+    begin = support[0]
+    length, direction, powers = edge_parameters(tuple(support), axis)
+    polynomial = {k:terms[e] for e,k in zip(support, powers)}
     return {
         "start": list(begin), "direction": list(direction), "degree": length,
         "root_polynomial": {str(k):str(c) for k,c in sorted(polynomial.items())},
     }, {(k,):v for k,v in polynomial.items()}
 
 
-def _kernel(terms, dimension, timeout):
-    # Clearing rational denominators changes the generator by a torus unit.
+def _primitive_reference(coefficients):
     denominator = 1
-    for c in terms.values():
+    for c in coefficients:
         denominator = lcm(denominator,c.denominator)
         if denominator.bit_length() > 8192:
-            return "undetermined", {"reason":"Clearing the face denominators exceeds the coefficient budget."}
-    coefficients = [c.numerator * (denominator//c.denominator) for c in terms.values()]
-    content = gcd(*coefficients)
+            return "denominator"
+    integers = [c.numerator * (denominator//c.denominator) for c in coefficients]
+    content = gcd(*integers)
+    primitive = [v//content for v in integers]
+    return "coefficient" if any(abs(c).bit_length()>8192 for c in primitive) else primitive
+
+
+def _kernel(terms, dimension, timeout):
+    # Clearing rational denominators changes the generator by a torus unit.
+    coefficients = list(terms.values())
+    rows = _newton("coefficients", dimension, (len(coefficients),),
+                   *((c.numerator,c.denominator) for c in coefficients))
+    if rows is None:
+        primitive = _primitive_reference(coefficients)
+    else:
+        primitive = rows[0] if rows[0] in ("coefficient", "denominator") else list(map(_integer, rows))
+        if CHECK and primitive != _primitive_reference(coefficients):
+            raise AssertionError("Primitive Newton coefficients differ from their reference.")
+    if primitive == "denominator":
+        return "undetermined", {"reason":"Clearing the face denominators exceeds the coefficient budget."}
+    if primitive == "coefficient" or any(max(e)>4096 for e in terms):
+        return "undetermined", {"reason":"A face coefficient or exponent exceeds the Gröbner input budget."}
     rows = [f"{dimension} {len(terms)}"]
-    for exp, c in zip(terms, coefficients):
-        primitive = c//content
-        if abs(primitive).bit_length() > 8192 or any(v>4096 for v in exp):
-            return "undetermined", {"reason":"A face coefficient or exponent exceeds the Gröbner input budget."}
-        rows.append(f"{primitive} " + " ".join(map(str,exp)))
+    rows.extend(f"{c} " + " ".join(map(str,e)) for e,c in zip(terms,primitive))
     if not _KERNEL.is_file():
         raise RuntimeError("Native Newton-face checker is not built. Run make.")
     try:
@@ -116,8 +111,7 @@ def certify_face(face_terms, timeout=5.0):
         if len(counts)==2 and 1 in counts.values():
             return dict(result, status="nondegenerate", method="monomial in logarithmic Jacobian", axis=axis)
     if dimension>1:
-        minimum = [min(e[i] for e in support) for i in axes]
-        reduced = {tuple(e[i]-a for i,a in zip(axes,minimum)):c for e,c in terms.items()}
+        reduced = dict(zip(projected_support(support, axes), (terms[e] for e in support)))
     method = "univariate square-free gcd" if dimension==1 else "torus Jacobian Gröbner basis over Q"
     status, details = _kernel(reduced,dimension,timeout)
     return dict(result, status=status, method=method, **details)

@@ -10,8 +10,7 @@ from functools import cmp_to_key, lru_cache
 from math import prod
 import re
 
-import sympy as sp
-from sympy import QQ
+from .reference import sp, QQ
 
 from .blowup_ideal import ideal_basis, ideal_subset, saturate
 from .polynomial import InputError
@@ -22,11 +21,8 @@ def _text(expr):
 
 
 def _read(source, names):
-    # Chart formulas are generated internally. Remap identifiers so even
-    # Python keywords chosen as coordinate names are ordinary indeterminates.
-    aliases = {name:f"q_{i}" for i,name in enumerate(names)}
-    source = re.sub(r"[A-Za-z][A-Za-z0-9_]*",lambda m:aliases[m.group()], source)
-    return sp.sympify(source.replace("^","**"),locals={a:names[name] for name,a in aliases.items()})
+    from .atlas import _expression
+    return _expression(source, names)
 
 
 @lru_cache(maxsize=64)
@@ -91,7 +87,8 @@ def _chart_field(atlas, chart):
     values=_algebraics(atlas.get("algebraic_numbers",{}),used)
     name=field.get("generator")
     if name and field.get("exact_root"):
-        values[name]=sp.sympify(field["exact_root"])
+        from .monodromy_graph import _algebraic_literal
+        values[name]=_algebraic_literal(field["exact_root"])
     elif name=="theta" and "theta" in used:
         # The native A-series chart specifies either square root; choosing
         # one embedding of the displayed common field fixes the atlas.
@@ -100,10 +97,6 @@ def _chart_field(atlas, chart):
         if not match: raise ArithmeticError("Unrecognized quadratic chart field.")
         values[name]=sp.sqrt(sp.Rational(match[1]))
     return QQ.algebraic_field(*dict.fromkeys(values.values())) if values else QQ,values
-
-
-def _expression(p, symbols):
-    return sp.Poly.from_dict({e:sp.Rational(c) for e,c in p.items()},symbols,domain=QQ)
 
 
 def _display_poly(poly, domain, field_name):
@@ -170,14 +163,19 @@ def _uniform_lift(atlas, multiplicity, unit, symbols):
             chart["reduced_strict_transform_on_exceptional"]=chart.pop("strict_transform_on_exceptional")
         power=[(strict,multiplicity)]
         if unit != 1:
-            # Symbolic substitution is exact even before algebraic numbers
-            # are evaluated. No cancellation is used to compute a valuation.
-            names={a:sp.Symbol(a) for a in chart["coordinates"]}
-            for a in atlas.get("algebraic_numbers",{}): names[a]=sp.Symbol(a)
-            gen=atlas.get("coefficient_field",{}).get("generator")
-            if gen: names[gen]=sp.Symbol(gen)
-            pulled=unit.xreplace({v:_read(chart["map"][str(v)],names) for v in symbols})
-            power.insert(0,(_text(pulled),1))
+            # Keep the published algebraic labels. Substitution with these
+            # labels as formal coordinates specializes to the same unit.
+            from .affine_kernel import pullbacks
+            names = {a: sp.Symbol(a) for a in chart["coordinates"]}
+            needed = set(re.findall(r"[A-Za-z][A-Za-z0-9_]*", " ".join(chart["map"].values())))
+            coefficients = sorted(needed & atlas.get("algebraic_numbers", {}).keys())
+            gen = atlas.get("coefficient_field", {}).get("generator")
+            if gen in needed:
+                coefficients.append(gen)
+            names.update((a, sp.Symbol(a)) for a in coefficients)
+            mapping = tuple(_read(chart["map"][str(v)], names) for v in symbols)
+            pulled, = pullbacks(tuple(names.values()), mapping, symbols, (unit,))
+            power.insert(0, (_text(pulled), 1))
         chart["strict_transform"]=_power_product(power)
         chart["pullback_factor"]=_power_product([(factor,multiplicity)]) if factor!="1" else "1"
         chart["ambient_total_transform"]=f"({chart['pullback_factor']})*({chart['strict_transform']})"
@@ -189,77 +187,338 @@ def _uniform_lift(atlas, multiplicity, unit, symbols):
     return True
 
 
-def _lift(atlas, factors, unit, symbols):
-    weights={}
-    for chart in atlas["charts"]:
-        nms=chart["coordinates"]
-        coordinates=tuple(sp.Symbol(s) for s in nms)
-        domain,algebraics=_chart_field(atlas,chart)
-        names=dict(zip(nms,coordinates));names.update(algebraics)
-        field_name="weight_generator"
-        while field_name in names: field_name+="_"
-        if algebraics:
-            # Record the exact embedding; retained charts may also refer to
-            # the original algebraic labels in their blowdown maps.
-            chart["weight_field"]={"generator":field_name,"exact":str(domain.ext.as_expr())}
-        def display(f):
-            return _display_poly(sp.Poly(f,*coordinates,domain=domain),domain,field_name)
-        mapping={v:_read(chart["map"][str(v)],names) for v in symbols}
-        scalar=sp.Poly(unit.xreplace(mapping),*coordinates,domain=domain)
-        polys=[(sp.Poly(f.xreplace(mapping),*coordinates,domain=domain),m) for f,m in factors]
-        # Keep original pullbacks factored to avoid expanding large powers.
-        original=[(display(p.as_expr()),m) for p,m in polys]
-        if not scalar.is_one: original.insert(0,(display(scalar.as_expr()),1))
-        chart["ambient_total_transform"]=_power_product(original)
-        chart["reduced_strict_transform"]=chart["strict_transform"]
-        if "strict_transform_on_exceptional" in chart:
-            chart["reduced_strict_transform_on_exceptional"]=chart.pop("strict_transform_on_exceptional")
-        local={}
-        if "ambient_ideal" in chart:
-            ambient=tuple(_read(f,names) for f in chart["ambient_ideal"])
-            total=scalar.as_expr()*prod(p.as_expr()**m for p,m in polys)
-            pivot=_read(chart["pivot_generator"],names)
-            strict=saturate(coordinates,(*ambient,total),pivot,domain=domain)
-            chart["strict_transform"]=[display(f) for f in strict
-                                        if not ideal_subset(coordinates,(f,),ambient,domain=domain)]
-            for comp in chart["exceptional"]:
-                prime=tuple(_read(f,names) for f in comp.get("ideal",[comp["equation"]]))
-                label=comp["id"]
-                if label not in weights:
-                    weights[label]=_valuation(coordinates,ambient,prime,total,domain)
-                local[label]=weights[label]
+def _strict_parts(variables, ambient, divisors, pulled):
+    """Remove each Cartier divisor from each effective principal divisor.
+
+    In a local trivialization for a divisor with equation d, an ideal J is
+    contained in (d) exactly when J has positive order there, and J : (d)
+    cancels one factor d. These quotients glue. The exceptional divisors in
+    a chart are distinct; subtracting one leaves the orders of the others
+    unchanged. Rational conjugates have equal orders. Thus repeated quotient
+    gives both the orders and the ideal of the residual strict transform.
+    """
+    from . import kernel
+    from .groebner import CHECK, _MODE
+    native = kernel.strict_parts(variables, ambient, divisors, pulled)
+    if native is None and _MODE != "sympy":
+        # Work in the preimage of the Cartier ideals in the ambient ring.
+        # (J:P) mod A agrees with (J/A):(P/A) whenever A is in J,P.
+        # The wide native block order handles large rings and exponents.
+        from .groebner import colon
+        native = []
+        primes = [ideal_basis(variables, (*ambient, *part)) for part in divisors]
+        if any(p == (1,) or ideal_subset(variables, p, ambient) for p in primes):
+            raise ArithmeticError("Expected a nonempty divisor of positive codimension.")
+        for g in pulled:
+            if ideal_subset(variables, (g,), ambient):
+                raise ArithmeticError("A factor vanishes identically on a chart component.")
+            residual = ideal_basis(variables, (*ambient, g))
+            orders = []
+            for prime in primes:
+                order = 0
+                while ideal_subset(variables, residual, prime):
+                    quotient = colon(residual, prime, variables)
+                    if quotient is None or quotient == residual:
+                        raise ArithmeticError("Could not lower the order of the strict ideal.")
+                    residual = quotient
+                    order += 1
+                orders.append(order)
+            native.append((tuple(orders), residual))
+    if native is not None and not CHECK:
+        return native
+    ring = QQ.old_poly_ring(*variables, order="grevlex")
+    reference = []
+    for g in pulled:
+        ideal = ring.ideal(*ambient, g)
+        orders = []
+        for generators in divisors:
+            divisor = ring.ideal(*ambient, *generators)
+            order = 0
+            while divisor.subset(ideal):
+                ideal = ideal.quotient(ring.ideal(*generators))
+                order += 1
+            orders.append(order)
+        residual = tuple(ring.to_sympy(h) for h in ideal.gens)
+        basis = tuple(sp.groebner(residual, *variables, order="grevlex", domain=QQ).exprs)
+        reference.append((tuple(orders), basis))
+    if native is not None and reference != native:
+        raise AssertionError("The kernel's exceptional orders or strict ideals differ from SymPy's.")
+    return reference
+
+
+def _lift_local(chart, saved, factors, unit, symbols):
+    """Weight a serialized blowup chart and its chart in the exported record."""
+    from itertools import combinations_with_replacement, product
+    from .affine_kernel import pullbacks
+    from .local_blowups import _is_strict
+    coords = tuple(map(sp.Symbol, saved["coordinates"]))
+    names = dict(zip(saved["coordinates"], coords))
+    ambient = tuple(_read(g, names) for g in saved["ambient_ideal"])
+    mapping = tuple(_read(saved["map"][str(v)], names) for v in symbols)
+    pulled = pullbacks(coords, mapping, symbols, (unit, *(f for f, _ in factors)))
+    scalar, *polynomials = pulled
+    exceptional = [c for c in saved["components"] if not _is_strict(c["id"])]
+    if len(factors) == 1:
+        # The existing strict ideal and all exceptional orders already belong
+        # to this single factor; the unit has order zero over the origin.
+        weight = factors[0][1]
+        weights = {c["id"]: c["multiplicity"] * weight for c in exceptional}
+        strict = [{**c, "multiplicity": weight} for c in saved["components"] if _is_strict(c["id"])]
+    else:
+        divisors = [tuple(_read(g, names) for g in c["ideal"]) for c in exceptional]
+        parts = _strict_parts(coords, ambient, divisors, polynomials)
+        weights = dict.fromkeys((c["id"] for c in exceptional), 0)
+        strict = []
+        for k, ((orders, ideal), (_, weight)) in enumerate(zip(parts, factors), 1):
+            for c, order in zip(exceptional, orders):
+                weights[c["id"]] += weight * order
+            if ideal != (1,):
+                strict.append({"id": f"S{k}", "multiplicity": weight, "nu": 1, "ideal": [_text(g) for g in ideal]})
+    saved["components"] = [{**c, "multiplicity": weights[c["id"]]} for c in exceptional] + strict
+    total = [(_text(g), weight) for g, (_, weight) in zip(polynomials, factors)]
+    if scalar != 1:
+        total.insert(0, (_text(scalar), 1))
+    chart["ambient_total_transform"] = _power_product(total)
+    # Retain the original strict ideal of each factor with its multiplicity.
+    # Their product, times the pullback of the unit, gives the divisor ideal.
+    chart["reduced_strict_transform"] = chart["strict_transform"]
+    powers = [combinations_with_replacement(c["ideal"], c["multiplicity"]) for c in strict]
+    generators = []
+    for choice in product(*powers):
+        row = [g for terms in choice for g in terms]
+        if scalar != 1:
+            row.insert(0, _text(scalar))
+        generators.append(_power_product([(g, row.count(g)) for g in dict.fromkeys(row)]))
+    chart["strict_transform"] = generators
+    for comp in chart["exceptional"]:
+        comp["total_multiplicity"] = weights[comp["id"]]
+    return weights
+
+
+@lru_cache(maxsize=256)
+def _weight_embedding(indexed):
+    """A SymPy-readable name for the marked FLINT generator in the display record."""
+    match = re.fullmatch(r"PolynomialRootIndexed\(List\(([-\d, ]+)\), (\d+)\)", indexed)
+    if not match:
+        raise ArithmeticError("Unrecognized exact root of a weighted chart.")
+    coeffs = tuple(map(int, match[1].split(",")))
+    index = int(match[2]) - 1
+    if len(coeffs) == 2:
+        return str(sp.Rational(-coeffs[0], coeffs[1]))
+    if len(coeffs) == 3:
+        # FLINT gives the larger real root or the positive imaginary root
+        # first. Its irreducible integral polynomial has positive leading coefficient.
+        c, b, a = coeffs
+        from .field_coefficient import rational_sqrt
+        return str(rational_sqrt(b*b - 4*a*c, sp.Rational(1 if index == 0 else -1, 2*a),
+                                 sp.Rational(-b, 2*a)))
+    from .field_coefficient import marked_root_display
+    from .groebner import CHECK, _MODE
+    if _MODE == "sympy":
+        return str(_flint_roots(coeffs)[index])
+    description = marked_root_display(coeffs)
+    if description is None:
+        return str(_flint_roots(coeffs)[index])
+    scale, normalized, positions = description
+    x = sp.Symbol("x")
+    poly = sp.PurePoly.from_list(normalized, x, domain=sp.ZZ)
+    root = scale * sp.CRootOf._new(poly, positions[index])
+    if CHECK and root.equals(_flint_roots(coeffs)[index]) is not True:
+        raise AssertionError("The exact number field embedding differs from the reference root.")
+    return str(root)
+
+
+
+def _lift_free(atlas, chart, factors, unit, symbols):
+    """Pull back factors in the marked coefficient field and remove the coordinate axes."""
+    from .affine_kernel import chart_data, pullbacks
+    from .atlas import _field, _record_text
+    coordinates = tuple(map(sp.Symbol, chart["coordinates"]))
+    names = {v.name: v for v in coordinates}
+    # Only numbers occurring in the coordinate map enter the published
+    # weight field. Excluded points in the atlas may use a larger extension.
+    field = _field(atlas, {"map": chart["map"]}, names, symbols)
+    ring, target, modulus = coordinates, symbols, None
+    if field:
+        parameter, modulus, _, embedding = field
+        field_name = "weight_generator"
+        while field_name in names or field_name in chart["map"]:
+            field_name += "_"
+        generator = sp.Symbol(field_name)
+        rename = {parameter: generator}
+        names = {name: value.xreplace(rename) for name, value in names.items()}
+        modulus = modulus.xreplace(rename)
+        ring, target = (*coordinates, generator), (*symbols, generator)
+        if embedding == "root 1 (FLINT order)":  # the marked A-series quadratic
+            data = atlas["coefficient_field"]
+            pattern = re.escape(data["generator"]) + r"\^2-\(([-\d/]+)\)"
+            match = re.fullmatch(pattern, data["minimal_polynomial"])
+            if not match:
+                raise ArithmeticError("Unrecognized quadratic chart field.")
+            from .field_coefficient import rational_sqrt
+            exact = str(rational_sqrt(match[1]))
         else:
-            axes={}
-            for comp in chart.get("exceptional",[]):
-                variable=_read(comp["equation"],names)
-                if variable not in coordinates:
-                    raise ArithmeticError("A free embedded chart needs coordinate exceptional components.")
-                axes[coordinates.index(variable)]=comp["id"]
-            strict=[]
-            # A unit at the origin has order zero on every germ-relevant
-            # exceptional component. Keep its actual pullback in the equation.
-            if not scalar.is_one: strict.append((display(scalar.as_expr()),1))
-            for p,m in polys:
-                terms=p.rep.to_dict()
-                minima={j:min(e[j] for e in terms) for j in axes}
-                for j,label in axes.items():
-                    local[label]=local.get(label,0)+m*minima[j]
-                shifted={tuple(k-minima.get(j,0) for j,k in enumerate(e)):c for e,c in terms.items()}
-                proper=sp.Poly.from_dict(shifted,coordinates,domain=domain)
-                strict.append((_display_poly(proper,domain,field_name),m))
-            chart["strict_transform"]=_power_product(strict)
-            chart["pullback_factor"]=_power_product([(str(coordinates[j]),local[label])
-                                                     for j,label in axes.items() if local[label]])
-        for ident,order in local.items():
-            if ident in weights and order!=weights[ident]:
+            exact = _weight_embedding(embedding)
+        chart["weight_field"] = {"generator": field_name, "exact": exact}
+    mapping = tuple(_read(chart["map"][v.name], names) for v in symbols)
+    if field:
+        mapping = (*mapping, generator)
+    axes = {}
+    for component in chart.get("exceptional", ()):
+        variable = _read(component["equation"], names)
+        if variable not in coordinates:
+            raise ArithmeticError("A free embedded chart needs coordinate exceptional components.")
+        axes[variable] = component["id"]
+    local = dict.fromkeys(axes.values(), 0)
+    strict = []
+    original = []
+    # A unit at the origin has order zero on every germ-relevant divisor.
+    scalar, *pulled = pullbacks(ring, mapping, target, (unit, *(f for f, _ in factors)), modulus)
+    if scalar != 1:
+        strict.append((_record_text(scalar, ring), 1))
+        original.append((_record_text(scalar, ring), 1))
+    for (factor, weight), total in zip(factors, pulled):
+        orders, proper = chart_data(ring, mapping, tuple(axes), factor, target, modulus)
+        for label, (order, _) in zip(axes.values(), orders):
+            local[label] += weight*order
+        strict.append((_record_text(proper, ring), weight))
+        original.append((_record_text(total, ring), weight))
+    chart["ambient_total_transform"] = _power_product(original)
+    chart["strict_transform"] = _power_product(strict)
+    chart["pullback_factor"] = _power_product([(str(v), local[label]) for v, label in axes.items() if local[label]])
+    return local
+
+
+def _lift_graph_reference(atlas, chart, factors, unit, symbols, weights):
+    coordinates = tuple(map(sp.Symbol, chart["coordinates"]))
+    domain, algebraics = _chart_field(atlas, chart)
+    names = {v.name: v for v in coordinates} | algebraics
+    field_name = "weight_generator"
+    while field_name in names:
+        field_name += "_"
+    if algebraics:
+        chart["weight_field"] = {"generator": field_name, "exact": str(domain.ext.as_expr())}
+
+    def display(f):
+        return _display_poly(sp.Poly(f, *coordinates, domain=domain), domain, field_name)
+
+    mapping = {v: _read(chart["map"][v.name], names) for v in symbols}
+    scalar = sp.Poly(unit.xreplace(mapping), *coordinates, domain=domain)
+    polys = [(sp.Poly(f.xreplace(mapping), *coordinates, domain=domain), m) for f, m in factors]
+    original = [(display(p.as_expr()), m) for p, m in polys]
+    if not scalar.is_one:
+        original.insert(0, (display(scalar.as_expr()), 1))
+    chart["ambient_total_transform"] = _power_product(original)
+    ambient = tuple(_read(f, names) for f in chart["ambient_ideal"])
+    total = scalar.as_expr()*prod(p.as_expr()**m for p, m in polys)
+    pivot = _read(chart["pivot_generator"], names)
+    strict = saturate(coordinates, (*ambient, total), pivot, domain=domain)
+    chart["strict_transform"] = [display(f) for f in strict if not ideal_subset(coordinates, (f,), ambient, domain=domain)]
+    local = {}
+    for comp in chart["exceptional"]:
+        prime = tuple(_read(f, names) for f in comp.get("ideal", [comp["equation"]]))
+        label = comp["id"]
+        local[label] = weights[label] if label in weights else _valuation(coordinates, ambient, prime, total, domain)
+    return local
+
+
+def _lift_graph(atlas, chart, factors, unit, symbols, weights):
+    """Compute over Q[theta]/(m), with graph ideals lifted to Q[axes,theta].
+
+    Saturation and ideal quotient commute with taking the preimage in
+    this presentation. Descent to any embedding preserves the Cartier
+    orders and strict equations. The field embedding is only needed to
+    label the coefficients for display.
+    """
+    from .affine_kernel import pullbacks
+    from .atlas import _record_text
+    from .groebner import CHECK, _MODE
+    field = atlas.get("coefficient_field", {})
+    if _MODE == "sympy":
+        return _lift_graph_reference(atlas, chart, factors, unit, symbols, weights)
+    if atlas.get("algebraic_numbers"):
+        from .graph_record import lift_graph
+        base = tuple(v.name for v in symbols)
+        return lift_graph(atlas, chart, [(_record_text(f,symbols), m) for f,m in factors],
+                          _record_text(unit,symbols), base)
+    if field.get("generator"):
+        from .monodromy_graph import _field_coefficients
+        coefficients = _field_coefficients(field)
+    coordinates = tuple(map(sp.Symbol, chart["coordinates"]))
+    names = {v.name: v for v in coordinates}
+    target = tuple(symbols)
+    relation = None
+    if field.get("generator"):
+        label = "weight_generator"
+        while label in names:
+            label += "_"
+        theta = sp.Symbol(label)
+        names[field["generator"]] = theta
+        relation = sp.Add(*(sp.Rational(c)*theta**k for k, c in enumerate(reversed(coefficients))))
+        coordinates = (*coordinates, theta)
+        chart["weight_field"] = {"generator": label, "exact": field["exact_root"]}
+    mapping = tuple(_read(chart["map"][s.name], names) for s in target)
+    scalar, *images = pullbacks(coordinates, mapping, target, (unit, *(f for f, _ in factors)), modulus=relation)
+    pieces = [(f, multiplicity) for f, (_, multiplicity) in zip(images, factors)]
+    if scalar != 1:
+        pieces.insert(0, (scalar, 1))
+    original = [(_record_text(f, coordinates), m) for f, m in pieces]
+    ambient = tuple(_read(f, names) for f in chart["ambient_ideal"])
+    if relation is not None:
+        ambient = (*ambient, relation)
+    total, = pullbacks(coordinates, coordinates, coordinates, (prod(f**m for f, m in pieces),), modulus=relation)
+    pivot = _read(chart["pivot_generator"], names)
+    strict = saturate(coordinates, (*ambient, total), pivot)
+    proper = [g for g in strict if not ideal_subset(coordinates, (g,), ambient)]
+    local = {}
+    for comp in chart["exceptional"]:
+        label = comp["id"]
+        if label in weights:
+            local[label] = weights[label]
+            continue
+        prime = tuple(_read(f, names) for f in comp.get("ideal", [comp["equation"]]))
+        data = _strict_parts(coordinates, ambient, (prime,), (total,))
+        local[label] = data[0][0][0]
+    if CHECK:
+        other = chart.copy()
+        expected = _lift_graph_reference(atlas, other, factors, unit, symbols, weights)
+        codec = {v.name: v for v in coordinates}
+        other_ideal = tuple(_read(g, codec) for g in other["strict_transform"])
+        if (expected != local or not ideal_subset(coordinates, proper, (*ambient, *other_ideal)) or
+                not ideal_subset(coordinates, other_ideal, (*ambient, *proper))):
+            raise AssertionError("The weighted graph orders or strict ideal differ from the reference.")
+    chart["ambient_total_transform"] = _power_product(original)
+    chart["strict_transform"] = [_record_text(g, coordinates) for g in proper]
+    return local
+
+
+def _lift(atlas, factors, unit, symbols):
+    weights = {}
+    saved = atlas.get("atlas", []) if atlas["engine"] == "canonical-blowups" else []
+    for index, chart in enumerate(atlas["charts"]):
+        local_record = saved[index] if saved else None
+        if "fibre" in chart and "components" in chart:
+            local_record = chart
+        if local_record is not None:
+            local = _lift_local(chart, local_record, factors, unit, symbols)
+        else:
+            chart["reduced_strict_transform"] = chart["strict_transform"]
+            if "strict_transform_on_exceptional" in chart:
+                chart["reduced_strict_transform_on_exceptional"] = chart.pop("strict_transform_on_exceptional")
+            if "ambient_ideal" in chart:
+                local = _lift_graph(atlas, chart, factors, unit, symbols, weights)
+            else:
+                local = _lift_free(atlas, chart, factors, unit, symbols)
+        for ident, order in local.items():
+            if weights.setdefault(ident, order) != order:
                 raise ArithmeticError("Original divisor orders disagree on overlapping charts.")
-            weights[ident]=order
-        for component in (*chart.get("exceptional",()), *chart.get("ambient_components",())):
-            order=local[component["id"]]
-            for key in ("total_multiplicity","multiplicity","ambient_order"):
-                if key in component: component[key]=order
-            component["total_multiplicity"]=order
-    _set_global_weights(atlas,weights)
+        for component in (*chart.get("exceptional", ()), *chart.get("ambient_components", ())):
+            order = local[component["id"]]
+            for key in ("total_multiplicity", "multiplicity", "ambient_order"):
+                if key in component:
+                    component[key] = order
+            component["total_multiplicity"] = order
+    _set_global_weights(atlas, weights)
 
 
 def _set_global_weights(atlas,weights):
@@ -281,27 +540,39 @@ def nonreduced_resolution(p, variables, mode, resolve_support):
     resolve_support receives a sparse polynomial dictionary and must return
     an embedded atlas (or its ordinary inconclusive result).
     """
+    from .native_library import _MODE
+    if _MODE != "sympy":
+        from .weighted_record import nonreduced_resolution as native_resolution
+        return native_resolution(p, variables, mode, resolve_support)
     symbols=tuple(sp.Symbol(v) for v in variables)
-    original=_expression(p,symbols)
-    scalar,parts=original.factor_list()
+    from .affine_kernel import rational_factor_rows, sparse_terms, _sparse_expression, _sparse_terms
+    from .atlas import _polynomial
+    scalar,parts=rational_factor_rows(symbols, _polynomial(p, symbols))
     active=[];unit=sp.sympify(scalar)
-    for factor,m in parts:
-        if factor.coeff_monomial((0,)*len(symbols))==0:
-            active.append((factor.as_expr(),m))
+    zero = (0,)*len(symbols)
+    for row,m,_ in parts:
+        factor = _sparse_expression(symbols, row)
+        if zero not in dict(_sparse_terms(row)):
+            active.append((factor,m))
         else:
-            unit*=factor.as_expr()**m
+            unit*=factor**m
     if not any(m>1 for _,m in active):
         return None
     if mode=="intrinsic":
         raise InputError("The germ has a repeated component through the origin. An intrinsic resolution requires the underlying reduced hypersurface.")
-    support=sp.Poly(prod(f for f,_ in active),*symbols,domain=QQ)
-    sparse={e:Fraction(int(c.p),int(c.q)) for e,c in support.terms()}
+    sparse=dict(sparse_terms(symbols, prod(f for f,_ in active)))
+    support=_polynomial(sparse, symbols)
     atlas=resolve_support(sparse)
-    metadata={"reduced_equation":_text(support.as_expr()),"unit_at_origin":_text(unit),
+    metadata={"reduced_equation":_text(support),"unit_at_origin":_text(unit),
               "factors":[{"equation":_text(f),"multiplicity":m} for f,m in active]}
     atlas["input_divisor"]=metadata
     if atlas["status"]!="resolved":
         return atlas
+    if atlas["engine"] != "canonical-blowups":
+        # Reconstruct from the weighted chart maps after the lift. For the
+        # origin engine the owned charts have no separate producer: lift them
+        # in place with their display records.
+        atlas.pop("atlas", None)
     multiplicities={m for _,m in active}
     if len(multiplicities)!=1 or not _uniform_lift(atlas,next(iter(multiplicities)),unit,symbols):
         _lift(atlas,active,unit,symbols)

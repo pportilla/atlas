@@ -7,12 +7,13 @@ switched off with ATLAS_GROEBNER=sympy, the ring has too many variables, an
 exponent exceeds the packed range, or the input is not a polynomial over Q.
 The caller then computes with SymPy, which also reports malformed input.
 """
-import ctypes
 
-import sympy as sp
-from sympy.polys.polyerrors import BasePolynomialError
+from . import native_polynomial as np
+from .reference import sp
 
-from .groebner import _MAX_VARIABLES, _MODE, _kernel, _line, _poly
+from .chart_kernel import crossings_rows, strata_rows
+from .native_library import Unavailable
+from .groebner import _MAX_VARIABLES, _MODE, _kernel, _line
 
 
 class _Unsuitable(Exception):
@@ -20,6 +21,8 @@ class _Unsuitable(Exception):
 
 
 def _lines(gens, exprs):
+    if np.native_ring(gens):
+        return [_line(gens, expr) for expr in exprs]
     lines = []
     for expr in exprs:
         if not isinstance(expr, sp.Basic):
@@ -31,7 +34,7 @@ def _lines(gens, exprs):
                 raise _Unsuitable from None
         try:
             lines.append(_line(gens, expr))
-        except BasePolynomialError:
+        except sp.polys.polyerrors.BasePolynomialError:
             raise _Unsuitable from None
     return lines
 
@@ -44,30 +47,67 @@ def _require(variables):
 
 def _ask(header, lines):
     """The lines of the kernel's answer."""
-    library = _kernel()
-    payload = (header + "\n" + "".join(line + "\n" for line in lines)).encode("ascii")
-    answer = library.atlas_ideal(payload, len(payload))
-    if not answer:
-        raise _Unsuitable
+    from .native_library import Unavailable, ideal_request
     try:
-        return ctypes.string_at(answer).decode("ascii").split("\n")[:-1]
-    finally:
-        library.atlas_groebner_release(answer)
+        return ideal_request(header, lines)
+    except Unavailable as exc:
+        raise _Unsuitable from exc
 
 
 def _exprs(gens, rows):
-    return tuple(_poly(gens, row)[1] for row in rows)
+    from .affine_kernel import _sparse_expression
+    return tuple(_sparse_expression(tuple(gens), row) for row in rows)
 
 
 def _optional(function):
     def wrapper(*arguments):
         try:
             return function(*arguments)
-        except _Unsuitable:
+        except (_Unsuitable, Unavailable):
             return None
     wrapper.__name__ = function.__name__
     wrapper.__doc__ = function.__doc__
     return wrapper
+
+
+@_optional
+def dimension(variables, ideal):
+    """Krull dimension, with -1 for the empty scheme."""
+    try:
+        _require(len(variables))
+        rows = _ask(f"dimension {len(variables)}", _lines(variables, ideal))
+    except _Unsuitable:
+        if _MODE == "sympy" or not variables or not hasattr(_kernel(), "atlas_wide_dimension_abi"):
+            raise
+        from .affine_kernel import _request, _ring
+        ring = _ring(tuple(variables))
+        rows = _request(["wide_dimension", ring.header, "grevlex", *map(ring.text, ideal)])
+    return int(rows[0])
+
+
+@_optional
+def strict_parts(variables, ambient, divisors, functions):
+    """The exceptional orders and the strict ideal of each pulled-back factor."""
+    _require(len(variables) + 1)
+    rows = _ask(f"strict_parts {len(variables)} {len(ambient)} {len(divisors)}" +
+                "".join(f" {len(ideal)}" for ideal in divisors),
+                _lines(variables, (*ambient, *(g for ideal in divisors for g in ideal), *functions)))
+    result, offset = [], 0
+    for _ in functions:
+        *orders, size = map(int, rows[offset].split())
+        offset += 1
+        result.append((tuple(orders), _exprs(variables, rows[offset:offset + size])))
+        offset += size
+    return result
+
+
+@_optional
+def graph_orders(variables, dimension, ambient, prime, equation):
+    """Orders (N, nu) on a graph projecting to its first dimension coordinates."""
+    _require(len(variables))
+    rows = _ask(f"graph_orders {len(variables)} {dimension} {len(ambient)} {len(prime)}",
+                _lines(variables, (*ambient, *prime, equation)))
+    return tuple(map(int, rows[0].split()))
 
 
 @_optional
@@ -76,6 +116,17 @@ def saturate(variables, ideal, by):
     _require(len(variables) + 1)
     lines = _lines(variables, (*ideal, by))
     return _exprs(variables, _ask(f"saturate {len(variables)} {len(lines) - 1}", lines))
+
+
+@_optional
+def finite_radical(variables, ideal):
+    """Reduced grevlex basis of the radical of a finite rational ideal."""
+    _require(len(variables))
+    rows = _ask(f"finite_radical {len(variables)}", _lines(variables, ideal))
+    if rows == ["positive_dimension"]:
+        from .centres import GiveUp
+        raise GiveUp("A centre expected to be finite is not.")
+    return _exprs(variables, rows)
 
 
 @_optional
@@ -234,20 +285,10 @@ def crossings(variables, dimension, ambient, divisors, fibre, region):
     (positions of the divisors, whether such a point lies in the region,
     generators of the ideal of those points)."""
     _require(len(variables))
-    divisors = [tuple(ideal) for ideal in divisors]
-    lines = _lines(variables, (*ambient, *(g for ideal in divisors for g in ideal), *fibre, *region))
-    sizes = "".join(f" {len(ideal)}" for ideal in divisors)
-    rows = _ask(f"crossings {len(variables)} {dimension} {len(tuple(ambient))} {len(divisors)}{sizes} "
-                f"{len(tuple(fibre))} {len(tuple(region))}", lines)
-    found, at = [], 0
-    while at < len(rows) and rows[at] != "none":
-        fields = rows[at].split()
-        size = int(fields[1])
-        count = int(fields[3 + size])
-        found.append((tuple(map(int, fields[2:2 + size])), fields[2 + size] == "1",
-                      _exprs(variables, rows[at + 1:at + 1 + count])))
-        at += 1 + count
-    return found
+    found = crossings_rows(len(variables), dimension, _lines(variables, ambient),
+                           [_lines(variables, ideal) for ideal in divisors],
+                           _lines(variables, fibre), _lines(variables, region))
+    return [(indices, inside, _exprs(variables, rows)) for indices, inside, rows in found]
 
 
 @_optional
@@ -291,17 +332,62 @@ def strata(variables, base, ideals, removed=()):
     supports of the points of the part on exactly those}, the nonzero ones.
     The points of the closed sets V(Z), Z in `removed`, are left out."""
     _require(len(variables) + 1)
-    base = tuple(base)
-    ideals = [tuple(ideal) for ideal in ideals]
-    removed = [tuple(ideal) for ideal in removed]
-    lines = _lines(variables, (*base, *(g for ideal in (*ideals, *removed) for g in ideal)))
-    rows = _ask(f"strata {len(variables)} {len(base)} {len(ideals)}" + "".join(f" {len(ideal)}" for ideal in ideals)
-                + f" {len(removed)}" + "".join(f" {len(ideal)}" for ideal in removed), lines)
-    found = {}
-    for row in rows:
-        if row == "none":
-            break
-        fields = row.split()
-        size = int(fields[1])
-        found[tuple(map(int, fields[2:2 + size]))] = int(fields[2 + size])
-    return found
+    return strata_rows(len(variables), _lines(variables, base), [_lines(variables, ideal) for ideal in ideals],
+                       [_lines(variables, ideal) for ideal in removed])
+
+
+@_optional
+def plane_components(variables, equations, region, removed):
+    """Owned geometric and rational component counts of a coordinate plane curve."""
+    if _MODE == "sympy":
+        return _plane_components_reference(variables, equations, region, removed)
+    _require(len(variables))
+    sizes = [len(equations), len(region), *map(len, removed)]
+    rows = _ask("plane_components " + " ".join(map(str, (len(variables), *sizes))),
+                _lines(variables, (*equations, *region, *(g for z in removed for g in z))))
+    if rows == ["unsupported"]:
+        return None
+    counts = tuple(map(int, rows[0].split()))
+    if _MODE == "check" and counts != _plane_components_reference(variables, equations, region, removed):
+        raise AssertionError("The plane component counts differ from the reference.")
+    return counts
+
+
+def _plane_components_reference(variables, equations, region, removed):
+    """Factor over Q and solve Gao's closed-form equations symbolically."""
+    zero = {v: 0 for v in variables if any(sp.sympify(g).as_coeff_Mul()[1] == v for g in equations)}
+    free = [v for v in variables if v not in zero]
+    if len(free) != 2:
+        return None
+    x, y = free
+
+    def restrict(g):
+        return sp.Poly(sp.sympify(g).xreplace(zero), x, y, domain=sp.QQ)
+
+    remaining = [g for g in map(restrict, equations) if not g.is_zero]
+    if len(remaining) != 1:
+        return None
+    equation, = remaining
+    geometric = rational = 0
+    for p, _ in equation.factor_list()[1]:
+        def vanishes(ideal):
+            return all(restrict(g).rem(p).is_zero for g in ideal)
+
+        if not vanishes(region) or any(vanishes(z) for z in removed):
+            continue
+        rational += 1
+        m, n = p.degree(x), p.degree(y)
+        if not m or not n:
+            geometric += m + n
+            continue
+        f = p.as_expr()
+        # Column polynomials of f*(g_y-h_x) - g*f_y + h*f_x.
+        columns = [f*q.diff(y) - q*f.diff(y) for i in range(m) for j in range(n+1)
+                   for q in (x**i*y**j,)]
+        columns.extend(q*f.diff(x) - f*q.diff(x) for i in range(m+1) for j in range(n)
+                       for q in (x**i*y**j,))
+        sparse = [sp.Poly(q, x, y).as_dict() for q in columns]
+        powers = sorted(set().union(*sparse))
+        matrix = sp.Matrix([[column.get(power, 0) for column in sparse] for power in powers])
+        geometric += len(columns) - matrix.to_DM().rank()
+    return geometric, rational

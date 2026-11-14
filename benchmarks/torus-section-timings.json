@@ -1,0 +1,156 @@
+{
+  "measured_date_utc": "2026-11-14",
+  "operation": "Complete warm Python engine.resolve.resolve call, including chart generation and independent atlas verification.",
+  "machine": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "gpu": "AMD Radeon 680M (radeonsi, rembrandt, ACO)",
+    "os": "Ubuntu 26.04.1 LTS",
+    "kernel": "7.0.0-43-generic",
+    "python": "3.14.4",
+    "opencl": "Mesa Rusticl OpenCL 3.0, driver 26.0.8-1ubuntu0.3"
+  },
+  "builds": {
+    "before": {
+      "engine_and_binaries_sha256": "279526eec14670389e330447a07e8259121a184fe14cbb5f6b0b8f9fda82832e",
+      "atlas_torus_py_sha256": "b1628bc3bf33e404686efe61ede4cdff899cf1059a50bc33398b8acb41fa110d"
+    },
+    "after": {
+      "engine_and_binaries_sha256": "e2118068bb7808f1cfa00c5e65a45d6092eddd04ed5b755804278e050bf2562d",
+      "atlas_torus_py_sha256": "2417959e4e551dc3cdc29d13ae6b6b3a69e862a12c1ade75dd519ccc555b12a6"
+    }
+  },
+  "build_hash_recipe": "Sort engine/*.py and native/build/* by relative path. Hash the UTF-8 concatenation of each path, tab, its file SHA-256 hex digest, and newline.",
+  "before_to_after_unified_diff": "--- a/engine/atlas_torus.py\n+++ b/engine/atlas_torus.py\n@@ -24,6 +24,8 @@\n \n def _normalized(terms):\n     first = terms[min(terms)]\n+    if first == 1:\n+        return tuple(sorted(terms.items()))\n     return tuple((e, Fraction(c)/first) for e, c in sorted(terms.items()))\n \n \n@@ -139,13 +141,20 @@\n                     return None\n                 labels.append(name)\n                 rays_by_label[name] = rays[at]\n-        # Include the further boundary strata to certify transversality\n-        # throughout each exceptional intersection in this affine chart.\n+        # Restrict to each coordinate hyperplane once. The terms on an\n+        # intersection survive on every participating hyperplane, so the\n+        # smallest restriction suffices to find their common subset.\n+        hyperplanes = [tuple(term for term in terms if term[0][i] == 0) for i in range(dimension)]\n         for size in range(1, dimension+1):\n             for indices in combinations(range(dimension), size):\n                 if not any(i in boundary for i in indices):\n                     continue\n-                restricted = tuple((e, Fraction(c)) for e, c in terms if all(e[i] == 0 for i in indices))\n+                if size == 1:\n+                    restricted = hyperplanes[indices[0]]\n+                else:\n+                    first = min(indices, key=lambda i: len(hyperplanes[i]))\n+                    other = tuple(i for i in indices if i != first)\n+                    restricted = tuple(term for term in hyperplanes[first] if all(term[0][i] == 0 for i in other))\n                 if not restricted:\n                     return None\n                 orbit = _orbit(rays, restricted)\n",
+  "method": {
+    "request": {
+      "mode": "intrinsic",
+      "monodromy": false,
+      "search": "default (exhaustive)"
+    },
+    "backend_selection": {
+      "cpu": {
+        "compute": "cpu"
+      },
+      "opencl": {
+        "compute": "gpu",
+        "RESOLUTION_GPU_BACKEND": "opencl"
+      }
+    },
+    "runs": "One persistent interpreter per version per input per backend, pinned to logical CPU 3. Run both versions once to warm, starting with before. Seven timed calls for each version, alternating which version goes first in every pair. CPU pairs completed before the OpenCL pairs. Other host activity continued.",
+    "scope": "Wall time from time.perf_counter() immediately before resolve(request) until it returns. JSON hashing, IPC, startup and input construction are outside the timed operation except creation of the small request dictionary. No tracing or profiler.",
+    "geometry_sha256": "After every warm-up and timed run, SHA-256 of json.dumps([r[k] for k in (\"charts\",\"atlas\",\"dual_complex\",\"fan\",\"root_families\")], sort_keys=True, separators=(\",\",\":\")).encode(). Check equality across versions and against the other backend. Require certificate.chart_batch.backend to be the expected CPU or OpenCL backend on each call."
+  },
+  "cases": [
+    {
+      "chart_count": 191,
+      "polynomial": "x^2+y^19+z^37+x^3*(x+y+z)^27",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "chart_term_pairs": 78119,
+      "geometry_sha256": "0ae384854f394486223ebf6bcb8e501a1ba268f5bce24bb410df7cdeab01f22d",
+      "cpu": {
+        "before_ms": [
+          1185.929,
+          1211.231,
+          1235.114,
+          1337.707,
+          1310.937,
+          1298.319,
+          1355.835
+        ],
+        "after_ms": [
+          1013.85,
+          1061.646,
+          1032.101,
+          1140.271,
+          1520.819,
+          1104.768,
+          1124.483
+        ],
+        "median_before_ms": 1298.319,
+        "median_after_ms": 1104.768
+      },
+      "opencl": {
+        "before_ms": [
+          1234.272,
+          1223.817,
+          1149.182,
+          1166.591,
+          1182.809,
+          1170.405,
+          1212.173
+        ],
+        "after_ms": [
+          1063.695,
+          984.358,
+          1014.128,
+          1014.3,
+          997.173,
+          1046.443,
+          1060.636
+        ],
+        "median_before_ms": 1182.809,
+        "median_after_ms": 1014.3
+      }
+    },
+    {
+      "chart_count": 598,
+      "polynomial": "x^5+z*y^3+z^15+t^4*x+t^8",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "chart_term_pairs": 12558,
+      "geometry_sha256": "59b13fd0c8b68e0d06cf5e48e36ee1ba09262bee2c5efea5b76c98a01f5955b6",
+      "cpu": {
+        "before_ms": [
+          466.062,
+          450.8,
+          453.237,
+          433.603,
+          463.883,
+          464.929,
+          446.67
+        ],
+        "after_ms": [
+          409.392,
+          394.997,
+          387.119,
+          382.797,
+          401.637,
+          416.178,
+          378.949
+        ],
+        "median_before_ms": 453.237,
+        "median_after_ms": 394.997
+      },
+      "opencl": {
+        "before_ms": [
+          411.026,
+          379.689,
+          381.833,
+          398.28,
+          377.479,
+          381.041,
+          365.207
+        ],
+        "after_ms": [
+          360.516,
+          331.495,
+          322.457,
+          356.331,
+          342.435,
+          338.878,
+          335.737
+        ],
+        "median_before_ms": 381.041,
+        "median_after_ms": 338.878
+      }
+    }
+  ]
+}

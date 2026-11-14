@@ -16,6 +16,23 @@ def subsets(items):
 
 
 class BinomialResolution(unittest.TestCase):
+    def test_large_orders_preserve_the_trace_and_exact_budget_boundary(self):
+        from engine.binomial_fan import build_binomial_fan
+        from engine.binomial_kernel import pairings
+        n = 2**140 + 37
+        exponents = ((n,0,0), (0,n,0))
+        fan = build_binomial_fan(exponents, variables=("x","y","z"), max_steps=1, max_cones=2)
+        self.assertEqual(fan["cones"], [[3,1,2], [0,3,2]])
+        self.assertEqual(fan["steps"][0]["center_ray_indices"], [0,1])
+        self.assertEqual(fan["steps"][0]["image_monomial_orders"], [n,n])
+        self.assertEqual(fan["terminal_certificates"][0]["signed_orders"], [0,-n,0])
+        self.assertIsNone(build_binomial_fan(exponents, max_cones=1))
+        self.assertIsNone(build_binomial_fan(exponents, max_steps=0))
+        self.assertEqual(pairings(((n,n+1,0),),exponents), ((n*n,n*(n+1)),))
+        huge = 10**5000 + 7
+        terminal = build_binomial_fan(((huge,0),(0,1)), max_steps=0)
+        self.assertEqual(terminal["terminal_certificates"][0]["signed_orders"], [huge,-1])
+
     def check_resolution(self, polynomial, names):
         embedded, intrinsic = [
             resolve({"polynomial":polynomial, "variables":list(names), "mode":mode})

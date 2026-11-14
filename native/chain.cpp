@@ -168,6 +168,8 @@ std::string render(const Polynomial& p,bool intrinsic) {
         baseMap[f.y]=linear(f.yu,u,f.yv,v);
         baseMap[f.z]=monomial(ze);
         for(int q=0;q<3;++q) out<<"map\t"<<baseMap[q]<<'\n';
+        for(const auto& ray:chart.rays)
+            out<<"ray\t"<<ray[0]<<'\t'<<ray[1]<<'\t'<<ray[2]<<'\n';
         for(const auto& expr:chart.parentMap) out<<"parentmap\t"<<expr<<'\n';
         out<<"strict\t"<<monomial(left)<<"+"<<monomial(right)<<'\n';
         out<<"factor\t"<<monomial(common)<<'\n';

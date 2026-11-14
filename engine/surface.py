@@ -75,8 +75,9 @@ Hessian of some generator of its ideal is not degenerate there.
 """
 from time import monotonic
 
-import sympy as sp
+from .chart_expressions import chart_expressions
 
+from .affine_kernel import frame_derivative, frame_function, frame_linear, frame_locus, frame_restrict
 from .blowup_ideal import empty_locus, ideal_basis, radical_subset, saturate
 from .centres import GiveUp, _intersection, _principal
 from .groebner import groebner
@@ -88,24 +89,7 @@ class NoModel(GiveUp):
 
 def _empty(variables, units, gens):
     """Whether the ideal has no zero where the units are invertible."""
-    units = [u for u in units if not sp.sympify(u).is_number]
-    inverses = [sp.Dummy("inverse") for _ in units]
-    return empty_locus((*variables, *inverses), (*gens, *(t*u - 1 for t, u in zip(inverses, units))))
-
-
-def _numerator(f, y, a, b, variables):
-    """f with y = -b/a, times the power of a that makes it a polynomial, without the factors a that can be removed."""
-    q = sp.Poly(f, y)
-    degree = q.degree()
-    if degree <= 0:
-        return sp.expand(f)
-    value = sp.expand(sum(q.nth(j)*(-b)**j*a**(degree - j) for j in range(degree + 1)))
-    while value != 0 and not a.is_number:
-        quotient, remainder = sp.div(value, a, *variables)
-        if remainder != 0:
-            break
-        value = sp.expand(quotient)
-    return value
+    return frame_locus(tuple(variables), tuple(gens), tuple(units))
 
 
 def _models(variables, equations, functions, working, threefold=0):
@@ -116,7 +100,11 @@ def _models(variables, equations, functions, working, threefold=0):
     (variables, units, functions, working, equations left, how many of these
     are equations of the chart: they come first), with the functions and the
     working ideals in those variables; with no equation left the variables
-    are two and the surface is an open set of their plane."""
+    are two and the surface is an open set of their plane. On the open
+    defined by a nonvanishing coefficient a, substitution and clearing
+    powers of a induce an isomorphism after localization. Removing any
+    further common powers of a preserves every zero locus there. The locus
+    a=0 stays on the pending list in the original coordinates."""
     pending = [(tuple(variables), [(e, i < threefold) for i, e in enumerate(equations) if e != 0], dict(functions), (),
                 list(working))]
     while pending:
@@ -127,21 +115,21 @@ def _models(variables, equations, functions, working, threefold=0):
                 raise NoModel("A chart does not reduce to a plane.")
             yield names, units, fns, work, (), 0
             continue
-        for e, _ in sorted(tagged, key=lambda item: sp.count_ops(item[0])):
+        for e, _ in sorted(tagged, key=lambda item: chart_expressions(variables).count_ops(item[0])):
             done = False
             for y in names:
-                p = sp.Poly(e, y)
-                if p.degree() != 1:
+                linear = frame_linear(names, e, y)
+                if linear is None:
                     continue
-                a, b = p.nth(1), p.nth(0)
-                hit = [w for w in work if not _empty(names, units, (*eqs, *w))
-                       and (a.is_number or not radical_subset(names, (a,), (*eqs, *w)))]
+                a, b = linear
+                # The substitution y=-b/a is defined precisely on this open.
+                hit = [w for w in work if not _empty(names, (*units, a), (*eqs, *w))]
                 if not hit:
                     continue
                 rest = tuple(v for v in names if v != y)
 
                 def move(f, y=y, a=a, b=b, names=names):
-                    return _numerator(sp.sympify(f), y, a, b, names)
+                    return frame_restrict(names, f, y, a, b)
 
                 def ideal(gens, move=move):
                     return tuple(g for g in map(move, gens) if g != 0)
@@ -166,9 +154,22 @@ def _models(variables, equations, functions, working, threefold=0):
                 yield names, units, fns, work, (*first, *(e for e, flag in tagged if not flag)), len(first)
 
 
-def _plane_step(names, units, functions, working):
+def _plane_step(names, units, functions, working, *, reference=False):
     """The step of the procedure on one plane model: (key, kind, generators), or None."""
+    if reference:
+        import sympy as sp
     s, t = names
+    def expand(f):
+        return sp.expand(f) if reference else frame_function(names, f)
+
+    def derivative(f, v):
+        return sp.diff(f, v) if reference else frame_derivative(names, f, {v: 1})
+
+    def factors(f):
+        if reference:
+            return sp.factor_list(f, s, t)[1]
+        from .affine_kernel import rational_factor_rows, _sparse_expression
+        return [(_sparse_expression(names, row), m) for row, m, _ in rational_factor_rows(names, f)[1]]
 
     def here(gens, everywhere=False):
         if everywhere:
@@ -180,15 +181,15 @@ def _plane_step(names, units, functions, working):
     for label, f in functions.items():
         if f == 0:
             raise GiveUp("A divisor contains the surface.")
-        for factor, power in sp.factor_list(f, s, t)[1]:
+        for factor, power in factors(f):
             p = factor.as_expr() if hasattr(factor, "as_expr") else factor
             if p.free_symbols and here((p,)):
                 curves.setdefault(p, {})[label] = power
     if not curves:
         return None
-    whole = sp.expand(sp.Mul(*curves))
-    first = [sp.diff(whole, v) for v in names]
-    hessian = sp.expand(sp.diff(whole, s, 2)*sp.diff(whole, t, 2) - sp.diff(whole, s, t)**2)
+    whole = expand(chart_expressions(names).prod(curves))
+    first = [derivative(whole, v) for v in names]
+    hessian = expand(derivative(first[0], s)*derivative(first[1], t) - derivative(first[0], t)**2)
     if here((whole, *first, hessian)):
         return (3, 0, 0, ()), "points", (whole, *first, hessian)
     if any(sum(m.values()) >= 2 for m in curves.values()):
@@ -199,25 +200,27 @@ def _plane_step(names, units, functions, working):
         else:
             labels = max(tuple(sorted(m)) for m in curves.values() if len(m) >= 2)
             chosen = [p for p, m in curves.items() if all(label in m for label in labels)]
-        together = sp.expand(sp.Mul(*chosen))
-        singular = (together, sp.diff(together, s), sp.diff(together, t))
+        together = expand(chart_expressions(names).prod(chosen))
+        singular = (together, derivative(together, s), derivative(together, t))
         if here(singular, everywhere=True):
             return (2, top, 1, labels), "points", singular
         return (2, top, 0, labels), "curve", (together,)
     for label in sorted(functions, reverse=True):
-        trace = sp.expand(sp.Mul(*(p for p, m in curves.items() if label in m)))
-        nodes = (trace, sp.diff(trace, s), sp.diff(trace, t))
+        trace = expand(chart_expressions(names).prod((p for p, m in curves.items() if label in m)))
+        nodes = (trace, derivative(trace, s), derivative(trace, t))
         if trace.free_symbols and here(nodes):
             return (1, 0, 0, (label,)), "points", nodes
     return None
 
 
-def _implicit_step(frame, functions, working, deadline=None):
+def _implicit_step(frame, functions, working, deadline=None, *, reference=False):
     """The same step on a surface given by equations, with two of the variables
     as coordinates: (key, kind, generators in the ring of the frame), or None."""
     from .groebner import colon
     # Ideals are taken in the variables of the chart, over the equations of the
     # surface; the open set of the frame only enters the tests for emptiness.
+    if reference:
+        import sympy as sp
     ring, base = frame.variables, frame.rows
 
     def here(gens, everywhere=False):
@@ -227,40 +230,63 @@ def _implicit_step(frame, functions, working, deadline=None):
             return not frame.empty(*gens)
         return any(not frame.empty(*gens, *w) for w in working)
 
-    def functions_of(ideal):
-        return [g for g in ideal if not frame.vanishes(g)]
-
     def quotient(ideal, by):
         answer = colon(tuple(ideal), tuple(by), ring)
         if answer is None:
-            raise NoModel("An ideal quotient is not available.")
+            from .native_polynomial import native_ring
+            if native_ring(ring):
+                raise NoModel("An ideal quotient is not available.")
+            from sympy import QQ
+            polynomials = QQ.old_poly_ring(*ring, order="grevlex")
+            quotient = polynomials.ideal(*ideal).quotient(polynomials.ideal(*by))
+            answer = tuple(polynomials.to_sympy(g) for g in quotient.gens)
         return tuple(answer)
 
     def derived(ideal):
-        return [d for g in functions_of(ideal) for k in frame.coords if (d := frame.derivative(g, k)) != 0]
+        # Each derivation is tangent to the surface. A generator which is
+        # zero on the open frame contributes only vanishing derivatives
+        # there. It is safe to retain them, and we need no saturation to
+        # recognize zero functions outside the working locus.
+        return [d for g in ideal for k in frame.coords if (d := frame.derivative(g, k)) != 0]
 
     def radical(ideal):
         return quotient(ideal, (*ideal, *derived(ideal)))
 
-    def poly(f):
-        return sp.Poly(f, *ring, domain=sp.QQ)
+    def expanded(f):
+        return sp.Poly(f, *ring, domain=sp.QQ).as_expr() if reference else frame_function(ring, f)
 
     labels = [label for label, f in functions.items() if here((f,))]
     if not labels:
         return None
-    product = poly(1)
-    for label in labels:
-        product *= poly(functions[label])
-    whole = radical((*base, product.as_expr()))
-    hessians = []
-    for g in functions_of(whole):
-        a, b = frame.coords
-        ga, gb = frame.derivative(g, a), frame.derivative(g, b)
-        hessian = poly(frame.derivative(ga, a))*poly(frame.derivative(gb, b)) - poly(frame.derivative(ga, b))**2
-        hessians.append(frame.reduced(hessian.as_expr()))
-    worse = (*whole, *derived(whole), *hessians)
-    if here(worse):
-        return (3, 0, 0, ()), "points", worse
+    product = expanded(chart_expressions(ring).prod((functions[label] for label in labels)))
+    whole = radical((*base, product))
+    a, b = frame.coords
+    gradients = []
+    for g in whole:
+        if g not in base:
+            gradients.append((frame.derivative(g, a), frame.derivative(g, b)))
+    # The Hessian is only tested at singular points in the working set.
+    # Reducing its entries modulo each such slice before multiplication
+    # preserves the determinant there and keeps the checked equations small.
+    singular = (*whole, *(d for gradient in gradients for d in gradient if d != 0))
+    slices = [w for w in working if not frame.empty(*singular, *w)]
+    if slices:
+        # Differentiating a representative of the first derivative is valid:
+        # the frame fields are tangent to its equations.
+        da, db = frame.field(a), frame.field(b)
+        entries = [(frame_derivative(ring, ga, da), frame_derivative(ring, ga, db),
+                    frame_derivative(ring, gb, db)) for ga, gb in gradients if ga != 0 or gb != 0]
+        for w in slices:
+            slice_basis = groebner((*base, *singular, *w), ring)
+            hessians = []
+            for row in entries:
+                aa, ab, bb = (slice_basis.reduce(g)[1] for g in row)
+                hessians.append(expanded(aa*bb - ab**2))
+            if not frame.empty(*singular, *w, *hessians):
+                # The centre itself must still use the whole singular locus;
+                # the working ideals only select which step has priority.
+                whole_hessians = [expanded(aa*bb - ab**2) for aa, ab, bb in entries]
+                return (3, 0, 0, ()), "points", (*singular, *whole_hessians)
     # For each divisor, the unions of its curves of multiplicity at least 1, 2, ...
     levels = {}
     for label in labels:
@@ -323,10 +349,10 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
         # rest is covered by the open sets u != 0, u a product of one generator
         # of each Z. Such an open set is the chart t*u = 1 with one variable
         # more, which the models below eliminate again.
-        covers = [sp.Integer(1)]
+        covers = [chart_expressions(variables).sympify(1)]
         for ideal in away:
-            covers = [sp.expand(u*g) for u in covers for g in ideal]
-        t = sp.Dummy("off")
+            covers = [frame_function(variables, u*g) for u in covers for g in ideal]
+        t = chart_expressions(variables).Dummy("off")
         found, left = [], working
         for unit in dict.fromkeys(covers):
             inner = step((t, *variables), (*ambient, t*unit - 1), strict, divisors, left, deadline)
@@ -351,7 +377,7 @@ def _best(variables, found):
         return None
     key = max(item[0] for item in found)
     kind = next(item[1] for item in found if item[0] == key)
-    centres = sorted({item[2] for item in found if item[0] == key}, key=sp.default_sort_key)
+    centres = sorted({item[2] for item in found if item[0] == key}, key=chart_expressions(variables).default_sort_key)
     centre = centres[0]
     for other in centres[1:]:
         centre = tuple(ideal_basis(variables, _intersection(variables, centre, other)))
@@ -362,7 +388,7 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
     """The steps found on one model, as (key, kind, generators in its variables)."""
     from . import kernel
     from .centres import _frames
-    from .groebner import CHECK
+    from .groebner import CHECK, _MODE
     labels = sorted(fns)
     native = kernel.surface_step(names, left, [fns[label] for label in labels], work, units, threefold)
     if native == "nomodel":
@@ -374,16 +400,16 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
         if not CHECK:
             return native
     if not left:
-        mine = [_plane_step(names, units, fns, work)]
+        mine = [_plane_step(names, units, fns, work, reference=CHECK or _MODE == "sympy")]
     else:
         # Two of the remaining variables as coordinates, the others determined by the equations left.
         try:
             # Only the points where the units are invertible are to be covered.
             frames = list(_frames(names, left, 2, (), work,
-                                  units=tuple(u for u in units if not sp.sympify(u).is_number)))
+                                  units=tuple(u for u in units if not getattr(u, "is_number", True))))
         except GiveUp as error:
             raise NoModel(str(error)) from error
-        mine = [_implicit_step(frame, fns, part, deadline) for frame, part in frames]
+        mine = [_implicit_step(frame, fns, part, deadline, reference=CHECK or _MODE == "sympy") for frame, part in frames]
     mine = [item for item in mine if item is not None]
     if native is not None:
         # Compared after closure, where generators are canonical.
@@ -414,7 +440,7 @@ def _step(variables, ambient, strict, functions, working, deadline=None):
             # The locus on the surface, then its closure in the chart.
             centre = ideal_basis(variables, (*ambient, *strict, *gens))
             for unit in units:
-                if not sp.sympify(unit).is_number:
+                if not getattr(unit, "is_number", True):
                     centre = saturate(variables, centre, unit)
             centre = tuple(ideal_basis(variables, centre))
             if centre != (1,):

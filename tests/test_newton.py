@@ -269,11 +269,16 @@ class GeneralNewton(unittest.TestCase):
         # On the dense torus the faces x+y=0 and x+y+z=0 are disjoint and
         # smooth. Their common edge on z=0 is repeated, which disqualifies
         # the polygon from the nondegenerate connectedness theorem. The
-        # modification is completed by blowups, and no dual complex is claimed.
+        # modification is completed by blowups. Its atlas determines some
+        # exceptional curves even when a geometric component count is open.
         p=parse("(x+y)*(x+y+z)+z^4",list("xyz"))
         result=resolve_newton(p,list("xyz"),"intrinsic")
         self.assertEqual(result["status"],"resolved")
-        self.assertEqual(result["dual_complex"]["status"],"unavailable")
+        dual = result["dual_complex"]
+        self.assertIn(dual["status"], {"partial", "complete"})
+        self.assertTrue(any(v["id"].startswith("P1.") for v in dual["vertices"]))
+        if dual["status"] == "partial":
+            self.assertIn("components", dual["reason"])
         self.assertTrue(any(step.get("centers") for step in result["steps"]))
         # The germ is uv + (v-u)^4 with u = x+y, v = x+y+z: two smooth surfaces
         # crossing normally, so the strata must give 1/(s+1)^2.

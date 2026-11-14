@@ -9,7 +9,8 @@ from engine.newton_backend import resolve_newton
 from engine.polynomial import format_poly, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
-from engine.strata import _power_factors, resolution_strata
+from engine.strata import resolution_strata
+from engine.strata_reference import _power_factors
 from engine.topological import topological_zeta
 
 
@@ -57,6 +58,13 @@ class TopologicalZeta(unittest.TestCase):
         zeta = answer("y^2-x^3", "xy", "intrinsic")["topological_zeta"]
         self.assertEqual(zeta["expression"], "(4*s + 5)/((s + 1)*(6*s + 5))")
         self.assertEqual(zeta["source"], "companion embedded resolution")
+
+    def test_the_blowup_and_the_identity_on_a_plane_crossing(self):
+        for mode in ("intrinsic", "embedded"):
+            with self.subTest(mode=mode):
+                result = answer("x*y", "xy", mode)
+                self.assertEqual(result["topological_zeta"]["expression"], "(s + 1)^(-2)")
+                self.assertEqual(result["monodromy_zeta"]["expression"], "1")
 
     def test_independent_of_the_resolution(self):
         # The same germ through its own engine and through the Newton modification.
@@ -115,13 +123,19 @@ class TopologicalZeta(unittest.TestCase):
         created = [row for row in result["topological_zeta"]["numerical_data"] if row["component"].startswith("P")]
         self.assertEqual([(row["multiplicity"], row["nu"]) for row in created], [(13, 11), (26, 20)])
 
-    def test_inconsistent_strata_are_refused(self):
+    def test_zeta_uses_the_atlas_independently_of_display_metadata(self):
         record = answer("y^2-x^3", "xy")
         data, strata, _ = resolution_strata(record)
         self.assertEqual(sum(sp.Rational(row["euler_characteristic"])
                              / sp.prod([next(d["nu"] for d in data if d["component"] == c) for c in row["components"]])
                              for row in strata), 1)
         record["dual_complex"]["vertices"][0]["self_intersection"] = -4
+        self.assertEqual(topological_zeta(record)["expression"], record["topological_zeta"]["expression"])
+        # Damaging the actual strict transform invalidates the normal-crossings certificate.
+        for chart in record["atlas"]:
+            for component in chart["components"]:
+                if component["id"] == "strict":
+                    component["ideal"] = [f"({component['ideal'][0]})^2"]
         self.assertEqual(topological_zeta(record)["status"], "unavailable")
 
     def test_power_products(self):

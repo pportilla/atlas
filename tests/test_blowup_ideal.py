@@ -9,6 +9,19 @@ from engine.blowup_ideal import (
 
 
 class IdealBlowupTests(unittest.TestCase):
+    def test_unpacked_charts_and_scalar_field_jacobians(self):
+        v = s.symbols("z:33")
+        x, y = v[:2]
+        a = s.sqrt(2)
+        field = s.QQ.algebraic_field(a)
+        self.assertTrue(smooth_locus(v, (a*x+y,x-a*y), 31, domain=field)["smooth"])
+        singular = smooth_locus(v, ((a*x+y)**2,), 32, domain=field)
+        self.assertFalse(singular["smooth"])
+        self.assertTrue(ideal_subset(v, (x+y/a,), singular["bad_ideal"], domain=field))
+        charts = blowup_charts(v, (), (x*y,), (x+y, x+y, 0))
+        self.assertEqual(tuple(c.pivot for c in charts), (x+y,x+y,0))
+        self.assertEqual(charts[-1].ambient, (1,))
+
     def test_distinct_internal_symbols_with_the_same_print_name(self):
         # Absolute factorization uses one Dummy("coefficient") per unknown.
         a,b=s.Dummy("coefficient"),s.Dummy("coefficient")

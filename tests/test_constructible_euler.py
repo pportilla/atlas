@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import sympy as sp
 
@@ -9,6 +10,40 @@ x,y,z = sp.symbols("x y z")
 
 
 class ConstructibleEuler(unittest.TestCase):
+    def test_native_euler_never_switches_to_symbolic_arithmetic(self):
+        from engine import native_library
+        if native_library._MODE != "native":
+            self.skipTest("Checks the default native dispatch.")
+        with patch("engine.constructible_euler._reference", side_effect=AssertionError):
+            with self.assertRaisesRegex(ValueError, "rational or marked"):
+                euler_characteristic((x,), (x,), domain=sp.ZZ)
+            with patch("engine.native_library._kernel", return_value=None), patch("engine.kernel.strata", return_value=None):
+                with self.assertRaisesRegex(ArithmeticError, "Euler characteristic kernel"):
+                    euler_characteristic((x,), (x,))
+
+    def test_constant_locus_over_a_marked_field(self):
+        from engine import native_library
+        from engine.candidate_field import indexed_field
+        if native_library._MODE != "native":
+            self.skipTest("Exercises the native coefficient representation.")
+        field, t = indexed_field((1,0,-2),0)
+        self.assertEqual(euler_characteristic((), (t,), domain=field), 0)
+        self.assertEqual(euler_characteristic((), (t*t-2,), domain=field), 1)
+        self.assertEqual(euler_characteristic((), (), ((t*t-2,),), domain=field), 0)
+
+    def test_independent_factors_and_arbitrary_integer_counts(self):
+        from engine import native_library
+        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_euler"):
+            self.skipTest("Requires the sparse FLINT Euler kernel.")
+        # Each coordinate can be chosen independently among the indicated
+        # distinct roots of unity. Use the formula even for impractically
+        # large dense reference arrays.
+        with patch("engine.groebner.CHECK", False):
+            degree = 10**24
+            self.assertEqual(euler_characteristic((x, y), (x**degree-1, y**3-1)), 3*degree)
+            coordinates = sp.symbols("t:70")
+            self.assertEqual(euler_characteristic(coordinates, tuple(v**2-1 for v in coordinates)), 2**70)
+
     def test_points_empty_loci_multiplicities_and_closed_exclusions(self):
         self.assertEqual(euler_characteristic((),()),1)
         self.assertEqual(euler_characteristic((),(3,)),0)

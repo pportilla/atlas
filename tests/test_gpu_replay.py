@@ -130,7 +130,7 @@ class ReplayThroughTheKernel(unittest.TestCase):
     def test_reference_backend(self):
         self.compare("reference")
 
-    @unittest.skipUnless(gpu_replay.triton_available(), "Triton needs PyTorch with CUDA and the triton package")
+    @unittest.skipUnless(gpu_replay.triton_available(), "No usable Triton GPU at the selected index")
     def test_triton_backend(self):
         self.compare("triton")
 

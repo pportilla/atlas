@@ -1,6 +1,9 @@
 """Compare chart-major native exponent tables with Python integer dot products."""
 import json
 import os
+from contextlib import nullcontext
+from ctypes import c_int32
+from itertools import chain
 from pathlib import Path
 from random import Random
 import subprocess
@@ -10,7 +13,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from engine.chart_batch import transform_batch
+from engine.chart_batch import _pack, transform_batch
+from engine.gpu_devices import available_devices
 from engine.native_backend import gpu_devices
 
 
@@ -46,11 +50,75 @@ class ChartBatchTests(unittest.TestCase):
         for d in gpu_devices():
             for exps, rays, cones in [example(), random_batch(3), random_batch(4), random_batch(8)]:
                 orders, expected = projections(exps, rays, cones)
-                with patch.dict(os.environ, RESOLUTION_GPU_INDEX=str(d["index"])):
+                with patch.dict(os.environ, RESOLUTION_GPU_INDEX=str(d["index"]), RESOLUTION_GPU_BACKEND="opencl"):
                     actual, stats = transform_batch(exps, rays, cones, orders, "gpu")
                 self.assertEqual(actual, expected)
                 self.assertEqual(stats["backend"], "opencl")
                 self.assertEqual(stats["device"]["name"], d["name"])
+
+    def test_triton_exact(self):
+        devices = [d for d in available_devices() if d["backend"] == "triton"]
+        if not devices:
+            self.skipTest("No Triton-capable GPU")
+        for device in devices:
+            with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton", RESOLUTION_GPU_INDEX=str(device["index"])):
+                for dimension in range(2, 9):
+                    exps, rays, cones = random_batch(dimension)
+                    orders, expected = projections(exps, rays, cones)
+                    # Many cones use the temporary ray table. A single cone
+                    # uses the direct kernel with the same input buffers.
+                    for count in [1, len(cones)]:
+                        with self.subTest(device=device["name"], dimension=dimension, cones=count):
+                            actual, stats = transform_batch(exps, rays, cones[:count], orders, "gpu")
+                            self.assertEqual(stats["backend"], "triton", stats)
+                            self.assertEqual(stats["device"], device)
+                            self.assertEqual(actual, expected[:count])
+                limit = 2**31 - 1
+                actual, _ = transform_batch([(limit, 0)], [(1, 0)], [(0, 0)], [0], "gpu")
+                self.assertEqual(actual, [[(limit, limit)]])
+                with self.assertRaisesRegex(ValueError, "ray order"):
+                    transform_batch([(0, 1)], [(1, 0)], [(0, 0)], [1], "gpu")
+
+    @unittest.skipUnless(os.getenv("TRITON_INTERPRET") == "1", "Triton interpreter disabled")
+    def test_triton_interpreter(self):
+        try:
+            import torch
+            from engine.gpu_charts import transform
+        except ImportError:
+            self.skipTest("Triton interpreter and PyTorch required")
+        # Exercise the real transfer/launch code with host tensors. Only the
+        # device-selection context needs replacing in Triton's interpreter.
+        with patch.object(torch.cuda, "device", return_value=nullcontext()):
+            for dimension in range(2, 9):
+                exps, rays, cones = random_batch(dimension)
+                exps = exps[:37]
+                for group in [cones[:1], cones[:23]]:
+                    orders, expected = projections(exps, rays, group)
+                    inputs = [_pack(chain.from_iterable(g)) for g in (exps, rays, group)] + [_pack(orders)]
+                    out = (c_int32 * (dimension*len(exps)*len(group)))()
+                    transform(inputs, out, len(exps), dimension, "cpu")
+                    self.assertEqual(list(out), [x for chart in expected for vector in chart for x in vector])
+
+    def test_unavailable_triton_preserves_cpu_result(self):
+        exps, rays, cones = example()
+        orders, expected = projections(exps, rays, cones)
+        with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
+             patch("engine.chart_batch.triton_device", return_value=None), \
+             patch("engine.chart_batch._gpu_function") as opencl:
+            actual, stats = transform_batch(exps, rays, cones, orders, "gpu")
+        opencl.assert_not_called()
+        self.assertEqual(actual, expected)
+        self.assertEqual(stats["backend"], "cpu_after_triton")
+
+    def test_auto_threshold_skips_triton(self):
+        exps, rays, cones = example()
+        orders, expected = projections(exps, rays, cones)
+        with patch.dict(os.environ, RESOLUTION_GPU_MIN_PAIRS=str(len(exps)*len(cones) + 1)), \
+             patch("engine.chart_batch.triton_device") as lookup:
+            actual, stats = transform_batch(exps, rays, cones, orders, "auto")
+        lookup.assert_not_called()
+        self.assertEqual(stats["backend"], "cpu")
+        self.assertEqual(actual, expected)
 
     def test_fallback_and_bounds(self):
         exps = [(0, 0, 1), (1, 0, 0)]

@@ -32,25 +32,46 @@ resolutions (Comment. Math. Helv. 72 (1997)) for the monodromy zeta function;
 for the topological zeta function the blown-up space is an embedded
 resolution over a neighbourhood of the origin and the formula is applied to it.
 """
+from dataclasses import replace
 from itertools import combinations
 from math import prod
-import re
 
-import sympy as sp
+from .chart_expressions import chart_expressions
+from .native_polynomial import native_ring
+from .polynomial import parse_expression
 
+from . import kernel
+from .affine_kernel import frame_derivative, frame_linear
 from .blowup_ideal import saturate
-from .groebner import groebner
-from .constructible_euler import euler_characteristic
-from .local_blowups import GiveUp, _dimension, _point_components, _radical_points, acampo_over, cells
+from .groebner import CHECK, _MODE, groebner
+from .local_blowups import GiveUp, _dimension, _point_components, _radical_points, acampo_over
 from .monodromy_toric import _volume
+from .newton_backend import _valuations
 from .newton_faces import certify_face
+from .strata import records
 
 
 def _text(expr):
     return str(expr).replace("**", "^")
 
 
-def _rational(coords, free, points):
+def _euler(coords, equations, excluded=()):
+    native = kernel.strata(coords, equations, ((),), excluded)
+    if native is not None and not CHECK:
+        return native.get((0,), 0)
+    from .constructible_euler import euler_characteristic
+    answer = euler_characteristic(coords, equations, excluded)
+    if native is not None and native.get((0,), 0) != answer:
+        raise AssertionError("The Euler characteristic on a Newton chart differs from its reference.")
+    return answer
+
+
+def _point_count(free, points):
+    """The compactly supported Euler characteristic counts the geometric points."""
+    return _euler(free, points)
+
+
+def _rational(coords, free, points, count):
     """Conjugate points made rational. For a set of conjugate points that are
     not rational, a linear form with distinct values at them is adjoined as
     a variable theta: on the points it satisfies its minimal polynomial m,
@@ -62,25 +83,32 @@ def _rational(coords, free, points):
     Returns the variables and (m, coordinate - polynomial in theta, ...), or
     the coordinates and () for a rational point.
     """
-    if euler_characteristic(free, points) == 1:
+    if count == 1:
         return coords, ()
-    theta = sp.Symbol("theta")
-    for attempt in range(1, 12):
-        form = sum((1 + (attempt*(i + 1)) % 7)*v for i, v in enumerate(free))
-        basis = groebner((*points, theta - form), (*free, theta), order="lex").exprs
+    theta = chart_expressions(coords).Symbol("theta")
+    ring = (*free, theta)
+    # For each pair of the distinct geometric points the difference of these
+    # forms is a nonzero polynomial in a of degree at most len(free)-1.
+    # Beyond the sum of their root counts at least one form separates.
+    bad = (len(free) - 1)*count*(count - 1)//2
+    for a in range(bad + 1):
+        form = sum(a**i*v for i, v in enumerate(free))
+        basis = groebner((*points, theta - form), ring, order="lex").exprs
         minimal = [g for g in basis if g.free_symbols <= {theta}]
         solved = []
         for v in free:
-            found = [g for g in basis if sp.Poly(g, v).degree() == 1 and sp.Poly(g, v).LC().is_number
-                     and g.free_symbols <= {v, theta}]
-            if found:
-                solved.append(sp.expand(found[0]/sp.Poly(found[0], v).LC()))
+            for g in basis:
+                if v in g.free_symbols and g.free_symbols <= {v, theta}:
+                    linear = frame_linear(ring, g, v)
+                    if linear is not None and linear[0] == 1:
+                        solved.append(g)  # the reduced lex basis is monic
+                        break
         if len(minimal) == 1 and len(solved) == len(free):
             return (*coords, theta), (minimal[0], *solved)
-    return coords, ()
+    raise GiveUp("No separating linear form was found for the finite reduced Newton centre.")
 
 
-def strata(poly, variables, fan, parts=None, names=None, deadline=None):
+def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count_strata=True):
     """The numerical data, the strata over the origin and the blowups made.
 
     `poly` is the reduced equation, in the coordinates of the fan. `parts`
@@ -93,20 +121,22 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
     Returns {"data": {label: (N, nu)}, "strata": {frozenset of labels: chi},
     "repairs": [...]}, or None when the modification is not of the expected
     kind or normal crossings fail along more than finitely many points.
+    With count_strata=False only the local blowup charts are needed.
     """
     n = len(variables)
     rays, cones = fan["rays"], fan["cones"]
     if len(rays) <= n:
         return None
-    exponents = sorted(poly)
-    valuations = [[sum(r*t for r, t in zip(ray, e)) for e in exponents] for ray in rays]
-    orders = [min(row) for row in valuations]
-    if any(orders[:n]) or min(orders[n:]) < 1:
-        return None
-    minimizers = [frozenset(j for j, q in enumerate(row) if q == m) for row, m in zip(valuations, orders)]
     ray_support = [sum(1 << j for j, r in enumerate(ray) if r) for ray in rays]
     full_support = (1 << n) - 1
-    coords = sp.symbols(f"u1:{n + 1}")
+    from . import native_library
+    use_native = _MODE == "native" and native_library._kernel() is not None
+    if use_native:
+        from . import native_polynomial
+        coords = tuple(native_polynomial.Symbol(f"u{i+1}") for i in range(n))
+    else:
+        import sympy as sp
+        coords = sp.symbols(f"u1:{n + 1}")
     certified = {}
 
     class Part:
@@ -114,7 +144,7 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
         def __init__(self, label, weight, terms):
             self.label, self.weight, self.terms = label, weight, terms
             self.exponents = sorted(terms)
-            self.values = [[sum(r*t for r, t in zip(ray, e)) for e in self.exponents] for ray in rays]
+            self.values = _valuations(rays, self.exponents)
             self.orders = [min(row) for row in self.values]
             self.least = [frozenset(j for j, q in enumerate(row) if q == m)
                           for row, m in zip(self.values, self.orders)]
@@ -125,11 +155,18 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
         def strict(self, cone, face=None):
             """The strict transform in the chart of the cone, or its restriction to a face."""
             chosen = range(len(self.exponents)) if face is None else sorted(face)
+            if use_native:
+                terms = {tuple(self.values[r][j] - self.orders[r] for r in cone):
+                         self.terms[self.exponents[j]] for j in chosen}
+                return native_polynomial.from_terms(coords, terms)
             return sp.Add(*(sp.Rational(self.terms[self.exponents[j]].numerator, self.terms[self.exponents[j]].denominator)
                             * prod(u**(self.values[r][j] - self.orders[r]) for u, r in zip(coords, cone))
                             for j in chosen))
 
     support = Part("strict", 1, poly)
+    orders, exponents, minimizers = support.orders, support.exponents, support.least
+    if any(orders[:n]) or min(orders[n:]) < 1:
+        return None
     parts = [support] if parts is None else [Part(*part) for part in parts]
     if any(sum(part.orders[i] for part in parts) != orders[i] for i in range(len(rays))):
         return None  # the parts are not the factors of the reduced equation
@@ -180,6 +217,8 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
         refines = all(face for _, _, _, face in orbits)
         degenerate = [face for face in {face for _, _, _, face in orbits} if face and not nondegenerate(face)]
         for index, cone, orbit, face in orbits:
+            if not count_strata and face not in degenerate:
+                continue  # the orbit cut is smooth; only the singular points need local runs
             exceptional = [i for i in orbit if i >= n]
             d = n - len(orbit)
             off = frozenset(map(label, exceptional))
@@ -195,7 +234,7 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
             if d == 0:
                 add(off, 1)  # a point, off the strict transform
                 continue
-            if (refines or len(face) <= 2) and not any(other <= face for other in degenerate):
+            if count_strata and (refines or len(face) <= 2) and not any(other <= face for other in degenerate):
                 # The cuts of the parts are disjoint: their union is smooth.
                 total = 0
                 for k, (part, own) in enumerate(zip(parts, faces)):
@@ -213,17 +252,19 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
             free = tuple(u for u, r in zip(coords, cone) if r not in orbit)
             torus = [(u,) for u in free]
             on_orbit = support.strict(cone, face)
-            cuts = [part.strict(cone, own) for part, own in zip(parts, faces)]
-            cut = euler_characteristic(free, (on_orbit,), torus)
-            singular = saturate(free, (on_orbit, *(on_orbit.diff(u) for u in free)), prod(free))
-            add(off, -cut)
+            partials = (frame_derivative(free, on_orbit, {u: 1}) for u in free)
+            singular = saturate(free, (on_orbit, *partials), prod(free))
             if singular != (1,) and _dimension(free, singular) != 0:
                 raise GiveUp("The strict transform fails normal crossings along a curve of an orbit.")
-            for part, own in zip(parts, cuts):
-                chi = cut if len(parts) == 1 else euler_characteristic(free, (own,), torus)
-                if singular != (1,):
-                    chi -= euler_characteristic(free, (*singular, own))
-                add(off | {part.label}, chi)
+            if count_strata:
+                cut = _euler(free, (on_orbit,), torus)
+                add(off, -cut)
+                for part, face_terms in zip(parts, faces):
+                    own = part.strict(cone, face_terms)
+                    chi = cut if len(parts) == 1 else _euler(free, (own,), torus)
+                    if singular != (1,):
+                        chi -= _euler(free, (*singular, own))
+                    add(off | {part.label}, chi)
             if singular == (1,):
                 continue
             components = [(label(r), data[label(r)][0], sum(rays[r]), (u,))
@@ -232,12 +273,16 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
             # Each component over Q of the set of singular points is a problem of
             # its own: the blowups made over one do not touch the others.
             for points in _point_components(free, _radical_points(free, singular)):
-                fibre = (*(u for u, r in zip(coords, cone) if r in orbit), *points)
-                space, relation = _rational(coords, free, points)
-                if relation:
-                    fibre = (*(u for u, r in zip(coords, cone) if r in orbit), *relation[1:])
+                orbit_ideal = tuple(u for u, r in zip(coords, cone) if r in orbit)
+                parent_ideal = (*orbit_ideal, *points)
+                count = _point_count(free, points)
+                space, relation = _rational(coords, free, points, count)
+                fibre = (*orbit_ideal, *relation[1:]) if relation else parent_ideal
+                if CHECK and count != _euler(space, (*relation[:1], *fibre)):
+                    raise AssertionError("The finite cover must lift each Newton centre point exactly once.")
                 local_data, local_strata, charts, centres = acampo_over(
-                    space, components, fibre, ambient=relation[:1], dimension=n, deadline=deadline)
+                    space, components, fibre, ambient=relation[:1], dimension=n, deadline=deadline,
+                    count_strata=count_strata)
                 name = f"P{len(repairs) + 1}"
 
                 def rename(text, name=name):
@@ -248,51 +293,77 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None):
                         raise GiveUp("A component has two sets of numerical data.")
                 for key, chi in local_strata.items():
                     add(frozenset(map(rename, key)), chi)
-                # The intersections of the divisors over the point, with their numbers of
-                # components; over conjugate points the cover does not give them.
-                try:
-                    met = None if relation else [[sorted(map(rename, key)), count]
-                                                 for key, count in cells(charts, n).items()]
-                except GiveUp:
-                    met = None
                 repairs.append({
-                    "cells": met, "births": [rename(centre["id"]) for centre in centres],
                     "id": name, "chart": f"N{index}", "orbit_rays": [rays[r] for r in orbit],
-                    "points": euler_characteristic(space, (*relation[:1], *fibre)),
-                    "ideal": [_text(e) for e in (*relation[:1], *fibre)],
+                    "points": count,
+                    "ideal": [_text(e) for e in parent_ideal],
                     "blowups": [{**centre, "id": rename(centre["id"]),
                                  "components": [rename(c) for c in centre["components"]]} for centre in centres],
-                    "charts": [{
-                        "id": f"{name}.{k}", "parent": f"N{index}",
-                        "coordinates": [v.name for v in chart.variables],
-                        "ambient_ideal": [_text(e) for e in chart.ambient],
-                        "parent_coordinates": {old: _text(expr) for old, expr in chart.coordinates
-                                               if old in {v.name for v in coords}},
-                        "divisors": [{"id": rename(text), "multiplicity": m, "ideal": [_text(e) for e in ideal]}
-                                     for text, m, _, ideal in chart.components],
-                        **({"blown_up": [{"ideal": [_text(e) for e in z]} for z in chart.removed]}
-                           if chart.removed else {}),
-                    } for k, chart in enumerate(charts, 1)],
+                    "charts": [replace(c, components=tuple((rename(label), m, nu, ideal)
+                                                          for label, m, nu, ideal in c.components))
+                               for c in charts],
                 })
     except GiveUp:
         return None
     return {"data": data, "strata": {key: chi for key, chi in found.items() if chi}, "repairs": repairs}
 
 
-def records(answer):
-    """The answer of `strata` as JSON data: the numerical data of the
-    components that occur and the strata, in a fixed order (exceptional
-    components, those of later blowups, then the strict transform)."""
-    used = set().union(*answer["strata"]) if answer["strata"] else set()
+def _chart_polynomial(text, variables):
+    backend = chart_expressions(variables)
+    names = tuple(v.name for v in variables)
+    if not native_ring(variables):
+        from .atlas import _expression
+        return _expression(text, dict(zip(names, variables)))
+    return backend.from_terms(variables, parse_expression(text, names))
 
-    def position(text):
-        kind = 2 if text == "strict" or re.fullmatch(r"S\d+", text) else 1 if text.startswith("P") else 0
-        return kind, [int(w) for w in re.findall(r"\d+", text)], text
 
-    data = [{"component": text, "multiplicity": answer["data"][text][0], "nu": answer["data"][text][1]}
-            for text in sorted(used, key=position)]
-    order = {row["component"]: k for k, row in enumerate(data)}
-    listed = [{"components": sorted(key, key=order.get), "euler_characteristic": chi}
-              for key, chi in answer["strata"].items()]
-    listed.sort(key=lambda row: (len(row["components"]), [order[c] for c in row["components"]]))
-    return data, listed
+def patch_record(chart, parent, chart_id):
+    """Express a local blowup chart over the original coordinate space.
+
+    Its local fibre cuts out the chosen Newton points, also on the cover:
+    there it is the graph of the separating parameter, one lift per point.
+    This condition now belongs in the ownership region. The fibre over the
+    original origin is defined by the composite map itself. Keeping these
+    ideals distinct also lets the cell count recognize a toric divisor whose
+    image is the origin but whose image in the Newton chart is a whole divisor.
+    """
+    from .affine_kernel import pullbacks
+    from .atlas import to_json
+    backend = chart_expressions(chart.variables)
+    parent_variables = tuple(map(backend.Symbol, parent["coordinates"]))
+    substitutions = dict(chart.coordinates)
+    parent_map = tuple(_chart_polynomial(text, parent_variables) for text in parent["map"].values())
+    mapping = pullbacks(chart.variables, tuple(substitutions[v.name] for v in parent_variables),
+                        parent_variables, parent_map)
+    patch = replace(chart, fibre=tuple(mapping), region=tuple(dict.fromkeys((*chart.region, *chart.fibre))),
+                    coordinates=tuple(zip(parent["map"], mapping)))
+    item, = to_json([patch])
+    item.update(id=chart_id, parent=parent["id"])
+    item["exceptional"] = [{"id": c["id"], "ideal": c["ideal"], "equation": ", ".join(c["ideal"]),
+                            "total_multiplicity": c["multiplicity"]} for c in item["components"] if c["id"] != "strict"]
+    item["strict_transform"] = next((c["ideal"] for c in item["components"] if c["id"] == "strict"), ["1"])
+    return item
+
+
+def join_atlas(record, toric_charts):
+    """Replace the bad points in the partition by the local runs over them.
+
+    A fan chart contains the orbit of a face precisely when the face belongs
+    to its cone. Thus its first cone in the fan order owns that entire orbit.
+    This is exactly the cone chosen in `strata`. Removing the points from its
+    owned region removes them once, in their equations over Q before passing
+    to a cover. The local runs partition the inverse image of the removed
+    points, including all conjugates. The complement and these inverse
+    images are disjoint and cover the resolved fibre over the origin.
+    """
+    from .atlas import from_json
+    parents = [item for item in record["charts"] if "ray_indices" in item]
+    patches = [item for item in record["charts"] if "ray_indices" not in item]
+    if len(parents) != len(toric_charts) or any("region" not in item for item in patches):
+        return None
+    result = []
+    for item, chart in zip(parents, toric_charts):
+        centres = [tuple(_chart_polynomial(text, chart.variables) for text in centre["ideal"])
+                   for centre in item.get("blown_up", ())]
+        result.append(replace(chart, removed=(*chart.removed, *centres)))
+    return result + from_json(patches, native=native_ring(toric_charts[0].variables) if toric_charts else None)

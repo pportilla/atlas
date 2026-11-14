@@ -1,1 +1,1 @@
-sympy==1.14.0
+# The CPU solver uses the Python standard library and the compiled Atlas kernels.

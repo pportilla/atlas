@@ -15,7 +15,7 @@ References:
 
 A polynomial is stored as a primitive integer polynomial, its terms sorted in decreasing order. Every step (S-polynomial, reduction step) is carried out up to a nonzero rational factor with exact integers (FLINT `fmpz`), so no rounding or modular approximation enters. The statements used below (membership in an ideal, divisibility of leading monomials) do not change when a polynomial is multiplied by a nonzero rational number.
 
-A monomial is packed with 16 bits per exponent; the total degree is kept below $2^{15}$. An operation that would exceed this raises an error and the caller falls back to SymPy. It never returns a wrong result.
+The packed representation uses 16 bits per exponent and a total degree below $2^{15}$. A Gröbner problem exceeding these limits uses the unpacked FLINT polynomial ring, including for reductions against an existing basis.
 
 Orders: graded reverse lexicographic, lexicographic, and "first variable, then graded reverse lexicographic", which is an elimination order for the first variable.
 
@@ -144,7 +144,7 @@ The number of strata reported is the number of strata visited, which depends onl
 ## 6. What is outside the kernel
 
 - Integer arithmetic is FLINT's.
-- Number fields, factorization, and the decomposition into geometric components after a candidate has passed (`engine/geometric_components.py`) are computed with SymPy, calling the kernel for Gröbner bases over $\mathbf Q$.
+- The kernel computes the factorization, elimination and ideal membership tests for geometric decomposition over rational and marked number fields. Python chooses projections, enumerates candidate intersections and connects chart components after the native overlap tests. Comparison runs can independently compute geometric decomposition over a symbolic fraction field. See section 9 and `engine/geometric_components.py`.
 - The mathematical claim that conditions 1 to 4, followed by the component analysis, certify a resolution belongs to the engine, not to this note.
 
 ## 7. The modular route
@@ -163,7 +163,9 @@ Each generator $f_k$ is replaced by its homogenization $f_k^h\in\mathbf Q[x,y]$,
 
 *Trace.* For one prime $p_0$ the reduced Gröbner basis $G_{p_0}$ of $I'_{p_0}=(\bar f_1^h,\dots,\bar f_s^h)\subset\mathbf F_{p_0}[x,y]$ is computed by the algorithm of section 2, which is valid over any field, degree by degree. Each S-polynomial is reduced in a vector indexed by the monomials that can occur; the list of monomials and of reducers depends only on leading monomials. For every S-polynomial with a nonzero remainder the row operations are appended to a *replay program*, together with the positions of the coefficients that were zero.
 
-*Replay.* For another prime $q$ the program is executed on the images of the generators modulo $q$. It consists of additions of multiples of rows, so whatever it produces lies in $I'_q$. If a leading coefficient vanishes or a coefficient recorded as zero does not, the prime is dropped. If most primes are dropped the trace prime is the suspect and another one is taken. Different primes are independent, and the program has no branches that depend on the data: this is the part that runs on threads or, through `opencl_groebner.cpp`, on a GPU, one work item per prime. Where it runs has no influence on the result.
+For a sufficiently large group of same-degree pairs, the tracer freezes the current basis and constructs the union of the monomial columns and shifted reducers once. Each S-polynomial reduces independently against this triangular table on CPU threads, Triton, or OpenCL. Row elimination on the remainders proceeds in increasing least-common-multiple order. A dependent row is a linear combination of earlier rows of the same degree and of shifted reducers with leading terms strictly smaller than its pair lcm. Once the earlier pairs have a standard representation, so does this pair. Independent pairs enter the ordinary trace in order. A size bound limits the temporary table, and a failed device launch can reuse the same table on the CPU.
+
+*Replay.* For another prime $q$ the program is executed on the images of the generators modulo $q$. It consists of additions of multiples of rows, so whatever it produces lies in $I'_q$. If a leading coefficient vanishes or a coefficient recorded as zero does not, the prime is dropped. If most primes are dropped the trace prime is the suspect and another one is taken. Different primes are independent. Native threads, Triton, and OpenCL can execute the same recorded operations. After a device screens trace rows, replay batches smaller than 16 primes run on CPU threads to avoid another transfer and dispatch.
 
 *Lifting.* The coefficients are combined by the Chinese remainder theorem and rational reconstruction, and compared with one further prime. This gives a candidate $G\subset\mathbf Q[x,y]$, monic and homogeneous, with the leading monomials of $G_{p_0}$. No claim is made about it yet.
 
@@ -179,7 +181,7 @@ Then $J=I'$, and $G$ is a Gröbner basis of $I'$.
 
 *Proof.* Let $A=\mathbf Z_{(p)}$ and, for an ideal $K$ of $\mathbf Q[x,y]$, let $K_A=K\cap A[x,y]$ and $\bar K$ its image in $\mathbf F_p[x,y]$. Division by $G$ of an element of $J_A$ stays in $A[x,y]$, because the leading coefficients are $1$, and ends in zero by (a); reducing modulo $p$ shows that $\bar G$ is a Gröbner basis of $\bar J$, so $L(\bar J)$ is generated by the leading monomials of $G$. By (b), $I'\subset J$, hence $I'_p\subset\overline{I'}\subset\bar J$. By (c), $L(I'_p)=L(\bar J)$, and two ideals, one inside the other, with the same leading monomials are equal: $I'_p=\overline{I'}=\bar J$. So every $h\in J_A$ is congruent modulo $p$ to some $g\in I'_A$, and $(h-g)/p\in J_A$; that is, $J_A=I'_A+pJ_A$. All these ideals are homogeneous, so the same holds in each degree $d$, where $(J_A)_d$ is a finitely generated module over the local ring $A$. By Nakayama's lemma $(J_A)_d=(I'_A)_d$. Hence $J_A=I'_A$ and $J=I'$. $\square$
 
-The kernel checks (a) with the exact engine: the candidate is inserted and every S-polynomial that the criteria of section 2 keep must reduce to zero (`Engine::is_basis`; the pairs are reduced on several threads, which only read the basis). It checks (b) by exact normal forms, and (c) with $p=p_0$, for which the basis was computed in full; it also checks that $p_0$ divides no denominator of $G$. If a check fails, more primes are used.
+For (a), every S-polynomial retained by the criteria of section 2 must reduce to zero. For (b), the same condition applies to the input generators. For large homogeneous candidates, the verifier groups both sets of rows by degree and shares the selected divisor and its shifted tail for each monomial. CPU workers reduce independent coefficient vectors by fraction-free integer arithmetic with FLINT. Any nonzero irreducible coefficient disproves the candidate. Small bases and symbolic tables that exceed the memory bounds use the sparse exact verifier. For (c), the kernel compares leading monomials with those at the trace prime and checks that the prime divides no denominator of $G$. If a check fails, more primes are used.
 
 Homogenizing is necessary. For a prime $p$ let $I=(x,z)\cap(1-py,\,z-1)$, generated by $z(z-1)$, $x(z-1)$, $z+yz-(p+1)yz^2$ and $x+xy-(p+1)xyz$, none of whose coefficients is divisible by $p$. Modulo $p$ these generate $(x,z)$. The set $G=\{x,z\}$ satisfies (a), (b) and (c), and yet $(x,z)\ne I$: the component $V(1-py,z-1)$ has no points modulo $p$. The proof above breaks at the last step, which needs the grading. This ideal is one of the tests.
 
@@ -253,3 +255,199 @@ because $\chi_c$ is additive and multiplicative for maps whose fibres have const
 
 A pseudo-remainder is divided by integers and by the factors of the leading coefficient of the divisor that are common to its coefficients; that leading coefficient has no zero on the piece, so the quotient is still the remainder up to a function without zeros there. A condition is stored as the primitive squarefree polynomial with the same zeros ($f/\gcd(f,\partial_1f,\dots,\partial_mf)$ in characteristic zero), so equal conditions are equal polynomials and results are reused within a chart. Polynomial arithmetic and greatest common divisors are FLINT's (`fmpz_mpoly`).
 
+
+### 9.5 Affine chart maps
+
+For a birational polynomial chart map $x_i=\phi_i(u)$, pullback is simultaneous
+polynomial composition. On a coordinate divisor $u_j=0$, its divisorial order
+is the least $j$-th exponent in the support. Applying this to $f(\phi)$ and to
+$\det(\partial\phi_i/\partial u_j)$ gives $N$ and $\nu-1$ because the determinant
+is the coefficient of the pulled-back volume form. Dividing out the specified
+coordinate powers gives the strict transform. On a finite coefficient extension
+$\mathbf Q[\theta]/(m)$, append $\theta$ to both spaces and map it identically.
+The last row of the enlarged Jacobian makes its determinant equal to the relative
+determinant. Reducing its coefficients and the pullback modulo $m$ before reading
+their supports gives the divisorial orders over the extension.
+
+In the graph ideal $(\phi_i(u)-x_i)$, eliminate every chart variable except
+$u_j$ with a lexicographic Gröbner basis. If $u_j=A(x)/B(x)$ with $A,B$ coprime,
+the contraction to $\mathbf Q[x,u_j]$ is generated by $Bu_j-A$. Indeed it is
+the kernel of evaluation in $\mathbf Q(x)$, and Gauss's lemma contracts the
+linear relation over this field to the primitive generator over $\mathbf Q[x]$.
+Thus the eliminated reduced basis consists of that relation up to a scalar.
+For each coordinate of the earlier chart, compose both numerator and denominator
+with the later chart map and divide by their gcd. A reduced fraction on affine
+space is regular precisely off the zero set of its denominator because the
+coordinate ring is factorial. On two open charts of a separated resolution,
+the regular locus of this transition equals their overlap. Indeed wherever
+the transition is regular, its composition with the earlier chart inclusion
+and the later chart inclusion agree on a dense open and hence everywhere.
+The squarefree part of the product of the reduced denominators defines the
+complement. It equals $1$ for a transition regular everywhere. FLINT computes
+compositions, Jacobian determinants and gcds. The graph elimination uses the
+same exact kernel as the ideal operations.
+
+### Ideals on an open frame of the invariant
+
+Given a locus with ideal $I$ and an open condition $u_1\cdots u_k\ne0$,
+first compute a basis of $I$. Reduce each $u_j$ modulo that basis, multiplying
+the residues and reducing after each multiplication. The resulting $r$ equals
+the product modulo $I$, up to a nonzero rational scalar. It therefore defines
+the same principal open in $\mathrm{Spec}(R/I)$. A zero residue makes the open
+empty. A nonzero constant makes the condition automatic. In the remaining
+case, emptiness is the unit-ideal test on $I+(tr-1)$. Containment of the open
+locus in $V(h)$ is the same emptiness test with $h$ as one more factor.
+
+A polynomial vanishes in the localized coordinate ring precisely when it is
+in the contraction $I:r^\infty$. The elimination order comparing $t$ first
+in $I+(tr-1)$ gives the reduced grevlex basis of that contraction. This
+preserves scheme multiplicities in ideal membership. It also proves
+equivalence with adjoining a separate inverse variable for each $u_j$,
+since a product is a unit exactly when all its factors are.
+
+The vector field for a free coordinate is the last-row expansion of the
+Jacobian determinant of the defining rows followed by the function, in
+columns given by the dependent coordinates followed by that free coordinate.
+Its coefficients are the signed complementary minors, computed with their
+rational scales. The determinant is zero on each defining row by repetition,
+so the derivation descends to the quotient by the rows. Its coefficient on
+the chosen free coordinate is the invertible Jacobian minor. Hence it is
+that minor times the coordinate derivation. Successive derivatives are
+computed by applying these polynomial fields and taking exact normal forms.
+
+### Chart partitions and coefficient embeddings
+
+In a regular fan, the common face of two maximal cones spans their overlap.
+In either affine chart, the coordinates indexed by rays outside that face
+must be units. An invertible change of the original variables preserves the
+fan overlap. For point blowups of the plane, the earlier charts retain
+their points away from the blown-up centres. Over each centre the two
+new charts own the affine line of slopes and its one missing point. Applying
+this partition at every stage counts every point of the final fibre once.
+
+A chart over a chosen embedding of a number field can be calculated in an
+extra variable subject to its minimal polynomial. For algebraic plane
+centres, FLINT obtains a common field for the coefficients by trying
+integer linear combinations of pairs of generators. Only finitely many
+integers fail to separate all pairs of distinct embeddings. FLINT verifies
+each proposed expression by exact substitution. Over the algebraic closure
+the resulting rational model consists of one copy for each embedding. The
+labelled intersections, their incidences, and their compactly supported
+Euler characteristics are conjugate. For the Euler characteristic this
+also follows from the projection recursion of §9.4, which uses only
+algebraic vanishing conditions and root counts. Dividing each local count
+by the degree of this field gives the count on the selected sheet. A
+parameter deliberately covering distinct blown-up centres carries no
+selected embedding and every sheet then contributes.
+
+Exhaustive search transports a marked field through its certified irreducible
+polynomial and root index. For a real generator, FLINT counts its strictly
+smaller real conjugates. A single nonreal pair follows the real roots, with
+its negative imaginary member first. To order several pairs, FLINT classifies
+the exact conjugates by the subdivision defining the historical indexed-root
+rectangles. The same permutation in the reverse direction selects the exact
+algebraic value of an indexed literal. On receipt the worker reconstructs the same marked field from this
+pair. To retain the historical printed root, it clears denominators and
+content, then applies the indexed-root convention for positive integer
+rescaling. For a nonleading coefficient of degree $j$ in a degree $n$
+polynomial, scaling by $s$ requires $s^{n-j}$ to divide that coefficient.
+The minimum of the corresponding prime valuations divided by $n-j$, rounded
+down, gives each allowable prime exponent. Sparse boundary coefficients are
+reduced modulo the certified minimal polynomial before encoding. Uniqueness
+of the resulting power-basis coordinates proves that sending and receiving
+these coefficients preserves every boundary ideal.
+
+New weighted-chart quadratic labels use the principal square root. FLINT
+extracts square factors from the absolute numerator and denominator. For
+coprime positive $a,b$, rationalizing $\sqrt{a/b}=\sqrt a\sqrt b/b$ gives
+the rational coefficient and a squarefree integer radicand. A negative
+input contributes the positive imaginary unit. Previously recorded labels
+are accepted verbatim. A bounded historical search sometimes left a large
+square inside a newly printed radical. For example, the old
+`sqrt(1000000023000000175000000441)` now prints as
+`1000000007*sqrt(1000000009)`. Comparison mode verifies the principal
+root's value when this normalization changes its spelling.
+
+### Orders on a projective graph chart
+
+Write the graph chart as a smooth variety defined by an ideal $A$ in coordinates $(x,t)$, with the projection retaining $x$. For an exceptional prime divisor $D$ with ideal $P$ modulo $A$, smoothness makes $P$ locally principal. Thus its powers are the ideals of functions vanishing to those orders along $D$. The largest $k$ such that $f\in A+P^k$ is $N$. The presentation of the relative differentials has matrix $(\partial a_i/\partial t_j)$. Its maximal minors generate the zeroth Fitting ideal, which is also locally generated by the determinant of the differential of the projection between smooth varieties of equal dimension. Consequently $\nu-1$ is the minimum order of its nonzero generators. The native operation tests successive ideal powers in the quotient ring. On a number-field chart the separable parameter and its minimal equation add an invertible factor to this determinant.
+
+### Geometric component counts on coordinate plane curves
+
+Setting coordinate equations to zero can leave a single plane equation $f(x,y)$. Take its primitive squarefree part and factor it over $\mathbf Q$. The absolute factors of each rational irreducible factor $p$ are one Galois orbit. A rational equation vanishes on any one of these components exactly when $p$ divides it. This decides whether the generic points belong to the closed ownership region and avoid every removed centre, without choosing a root.
+
+For a squarefree $p$ of bidegree $(m,n)$, count its absolute factors by the nullity of the integer linear system $p(g_y-h_x)-gp_y+hp_x=0$ with $\deg(g)\le(m-1,n)$ and $\deg(h)\le(m,n-1)$ coordinatewise. Gao's theorem identifies its solution space with the span of the logarithmic differentials of the absolute factors. Rank is unchanged under extension from $\mathbf Q$ to $\mathbf C$. A squarefree univariate factor contributes its degree. [Gao, Mathematics of Computation 72 (2003)](https://www.math.clemson.edu/~sgao/papers/fac_bipoly.pdf)
+
+Restricting the ambient chart to the smooth strict transform gives the intrinsic exceptional intersections. When one divisor consists of a single rational orbit of $k$ geometric curves and the other is geometrically irreducible, Galois acts transitively on the $k$ curves and fixes the other divisor. The number of their intersection points is therefore the same for every curve. Dividing the total by $k$ determines all edges, including parallel edges. Ambiguous attachments require the local primes and their transitions.
+
+### Weights on smooth local blowup charts
+
+On a smooth chart with exceptional Cartier divisors of ideals $P_i$, let $J$ be the ideal of the pullback of one input factor. The condition $J\subseteq P_i$ is exactly that its divisor contains $E_i$. In that case the ideal quotient $J:P_i$ removes one copy of $E_i$, as is seen in any local trivialization of $P_i$. Working modulo the ambient equations by including them in $J$ gives the same quotient. Iterating for each exceptional divisor gives the residual strict ideal and the orders. Distinct prime divisors do not change one another's orders. A conjugate orbit of primes has constant order for a rational function defined over the base field. Multiplying these orders by the input multiplicities and summing gives the numerical data of the original divisor. The kernel operation `strict_parts` performs the quotients and checks that each step strictly enlarges the ideal.
+
+### Local topological zeta reduction
+
+For numerical data $(N_i,\nu_i)$ put $D=\prod_i (N_i s+\nu_i)$. If $c_I$ is the Euler characteristic of the owned stratum indexed by $I$, then its contribution to $D Z_{\rm top}$ is $c_I D/\prod_{i\in I}(N_i s+\nu_i)$. The indicated divisions are exact in $\mathbf Z[s]$. The kernel sums these polynomials, checks the equality of the constant coefficients of the sum and $D$, and cancels their integer-polynomial gcd. Factoring the resulting numerator and denominator over $\mathbf Z$ gives the displayed rational function and the true poles with their orders. Every nonconstant denominator factor is linear because it divides $D$. This calculation uses FLINT's univariate integer polynomials in `native/zeta.cpp`.
+
+For a row linear in a coordinate, written $av+b$, its locus in $D(a)$ is the
+graph of $v=-b/a$. For a polynomial $f$ of degree $d$ in $v$, homogeneous
+Horner evaluation gives $a^d f(-b/a)$. Removing powers of $a$ from this
+polynomial leaves its restriction up to a unit at every point of the frame.
+A coordinate factor in a free frame is removed by exact polynomial division.
+
+### Finite centres over the rationals
+
+For a finite locus, adjoining the squarefree coordinate eliminants gives its
+radical. Indeed after extending scalars to the algebraic closure the quotient
+by the squarefree eliminants alone is a finite product of fields, by the Chinese
+remainder theorem in each coordinate. Every further quotient of that product
+is reduced; the added relations preserve the geometric points. If the reduced
+locus has $d$ points, its Euler characteristic is $d$. The forms
+$L_a=\sum_i a^i x_i$ (indices starting at zero) give distinct values on every
+pair for some integer $1\le a\le 1+(n-1)\binom d2$. Each pair excludes at most
+$n-1$ integers because its difference gives a nonzero polynomial of that
+degree. The squarefree eliminant for $L_a$ has degree $d$ precisely when the
+values are distinct. Its rational irreducible factors then correspond to the
+Galois orbits of the points, and adjoining each factor evaluated at $L_a$
+cuts out its orbit.
+
+### Common torus charts and incidence
+
+A regular cone has an integer matrix $R$ whose rows are its primitive rays, with determinant $\pm1$. For a character $x^a$ on the common torus the vector of chart exponents is $Ra$. The kernel recovers $a$ by exact integer matrix inversion. Translating a finite Laurent support by a single vector multiplies its polynomial by a torus unit. Component labels use the same orientation of a primitive character in every chart and normalize the coefficient of its first term. The chart maps must agree with the monomial coordinates followed by the recorded common invertible linear transformation.
+
+Completeness matters. On the standard simplex $\sum x_i=1$, the section of a cone with rays $r_i$ has relative volume $|\det R|/\prod_i\sum_j(r_i)_j$. Every cone is oriented positively. Cancellation of the oriented facets away from the boundary of the orthant makes the sum of the indicators locally constant across each interior facet, hence constant almost everywhere in the open simplex. Total relative volume one then gives multiplicity one. Finite closedness gives coverage and the cones have disjoint interiors. The check rejects a missing chart even when its absence would be invisible to the Jacobian on the charts supplied.
+
+For an internal face of this fan, the closure of its orbit lies over the origin. Restricting a strict equation to each coordinate stratum gives the initial Laurent form on that orbit. The algorithm checks all these restrictions in the star of every exceptional ray. Each is nonzero and has smooth zero set in the torus, which makes the closure transverse to the toric boundary. Completeness of the star sees all subfaces of the restricted Newton polytope. In detail, the restrictions through each maximal cone have a unique surviving monomial at its fixed point. That monomial minimizes every generator of the cone, so the fan refines the regions of linearity of the Newton support function there. Every subface of an internal face is exposed by a sufficiently small perturbation of its positive normal.
+
+Take the saturated lattice in the linear span of the differences of exponents. The remaining torus coordinates give a product factor. In this lattice the polytope is full dimensional. In dimension at least two, affine Lefschetz on the smooth nondegenerate torus hypersurface identifies its degree-zero cohomology with that of the torus, so it is connected and smooth, hence irreducible. A segment gives one component for each distinct nonzero root of the polynomial in its primitive character. A monomial has empty zero set. No additional component of the expected dimension can lie in a smaller orbit because of transversality. Inclusions between split sections are therefore identified by equality of their character and root polynomial. The algorithm verifies these equalities before attaching cells. [Danilov and Khovanskii, Proposition 3.9 and Remark 3.10](https://www.math.utoronto.ca/askold/1986-Izvestiya-5-english-s-Danilovym.pdf)
+
+Outside this presentation, a smooth intersection with several geometric components has disjoint components. On a common marked coefficient field the parameter must agree on both sides of the overlap diagonal. The diagonal is obtained by saturating equality of the original maps off the exceptional divisors of birational charts. Two prime curves on a smooth surface may meet at a point even when they are different. Gluing curves therefore requires equality on a nonempty open part of the overlap. The distinct transverse intersection points on owned regions then count the edges exactly once. This applies also to two curves cut out by the same ambient divisor. [Implementation and hypotheses](../engine/atlas_gluing.py)
+
+### Strata over a finite centre
+
+Suppose one divisor splits and on every chart that meets it the ratio of two original coordinates has a regular representative $t$. The chart checks the equality after clearing its denominator and checks by saturation that the denominator is a nonzerodivisor. The representatives agree on overlaps by density. A triangular lexicographic basis can present each nonempty incident section as affine space over $\mathbf Q[t]/(p)$ for the same squarefree $p$. After base change there is one integral affine fibre per geometric root. Containment in the ownership and removal ideals on each rational factor determines which conjugates are owned generically. The algorithm requires each section to lie over the origin and requires exactly one owner for each root in every incident stratum. The attachments then carry the same root on faces containing the split divisor. Other incident faces must be unique. [Finite-centre implementation](../engine/atlas_finite.py)
+
+### Native input arithmetic
+
+The tokenizer preserves the public arithmetic grammar. Induction on the expression tree gives equality with evaluation in $\mathbf Q[x_1,\ldots,x_n]$. Division is permitted by a nonzero constant only. Quick parsing uses the same repeated-squaring schedule and checks literal sizes, depth, intermediate term counts, degrees, and rational coefficient sizes. The product budget is tested on the inputs before each multiplication. Uniform scalar normalization inside FLINT preserves the actual rational coefficients for these checks. The Python evaluator supplies the independent result in comparison and reference modes.
+
+### Sparse ideal operations and dimension
+
+Beyond the packed monomial range, Buchberger reduction and ordered division use arbitrary-size exponent vectors. Over the rationals the scalar content of each generator is a unit. Primitive integer operations followed by monic normalization therefore give the same reduced basis over the rationals. For a simple number field represented by a monic irreducible polynomial, the additional coefficient coordinate is compared after every ordinary monomial. Adjoining its relation and reducing the coefficients gives ordinary division in the residue field. The leading-term comparison for graded lex uses total degree in the ordinary variables followed by their lexicographic order. For a principal ideal quotient the contraction of $(tI,(1-t)b)$ is $I\cap(b)$. Dividing its generators by $b$ gives $I:b$. Intersecting these results for each nonzero generator of $J$ gives $I:J$.
+
+A Gröbner initial ideal has the dimension of the original ideal. A coordinate prime contains a monomial precisely when it contains a variable of its support. Every minimal prime of a monomial ideal is such a prime. Its height is therefore the smallest number of variables meeting every leading support. Branching on one support examines every possible hitting set, and any family of pairwise disjoint remaining supports gives a lower bound on its additional size. The zero ideal has dimension equal to the number of variables. The empty variety has dimension $-1$ here.
+
+### Jets and residual orders
+
+On a free affine frame, the derivatives of orders less than $k$ are obtained by applying every allowed coordinate derivative to the preceding layer. Identical intermediate polynomials have identical derivatives. Omitting a repeat first seen in an earlier layer preserves the jet ideal. The valuation of a nonzero polynomial on a coordinate divisor is the minimum exponent of that coordinate among its nonzero terms. Dividing by the product of these coordinate powers gives the joint residual polynomial in one exact division.
+
+For a weighted row $(x^{e_i}g_i,w_i)$, the common exceptional exponent on divisor $h$ is $a_h=\min_i e_{ih}/w_i$. After subtracting $w_i a_h$, write the remaining exponents as $r_{ih}$. On the stratum through the divisors $I$, a residual order at least $v$ requires every $g_i$ to have order at least $\lceil w_i v-\sum_{h\in I}r_{ih}\rceil$. The minimal row attains a value $(k+\sum_{h\in I}r_{ih})/w_i$ for some integer order $k$. Enumerating these values up to the measured jet orders gives every possible maximum. The test on each closed candidate locus uses its open ownership conditions. The kernel computes the residual exponents, the sorted exact thresholds, and the required jet orders with FLINT rationals. Python coordinates the search across frames. [Order invariant and implementation](../engine/centres.py)
+
+### Euler characteristics on the owned fibre
+
+A base monomial has the same complex zero set as the product of the distinct variables occurring in it. Each term divisible by that squarefree product vanishes on the entire base locus. Removing these terms from the other base conditions, divisor equations and removed-centre equations preserves every locally closed stratum there. The Jacobian and valuation calculations use the original equations. When closed equations split across disjoint sets of variables their common locus is a Cartesian product, and its compactly supported Euler characteristic is the product of the Euler characteristics. A separate univariate equation contributes its number of distinct complex roots, computed by taking the degree of its squarefree part. Affine coordinates free of all equations contribute one. The projection recursion and integer accumulators also apply to the rational model of a marked coefficient field.
+
+### Lattice volume and fan ownership
+
+An affinely dependent support has normalized volume zero in the ambient lattice. Otherwise exact row reduction selects a starting full-dimensional simplex. Its edge determinant in absolute value is $d!$ times Euclidean volume in lattice coordinates. The centroid of this simplex remains interior as the hull grows, so it orients the supporting forms at every stage. For each new point the difference of the two hulls consists, up to common boundaries, of the pyramids over the visible boundary simplices. Each pyramid's normalized volume is the absolute cofactor determinant evaluated at the point. Interior ridges of the visible region occur twice and cancel. Coning the remaining horizon ridges supplies the new boundary. This gives the volume by induction using integer arithmetic throughout.
+
+For a regular fan, the common face of two chart cones is generated by their shared rays. The open overlap in the current chart requires all coordinates outside that face to be nonzero. To own the complement one imposes the vanishing of their product for each earlier chart. Products belonging to smaller shared faces are multiples of those for maximal shared faces. Enumerating the subsets of a cone and retaining the maximal ones in the union of the already seen faces gives exactly the minimal region equations. The kernel checks the oriented boundary and the exact sum of simplex volumes described above before using this partition. [Native fan implementation](fan_cover.cpp)

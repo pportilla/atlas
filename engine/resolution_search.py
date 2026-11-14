@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Candidates, not certificates of success, for an exact resolution verifier.
 
 The early candidates make common smooth centers inexpensive to find. Integer
@@ -9,12 +10,17 @@ workers and retain the distinction between rejection, timeout and success.
 """
 from dataclasses import dataclass
 from itertools import combinations, count
-from math import isqrt
+from math import isqrt, prod
 
-import sympy as sp
-from sympy import QQ
+from . import native_polynomial as np
+from .chart_expressions import chart_expressions
+from .reference import sp
+from .reference import QQ
 
+from .affine_kernel import (_sparse_expression, _sparse_terms, frame_derivative,
+                            frame_function, rational_factor_rows, sparse_terms)
 from .blowup_ideal import ideal_basis
+from .groebner import CHECK, groebner
 
 
 @dataclass(frozen=True)
@@ -35,7 +41,7 @@ def _projective(variables, length):
         while name in existing:
             name += "_"
         existing.add(name)
-        result.append(sp.Symbol(name))
+        result.append(chart_expressions(variables).Symbol(name))
     return tuple(result)
 
 
@@ -51,26 +57,34 @@ def _candidate(variables, center, source):
 def _squarefree_generators(exprs, variables):
     sqfree = set()
     for expr in exprs:
-        poly = sp.Poly(expr, *variables, domain=QQ)
-        if not poly.is_zero:
-            sqfree.add(poly.sqf_part().monic().as_expr())
-    return tuple(sorted(sqfree, key=sp.default_sort_key))
+        scalar, factors = rational_factor_rows(variables, expr)
+        if scalar:
+            # Each rational irreducible occurs once in the monic squarefree part.
+            monic_factors = (_sparse_expression(variables, row) / max(_sparse_terms(row))[1]
+                             for row, _, _ in factors)
+            value = frame_function(variables, prod(monic_factors, start=chart_expressions(variables).S.One))
+            if CHECK and value != sp.Poly(expr, *variables, domain=QQ).sqf_part().monic().as_expr():
+                raise AssertionError("The squarefree Jacobian generator differs from SymPy's.")
+            sqfree.add(value)
+    return tuple(sorted(sqfree, key=chart_expressions(variables).default_sort_key))
 
 
 def _jacobian_support(variables, f):
     # Taking the square-free part of each individual equation preserves its
     # geometric vanishing set. Reducing modulo the known linear equations
     # can reveal further linear equations, e.g. x^2-y^2*z gives (x,y).
-    equations = _squarefree_generators((f, *(f.diff(v) for v in variables)), variables)
+    api = chart_expressions(variables)
+    derivatives = (frame_derivative(variables, f, {v: api.S.One}) for v in variables)
+    equations = _squarefree_generators((f, *derivatives), variables)
     for _ in variables:
-        linear = tuple(e for e in equations if sp.Poly(e, *variables).total_degree() <= 1)
+        linear = tuple(e for e in equations if all(sum(m) <= 1 for m,_ in sparse_terms(variables, e)))
         if not linear:
             break
         if any(not e.free_symbols for e in linear):
-            return (sp.S.One,)
-        gb = sp.groebner(linear, *variables, domain=QQ, order="grevlex")
+            return (api.S.One,)
+        gb = groebner(linear, variables)
         reduced = [gb.reduce(e)[1] for e in equations]
-        new = _squarefree_generators((*[p.as_expr() for p in gb.polys], *reduced), variables)
+        new = _squarefree_generators((*gb.exprs, *reduced), variables)
         if new == equations:
             break
         equations = new
@@ -79,8 +93,11 @@ def _jacobian_support(variables, f):
 
 def _two_blowup_candidates(variables, f):
     """Find constant rational sections of the repeated relative tangent cone."""
-    terms = f.terms()
-    parameter = sp.Dummy("slope")
+    api = chart_expressions(variables)
+    terms = sparse_terms(variables, f.as_expr() if hasattr(f, "as_expr") else f)
+    if not terms:
+        return
+    parameter = api.Dummy("slope")
     projective = _projective(variables, 3)
     for i, j in combinations(range(len(variables)), 2):
         order = min(e[i] + e[j] for e, _ in terms)
@@ -95,20 +112,38 @@ def _two_blowup_candidates(variables, f):
         for e, c in terms:
             if e[i] + e[j] == order:
                 base = e[:i] + e[i+1:j] + e[j+1:]
-                coefficients.setdefault(base, {})[(e[j],)] = c
-        forms = [sp.Poly.from_dict(row, parameter, domain=QQ) for row in coefficients.values()]
+                coefficients.setdefault(base, {})[e[j]] = c
+        forms = list(coefficients.values())
         x, y = variables[i], variables[j]
         directions = []
-        if all(form.degree() <= order - 2 for form in forms):
+        if all(max(form) <= order - 2 for form in forms):
             directions.append((y, x))  # the missing direction x=0
-        common = forms[0]
+        # A rational slope is a repeated root of the gcd precisely when
+        # its linear factor has multiplicity at least two in every form.
+        def slopes(form):
+            expr = api.Add(*(c * parameter**k for k,c in form.items()))
+            found = set()
+            for row, m, _ in rational_factor_rows((parameter,), expr)[1]:
+                if m >= 2:
+                    terms = dict(_sparse_terms(row))
+                    if max(terms) == (1,):
+                        found.add(api.Rational(-terms.get((0,), 0) / terms[(1,)]))
+            return found
+
+        repeated = slopes(forms[0])
         for form in forms[1:]:
-            if common.degree() < 2:
+            if not repeated:
                 break
-            common = common.gcd(form)
-        if common.degree() >= 2:
-            directions.extend((x, y - slope*x) for slope, mult in
-                              sorted(common.ground_roots().items()) if mult >= 2)
+            repeated.intersection_update(slopes(form))
+        if CHECK:
+            polys = [sp.Poly.from_dict({(k,): c for k,c in form.items()}, parameter, domain=QQ)
+                     for form in forms]
+            common = polys[0]
+            for form in polys[1:]:
+                common = common.gcd(form)
+            if repeated != {r for r, m in common.ground_roots().items() if m >= 2}:
+                raise AssertionError("The repeated rational tangent slopes differ from SymPy's.")
+        directions.extend((x, y - slope*x) for slope in sorted(repeated))
 
         # For parameters a,b with tangent b=0, first blow up (a,b).
         # In the chart b=a*v the second center is (a,v), while on the
@@ -126,11 +161,13 @@ def _two_blowup_candidates(variables, f):
 def priority_candidates(variables, polynomial):
     """Finite sequence of inexpensive geometric hypotheses. polynomial is a SymPy Expr."""
     variables = tuple(variables)
-    f = sp.Poly(polynomial, *variables, domain=QQ)
-    yield _candidate(variables, (sp.S.One,), "identity")
+    api = chart_expressions(variables)
+    f = polynomial.as_expr() if hasattr(polynomial, "as_expr") else api.sympify(polynomial)
+    terms = sparse_terms(variables, f)
+    yield _candidate(variables, (api.S.One,), "identity")
     # Do not compute a large singular ideal before offering the origin.
     yield _candidate(variables, variables, "origin")
-    seen = {frozenset((sp.S.One,)), frozenset(variables)}
+    seen = {frozenset((api.S.One,)), frozenset(variables)}
 
     def new(generators):
         key = frozenset(generators)
@@ -139,7 +176,9 @@ def priority_candidates(variables, polynomial):
         seen.add(key)
         return True
 
-    exps = f.monoms()
+    # Match the historical zero polynomial's degree and singleton zero monomial.
+    exps = [e for e,_ in terms] or [(0,)*len(variables)]
+    degree = max(map(sum, exps))
     active = tuple(v for i,v in enumerate(variables) if any(e[i] for e in exps))
     if len(active) >= 2 and new(active):
         yield _candidate(variables, active, "support coordinate subspace")
@@ -154,16 +193,16 @@ def priority_candidates(variables, polynomial):
                     yield _candidate(variables, center, "singular coordinate subspace")
 
     # These limits only govern the early shortcuts, never the exhaustive family.
-    if len(variables) <= 5 and f.total_degree() <= 14 and len(exps) <= 140:
-        center = _jacobian_support(variables, f.as_expr())
+    if len(variables) <= 5 and degree <= 14 and len(exps) <= 140:
+        center = _jacobian_support(variables, f)
         if new(center):
             yield _candidate(variables, center, "equations for the geometric Jacobian locus")
-        if 2 <= len(center) <= 8 and f.total_degree() <= 6 and len(variables) <= 3:
+        if 2 <= len(center) <= 8 and degree <= 6 and len(variables) <= 3:
             simplified = ideal_basis(variables, center)
             if new(simplified):
                 yield _candidate(variables, simplified, "simplified Jacobian center")
-        _, factors = sp.factor_list(f.as_expr(), *variables)
-        for (a,_), (b,_) in combinations(factors, 2):
+        factors = [_sparse_expression(variables, row) for row, _, _ in rational_factor_rows(variables, f)[1]]
+        for a, b in combinations(factors, 2):
             if new((a,b)):
                 yield _candidate(variables, (a,b), "intersection of two rational factors")
         yield from _two_blowup_candidates(variables, f)
@@ -202,7 +241,7 @@ class _Reader:
         return n
 
 
-def _read_field(reader):
+def _read_field(reader, api):
     field_degree = reader.nat() + 1
     if field_degree == 1:
         return QQ, None, 1
@@ -212,15 +251,23 @@ def _read_field(reader):
     root_index = reader.nat()
     if root_index >= field_degree:
         raise _InvalidCode
-    t = sp.Symbol("T")
-    poly = sp.Poly(t**field_degree + sum(c*t**i for i,c in enumerate(coeff)), t, domain=QQ)
-    if not poly.is_irreducible:
+    t = api.Symbol("T")
+    coefficients = (1, *reversed(coeff))
+    expr = t**field_degree + api.Add(*(c * t**i for i,c in enumerate(coeff) if c))
+    factors = rational_factor_rows((t,), expr)[1]
+    if len(factors) != 1 or factors[0][1] != 1:
         raise _InvalidCode
-    primitive = sp.CRootOf(poly.as_expr(), root_index)
-    return QQ.algebraic_field(primitive), primitive, field_degree
+    if api is np:
+        from .candidate_field import indexed_field
+        domain, primitive = indexed_field(coefficients, root_index)
+    else:
+        from .field_coefficient import indexed_field
+        domain, primitive = indexed_field(coefficients, t, root_index)
+    return domain, primitive, field_degree
 
 
 def _read_poly(reader, variables, field_degree, primitive, projective_start=None):
+    api = chart_expressions(variables)
     terms = []
     projective_degree = None
     for _ in range(reader.size(1)):
@@ -238,8 +285,8 @@ def _read_poly(reader, variables, field_degree, primitive, projective_start=None
             if projective_degree is not None and projective_degree != d:
                 raise _InvalidCode
             projective_degree = d
-        terms.append(coeff * sp.prod(v**e for v,e in zip(variables,exps)))
-    poly = sp.Add(*terms)
+        terms.append(coeff * api.prod(v**e for v,e in zip(variables,exps)))
+    poly = api.Add(*terms)
     if poly == 0:
         raise _InvalidCode
     return poly
@@ -266,7 +313,7 @@ def decode_candidate(variables, code):
     variables = tuple(variables)
     r = _Reader(code)
     try:
-        domain, primitive, degree = _read_field(r)
+        domain, primitive, degree = _read_field(r, chart_expressions(variables))
         center = tuple(_read_poly(r, variables, 1, None) for _ in range(r.size(1)))
         u = _projective(variables, len(center))
         homogeneous = (*variables,*u)

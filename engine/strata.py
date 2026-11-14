@@ -1,353 +1,219 @@
-"""The total transform of an embedded resolution: its components and its strata over the origin.
-
-Near the fibre over the origin the total transform of f is a sum of smooth
-divisors with normal crossings. Each is given a label: an exceptional
-divisor, or the strict transform of a factor of f. A label may stand for
-several disjoint irreducible divisors with the same numbers (conjugate
-ones, for instance); this changes none of the formulas below.
-
-The data computed here are, for every label, the order N of f along the
-divisor and the number nu, one more than the order of the pulled-back volume
-form, and, for every set I of labels, the Euler characteristic of the set of
-points of the fibre over the origin lying on the divisors of I and on no
-other. They give A'Campo's formula for the monodromy zeta function and the
-formula of Denef and Loeser for the topological zeta function.
-
-How they are read off depends on the kind of resolution:
-
-  - a toric modification (a fan): the strata are unions of torus orbits, and
-    a divisor of ray a has N = min <a, exponents> and nu = sum of the a_i
-    (engine/newton_repair.py, which also covers blowups made afterwards);
-  - point blowups of a plane curve: the dual graph. An exceptional curve is a
-    projective line; nu comes from the adjunction formula
-        sum_j (nu_j - 1) E_j.E_i = -2 - E_i^2,
-    whose matrix is negative definite, and the projection formula
-        sum_j N_j E_j.E_i + (orders of the branches through E_i) = 0
-    is checked;
-  - the blowup of an ordinary point of multiplicity d in n variables: the
-    exceptional divisor is P^(n-1) with N = d and nu = n, and the strict
-    transform cuts it in a smooth hypersurface of degree d;
-  - the point and line blowups of the surfaces ab + c^k: all centres are
-    coordinate subspaces, so the charts are those of a fan, which is read
-    off from the monomial chart maps;
-  - the blowup of an ideal, in graph charts: the strata are counted on the
-    pieces "first nonzero homogeneous coordinate", and nu - 1 is the order of
-    the Jacobian of the projection, computed as the order of a Fitting ideal
-    (engine/monodromy_graph.py);
-  - a divisor with normal crossings at the origin: the identity, with the
-    origin as the only stratum.
-"""
+"""Numerical data and Euler characteristics on a certified resolution atlas."""
 import re
 
-import sympy as sp
-
+from .native_library import CHECK, _MODE
 from .polynomial import InputError, parse
 
-TORIC = ("binomial-coordinate-blowups", "newton-polyhedron", "native-toric")
+
+class InvalidChart(ValueError):
+    """The chart equations contradict the claimed resolution."""
 
 
-def _records(data, strata):
-    from .newton_repair import records
-    return records({"data": data, "strata": strata})
+def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
+    from .identity_atlas import identity_outputs
+    options = dict(complex=complex, intrinsic=intrinsic, integrals=integrals)
+    identity = identity_outputs(record, polynomial, **options)
+    if identity is not None:
+        return identity
+    if len(record["variables"]) == 2:
+        from .plane_atlas import plane_outputs
+        plane = plane_outputs(record, polynomial, **options)
+        if plane is not None:
+            return plane
+    if record.get("engine") == "verified-ideal-blowup" and ("charts" in record or not record.get("atlas")):
+        from .graph_record import graph_outputs
+        graph = graph_outputs(record, polynomial, **options)
+        if graph is not None:
+            return graph
+    from .point_atlas import point_outputs
+    point = point_outputs(record, polynomial, **options)
+    if point is not None:
+        return point
+    from .monomial_atlas import fan_outputs
+    return fan_outputs(record, polynomial, **options)
 
 
-def _sparse(expr, symbols):
-    from fractions import Fraction
-    poly = sp.Poly(expr, *symbols, domain=sp.QQ)
-    return {e: Fraction(int(c.p), int(c.q)) for e, c in poly.terms()}
-
-
-def _parts(record, variables, matrix=None):
-    """The factors of a divisor with multiplicities as (label, N, polynomial),
-    in the coordinates v of the fan when x = matrix * v. None for a reduced one."""
-    info = record.get("input_divisor")
-    if not info:
-        return None
-    factors = info["factors"]
-    symbols = sp.symbols(" ".join(f"strata_{i}" for i in range(len(variables))), seq=True)
-    images = symbols if matrix is None else [sum(c*v for c, v in zip(row, symbols)) for row in matrix]
-    parts = []
-    for k, factor in enumerate(factors, 1):
-        terms = parse(factor["equation"], list(variables), bounded=False)
-        expr = sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(x**a for x, a in zip(images, e)))
-                        for e, c in terms.items()))
-        parts.append(("strict" if len(factors) == 1 else f"S{k}", factor["multiplicity"], _sparse(expr, symbols)))
-    return parts
-
-
-def _toric(record, polynomial):
-    from .newton_repair import strata
-    variables = record["variables"]
-    proof = record.get("certificate", {})
-    source = record.get("input_divisor", {}).get("reduced_equation")
-    matrix = None
-    if record["engine"] == "newton-polyhedron":
-        source = proof["adapted_polynomial"]
-        matrix = proof.get("linear_map_to_input")
-    support = parse(source, list(variables), bounded=False) if source else polynomial
-    answer = strata(support, variables, record["fan"], _parts(record, variables, matrix))
-    if answer is None:
-        return None
-    method = "Torus orbits of the regular fan"
-    if answer["repairs"]:
-        method += ", and the divisors of the blowups made where a face is degenerate"
-    return answer["data"], answer["strata"], method
-
-
-def _power_factors(text):
-    """[(factor, exponent)] of a product written (f1)^m1*(f2)*..., or None."""
-    out, i = [], 0
-    while i < len(text):
-        if text[i] != "(":
-            return None
-        depth, j = 0, i
-        while j < len(text):
-            depth += (text[j] == "(") - (text[j] == ")")
-            if depth == 0:
-                break
-            j += 1
-        if depth:
-            return None
-        inner, j, power = text[i + 1:j], j + 1, 1
-        if j < len(text) and text[j] == "^":
-            k = j + 1
-            while k < len(text) and text[k].isdigit():
-                k += 1
-            if k == j + 1:
-                return None
-            power, j = int(text[j + 1:k]), k
-        out.append((inner, power))
-        if j < len(text):
-            if text[j] != "*":
-                return None
-            j += 1
-        i = j
-    return out
-
-
-def _is_zero(value):
-    value = sp.sympify(value)
-    if value.is_Rational:
-        return value == 0
-    t = sp.Dummy("t")
-    return sp.minimal_polynomial(value, t) == t
-
-
-def _branches(record):
-    """(exceptional curve, label, N) for every point of the strict transform over the origin."""
-    branches = record["branches"]
-    info = record.get("input_divisor")
-    if not info:
-        return [(b["ambient_components"][0], "strict", 1) for b in branches]
-    factors = info["factors"]
-    if len({f["multiplicity"] for f in factors}) == 1:
-        return [(b["ambient_components"][0], "strict", factors[0]["multiplicity"]) for b in branches]
-    # Factors of different multiplicities: the one through each point is the
-    # factor of the strict transform of its chart that vanishes there.
-    from .nonreduced import _algebraics, _read
-    charts = {chart["id"]: chart for chart in record["charts"]}
-    offset = 0 if info.get("unit_at_origin") == "1" else 1
-    out = []
-    for b in branches:
-        chart = charts[b["chart"]]
-        listed = _power_factors(chart["strict_transform"])
-        if listed is None or len(listed) != len(factors) + offset:
-            return None
-        listed = listed[offset:]
-        words = set(re.findall(r"[A-Za-z][A-Za-z0-9_]*", " ".join([*b["point"], *(text for text, _ in listed)])))
-        names = _algebraics(record.get("algebraic_numbers", {}), words)
-        field = chart.get("weight_field")
-        if field:
-            names[field["generator"]] = sp.sympify(field["exact"])
-        symbols = {name: sp.Symbol(name) for name in chart["coordinates"]}
-        point = {symbols[name]: _read(text, names) for name, text in zip(chart["coordinates"], b["point"])}
-        through = [k for k, (text, _) in enumerate(listed)
-                   if _is_zero(_read(text, {**names, **symbols}).xreplace(point))]
-        if len(through) != 1:
-            return None
-        k = through[0]
-        out.append((b["ambient_components"][0], f"S{k + 1}", factors[k]["multiplicity"]))
-    return out
-
-
-def _plane(record):
-    from .monodromy_blowups import _plane as open_curves
-    rows = open_curves(record)
-    if rows is None:
-        return None
-    dual = record["dual_complex"]
-    vertices = dual["vertices"]
-    position = {v["id"]: k for k, v in enumerate(vertices)}
-    meet = sp.zeros(len(vertices), len(vertices))
-    for k, v in enumerate(vertices):
-        meet[k, k] = v["self_intersection"]
-    for cell in dual["cells"]:
-        a, b = (position[name] for name in cell["vertices"])
-        meet[a, b] += 1
-        meet[b, a] += 1
-    if meet.det() == 0:
-        return None
-    canonical = meet.LUsolve(sp.Matrix([-2 - v["self_intersection"] for v in vertices]))
-    if any(not k.is_Integer or k < 1 for k in canonical):
-        return None
-    branches = _branches(record)
-    if branches is None:
-        return None
-    orders = sp.Matrix([v["total_multiplicity"] for v in vertices])
-    through = [0]*len(vertices)
-    for curve, _, order in branches:
-        through[position[curve]] += order
-    if list(meet*orders + sp.Matrix(through)) != [0]*len(vertices):
-        return None  # the projection formula fails: the data are inconsistent
-    data = {v["id"]: (v["total_multiplicity"], int(k) + 1) for v, k in zip(vertices, canonical)}
-    strata = {frozenset({row["component"]}): row["euler_characteristic"] for row in rows}
-    for cell in dual["cells"]:
-        key = frozenset(cell["vertices"])
-        strata[key] = strata.get(key, 0) + 1
-    for curve, label, order in branches:
-        if data.setdefault(label, (order, 1)) != (order, 1):
-            return None
-        key = frozenset({curve, label})
-        strata[key] = strata.get(key, 0) + 1
-    return data, strata, "Dual graph of the point blowups, with the adjunction formula"
-
-
-def _ordinary(record):
-    from .monodromy_blowups import _ordinary as open_part
-    rows = open_part(record)
-    if rows is None:
-        return None
-    row = rows[0]
-    n, degree, order, chi = row["projective_dimension"] + 1, row["tangent_degree"], row["multiplicity"], row["euler_characteristic"]
-    if order % degree:
-        return None
-    # The strict transform meets P^(n-1) in the smooth tangent hypersurface,
-    # of Euler characteristic n - chi(complement).
-    label = row["component"]
-    data = {label: (order, n), "strict": (order//degree, 1)}
-    strata = {frozenset({label}): chi, frozenset({label, "strict"}): n - chi}
-    return data, strata, "Blowup of an ordinary point: a smooth hypersurface in projective space"
-
-
-def _constants(record):
-    """The exact value of the generator of the coefficient field of a chain record."""
-    field = record.get("coefficient_field") or {}
-    name = field.get("generator")
-    if not name:
-        return {}
-    match = re.fullmatch(rf"{re.escape(name)}\^2-\(([-\d/]+)\)", field.get("minimal_polynomial", ""))
-    if not match:
-        raise InputError("Unrecognized coefficient field in the chart maps.")
-    return {name: sp.sqrt(sp.Rational(match[1]))}
-
-
-def _chain(record):
-    """The fan of the point and line blowups of ab + c^k, from the chart maps."""
-    from .newton_repair import strata
-    from .nonreduced import _read
-    variables = record["variables"]
-    root = record["certificate"]["normalized_chart"]
-    names = root["coordinates"]
-    n = len(names)
-    normal = parse(root["equation"], list(names), bounded=False)
-    weight = 1
-    if record.get("input_divisor"):
-        factors = record["input_divisor"]["factors"]
-        if len(factors) != 1:
-            return None
-        weight = factors[0]["multiplicity"]
-    constants = _constants(record)
-    symbols = [sp.Symbol(name) for name in names]
-    forms = [sp.expand(_read(root["map"][v], {**dict(zip(names, symbols)), **constants})) for v in variables]
-    linear = sp.Matrix([[form.coeff(s) for s in symbols] for form in forms])
-    if any(sp.expand(form - sum(c*s for c, s in zip(row, symbols))) != 0
-           for form, row in zip(forms, linear.tolist())) or linear.det() == 0:
-        return None
-    inverse = linear.inv()
-    rays = [[int(i == j) for j in range(n)] for i in range(n)]
-    labels, cones = {}, []
-    for chart in record["charts"]:
-        if not chart.get("final", True):
-            continue
-        coordinates = [sp.Symbol(name) for name in chart["coordinates"]]
-        local = {**dict(zip(chart["coordinates"], coordinates)), **constants}
-        image = sp.Matrix([_read(chart["map"][v], local) for v in variables])
-        powers = []
-        for value in inverse*image:
-            terms = [(e, c) for e, c in sp.Poly(sp.expand(value), *coordinates).terms() if sp.simplify(c) != 0]
-            if len(terms) != 1:
-                return None  # a root coordinate is not a monomial in this chart
-            powers.append(terms[0][0])
-        divisors = {e["equation"]: e["id"] for e in chart["exceptional"]}
-        cone = []
-        for i, name in enumerate(chart["coordinates"]):
-            ray = [powers[j][i] for j in range(n)]
-            label = divisors.get(name)
-            if (label is None) != (sum(ray) == 1 and ray in rays[:n]):
-                return None
-            if ray not in rays:
-                rays.append(ray)
-            index = rays.index(ray)
-            if label is not None and labels.setdefault(index, label) != label:
-                return None
-            cone.append(index)
-        cones.append(cone)
-    answer = strata(normal, names, {"rays": rays, "cones": cones}, [("strict", weight, normal)], labels)
-    if answer is None or answer["repairs"]:
-        return None
-    return answer["data"], answer["strata"], "Torus orbits of the fan of the point and line blowups"
-
-
-def _crossings(record):
-    from .monodromy_special import crossing_components
-    named = crossing_components(record)
-    if named is None:
-        return None
-    labels = ["strict"] if len(named) == 1 else [f"S{k}" for k in range(1, len(named) + 1)]
-    data = {label: (order, 1) for label, (_, order) in zip(labels, named)}
-    return data, {frozenset(labels): 1}, "Normal crossings at the origin: the identity is a resolution"
-
-
-def resolution_strata(record, polynomial=None):
-    """(numerical data, strata, method) of a certified resolution record, as
-    JSON rows, or None when the record does not determine them.
-
-    The rows are {"component", "multiplicity", "nu"} and {"components",
-    "euler_characteristic"}; strata of Euler characteristic zero are left out.
-    """
+def resolution_strata(record, polynomial=None, *, computed=None):
     if not isinstance(record, dict) or record.get("status") != "resolved":
         return None
-    engine, variables = record.get("engine"), record.get("variables")
-    proof = record.get("certificate") or {}
-    if proof.get("strata") and proof.get("numerical_data") and not record.get("input_divisor"):
-        # Computed with the resolution (blowups from the origin, or a Newton
-        # modification completed by blowups).
-        return (proof["numerical_data"], proof["strata"],
-                "Divisors of the blowups, with exact Euler characteristics of their strata"
-                if engine == "canonical-blowups" else
-                "Torus orbits of the regular fan, and the divisors of the blowups made where a face is degenerate")
+    variables = record.get("variables")
+    if not isinstance(variables, list) or not variables:
+        raise InputError("The resolution needs its ordered list of variables.")
     if polynomial is None:
-        polynomial = parse(record.get("polynomial"), list(variables), bounded=False)
-    found = None
+        polynomial = parse(record.get("polynomial"), variables, bounded=False)
+    if computed is None and record.get("mode") == "intrinsic" and "embedded_companion" in record:
+        # Both sets of charts refer to the same original polynomial. The
+        # companion must pass the ordinary embedded verification on re-read.
+        companion = record["embedded_companion"]
+        if not isinstance(companion, dict) or not isinstance(companion.get("atlas"), list) or not companion["atlas"]:
+            raise InputError("The embedded companion needs its resolution atlas.")
+        record = dict(status="resolved", mode="embedded", variables=variables, atlas=companion["atlas"])
     try:
-        if engine in TORIC:
-            # Valid in either mode: the fan gives the ambient modification.
-            found = _toric(record, polynomial)
-        elif record.get("mode") == "embedded":
-            if engine == "C++ / FLINT plane point blowups":
-                found = _plane(record)
-            elif engine == "native-ordinary":
-                found = _ordinary(record)
-            elif engine == "native-a-series":
-                found = _chain(record)
-            elif engine == "verified-ideal-blowup":
-                from .monodromy_graph import graph_strata
-                found = graph_strata(record, polynomial)
-        if found is None:
-            found = _crossings(record)
-    except (KeyError, IndexError, TypeError) as exc:
-        raise InputError("Incomplete or inconsistent chart or divisor data in the resolution record.") from exc
-    if found is None:
+        if computed is not None:
+            found = computed
+        else:
+            try:
+                certified = rational_chart_outputs(record, polynomial, complex=False)
+            except InvalidChart:
+                return None
+            if certified is not None:
+                _, found = certified
+            else:
+                from . import atlas
+                from .local_blowups import GiveUp
+                try:
+                    if (charts := atlas.from_record(record, polynomial, native=_MODE not in ("check", "sympy"))) is None:
+                        # Archived resolutions from before chart ownership was serialized.
+                        proof = record.get("certificate", {})
+                        if proof.get("numerical_data") and proof.get("strata") and not record.get("input_divisor"):
+                            return proof["numerical_data"], proof["strata"], "Certified strata of the archived resolution"
+                        return None
+                    found = atlas.outputs(charts, len(variables), complex=False)
+                except GiveUp:
+                    return None
+    except (IndexError, KeyError, TypeError) as exc:
+        raise InputError("Incomplete chart or divisor data in the resolution record.") from exc
+    data, strata = found["numerical_data"], found["strata"]
+    if CHECK:
+        from .strata_reference import IDENTITY_METHOD, resolution_strata as reference
+        old = reference(record, polynomial)
+        if old is not None and not _same_integrals(data, strata, *old[:2]):
+            # Blowing up a crossing changes the strata. If the reference
+            # used the identity, compare the two resolution invariants.
+            if old[2] != IDENTITY_METHOD:
+                raise AssertionError("The atlas and the reference resolution strata give different zeta integrals.")
+            if _zeta_integrals(data, strata) != _zeta_integrals(*old[:2]):
+                raise AssertionError("The atlas and the identity give different zeta functions.")
+    return data, strata, "Euler characteristics on the disjoint parts of the resolution atlas"
+
+
+def _zeta_integrals(data, strata):
+    from .topological import _acampo, _reference
+    numbers = {r["component"]: (r["multiplicity"], r["nu"]) for r in data}
+    value = _reference(numbers, strata)
+    if value is None:
+        raise AssertionError("The topological zeta integral fails Z(0) = 1.")
+    return _acampo(data, strata), value[0]
+
+
+def _same_integrals(data, strata, old_data, old_strata):
+    # The reference algorithms can group disjoint branches of equal weight.
+    # Relabel by numerical data before comparing the sums of their strata.
+    def group(numbers, rows):
+        by_name = {r["component"]: (r["multiplicity"], r["nu"]) for r in numbers}
+        totals = {}
+        for row in rows:
+            key = tuple(sorted(by_name[c] for c in row["components"]))
+            totals[key] = totals.get(key, 0) + row["euler_characteristic"]
+        return {k:v for k,v in totals.items() if v}
+    return group(data, strata) == group(old_data, old_strata)
+
+
+def records(answer):
+    """The answer of `strata` as JSON data: the numerical data of the
+    components that occur and the strata, in a fixed order (exceptional
+    components, those of later blowups, then the strict transform)."""
+    used = set().union(*answer["strata"]) if answer["strata"] else set()
+
+    def position(text):
+        kind = 2 if text == "strict" or re.fullmatch(r"S\d+", text) else 1 if text.startswith("P") else 0
+        return kind, [int(w) for w in re.findall(r"\d+", text)], text
+
+    data = [{"component": text, "multiplicity": answer["data"][text][0], "nu": answer["data"][text][1]}
+            for text in sorted(used, key=position)]
+    order = {row["component"]: k for k, row in enumerate(data)}
+    listed = [{"components": sorted(key, key=order.get), "euler_characteristic": chi}
+              for key, chi in answer["strata"].items()]
+    listed.sort(key=lambda row: (len(row["components"]), [order[c] for c in row["components"]]))
+    return data, listed
+
+
+def _vertex_aliases(found, old):
+    """Match named branches to an independently computed graph. Preserve the
+    parent divisor, loops and every edge multiplicity under the relabelling."""
+    from collections import Counter
+    if any(c.get("dimension", len(c["vertices"])-1) != 1 for g in (found, old) for c in g["cells"]):
         return None
-    data, strata, method = found
-    return (*_records(data, strata), method)
+    names = {v["id"] for v in found["vertices"]}
+    candidates = {}
+    for v in old["vertices"]:
+        name = v["id"]
+        if name in names:
+            candidates[name] = [name]
+            continue
+        parents = v.get("ambient_components") or ([v["ambient_divisor"]] if "ambient_divisor" in v else [])
+        if not parents and name.endswith(("u", "v")):
+            parents = [name[:-1]]
+        candidates[name] = sorted(k for k in names if any(k == p or
+                                  (k.startswith(p + ".") and k[len(p)+1:].isdigit()) for p in parents))
+    if len(candidates) != len(names) or not all(candidates.values()):
+        return None
+    if not old["cells"] and not found["cells"]:
+        # Intrinsic curves have only points. Within each disjoint group of
+        # indistinguishable points the order has no incidence information.
+        parts = {}
+        for k, values in candidates.items():
+            parts.setdefault(tuple(values), []).append(k)
+        pairs = {a: b for values, keys in parts.items() if len(values) == len(keys)
+                 for a, b in zip(values, keys)}
+        return pairs if len(pairs) == len(names) and len(set(pairs.values())) == len(names) else None
+    def adjacency(g):
+        a = {v["id"]: Counter() for v in g["vertices"]}
+        for cell in g["cells"]:
+            u, v = cell["vertices"]
+            a[u][v] += 1
+            a[v][u] += 1
+        return a
+    source, target = adjacency(old), adjacency(found)
+    chosen = {}
+    def match():
+        if len(chosen) == len(names):
+            return {b: a for a, b in chosen.items()}
+        key = min((k for k in candidates if k not in chosen),
+                  key=lambda k: (len(candidates[k]), -sum(n in chosen for n in source[k])))
+        for v in candidates[key]:
+            if (v in chosen.values() or sorted(source[key].values()) != sorted(target[v].values()) or
+                    source[key][key] != target[v][v] or
+                    any(source[key][k] != target[v][w] for k, w in chosen.items())):
+                continue
+            chosen[key] = v
+            answer = match()
+            if answer is not None:
+                return answer
+            del chosen[key]
+        return None
+    return match()
+
+
+def annotate_complex(old, found):
+    """Preserve compatible names and annotations on a computed complex."""
+    from collections import Counter
+    if old["status"] != "complete" or found["status"] != "complete":
+        return found
+    if CHECK:
+        def dimensions(g):
+            return len(g["vertices"]), Counter(len(c["vertices"])-1 for c in g["cells"])
+        if dimensions(found) != dimensions(old):
+            raise AssertionError("The atlas and the reference have different cell counts.")
+    old_vertices = {v["id"]: v for v in old["vertices"]}
+    if set(old_vertices) != {v["id"] for v in found["vertices"]}:
+        aliases = _vertex_aliases(found, old)
+        if aliases is None:
+            return found
+        found = {**found, "cells": [{**cell, "vertices": [aliases[u] for u in cell["vertices"]],
+                                     "faces": [aliases.get(f, f) for f in cell["faces"]]} for cell in found["cells"]]}
+    found["vertices"] = list(old_vertices.values())
+    if CHECK and Counter(frozenset(c["vertices"]) for c in old["cells"]) != Counter(
+            frozenset(c["vertices"]) for c in found["cells"]):
+        raise AssertionError("The atlas and the reference have different cell incidences.")
+    old_cells = {}
+    for cell in old["cells"]:
+        old_cells.setdefault(frozenset(cell["vertices"]), []).append(cell)
+    for cell in found["cells"]:
+        matches = old_cells.get(frozenset(cell["vertices"]))
+        if matches:
+            annotation = matches.pop(0)
+            for k, v in annotation.items():
+                if k not in ("id", "faces", "vertices", "dimension"):
+                    cell[k] = v
+    return {**old, **found}

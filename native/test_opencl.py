@@ -57,7 +57,7 @@ class GPUParity(unittest.TestCase):
         with patch.dict(os.environ, RESOLUTION_GPU="off"):
             cpu = resolve_native(terms, variables, "intrinsic")
         for device in gpu_devices():
-            with patch.dict(os.environ, RESOLUTION_GPU="auto", RESOLUTION_GPU_MIN_COLS="1",
+            with patch.dict(os.environ, RESOLUTION_GPU="auto", RESOLUTION_GPU_BACKEND="opencl", RESOLUTION_GPU_MIN_COLS="1",
                             RESOLUTION_GPU_INDEX=str(device["index"])):
                 gpu = resolve_native(terms, variables, "intrinsic")
             self.assertEqual(gpu["certificate"]["rank_backend"], "opencl")
@@ -69,7 +69,8 @@ class GPUParity(unittest.TestCase):
 class CPUFallback(unittest.TestCase):
     def test_missing_device_is_recoverable(self):
         terms = [((1,1,0), "1"), ((0,0,2), "1")]
-        with patch.dict(os.environ, RESOLUTION_GPU="auto", RESOLUTION_GPU_MIN_COLS="1", RESOLUTION_GPU_INDEX="999"):
+        with patch.dict(os.environ, RESOLUTION_GPU="auto", RESOLUTION_GPU_BACKEND="opencl",
+                        RESOLUTION_GPU_MIN_COLS="1", RESOLUTION_GPU_INDEX="999"):
             result = resolve_native(terms, ["x","y","z"], "intrinsic")
         self.assertIn(result["certificate"]["rank_backend"], ("cpu", "cpu_after_opencl"))
 

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -21,6 +22,59 @@ namespace {
 
 // The instruction set of modular.cpp. Work entries stay below p*p < 2^62.
 const char* source = R"CLC(
+// One independent S-pair per lane. Neighbouring lanes access the same
+// monomial in different pairs. Reducer tails have strictly later columns.
+kernel void trace_screen(uint prime, uint pairs, uint width,
+                         global const uint *initial, global const uint *offsets,
+                         global const uint *pivot, global const uint *columns,
+                         global const uint *coefficients, global ulong *work, global uint *remainders) {
+    size_t item = get_global_id(0);
+    for (uint j = 0; j < width; ++j)
+        work[(size_t)j * pairs + item] = initial[item * width + j];
+    const ulong square = (ulong)prime * prime;
+    for (uint j = 0; j < width; ++j) {
+        ulong value = work[(size_t)j * pairs + item];
+        uint f = prime == 2147483629u ? (uint)(value % 2147483629ul) : (uint)(value % prime);
+        remainders[item * width + j] = pivot[j] ? 0 : f;
+        if (!f || !pivot[j]) continue;
+        const ulong factor = prime - f;
+        for (uint t = offsets[j]; t < offsets[j+1]; ++t) {
+            size_t at = (size_t)columns[t] * pairs + item;
+            ulong x = work[at] + factor * coefficients[t];
+            work[at] = x >= square ? x - square : x;
+        }
+    }
+}
+
+// If a row fits in the device's local memory, a whole workgroup reduces it.
+// Tail columns in a single reducer are distinct. Between successive pivots
+// the workgroup synchronizes before any lane can read the next coefficient.
+kernel void trace_local(uint prime, uint pairs, uint width,
+                        global const uint *initial, global const uint *offsets,
+                        global const uint *pivot, global const uint *columns,
+                        global const uint *coefficients, local ulong *work, global uint *remainders) {
+    const size_t start = get_group_id(0) * width;
+    const uint lane = get_local_id(0), group = get_local_size(0);
+    for (uint j = lane; j < width; j += group) work[j] = initial[start + j];
+    barrier(CLK_LOCAL_MEM_FENCE);
+    const ulong square = (ulong)prime * prime;
+    for (uint j = 0; j < width; ++j) {
+        if (!pivot[j]) continue;
+        const ulong value = work[j];
+        const uint f = prime == 2147483629u ? (uint)(value % 2147483629ul) : (uint)(value % prime);
+        if (!f) continue;
+        const ulong factor = prime - f;
+        for (uint t = offsets[j] + lane; t < offsets[j+1]; t += group) {
+            const uint k = columns[t];
+            ulong x = work[k] + factor * coefficients[t];
+            work[k] = x >= square ? x - square : x;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    for (uint j = lane; j < width; j += group)
+        remainders[start+j] = pivot[j] ? 0 : (uint)(work[j] % prime);
+}
+
 kernel void replay(global const uint *code, uint from, uint to, uint pool_size, uint work_size,
                    global const uint *primes, global uint *pools, global ulong *works, global uint *status) {
     const size_t item = get_global_id(0);
@@ -106,9 +160,13 @@ struct Runtime {
     Owned<cl_program, clReleaseProgram> program;
     Owned<cl_command_queue, clReleaseCommandQueue> queue;
     Owned<cl_kernel, clReleaseKernel> kernel;
+    Owned<cl_kernel, clReleaseKernel> screen;
+    Owned<cl_kernel, clReleaseKernel> screen_local;
+    cl_ulong local_bytes = 0;
+    size_t screen_group = 1;
     cl_device_id device = nullptr;
 
-    Runtime() {
+    explicit Runtime(size_t index) {
         std::vector<cl_device_id> found;
         cl_uint count = 0;
         if (clGetPlatformIDs(0, nullptr, &count) != CL_SUCCESS || !count) throw std::runtime_error("No OpenCL platform");
@@ -121,9 +179,6 @@ struct Runtime {
             check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, n, ids.data(), nullptr));
             found.insert(found.end(), ids.begin(), ids.end());
         }
-        // The same choice of device as the other OpenCL kernels of Atlas.
-        const char* wanted = std::getenv("RESOLUTION_GPU_INDEX");
-        const size_t index = wanted ? static_cast<size_t>(std::strtoul(wanted, nullptr, 10)) : 0;
         if (index >= found.size()) throw std::runtime_error("No such OpenCL GPU");
         device = found[index];
         cl_int status;
@@ -136,15 +191,33 @@ struct Runtime {
         check(status);
         kernel.value = clCreateKernel(program.value, "replay", &status);
         check(status);
+        screen.value = clCreateKernel(program.value, "trace_screen", &status);
+        check(status);
+        screen_local.value = clCreateKernel(program.value, "trace_local", &status);
+        check(status);
+        check(clGetDeviceInfo(device, CL_DEVICE_LOCAL_MEM_SIZE, sizeof(local_bytes), &local_bytes, nullptr));
+        size_t max_group;
+        check(clGetKernelWorkGroupInfo(screen_local.value, device, CL_KERNEL_WORK_GROUP_SIZE,
+                                       sizeof(max_group), &max_group, nullptr));
+        screen_group = std::min<size_t>(64, max_group);
     }
 };
 
 std::mutex lock;  // one batch at a time: the kernel object holds its arguments
 
-Runtime& runtime() {
-    static std::unique_ptr<Runtime> instance;
-    if (!instance) instance = std::make_unique<Runtime>();
-    return *instance;
+Runtime& runtime(size_t index) {
+    static std::map<size_t, std::unique_ptr<Runtime>> instances;
+    auto found = instances.find(index);
+    if (found != instances.end()) return *found->second;
+    auto instance = std::make_unique<Runtime>(index);
+    Runtime& selected = *instance;
+    instances.emplace(index, std::move(instance));
+    return selected;
+}
+
+size_t default_device() {
+    const char* wanted = std::getenv("RESOLUTION_GPU_INDEX");
+    return wanted ? std::strtoul(wanted, nullptr, 10) : 0;
 }
 
 template <typename T> void arg(cl_kernel kernel, cl_uint index, T value) {
@@ -155,15 +228,63 @@ template <typename T> void arg(cl_kernel kernel, cl_uint index, T value) {
 
 extern "C" {
 
+// Inputs come from the bounded symbolic batch prepared by the native tracer.
+// Only a successful readback commits output to the host.
+int atlas_trace_screen_opencl_index(uint32_t prime, uint32_t pairs, uint32_t width,
+        const uint32_t* initial, const uint32_t* offsets, const uint32_t* pivot,
+        const uint32_t* columns, const uint32_t* coefficients, uint32_t* remainders, size_t index) noexcept {
+    try {
+        if (!pairs || !width || prime < 2 || prime >= (1u << 31)) return 1;
+        std::lock_guard<std::mutex> guard(lock);
+        Runtime& rt = runtime(index);
+        const size_t size = static_cast<size_t>(pairs) * width;
+        const size_t entries = offsets[width];
+        const uint32_t unused = 0;
+        const uint32_t* src[] = {initial, offsets, pivot, entries ? columns : &unused, entries ? coefficients : &unused};
+        const size_t lengths[] = {size, size_t(width) + 1, width, std::max<size_t>(entries, 1), std::max<size_t>(entries, 1)};
+        Buffer input[5], work, result;
+        cl_int error;
+        const bool local = size_t(width)*sizeof(cl_ulong) <= rt.local_bytes;
+        cl_kernel k = local ? rt.screen_local.value : rt.screen.value;
+        arg(k, 0, prime);
+        arg(k, 1, pairs);
+        arg(k, 2, width);
+        for (cl_uint i = 0; i < 5; ++i) {
+            input[i].value = clCreateBuffer(rt.context.value, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                            lengths[i]*sizeof(cl_uint), const_cast<uint32_t*>(src[i]), &error);
+            check(error);
+            arg(k, 3+i, input[i].value);
+        }
+        if (local) {
+            check(clSetKernelArg(k, 8, size_t(width)*sizeof(cl_ulong), nullptr));
+        } else {
+            work.value = clCreateBuffer(rt.context.value, CL_MEM_READ_WRITE, size*sizeof(cl_ulong), nullptr, &error);
+            check(error);
+            arg(k, 8, work.value);
+        }
+        result.value = clCreateBuffer(rt.context.value, CL_MEM_WRITE_ONLY, size*sizeof(cl_uint), nullptr, &error);
+        check(error);
+        arg(k, 9, result.value);
+        const size_t global = local ? pairs * rt.screen_group : pairs;
+        check(clEnqueueNDRangeKernel(rt.queue.value, k, 1, nullptr, &global,
+                                     local ? &rt.screen_group : nullptr, 0, nullptr, nullptr));
+        check(clEnqueueReadBuffer(rt.queue.value, result.value, CL_TRUE, 0, size*sizeof(cl_uint),
+                                  remainders, 0, nullptr, nullptr));
+        return 0;
+    } catch (...) {
+        return 1;
+    }
+}
+
 // Run code[0, length) for `count` primes. `pools` holds count*pool words, the
 // generators already in place; `status` receives 1 for every prime whose run
 // passed all checks. Returns 0 when the batch was run on the device.
-int atlas_replay_opencl(const uint32_t* code, size_t length, uint32_t pool, uint32_t work, const uint32_t* primes,
-                        uint32_t count, uint32_t* pools, uint32_t* status) noexcept {
+int atlas_replay_opencl_index(const uint32_t* code, size_t length, uint32_t pool, uint32_t work, const uint32_t* primes,
+                              uint32_t count, uint32_t* pools, uint32_t* status, size_t index) noexcept {
     try {
         if (!count || length > 0xFFFFFFFFu) return 1;
         std::lock_guard<std::mutex> guard(lock);
-        Runtime& rt = runtime();
+        Runtime& rt = runtime(index);
         cl_int error;
         const size_t pool_bytes = static_cast<size_t>(count) * std::max<uint32_t>(pool, 1) * sizeof(uint32_t);
         const size_t work_bytes = static_cast<size_t>(count) * std::max<uint32_t>(work, 1) * sizeof(cl_ulong);
@@ -213,19 +334,25 @@ int atlas_replay_opencl(const uint32_t* code, size_t length, uint32_t pool, uint
             check(clEnqueueNDRangeKernel(rt.queue.value, kernel, 1, nullptr, &global, nullptr, 0, nullptr, nullptr));
             from = to;
         }
+        check(clEnqueueReadBuffer(rt.queue.value, flags.value, CL_TRUE, 0, count * sizeof(uint32_t), ok.data(), 0, nullptr, nullptr));
         check(clEnqueueReadBuffer(rt.queue.value, coefficients.value, CL_TRUE, 0, pool_bytes, pools, 0, nullptr, nullptr));
-        check(clEnqueueReadBuffer(rt.queue.value, flags.value, CL_TRUE, 0, count * sizeof(uint32_t), status, 0, nullptr, nullptr));
+        std::copy(ok.begin(), ok.end(), status);
         return 0;
     } catch (...) {
         return 1;
     }
 }
 
+int atlas_replay_opencl(const uint32_t* code, size_t length, uint32_t pool, uint32_t work, const uint32_t* primes,
+                        uint32_t count, uint32_t* pools, uint32_t* status) noexcept {
+    return atlas_replay_opencl_index(code, length, pool, work, primes, count, pools, status, default_device());
+}
+
 // 1 when an OpenCL GPU is usable for replays.
 int atlas_replay_opencl_available() noexcept {
     try {
         std::lock_guard<std::mutex> guard(lock);
-        runtime();
+        runtime(default_device());
         return 1;
     } catch (...) {
         return 0;
