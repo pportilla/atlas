@@ -39,6 +39,8 @@ def _command(request):
                 args.append(flag + "=" + value)
             else:
                 args.extend([flag, value])
+    if "action" in operands:
+        args.extend(["--action", operands["action"]])
     if "exponent" in operands:
         args.extend(["--exponent", operands["exponent"]])
     if "variables" in operands:
@@ -54,9 +56,9 @@ def _command(request):
 def _script(request, prepared):
     from .session import new_session
 
-    if request["operation"] == "ideal":
-        # The public record of this declaration carries execution details and
-        # the original generator list; the console's ideal() is a constructor.
+    if request["operation"] in ("ideal", "quotient-ring"):
+        # Preserve one-shot declarations and quotient operations as a single
+        # structured record, with their original inputs and execution details.
         return None
     # Each ideal declaration has its own line. The polynomial operands share
     # the operation line. Check all three before formatting any polynomial.

@@ -6,9 +6,8 @@ import unittest
 from textwrap import dedent
 
 from engine.session import SessionError, new_session
-from tests.test_cli_session import ROOT, run_prompt, run_script
-from tests.test_http_basis_refs import endpoint, post
-from tests.test_point_standard_interface import shell
+from tests.cli_support import ROOT, run_prompt, run_script, shell
+from tests.http_support import endpoint, post
 
 
 class LocalizationInterfaceTests(unittest.TestCase):

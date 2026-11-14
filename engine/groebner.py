@@ -336,9 +336,11 @@ def groebner(ideal, gens, *, order="grevlex", domain=QQ, known=0):
         elif getattr(domain, "is_AlgebraicField", False):
             from .field_polynomial import native_basis
             native = native_basis(ideal, gens, order, domain)
-    if native is not None and CHECK and np.native_ring(gens) and domain == QQ:
-        from tests.groebner_oracle import _SymbolicBasis
-        return _Checked(native, _SymbolicBasis(ideal, gens, order, trusted=False))
+    if native is not None and CHECK and domain == QQ:
+        from .field_wide import WideBlockBasis
+        if np.native_ring(gens) or isinstance(native, WideBlockBasis):
+            from tests.groebner_oracle import _SymbolicBasis
+            return _Checked(native, _SymbolicBasis(ideal, gens, order, trusted=False))
     if native is not None and (_MODE != "check" or np.native_ring(gens)):
         return native
     if _MODE == "native" or np.native_ring(gens):

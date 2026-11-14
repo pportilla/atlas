@@ -1,5 +1,6 @@
 // Sparse local algebra operations shared by the dispatcher and the native CLI.
 #include "local_io.hpp"
+#include "local_monomial.hpp"
 #include "local_point_quotient.hpp"
 #include "local_dimension.hpp"
 #include "local_division.hpp"
@@ -298,7 +299,7 @@ std::string operations(std::istream& in, const std::string& op) {
             auto head = op == "local_global_heads" ? global_head(f, lex) : local_head(f, lex);
             if (op == "local_associate_heads")
                 for (const auto& term : f)
-                    if (!std::equal(head.begin(), head.end(), term.first.begin(), std::less_equal<>()))
+                    if (!monomial_divides(head, term.first))
                         return "";
             result.push_back({{std::move(head), 1}});
         }

@@ -14,7 +14,7 @@ from engine.session import new_session, print_json
 from engine.session_expressions import SessionError
 from engine.session_values import Resolution
 from engine.strata import resolution_strata
-from tests.test_cli_session import run_prompt, run_script
+from tests.cli_support import run_prompt, run_script
 
 
 class SessionMonodromyTests(unittest.TestCase):

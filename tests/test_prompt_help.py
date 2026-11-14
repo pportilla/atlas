@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from engine.session import new_session
-from tests.test_cli_session import run_prompt
+from tests.cli_support import run_prompt
 
 
 class PromptHelpTests(unittest.TestCase):

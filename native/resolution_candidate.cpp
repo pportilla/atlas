@@ -105,9 +105,134 @@ Json::Value candidate(Reader& reader, size_t n) {
     return result;
 }
 
+// Detect an ordinary coordinate-centre modification already certified by the
+// current exhaustive policy. For these data the preceding Newton branch can
+// never supply a record; the graph verifier still verifies the ordered candidates.
+Json::Value transverse_pencil(const Json::Value& rows) {
+    // At most 16 binary coefficients per row and 64 bits per input rational.
+    // The Horner/power certificate then operates on O(16 * 64)-bit integers.
+    constexpr unsigned width=3, max_degree=15;
+    if (!rows.isArray() || rows.size()<4 || rows.size()>2*(max_degree+1)) return {};
+    for (const auto& term:rows) {
+        if (!term.isArray() || term.size()!=2 || !term[0].isString() || term[0].asString().size()>43 ||
+                !term[1].isArray() || term[1].size()!=width) return {};
+        for (const auto& p:term[1])
+            if (!p.isString() || p.asString().empty() || p.asString().size()>2 ||
+                    p.asString().find_first_not_of("0123456789")!=std::string::npos) return {};
+    }
+    const auto terms=read_terms(rows,width);
+    if (terms.empty() || terms.size()!=rows.size()) return {};
+    for (const auto& [e,c]:terms)
+        if (!c || mpz_sizeinbase(c.get_num_mpz_t(),2)>64 || mpz_sizeinbase(c.get_den_mpz_t(),2)>64 ||
+                std::any_of(e.begin(),e.end(),[&](const Z& k){return k>max_degree;})) return {};
+    for (unsigned parameter=0;parameter<width;++parameter) {
+        std::vector<unsigned> axes;
+        for (unsigned j=0;j<width;++j) if (j!=parameter) axes.push_back(j);
+        const unsigned a=axes[0], b=axes[1];
+        const auto& first=terms.begin()->first;
+        const unsigned degree=first[a].get_ui()+first[b].get_ui();
+        if (degree<2 || degree>max_degree) continue;
+        // F = H(X,Y) + Z*K(X,Y), homogeneous initially in (X,Y).
+        // Identify H=c*(X+sY)^d term by term over Q.
+        std::vector<Q> h(degree+1), k(degree+1);
+        bool homogeneous=true;
+        for (const auto& [e,c]:terms) {
+            if (e[parameter]>1 || e[a]+e[b]!=degree) {homogeneous=false;break;}
+            (e[parameter]==0?h:k)[e[b].get_ui()]=c;
+        }
+        if (!homogeneous || h[0]==0 || h[1]==0) continue;
+        const Q slope=h[1]/(degree*h[0]);
+        Q coefficient=h[0], value=0;
+        for (unsigned j=0;j<=degree;++j) {
+            if (h[j]!=coefficient) {homogeneous=false;break;}
+            coefficient *= slope*(degree-j)/(j+1);
+            value = value*(-slope)+k[j];  // Evaluate K(-s,1).
+        }
+        if (!homogeneous || value==0) continue;
+        // The source normal fan is the blowup of (X,Y): its polyhedron is
+        // x+y>=d in the orthant, since H has both axial terms. On the fibre
+        // orbit Z=0 the non-monomial repeated form H is degenerate; this
+        // boundary modification cannot enter the finite-point repair path.
+        // The only missing axial intercept is Z. Each of the Newton policy's
+        // donor shears gives all three intercepts d. Its ordinary exceptional
+        // P^2 has a line, meeting the dense torus, along which H' = L^d
+        // fails transversality. Finite-point Newton repair rejects that curve.
+        // K(-s,1) != 0 also makes H+Z*K a smooth section transverse to the
+        // coordinate exceptional divisor. Both axes of the centre are used,
+        // and coprimality makes the primitive polynomial linear in Z irreducible.
+        Json::Value found(Json::arrayValue);
+        found.append(a);found.append(b);
+        return found;
+    }
+    return {};
+}
+
+// A fully supported repeated linear tangent has equal axial intercepts d.
+// The only coordinate choice is the identity; the Newton polyhedron is the
+// simplex of size d plus the orthant. Its normal fan is the smooth ordinary
+// blowup. On the dense exceptional torus the equation is L^d; the curve
+// L=0 is a positive-dimensional locus of failed crossings. The finite-point
+// repair cannot return a Newton chart. For a reduced equation neither the
+// identity nor this ordinary blowup resolves it. The origin worker checks
+// reducedness before computing any blowups. Every proper coordinate-centre
+// candidate misses a pure axial term on a free axis. Later certificate candidates still race a longer canonical solve.
+bool repeated_tangent_obstruction(const Json::Value& rows, unsigned n) {
+    constexpr unsigned max_degree=16, max_rows=128;
+    if (n!=3 || !rows.isArray() || rows.size()<6 || rows.size()>max_rows) return false;
+    for (const auto& row : rows) {
+        if (!row.isArray() || row.size()!=2 || !row[0].isString() || row[0].asString().size()>43 ||
+                !row[1].isArray() || row[1].size()!=n) return false;
+        for (const auto& e : row[1]) {
+            if (!e.isString()) return false;
+            const auto digits=e.asString();
+            if (digits.empty() || digits.size()>2 || digits.find_first_not_of("0123456789")!=std::string::npos)
+                return false;
+        }
+    }
+    const Terms terms=read_terms(rows,n);
+    if (terms.size()!=rows.size()) return false;
+    unsigned order=max_degree+1, degree=0;
+    Terms lowest;
+    for (const auto& [e,c] : terms) {
+        const unsigned total=std::accumulate(e.begin(),e.end(),0u,
+            [](unsigned sum, const Z& power){return sum+power.get_ui();});
+        if (!c || total>max_degree || mpz_sizeinbase(c.get_num_mpz_t(),2)>64 ||
+                mpz_sizeinbase(c.get_den_mpz_t(),2)>64) return false;
+        degree=std::max(degree,total);
+        if (total<order) {order=total;lowest.clear();}
+        if (total==order) lowest.emplace(e,c);
+    }
+    // For L using every variable the degree-d expansion has exactly (d+2
+    // choose 2) coefficients. Do not construct it without a matching support
+    // count: the entire synchronous check is bounded by 128 sparse terms.
+    if (order<2 || degree==order || lowest.size()!=(order+1)*(order+2)/2) return false;
+    Powers e(n); e[0]=order;
+    const auto first=lowest.find(e);
+    if (first==lowest.end()) return false;
+    const Q leading=first->second;
+    Terms linear;
+    --e[0];
+    for (unsigned j=0; j<n; ++j) {
+        ++e[j];
+        const auto mixed=lowest.find(e);
+        if (mixed==lowest.end()) return false;
+        Powers axis(n); axis[j]=1;
+        linear.emplace(std::move(axis), j==0 ? Q(1) : Q(mixed->second/(order*leading)));
+        --e[j];
+    }
+    const Terms expected=atlas::primary::power(std::move(linear),order,n);
+    for (const auto& [monomial,coefficient] : expected) {
+        const auto found=lowest.find(monomial);
+        if (found==lowest.end() || found->second!=leading*coefficient) return false;
+    }
+    return true;
+}
+
 Json::Value decode(const Json::Value& request) {
     const auto n = request["width"].asUInt64();
     const auto op = request["operation"].asString();
+    if (op == "repeated_tangent_obstruction") return n==3 && repeated_tangent_obstruction(request["terms"],3);
+    if (op == "transverse_pencil") return n==3 ? transverse_pencil(request["terms"]) : Json::Value();
     if (op == "first") {
         Z first = (Z(0b1111011) << (n+1))-2;
         return first.get_str(16);
@@ -132,3 +257,7 @@ Json::Value decode(const Json::Value& request) {
 extern "C" const char* atlas_resolution_candidate(const char* input) noexcept {
     return atlas::sparse_json::invoke(input,decode);
 }
+
+extern "C" int atlas_transverse_pencil_abi() noexcept { return 1; }
+
+extern "C" int atlas_newton_tangent_obstruction_abi() noexcept { return 1; }

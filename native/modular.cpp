@@ -23,6 +23,7 @@
 // Nothing here is probabilistic: an unlucky prime can only cost time.
 #include "groebner.hpp"
 #include "groebner_verify.hpp"
+#include "modular_replay.hpp"
 
 #include <flint/fmpq.h>
 #include <flint/ulong_extras.h>
@@ -36,99 +37,6 @@
 
 namespace atlas {
 namespace {
-
-// The replay program is a sequence of blocks. Each block computes one
-// polynomial in a work vector indexed by the monomials that can occur:
-//   BEGIN width                          clear the work vector
-//   ADD offset count index...            work[index[t]] += pool[offset + t]
-//   SUB offset count index...            work[index[t]] -= pool[offset + t]
-//   RED column offset count index...     f = work[column]; work[column] = 0;
-//                                        work[index[t]] -= f * pool[offset + t]
-//   CHECK count index...                 these entries must be zero
-//   STORE offset count index...          pool[offset + t] = work[index[t]] / work[index[0]],
-//                                        and work[index[0]] must not be zero
-// The pool holds the coefficients of every polynomial of the computation,
-// each one monic; offsets and indices are fixed, only the prime varies.
-enum : uint32_t { OP_BEGIN = 1, OP_ADD, OP_SUB, OP_RED, OP_CHECK, OP_STORE };
-
-// Run code[from, to) modulo p. Work entries stay below p*p.
-bool execute(const uint32_t* code, size_t from, size_t to, uint32_t p, uint32_t* pool, u64* work) {
-    const u64 square = static_cast<u64>(p) * p;
-    size_t at = from;
-    while (at < to) {
-        switch (code[at]) {
-        case OP_BEGIN:
-            std::fill(work, work + code[at + 1], 0);
-            at += 2;
-            break;
-        case OP_ADD: {
-            const uint32_t* source = pool + code[at + 1];
-            const uint32_t count = code[at + 2];
-            const uint32_t* index = code + at + 3;
-            for (uint32_t t = 0; t < count; ++t) {
-                u64& w = work[index[t]];
-                w += source[t];
-                if (w >= square) w -= square;
-            }
-            at += 3 + count;
-            break;
-        }
-        case OP_SUB: {
-            const uint32_t* source = pool + code[at + 1];
-            const uint32_t count = code[at + 2];
-            const uint32_t* index = code + at + 3;
-            for (uint32_t t = 0; t < count; ++t) {
-                u64& w = work[index[t]];
-                w += p - source[t];
-                if (w >= square) w -= square;
-            }
-            at += 3 + count;
-            break;
-        }
-        case OP_RED: {
-            u64& pivot = work[code[at + 1]];
-            const uint32_t* source = pool + code[at + 2];
-            const uint32_t count = code[at + 3];
-            const uint32_t* index = code + at + 4;
-            const u64 f = pivot % p;
-            pivot = 0;
-            if (f) {
-                const u64 factor = p - f;
-                for (uint32_t t = 0; t < count; ++t) {
-                    u64& w = work[index[t]];
-                    w += factor * source[t];
-                    if (w >= square) w -= square;
-                }
-            }
-            at += 4 + count;
-            break;
-        }
-        case OP_CHECK: {
-            const uint32_t count = code[at + 1];
-            const uint32_t* index = code + at + 2;
-            for (uint32_t t = 0; t < count; ++t)
-                if (work[index[t]] % p) return false;
-            at += 2 + count;
-            break;
-        }
-        case OP_STORE: {
-            uint32_t* target = pool + code[at + 1];
-            const uint32_t count = code[at + 2];
-            const uint32_t* index = code + at + 3;
-            const u64 lead = work[index[0]] % p;
-            if (!lead) return false;
-            const u64 inverse = n_invmod(lead, p);
-            target[0] = 1;
-            for (uint32_t t = 1; t < count; ++t) target[t] = static_cast<uint32_t>((work[index[t]] % p) * inverse % p);
-            at += 3 + count;
-            break;
-        }
-        default:
-            throw std::logic_error("Corrupt replay program.");
-        }
-    }
-    return true;
-}
 
 // FLINT owns the large numerator and denominator allocated during rational
 // reconstruction. Release each pair even when constructing the basis throws.
@@ -364,7 +272,7 @@ private:
             for (uint32_t t = 0; t < row.count; ++t) code.push_back(position[row_terms_[row.terms + t]]);
         }
         if (work_.size() < width) work_.resize(width);
-        execute(code.data(), start, code.size(), p_, pool.data(), work_.data());
+        execute_replay_block(code.data(), start, code.size(), p_, pool.data(), work_.data());
         std::vector<uint32_t> present, absent;
         Poly h;
         for (uint32_t id : columns_) {
@@ -398,7 +306,7 @@ private:
             code.push_back(slot.offset);
             code.push_back(slot.length);
             code.insert(code.end(), present.begin(), present.end());
-            execute(code.data(), tail, code.size(), p_, pool.data(), work_.data());
+            execute_replay_block(code.data(), tail, code.size(), p_, pool.data(), work_.data());
         }
         if (keep) {
             outputs.push_back(slot);
@@ -446,31 +354,6 @@ thread_local uint64_t cpu_primes = 0;
 
 ReplayBatch active_batch() {
     return has_scoped_batch ? scoped_batch : default_batch.load();
-}
-
-void replay_on_host(const Tracer& tracer, const std::vector<uint32_t>& primes,
-                    std::vector<uint32_t>& pools, std::vector<uint32_t>& status) {
-    if (primes.empty() || tracer.code.empty()) return;
-    const size_t lanes = std::min<size_t>(primes.size(), std::max(1u, std::thread::hardware_concurrency()));
-    std::vector<u64> scratch(lanes * tracer.work_size);
-    std::atomic<size_t> cursor{0};
-    auto worker = [&](size_t lane) {
-        u64* work = scratch.data() + lane * tracer.work_size;
-        for (size_t b; (b = cursor.fetch_add(1)) < primes.size();)
-            if (status[b] && !execute(tracer.code.data(), 0, tracer.code.size(), primes[b],
-                                      pools.data() + b * tracer.pool.size(), work))
-                status[b] = 0;
-    };
-    std::vector<std::thread> crew;
-    crew.reserve(lanes - 1);
-    try {
-        for (size_t lane = 1; lane < lanes; ++lane) crew.emplace_back(worker, lane);
-    } catch (const std::system_error&) {
-        // Overlapping solves may exhaust the available worker threads. Those
-        // already running and the calling thread consume the remaining primes.
-    }
-    worker(0);
-    for (std::thread& thread : crew) thread.join();
 }
 
 // Merge new prime images into the existing CRT residues and reconstruct
@@ -683,7 +566,7 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
             }
             if (!done && !tracer.code.empty()) {
                 const size_t active = std::count(status.begin(), status.end(), 1u);
-                replay_on_host(tracer, fresh, pools, status);
+                replay_on_host(tracer.code, pool_size, tracer.work_size, fresh, pools, status);
                 ++cpu_batches;
                 cpu_primes += active;
             }
@@ -885,7 +768,7 @@ long atlas_groebner_replay_compare(const char* input, size_t length, uint32_t co
                 if (!monic_image(generators[k], primes[b], host.data() + b * pool_size + tracer->inputs[k].offset)) host_status[b] = 0;
         device = host;
         clock = std::chrono::steady_clock::now();
-        replay_on_host(*tracer, primes, host, host_status);
+        replay_on_host(tracer->code, pool_size, tracer->work_size, primes, host, host_status);
         seconds[1] = since(clock);
         const ReplayBatch batch_hook = active_batch();
         if (!batch_hook) return -1;

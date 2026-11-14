@@ -9,6 +9,7 @@ import tokenize
 
 from .native_polynomial import scalar_arithmetic
 from .session_polynomial import Polynomial
+from .session_quotient import QuotientElement
 
 
 _EVALUATION_ERRORS = (ValueError, TypeError, KeyError, IndexError, AttributeError,
@@ -53,7 +54,7 @@ _SCALAR_OPERATORS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", as
 
 
 def _numeric(value):
-    return type(value) is int or isinstance(value, (Fraction, Polynomial))
+    return type(value) is int or isinstance(value, (Fraction, Polynomial, QuotientElement))
 
 
 def _arithmetic(op, left, right):
@@ -65,7 +66,7 @@ def _arithmetic(op, left, right):
             right = right.numerator
         if type(right) is not int:
             raise ValueError("Use an integer exponent.")
-    if isinstance(left, Polynomial) or isinstance(right, Polynomial):
+    if isinstance(left, (Polynomial, QuotientElement)) or isinstance(right, (Polynomial, QuotientElement)):
         return operation(left, right)
     result = scalar_arithmetic(_SCALAR_OPERATORS[type(op)], left, right)
     if isinstance(left, Fraction) or isinstance(right, Fraction) or isinstance(op, ast.Div):
@@ -191,7 +192,11 @@ class Evaluator:
             if isinstance(node.op, ast.Not):
                 return not value
             if _numeric(value) and isinstance(node.op, (ast.UAdd, ast.USub)):
-                return value if isinstance(node.op, ast.UAdd) else _arithmetic(ast.Sub(), 0, value)
+                if isinstance(node.op, ast.UAdd):
+                    return value
+                if isinstance(value, QuotientElement):
+                    return -value
+                return _arithmetic(ast.Sub(), 0, value)
             raise ValueError("A sign requires a rational number or polynomial.")
         if isinstance(node, ast.BinOp):
             return _arithmetic(node.op, self._value(node.left), self._value(node.right))

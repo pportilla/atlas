@@ -92,9 +92,39 @@ The ideal operations below take an `ideal`, an array of polynomial strings. Use 
 | `primary-decomposition` | | Primary components and their associated primes in the input ring |
 | `intersection` | `other_ideal`, an array of polynomials | Ideal, in `generators` |
 | `quotient` | `other_ideal` | Ideal quotient, in `generators` |
+| `quotient-ring` | `action` and its operands | Ring declaration, canonical residue class or boolean |
 | `saturation` | `polynomial` | Saturation by one polynomial, in `generators` |
 | `dimension` | | Krull dimension of the quotient as an integer `value`, with −1 for the empty variety |
 | `hilbert-series` | | Sparse numerator, ambient denominator power, dimension and multiplicity of a homogeneous quotient |
+
+### Arithmetic in declared quotient rings over QQ
+
+Declare an ideal in the ambient coordinates, then call `quotient_ring(I)` to work in $A=\mathbb Q[x_1,\ldots,x_n]/I$. The ring retains the chosen monomial order. `A.coordinates` holds the original ambient variables, `A.gens` holds their residue classes, and `A(f)` takes the class of an ambient polynomial or rational number. Every quotient element exposes its `.parent` and its canonical ambient `.representative`.
+
+```python
+x, y = coordinates("x", "y", coeffs=QQ)
+A = quotient_ring(ideal(x*y - 1))
+u, v = A.gens
+print(u.inverse() == v)                 # True
+print((u^3 / u).representative == x^2)  # True
+print(A(x^2*y + 1) == u + 1)           # True
+
+D = quotient_ring(ideal(x^2))
+t = D(x)
+print(t^2 == 0, t.is_unit())            # True False
+print((1 + t)^-1 == 1 - t)              # True
+```
+
+Use these expressions at the prompt or in a file passed to `./atlas run`. Rational numbers and ambient polynomials from the original coordinates can appear on either side of an operator. To transfer a representative into a second quotient of the same ambient space, write `D(u.representative)`. Division and negative powers require an invertible denominator or base. In the zero ring, $0=1$ and its only element is its own inverse.
+
+```sh
+./atlas algebra quotient-ring --vars x,y --gen 'x*y-1' --action inverse --poly x
+./atlas algebra quotient-ring --vars x,y --gen 'x^2' --action power --poly '1+x' --exponent -3 --json
+```
+
+In the browser’s **Algebra** view, choose **Quotient ring arithmetic**. Select **Declare a quotient ring**, enter the defining relations, and name the ring to use it in later operations. A saved element can be used with its parent ring. Each calculation can also be exported as an Atlas script.
+
+Over HTTP, select operation `quotient-ring` and supply `operands.ideal`. The default action is `declare`. For `reduce`, `negate`, `unit`, and `inverse`, pass `polynomial`. For `add`, `subtract`, `multiply`, `divide`, and `equal`, also pass `other_polynomial`. For `power`, pass `polynomial` and a signed integral `exponent`. A decimal string preserves an exponent of any width. All result records contain the reduced defining `relations`. A `quotient-element` also has a `representative`, and a `boolean` has a `value`. In a session, `A.apply("equal", u*v, 1).json` returns the complete predicate record.
 
 ### Ordinary and symbolic powers over QQ
 
@@ -318,6 +348,19 @@ For a global basis, `--order` selects the monomial order. At $p$, Atlas compares
 ```
 
 The first pair gives dimensions 2 and 1. The last pair gives $\mu=11$ and $\tau=10$. Request the number alone when a full list of basis elements would be too large.
+
+The same four local operations accept sparse equations whose expansion about the point would exceed one million terms. For example, set $g=x^{1001}y^{1001}+x+y-3$ and $h=x-y$. At $(1,1)$ these are independent local coordinates. The Jacobian algebra of $g^5+h^5+g^3h^3$ has 16 basis monomials, and adding the equation itself leaves 15.
+
+```sh
+g='(x^1001*y^1001+x+y-3)'
+h='(x-y)'
+f="$g^5+$h^5+$g^3*$h^3"
+./atlas algebra local-jacobian-algebra --vars x,y --point 1,1 --poly "$f"
+./atlas algebra milnor-number --vars x,y --point 1,1 --poly "$f" --compute cpu
+./atlas algebra tjurina-number --vars x,y --point 1,1 --poly "$f" --compute cpu
+```
+
+In the browser, select the same operation and enter the equation, the variables `x,y` and the point `1,1`. A basis request lists every surviving monomial. A Milnor or Tjurina request returns an exact integer even when the length exceeds 64 bits. [CPU measurements and Singular checks](../benchmarks/point-quotient-invariants.md)
 
 ```python
 x, y = coordinates("x", "y", coeffs=QQ)

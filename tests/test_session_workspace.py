@@ -8,7 +8,7 @@ from unittest.mock import patch
 from engine.session import new_session
 from engine.session_panel import SessionPanel, workspace
 from engine.session_values import Resolution
-from tests.test_cli_session import run_prompt
+from tests.cli_support import run_prompt
 
 
 class Terminal(io.StringIO):

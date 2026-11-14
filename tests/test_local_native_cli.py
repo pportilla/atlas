@@ -31,6 +31,32 @@ class LocalNativeCliTests(unittest.TestCase):
         self.assertEqual(data["execution"]["implementation"], "native-cli")
         return data
 
+    def test_wide_local_quotients_and_scalar_lengths_replay_exactly(self):
+        n = 2**64 + 7
+        f = f"(x^{n}-1)^3+(y+2/3)^2"
+        for operation in ("local-quotient-basis", "local-jacobian-algebra", "milnor-number", "tjurina-number"):
+            with self.subTest(operation=operation):
+                args = [operation, "--vars", "x,y", "--point", "1,-2/3"]
+                if operation == "local-quotient-basis":
+                    args += ["--gen", f"(x^{n}-1)^2", "--gen", "y+2/3"]
+                else:
+                    args += ["--poly", f]
+                record = self.record(args)
+                result = record["result"]
+                self.assertEqual(result["point"], ["1", "-2/3"])
+                if result["type"] == "integer":
+                    self.assertEqual(result["value"], 2)
+                else:
+                    self.assertEqual((result["dimension"], result["basis"]), (2, ["1", "x-1"]))
+                for response in (self.invoke(shlex.split(record["replay"]["command"])[1:]),
+                                 self.invoke(["run", "-"], stdin=record["replay"]["script"])):
+                    self.assertEqual(response.returncode, 0, response.stderr)
+                    self.assertEqual(json.loads(response.stdout)["result"], result)
+        for op in ("milnor-number", "tjurina-number"):
+            wide = self.record([op, "--vars", "x,y", "--point", "0,1", "--poly", f"x^{n+1}+(y-1)^2"])
+            self.assertEqual(wide["result"]["value"], n)
+            self.assertIs(type(wide["result"]["value"]), int)
+
     def test_shifted_projection_and_both_replays(self):
         args = ["local-standard-basis", "--vars", "x,y,z", "--point", "-1/2,0,0",
                 "--gen", "3*x^6000*y^2", "--gen", "x*y^2*z", "--gen", "-2*z^2"]
@@ -69,15 +95,32 @@ class LocalNativeCliTests(unittest.TestCase):
     def test_finite_jet_requires_a_certificate(self):
         for order in ("lex", "grevlex"):
             for finite, second in ((True, "x^4+y^5+x*y^4"), (False, "(x^4+y^5)*(1+x)")):
-                args = ["local-normal-form", "--vars", "x,y", "--order", order,
-                        "--gen", "x^4+y^5", "--gen", second, "--poly", "x^4+y^7"]
-                with self.subTest(order=order, finite=finite):
-                    result = self.record(args)
-                    reference = self.invoke(["algebra", *args, "--compute", "cpu", "--json"], interpreter=True)
-                    self.assertEqual(reference.returncode, 0, reference.stderr)
-                    self.assertEqual(json.loads(reference.stdout)["result"], result["result"])
-                    stages = [s["operation"] for s in result["execution"]["stages"]]
-                    self.assertEqual("finite_jet_standard_basis" in stages, finite)
+                for operation in ("local-standard-basis", "local-normal-form"):
+                    args = [operation, "--vars", "x,y", "--order", order,
+                            "--gen", "x^4+y^5", "--gen", second]
+                    if operation == "local-normal-form":
+                        args += ["--poly", "x^4+y^7"]
+                    with self.subTest(order=order, finite=finite, operation=operation):
+                        result = self.record(args)
+                        reference = self.invoke(["algebra", *args, "--compute", "cpu", "--json"], interpreter=True)
+                        self.assertEqual(reference.returncode, 0, reference.stderr)
+                        self.assertEqual(json.loads(reference.stdout)["result"], result["result"])
+                        stages = [s["operation"] for s in result["execution"]["stages"]]
+                        self.assertEqual("finite_jet_standard_basis" in stages, finite)
+
+    def test_finite_basis_representatives_under_permutation_and_rescaling(self):
+        for first, second in (("x^4+y^5", "x^4+y^7"),
+                              ("x^4+3*x^3*y+4*y^5+4*x*y^5", "x^5+2*y^6+2*x^3*y^3+4*x^4*y^3+4*x^5*y")):
+            for names in ("x,y", "z,a"):
+                with self.subTest(names=names, first=first):
+                    rename = str.maketrans("xy", names.replace(",", ""))
+                    f, g = first.translate(rename), second.translate(rename)
+                    args = ["local-standard-basis", "--vars", names]
+                    original = self.record([*args, "--gen", f, "--gen", g])
+                    permuted = self.record([*args, "--gen", f"(-3/7)*({g})", "--gen", f"5*({f})"])
+                    self.assertEqual(permuted["result"], original["result"])
+                    self.assertIn("finite_jet_standard_basis",
+                                  [s["operation"] for s in original["execution"]["stages"]])
 
     def test_homogeneous_division_respects_the_local_tie_order(self):
         # x*z leads y^2 under lex, while y^2 leads x*z under grevlex.

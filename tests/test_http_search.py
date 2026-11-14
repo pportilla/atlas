@@ -7,18 +7,14 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from engine.app import AtlasServer, Handler
+from engine.app import AtlasServer
 from engine.search_jobs import SearchJobs
-
-
-class Quiet(Handler):
-    def log_message(self, *args):
-        pass
+from tests.http_support import QuietHandler
 
 
 class SearchEndpoints(unittest.TestCase):
     def setUp(self):
-        self.server = AtlasServer(("127.0.0.1",0),Quiet)
+        self.server = AtlasServer(("127.0.0.1",0),QuietHandler)
         # One polynomial completes immediately; the other stays running until
         # the server kills its process group. The stub verifies the effective
         # worker request and avoids depending on a specific algebraic example.

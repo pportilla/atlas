@@ -1,8 +1,10 @@
 #include "local_basis.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "groebner.hpp"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -23,12 +25,6 @@ void atlas_groebner_free(void*) noexcept;
 
 namespace atlas::local {
 namespace {
-
-mpz_class degree(const Powers& e) {
-    mpz_class d = 0;
-    for (const auto& power : e) d += power;
-    return d;
-}
 
 Poly packed_row(const Ring& ring, const Polynomial& row, Rational* scale) {
     for (const auto& term : row)
@@ -61,16 +57,6 @@ Polynomial unpack_row(const Ring& ring, const Poly& row, const fmpz* numerator,
     return result;
 }
 
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
-}
-
-mpz_class max_degree(const Polynomial& f) {
-    mpz_class d = 0;
-    for (const auto& term : f) d = std::max(d, degree(term.first));
-    return d;
-}
-
 Polynomial monic(const Polynomial& f, const Powers& head) {
     Polynomial result = f;
     const auto& coefficient = f.at(head);
@@ -82,23 +68,44 @@ Polynomial monic(const Polynomial& f, const Powers& head) {
 // Matches native_polynomial.default_sort_key on QQ expressions. Only the
 // active coordinates participate, in ascending name order. Within that
 // ring the tuple of (exponents, coefficient) is stored largest exponent first.
-using SortKey = std::pair<std::vector<std::string>, std::vector<std::pair<Powers, mpq_class>>>;
+struct OrderedRow {
+    Polynomial row;
+    std::vector<std::string> variables;
+    std::vector<std::pair<Powers, mpq_class>> reordered_terms;
 
-SortKey sort_key(const Polynomial& row, const std::vector<std::string>& names) {
-    std::vector<size_t> active;
-    for (size_t i = 0; i < names.size(); ++i)
-        if (std::any_of(row.begin(), row.end(), [i](const auto& t) { return t.first[i] != 0; }))
-            active.push_back(i);
-    std::sort(active.begin(), active.end(), [&](size_t i, size_t j) { return names[i] < names[j]; });
-    SortKey key;
-    for (size_t i : active) key.first.push_back(names[i]);
-    for (const auto& [e, c] : row) {
-        Powers restricted;
-        for (size_t i : active) restricted.push_back(e[i]);
-        key.second.emplace_back(std::move(restricted), c);
+    OrderedRow(Polynomial polynomial, const std::vector<std::string>& names, bool names_sorted)
+        : row(std::move(polynomial)) {
+        std::vector<size_t> active;
+        for (size_t i = 0; i < names.size(); ++i)
+            if (std::any_of(row.begin(), row.end(), [i](const auto& t) { return t.first[i] != 0; }))
+                active.push_back(i);
+        if (!names_sorted)
+            std::sort(active.begin(), active.end(), [&](size_t i, size_t j) { return names[i] < names[j]; });
+        for (size_t i : active) variables.push_back(names[i]);
+        if (names_sorted) return;
+        for (const auto& [powers, coefficient] : row) {
+            Powers restricted;
+            for (size_t i : active) restricted.push_back(powers[i]);
+            reordered_terms.emplace_back(std::move(restricted), coefficient);
+        }
+        std::sort(reordered_terms.rbegin(), reordered_terms.rend());
     }
-    std::sort(key.second.rbegin(), key.second.rend());
-    return key;
+
+    bool operator<(const OrderedRow& other) const {
+        if (variables != other.variables) return variables < other.variables;
+        if (!reordered_terms.empty()) return reordered_terms < other.reordered_terms;
+        // With the same active variables, all omitted coordinates are zero
+        // in both rows. Reverse map iteration already has the required order.
+        return std::lexicographical_compare(row.rbegin(), row.rend(), other.row.rbegin(), other.row.rend());
+    }
+};
+
+Basis sorted_rows(std::vector<OrderedRow> rows) {
+    std::sort(rows.begin(), rows.end());
+    Basis result;
+    result.reserve(rows.size());
+    for (auto& entry : rows) result.push_back(std::move(entry.row));
+    return result;
 }
 
 using Heads = std::vector<Powers>;
@@ -116,36 +123,31 @@ Basis minimal_rows(const Basis& rows, const Heads& heads, const std::vector<std:
     Heads ordered;
     for (const auto& group : groups) ordered.push_back(group.first);
     std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) {
-        auto da = degree(a), db = degree(b);
+        auto da = total_degree(a), db = total_degree(b);
         return da != db ? da < db : a < b;
     });
     Heads minimal;
-    std::vector<std::pair<SortKey, Polynomial>> chosen;
+    const bool names_sorted = std::is_sorted(names.begin(), names.end());
+    std::vector<OrderedRow> chosen;
     for (const auto& head : ordered) {
-        if (std::any_of(minimal.begin(), minimal.end(), [&](const auto& h) { return divides(h, head); }))
+        if (std::any_of(minimal.begin(), minimal.end(), [&](const auto& h) { return monomial_divides(h, head); }))
             continue;
         minimal.push_back(head);
         std::pair<mpz_class, size_t> best_cost;
-        SortKey best_key;
-        Polynomial best;
+        std::optional<OrderedRow> best;
         for (auto i : groups.at(head)) {
             const auto& row = rows[i];
-            auto cost = std::make_pair(max_degree(row), row.size());
-            if (!best.empty() && best_cost < cost) continue;
-            auto candidate = monic(row, head);
-            auto key = sort_key(candidate, names);
-            if (best.empty() || cost < best_cost || key < best_key) {
+            auto cost = std::make_pair(max_total_degree(row), row.size());
+            if (best && best_cost < cost) continue;
+            OrderedRow candidate(monic(row, head), names, names_sorted);
+            if (!best || cost < best_cost || candidate < *best) {
                 best_cost = cost;
-                best_key = std::move(key);
                 best = std::move(candidate);
             }
         }
-        chosen.emplace_back(std::move(best_key), std::move(best));
+        chosen.push_back(std::move(*best));
     }
-    std::sort(chosen.begin(), chosen.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    Basis result;
-    for (auto& item : chosen) result.push_back(std::move(item.second));
-    return result;
+    return sorted_rows(std::move(chosen));
 }
 
 // In a homogeneous lift t^(d-|e|)*x^e the largest t exponent selects the
@@ -156,13 +158,13 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift, boo
     std::ostringstream input;
     input << width << ' ' << order << " 0\n";
     for (const auto& row : rows) {
-        auto top = max_degree(row);
+        auto top = max_total_degree(row);
         bool first = true;
         for (const auto& [e, c] : row) {
             if (!first) input << ';';
             first = false;
             input << c.get_str();
-            if (lift) input << ' ' << top - degree(e);
+            if (lift) input << ' ' << top - total_degree(e);
             for (const auto& power : e) input << ' ' << power;
         }
         input << '\n';
@@ -222,7 +224,7 @@ std::optional<std::vector<std::vector<int>>> local_leading_supports(
     bool associates = true;
     for (const auto& row : rows) if (!row.empty()) {
         const auto head = local_head(row, lex);
-        if (std::any_of(row.begin(), row.end(), [&](const auto& t) { return !divides(head, t.first); })) {
+        if (std::any_of(row.begin(), row.end(), [&](const auto& t) { return !monomial_divides(head, t.first); })) {
             associates = false;
             break;
         }
@@ -234,8 +236,8 @@ std::optional<std::vector<std::vector<int>>> local_leading_supports(
     supports.clear();
     bool lift = false;
     for (const auto& row : rows) if (!row.empty()) {
-        const auto d = degree(row.begin()->first);
-        for (const auto& term : row) if (degree(term.first) != d) { lift = true; break; }
+        const auto d = total_degree(row.begin()->first);
+        for (const auto& term : row) if (total_degree(term.first) != d) { lift = true; break; }
         if (lift) break;
     }
     if (width + lift > MAX_VARIABLES) return std::nullopt;
@@ -244,7 +246,7 @@ std::optional<std::vector<std::vector<int>>> local_leading_supports(
     std::vector<Poly> polys;
     try {
         for (const auto& row : rows) if (!row.empty()) {
-            const auto top = max_degree(row);
+            const auto top = max_total_degree(row);
             if (top > MAX_DEGREE) return std::nullopt;
             std::vector<u64> packed(row.size() * ring.stride);
             std::vector<const mpq_class*> coefficients;
@@ -335,10 +337,10 @@ std::optional<HomogeneousReducer> homogeneous_reducer(const Basis& centered, siz
     bool nonmonomial = false;
     for (const auto& f : centered) {
         if (f.empty()) continue;
-        const auto d = degree(f.begin()->first);
+        const auto d = total_degree(f.begin()->first);
         if (d == 0 || d > MAX_DEGREE) return std::nullopt;
         for (const auto& [e, c] : f)
-            if (e.size() != width || c == 0 || degree(e) != d) return std::nullopt;
+            if (e.size() != width || c == 0 || total_degree(e) != d) return std::nullopt;
         ++count;
         nonmonomial |= f.size() > 1;
     }
@@ -388,7 +390,7 @@ std::optional<Polynomial> HomogeneousReducer::reduce(const Polynomial& centered_
     bool dropped = false;
     for (auto it = centered_query.begin(); it != centered_query.end(); ++it) {
         if (it->first.size() != width) throw std::invalid_argument("Wrong width for a local polynomial.");
-        const auto d = degree(it->first);
+        const auto d = total_degree(it->first);
         if (cutoff_ && d >= *cutoff_) {
             if (!dropped) filtered.insert(centered_query.begin(), it);
             dropped = true;
@@ -411,7 +413,7 @@ std::optional<Polynomial> HomogeneousReducer::reduce(const Polynomial& centered_
 
 bool global_less(const Powers& a, const Powers& b, bool lex) {
     if (lex) return a < b;
-    const auto da = degree(a), db = degree(b);
+    const auto da = total_degree(a), db = total_degree(b);
     if (da != db) return da < db;
     return std::lexicographical_compare(b.rbegin(), b.rend(), a.rbegin(), a.rend());
 }
@@ -428,7 +430,7 @@ Powers local_head(const Polynomial& polynomial, bool lex) {
     mpz_class lowest = 0;
     for (const auto& [e, c] : polynomial) {
         if (c == 0) continue;
-        auto d = degree(e);
+        auto d = total_degree(e);
         if (!head || d < lowest || (d == lowest &&
             (lex ? e > *head : std::lexicographical_compare(e.rbegin(), e.rend(), head->rbegin(), head->rend())))) {
             head = &e;
@@ -440,6 +442,15 @@ Powers local_head(const Polynomial& polynomial, bool lex) {
 }
 
 Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex, bool prefer_modular) {
+    bool used_finite_jet;
+    return standard_basis(generators, names, lex, prefer_modular, used_finite_jet);
+}
+
+Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex,
+                     bool prefer_modular, bool& used_finite_jet) {
+    auto finite = finite_standard_basis(generators, names, lex);
+    used_finite_jet = finite.has_value();
+    if (finite) return std::move(*finite);
     Basis rows;
     const Powers origin(names.size(), 0);
     const Basis unit = {Polynomial{{origin, 1}}};
@@ -452,10 +463,10 @@ Basis standard_basis(const Basis& generators, const std::vector<std::string>& na
         }
         if (row.empty()) continue;
         if (row.count(origin)) return unit;
-        const auto d = degree(row.begin()->first);
+        const auto d = total_degree(row.begin()->first);
         if (homogeneous)
             for (const auto& term : row)
-                if (degree(term.first) != d) { homogeneous = false; break; }
+                if (total_degree(term.first) != d) { homogeneous = false; break; }
         rows.push_back(std::move(row));
     }
     if (rows.empty()) return {};
@@ -466,7 +477,7 @@ Basis standard_basis(const Basis& generators, const std::vector<std::string>& na
     bool associates = true;
     for (size_t i = 0; i < rows.size() && associates; ++i)
         for (const auto& term : rows[i])
-            if (!divides(heads[i], term.first)) { associates = false; break; }
+            if (!monomial_divides(heads[i], term.first)) { associates = false; break; }
     if (associates) return minimal_rows(rows, heads, names);
 
     Basis certified = global_basis(rows, names.size(), lex, !homogeneous, prefer_modular);
@@ -476,7 +487,7 @@ Basis standard_basis(const Basis& generators, const std::vector<std::string>& na
     // When input heads already generate the certified initial ideal, retain
     // the input representatives, including when a saved basis is replayed.
     for (const auto& h : certified_heads)
-        if (std::none_of(heads.begin(), heads.end(), [&](const auto& m) { return divides(m, h); }))
+        if (std::none_of(heads.begin(), heads.end(), [&](const auto& m) { return monomial_divides(m, h); }))
             return minimal_rows(certified, certified_heads, names);
     return minimal_rows(rows, heads, names);
 }
@@ -541,7 +552,13 @@ struct JetPair {
     bool operator<(const JetPair& other) const { return lcm > other.lcm; }
 };
 
-std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
+void make_jet_monic(Jet& row) {
+    const mpq_class coefficient = row.begin()->second;
+    if (coefficient != 1)
+        for (auto& term : row) term.second /= coefficient;
+}
+
+std::optional<Basis> plane_jet_basis(const Basis& generators, const std::vector<std::string>& names, unsigned cap) {
     unsigned end = (cap + 1) * jet_stride;
     std::vector<Jet> rows;
     std::vector<unsigned> heads;
@@ -563,9 +580,7 @@ std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
         }
         if (row.empty()) return true;
         const unsigned h = row.begin()->first;
-        const mpq_class c = row.begin()->second;
-        if (c != 1)
-            for (auto& term : row) term.second /= c;
+        make_jet_monic(row);
         for (size_t i = 0; i < heads.size(); ++i) {
             unsigned lcm = jet_lcm(h, heads[i]);
             if (lcm < end && lcm != h + heads[i])
@@ -582,12 +597,22 @@ std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
         }
         return true;
     };
-    for (const auto& f : generators) {
-        Jet row;
-        for (const auto& [m, c] : f) {
-            const auto key = degree(m).get_ui() * jet_stride + m[1].get_ui();
-            if (key < end && c != 0) row.emplace(key, c);
+    std::array<Jet, 2> input;
+    for (size_t i = 0; i < input.size(); ++i) {
+        for (const auto& [m, c] : generators[i]) {
+            const auto key = total_degree(m).get_ui() * jet_stride + m[1].get_ui();
+            input[i].emplace(key, c);
         }
+    }
+    // Insertion order can change the tails of a local standard basis.
+    // Use the local heads, breaking ties by the monic input polynomials.
+    if (input[0].begin()->first == input[1].begin()->first) {
+        for (auto& row : input) make_jet_monic(row);
+        if (input[1] < input[0]) input[0].swap(input[1]);
+    } else if (input[1].begin()->first < input[0].begin()->first) {
+        input[0].swap(input[1]);
+    }
+    for (auto& row : input) {
         if (!insert(std::move(row))) return std::nullopt;
     }
     while (!pairs.empty()) {
@@ -612,7 +637,8 @@ std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
     // the full local head ideal. Otherwise use the ordinary exact basis.
     unsigned bound = staircase_bound(heads);
     if (!bound || bound > cap) return std::nullopt;
-    Basis result;
+    std::vector<OrderedRow> result;
+    const bool names_sorted = std::is_sorted(names.begin(), names.end());
     for (size_t i = 0; i < rows.size(); ++i) {
         if (std::any_of(heads.begin(), heads.end(),
                 [&](unsigned h) { return h != heads[i] && jet_divides(h, heads[i]); }))
@@ -622,9 +648,9 @@ std::optional<Basis> plane_jet_basis(const Basis& generators, unsigned cap) {
             if (k != heads[i] && k / jet_stride >= bound) break;
             p.emplace(Powers{k / jet_stride - k % jet_stride, k % jet_stride}, c);
         }
-        result.push_back(std::move(p));
+        result.emplace_back(std::move(p), names, names_sorted);
     }
-    return result;
+    return sorted_rows(std::move(result));
 }
 
 }
@@ -642,7 +668,7 @@ std::optional<Basis> finite_standard_basis(const Basis& generators, const std::v
             if (term.second == 0) return std::nullopt;
             common_x &= term.first[0] != 0;
             common_y &= term.first[1] != 0;
-            const auto d = degree(term.first);
+            const auto d = total_degree(term.first);
             if (d > jet_degree_limit) return std::nullopt;
             low = std::min(low, d.get_ui());
             high = std::max(high, d.get_ui());
@@ -655,8 +681,8 @@ std::optional<Basis> finite_standard_basis(const Basis& generators, const std::v
     // in the ordinary kernel. Reserve the finite jet for high tangencies.
     if (!inhomogeneous || common_x || common_y) return std::nullopt;
     const auto a = local_head(generators[0], true), b = local_head(generators[1], true);
-    if (!divides(a, b) && !divides(b, a)) return std::nullopt;
-    return plane_jet_basis(generators, 2 * highest);
+    if (!monomial_divides(a, b) && !monomial_divides(b, a)) return std::nullopt;
+    return plane_jet_basis(generators, names, 2 * highest);
 }
 
 }

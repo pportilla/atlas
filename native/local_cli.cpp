@@ -4,10 +4,12 @@
 #include "local_dimension.hpp"
 #include "local_point_basis.hpp"
 #include "local_point_normal_form.hpp"
+#include "local_point_quotient.hpp"
 #include "primary_decomposition.hpp"
 #include "normalization.hpp"
 #include "localization.hpp"
 #include "ideal_powers.hpp"
+#include "quotient_ring.hpp"
 #include <json/json.h>
 #include <algorithm>
 #include <cerrno>
@@ -33,7 +35,8 @@ struct Request {
     std::string operation, order = "grevlex", compute = "auto";
     Strings names, generators, primes;
     std::vector<mpq_class> point;
-    std::optional<std::string> query, numerator, denominator, exponent;
+    std::optional<std::string> query, other_query, numerator, denominator, exponent;
+    std::string action = "declare";
     bool json = false;
     bool point_given = false;
 };
@@ -43,7 +46,15 @@ bool power_query(const std::string& op) {
 }
 
 bool global_ideal_query(const std::string& op) {
-    return op == "primary-decomposition" || op == "normalization" || op == "localization" || op == "localize" || power_query(op);
+    return op == "primary-decomposition" || op == "normalization" || op == "localization" || op == "localize" || power_query(op) || op == "quotient-ring";
+}
+
+bool hypersurface_query(const std::string& op) {
+    return op == "milnor-number" || op == "tjurina-number" || op == "local-jacobian-algebra";
+}
+
+bool local_quotient(const std::string& op) {
+    return hypersurface_query(op) || op == "local-quotient-basis";
 }
 
 bool dimension_query(const std::string& operation) {
@@ -120,7 +131,7 @@ mpq_class coordinate(const std::string& s) {
 bool is_option(const std::string& s) {
     static const std::set<std::string> flags = {
         "--field", "--vars", "--order", "--compute", "--gpu", "--gen", "--poly",
-        "--prime", "--numerator", "--denominator", "--exponent", "--point", "--json", "--help", "-h", "--"
+        "--prime", "--numerator", "--denominator", "--exponent", "--action", "--other-poly", "--point", "--json", "--help", "-h", "--"
     };
     return flags.count(s.substr(0, s.find('=')));
 }
@@ -139,6 +150,7 @@ Request arguments(int argc, char** argv) {
         if (flag != "--gen" && flag != "--poly" && flag != "--vars" && flag != "--point" &&
             flag != "--field" && flag != "--order" && flag != "--compute" &&
             !(power_query(r.operation) && flag == "--exponent") &&
+            !(r.operation == "quotient-ring" && (flag == "--action" || flag == "--other-poly" || flag == "--exponent")) &&
             !(r.operation == "localization" && (flag == "--prime" || flag == "--numerator" || flag == "--denominator")))
             throw std::invalid_argument("Use the general command parser.");
         if (eq == arg.npos && (++i == argc || is_option(argv[i])))
@@ -153,16 +165,20 @@ Request arguments(int argc, char** argv) {
         else if (flag == "--numerator") r.numerator = value;
         else if (flag == "--denominator") r.denominator = value;
         else if (flag == "--poly") r.query = value;
+        else if (flag == "--other-poly") r.other_query = value;
+        else if (flag == "--action") r.action = value;
         else if (flag == "--vars") { r.names = comma_list(value); vars = true; }
         else if (flag == "--point") point = comma_list(value);
         else if (flag == "--order") r.order = value;
         else if (flag == "--compute") r.compute = value;
         else if (value != "QQ") throw std::invalid_argument("Unsupported field.");
     }
-    if (!vars || (r.names.empty() && !power_query(r.operation)) ||
+    if (!vars || (r.names.empty() && !power_query(r.operation) && r.operation != "quotient-ring" && r.operation != "local-quotient-basis") ||
         (power_query(r.operation) && !r.exponent) || (r.order != "lex" && r.order != "grevlex") ||
         (r.compute != "auto" && r.compute != "cpu") ||
-        (r.operation == "local-normal-form") != r.query.has_value())
+        (r.operation != "quotient-ring" && (r.operation == "local-normal-form" || hypersurface_query(r.operation)) != r.query.has_value()) ||
+        (r.operation == "quotient-ring" && (bool(r.exponent) != (r.action == "power") || (r.other_query && !r.query))) ||
+        (hypersurface_query(r.operation) && !r.generators.empty()))
         throw std::invalid_argument("Use the general algebra handler.");
     std::set<std::string> distinct;
     for (const auto& name : r.names)
@@ -212,21 +228,25 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
     if (r.numerator) operand("--numerator",*r.numerator);
     if (r.denominator) operand("--denominator",*r.denominator);
     if (r.query) operand("--poly",*r.query);
+    if (r.other_query) operand("--other-poly", *r.other_query);
+    if (r.operation == "quotient-ring") operand("--action", r.action);
     if (r.exponent) operand("--exponent",*r.exponent);
-    if (!point.empty()) args.insert(args.end(), {"--point", join(point, ",")});
+    if (r.point_given || !point.empty()) args.insert(args.end(), {"--point", join(point, ",")});
     args.push_back("--json");
     for (auto& arg : args) arg = shell_quote(arg);
     Json::Value request;
     request["operation"] = r.operation;
     request["ring"] = ring;
     request["compute"] = r.compute;
-    request["operands"]["ideal"] = array(r.generators);
+    if (!hypersurface_query(r.operation)) request["operands"]["ideal"] = array(r.generators);
     if (r.operation == "localization") request["operands"]["prime"] = array(r.primes);
     if (r.numerator) request["operands"]["numerator"] = *r.numerator;
     if (r.denominator) request["operands"]["denominator"] = *r.denominator;
-    if (!point.empty()) request["operands"]["point"] = array(point);
+    if (r.point_given || !point.empty()) request["operands"]["point"] = array(point);
     if (r.exponent) request["operands"]["exponent"] = *r.exponent;
     if (r.query) request["operands"]["polynomial"] = *r.query;
+    if (r.other_query) request["operands"]["other_polynomial"] = *r.other_query;
+    if (r.operation == "quotient-ring") request["operands"]["action"] = r.action;
     Json::Value out;
     out["command"] = join(args, " ");
     // algebra_request accepts serialized JSON. Quoting it as a string again
@@ -293,9 +313,9 @@ Json::Value local_result(const Request& r, const Basis& input, Stages& stage) {
                                  : std::nullopt;
         if (remainder) output = {one, std::move(*remainder)};
         else {
-            auto finite = r.query ? finite_standard_basis(centered, r.names, lex) : std::nullopt;
-            Basis basis = finite ? std::move(*finite) : standard_basis(centered, r.names, lex);
-            stage(finite ? "finite_jet_standard_basis" : "local_standard_basis", "local_standard_basis");
+            bool used_finite_jet;
+            Basis basis = standard_basis(centered, r.names, lex, false, used_finite_jet);
+            stage(used_finite_jet ? "finite_jet_standard_basis" : "local_standard_basis", "local_standard_basis");
             if (!r.query) output = std::move(basis);
             else if (basis == Basis{one}) output = {one, {}};
             else {
@@ -346,6 +366,53 @@ Json::Value decomposition_result(const Request& r, const Basis& input, Stages& s
     return result;
 }
 
+std::string centered_monomial(const Powers& powers, const Request& r) {
+    const bool product = std::count_if(powers.begin(), powers.end(), [](const auto& e) { return e != 0; }) > 1;
+    Strings factors;
+    for (size_t j = 0; j < powers.size(); ++j) {
+        if (powers[j] == 0) continue;
+        std::string axis = r.names[j];
+        if (r.point[j] != 0) {
+            const mpq_class magnitude = abs(r.point[j]);
+            axis += (r.point[j] > 0 ? "-" : "+") + magnitude.get_str();
+            if (product || powers[j] > 1) axis = "(" + axis + ")";
+        }
+        if (powers[j] > 1) axis += "^" + powers[j].get_str();
+        factors.push_back(std::move(axis));
+    }
+    return factors.empty() ? "1" : join(factors, "*");
+}
+
+Json::Value local_quotient_result(const Request& r, const Basis& input, Stages& stages) {
+    stages("parse_local_input");
+    auto q = quotient_at_point(r.operation, input, r.names, r.point, r.order == "lex");
+    auto label = r.operation;
+    std::replace(label.begin(), label.end(), '-', '_');
+    stages(label.c_str());
+    const bool number = r.operation == "milnor-number" || r.operation == "tjurina-number";
+    Json::Value out;
+    out["type"] = number ? "integer" : r.operation == "local-quotient-basis" ? "quotient-basis" : r.operation;
+    out["scope"] = r.point_given ? "point" : "origin";
+    out["finite"] = q.dimension.has_value();
+    auto& length = out[number ? "value" : "dimension"];
+    if (q.dimension) {
+        if (q.dimension->fits_ulong_p()) length = Json::UInt64(q.dimension->get_ui());
+        else length = q.dimension->get_str(); // The output writer emits the unlimited JSON integer.
+    }
+    if (!number) {
+        auto& basis = out["basis"];
+        if (q.dimension) {
+            basis = Json::Value(Json::arrayValue);
+            for (const auto& exponents : q.monomials) basis.append(centered_monomial(exponents, r));
+        }
+        if (r.operation == "local-jacobian-algebra") {
+            auto& generators = out["generators"] = Json::Value(Json::arrayValue);
+            for (const auto& row : q.derivatives) generators.append(format_polynomial(row, r.names));
+        }
+    }
+    return out;
+}
+
 Json::Value calculate(const Request& r) {
     Stages stages;
     Basis input;
@@ -358,7 +425,10 @@ Json::Value calculate(const Request& r) {
     ring["field"] = "QQ";
     ring["order"] = r.order;
     auto& result = doc["result"];
-    if (dimension_query(r.operation)) {
+    if (local_quotient(r.operation)) {
+        if (r.query) input.push_back(parse_expression(r.names, *r.query));
+        result = local_quotient_result(r, input, stages);
+    } else if (dimension_query(r.operation)) {
         const bool smoothness = r.operation == "local-smoothness";
         stages("parse_local_input");
         auto d = dimension_at_point(input, r.names, r.point, r.order == "lex", smoothness);
@@ -374,6 +444,14 @@ Json::Value calculate(const Request& r) {
             result["type"] = "integer";
             result["value"] = d.dimension;
         }
+    } else if (r.operation == "quotient-ring") {
+        Basis operands;
+        if (r.query) operands.push_back(parse_expression(r.names, *r.query));
+        if (r.other_query) operands.push_back(parse_expression(r.names, *r.other_query));
+        auto exponent = atlas::quotient_ring::parse_exponent(r.exponent.value_or("0"));
+        stages("parse_input");
+        result = atlas::quotient_ring::compute(input, r.names, r.order == "lex", r.action, operands, exponent);
+        stages("quotient_ring");
     } else if (power_query(r.operation)) {
         const auto exponent = atlas::ideal_powers::parse_exponent(*r.exponent);
         const bool symbolic = r.operation == "symbolic-power";
@@ -402,9 +480,9 @@ Json::Value calculate(const Request& r) {
     }
     result["ring"] = ring;
     Strings point;
-    if (!dimension_query(r.operation) || r.point_given)
+    if (!(dimension_query(r.operation) || local_quotient(r.operation)) || r.point_given)
         for (const auto& q : r.point) point.push_back(q.get_str());
-    if (!point.empty()) result["point"] = array(point);
+    if (r.point_given || !point.empty()) result["point"] = array(point);
     doc["status"] = "ok";
     doc["operation"] = r.operation;
     doc["replay"] = replay(r,ring,point);
@@ -419,18 +497,49 @@ Json::Value calculate(const Request& r) {
     return doc;
 }
 
+// JsonCpp represents integers only up to uint64_t. Serialize a larger exact
+// length at its own field while leaving every other value to the JSON writer.
+void write_record(std::ostream& stream, const Json::Value& record, const std::string& operation) {
+    const auto& result = record["result"];
+    const char* key = result["type"] == "integer" ? "value" : "dimension";
+    if (!local_quotient(operation) || !result[key].isString()) {
+        stream << json_text(record) << '\n';
+        return;
+    }
+    Json::Value envelope = record;
+    Json::Value fields, length;
+    envelope.removeMember("result", &fields);
+    fields.removeMember(key, &length);
+    // Both objects retain required fields (e.g. ring and execution).
+    stream << "{\"result\":{\"" << key << "\":" << length.asString() << ','
+           << json_text(fields).substr(1) << ',' << json_text(envelope).substr(1) << '\n';
+}
+
 void show(const Request& r, const Json::Value& result) {
     Strings point;
     for (const auto& q : r.point) point.push_back(q.get_str());
     std::cout << (r.names.empty() ? "QQ" : "QQ[" + join(r.names,", ") + "]") << "   " << r.order << '\n';
-    if (dimension_query(r.operation) && !r.point_given) std::cout << "Scope: origin\n";
-    else if (!point.empty()) std::cout << "Scope: point\nPoint: (" << join(point,", ") << ")\n";
+    if ((dimension_query(r.operation) || local_quotient(r.operation)) && !r.point_given) std::cout << "Scope: origin\n";
+    else if (r.point_given || !point.empty()) std::cout << "Scope: point\nPoint: (" << join(point,", ") << ")\n";
     auto generators = [](const Json::Value& gens, const char* zero) {
         Strings polys;
         for (const auto& g : gens) polys.push_back(g.asString());
         return polys.empty() ? std::string(zero) : join(polys, ", ");
     };
-    if (power_query(r.operation)) {
+    if (local_quotient(r.operation)) {
+        const bool number = result["type"] == "integer";
+        const auto& length = result[number ? "value" : "dimension"];
+        if (result.isMember("generators"))
+            std::cout << "Jacobian generators: " << generators(result["generators"], "(none)") << '\n';
+        const char* label = number ? (r.operation == "milnor-number" ? "Milnor number" : "Tjurina number")
+                                   : "Vector space dimension over QQ";
+        std::cout << label << ": " << (length.isNull() ? "infinite" : length.asString()) << '\n';
+        if (!number && !length.isNull()) std::cout << "Basis: " << generators(result["basis"], "(empty)") << '\n';
+    } else if (r.operation == "quotient-ring") {
+        std::cout << "Relations: (" << generators(result["relations"], "0") << ")\n";
+        if (result.isMember("representative")) std::cout << "Representative: " << result["representative"].asString() << '\n';
+        if (result.isMember("value")) std::cout << "Result: " << (result["value"].asBool() ? "true" : "false") << '\n';
+    } else if (power_query(r.operation)) {
         std::cout << "Generators: " << generators(result["generators"], "(zero ideal)") << '\n';
     } else if (r.operation == "localization") {
         std::cout << "Prime ideal: (" << generators(result["prime"], "0") << ")\n"
@@ -523,6 +632,8 @@ int run_isolated(const Request& r, char** argv) {
             else show(r,record["result"]);
             std::cout.flush();
             _exit(0);
+        } catch (const atlas::quotient_ring::InvalidInput& error) {
+            _exit(cli_error(r, "invalid_request", error.what()));
         } catch (const atlas::ideal_powers::InvalidInput& error) {
             _exit(cli_error(r, "invalid_request", error.what()));
         } catch (const atlas::localization::InvalidInput& error) {
@@ -556,7 +667,7 @@ int run_isolated(const Request& r, char** argv) {
 int main(int argc, char** argv) {
     if (argc < 4 || std::string(argv[2]) != "algebra" ||
         (std::string(argv[3]) != "local-normal-form" && std::string(argv[3]) != "local-standard-basis" &&
-         !global_ideal_query(argv[3]) && !dimension_query(argv[3])))
+         !global_ideal_query(argv[3]) && !dimension_query(argv[3]) && !local_quotient(argv[3])))
         return 2;
     try {
         auto request = arguments(argc,argv);
@@ -569,6 +680,8 @@ int main(int argc, char** argv) {
         Json::Value result;
         try {
             result = calculate(request);
+        } catch (const HypersurfaceOutside& error) {
+            return cli_error(request, "invalid_request", error.what());
         } catch (const PointOutsideScheme& error) {
             if (request.json) {
                 Json::Value failure;
@@ -579,7 +692,7 @@ int main(int argc, char** argv) {
             } else std::cerr << error.what() << '\n';
             return 2;
         }
-        if (request.json) std::cout << json_text(result) << '\n';
+        if (request.json) write_record(std::cout, result, request.operation);
         else show(request,result["result"]);
         return 0;
     } catch (const std::exception&) {

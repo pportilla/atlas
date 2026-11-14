@@ -1,25 +1,21 @@
 // Primary decomposition shortcuts for monomial, principal, graph and comaximal ideals over QQ.
 #include "primary_decomposition.hpp"
+#include "local_monomial.hpp"
 #include "sparse_flint.hpp"
 #include <algorithm>
 #include <iterator>
 #include <map>
-#include <numeric>
 
 namespace atlas::primary {
 namespace {
 using local::Powers;
 using Monomials = std::vector<Powers>;
 
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
-}
-
 // Insert only minimal generators of a monomial ideal.
 void insert_generator(Monomials& generators, Powers row) {
-    for (const auto& g : generators) if (divides(g, row)) return;
+    for (const auto& g : generators) if (local::monomial_divides(g, row)) return;
     generators.erase(std::remove_if(generators.begin(), generators.end(),
-                                    [&](const auto& g) { return divides(row, g); }), generators.end());
+                                    [&](const auto& g) { return local::monomial_divides(row, g); }), generators.end());
     generators.push_back(std::move(row));
 }
 
@@ -52,8 +48,8 @@ void insert_box(Monomials& boxes, Powers corner) {
 // Descending order of leading monomials in the output ring.
 bool greater_monomial(const Powers& a, const Powers& b, bool lex) {
     if (lex) return a > b;
-    const auto da = std::accumulate(a.begin(), a.end(), mpz_class(0));
-    const auto db = std::accumulate(b.begin(), b.end(), mpz_class(0));
+    const auto da = local::total_degree(a);
+    const auto db = local::total_degree(b);
     if (da != db) return da > db;
     return std::lexicographical_compare(a.rbegin(), a.rend(), b.rbegin(), b.rend());
 }

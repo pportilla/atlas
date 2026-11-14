@@ -5,7 +5,7 @@ import unittest
 
 from engine.session_algebra import factor, gcd
 from engine.session_polynomial import coordinates
-from tests.test_cli_session import run_prompt, run_script
+from tests.cli_support import run_prompt, run_script
 
 
 class FactorSessionTests(unittest.TestCase):

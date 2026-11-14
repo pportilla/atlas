@@ -4,7 +4,8 @@ import os
 import subprocess
 
 from engine.app import MAX_REQUEST
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class ExhaustiveBrowserTests(AlgebraBrowserCase):

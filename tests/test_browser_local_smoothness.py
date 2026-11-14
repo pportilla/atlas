@@ -6,7 +6,8 @@ import shlex
 import subprocess
 
 from engine.app import MAX_REQUEST
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 from tests.large_coupled_ideal import COUPLED_SQUARES, EXPONENT, POINT, VARIABLES, coupled_squares
 
 

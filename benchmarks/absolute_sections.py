@@ -1,6 +1,7 @@
 """Check geometric section decompositions against Singular's absPrimdecGTZ over QQbar."""
 import argparse
 from dataclasses import dataclass
+from hashlib import sha256
 import json
 from pathlib import Path
 import platform
@@ -16,6 +17,8 @@ from engine import native_polynomial as np
 from engine.absolute_sections import ExtendSectionField, absolute_primes, extend_section_field
 from engine.affine_kernel import sparse_terms
 from engine.local_blowups import Chart
+from engine.native_library import _LIBRARY
+from engine.plane_backend import _WORKER
 from engine.polynomial import format_poly, parse_expression
 
 
@@ -74,7 +77,7 @@ def singular(code, seconds=120):
     return text
 
 
-def reference(e, trials):
+def reference(e, trials, *, include_first=False):
     names = list(e.axes)
     equations = list(e.equations)
     if e.marked:
@@ -92,8 +95,10 @@ def reference(e, trials):
     counts = [int(x.split()[1]) for x in out.splitlines() if x.startswith("COUNT ")]
     if len(counts) != trials + 1 or len(set(counts)) != 1 or counts[0] % (2 if e.marked else 1):
         raise AssertionError(out)
-    times = [int(x.split()[1])/1e6 for x in out.splitlines() if x.startswith("TIME ")][1:]
-    return counts[0] // (2 if e.marked else 1), times
+    times = [int(x.split()[1])/1e6 for x in out.splitlines() if x.startswith("TIME ")]
+    if len(times) != trials + 1:
+        raise AssertionError(out)
+    return counts[0] // (2 if e.marked else 1), times if include_first else times[1:]
 
 
 def verify(chart, primes, expected):
@@ -166,6 +171,8 @@ def main():
                     if s.startswith("model name")), cpu)
     result = {"cpu": cpu, "singular": subprocess.check_output(["Singular", "--version"],
               text=True).splitlines()[0], "trials": opt.trials,
+              "kernel_sha256": sha256(_LIBRARY.read_bytes()).hexdigest(),
+              "plane_worker_sha256": sha256(_WORKER.read_bytes()).hexdigest(),
               "conditions": "Warm Atlas worker and Singular interpreter, exact characteristic 0, one warm-up "
                  "discarded per system. Atlas elapsed wall seconds include field construction, extension and "
                  "every individual component ideal in one common marked field. Singular rtimer seconds for "

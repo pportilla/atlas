@@ -2,6 +2,8 @@
 #include <gmpxx.h>
 #include "groebner.hpp"
 #include "field_root_coordinates.hpp"
+#include "common_field.hpp"
+#include "rational_sparse_json.hpp"
 #include <flint/fmpq.h>
 #include <flint/fmpz_factor.h>
 #include <flint/fmpz_poly.h>
@@ -11,6 +13,7 @@
 #include <flint/ulong_extras.h>
 #include <sstream>
 #include <map>
+#include <set>
 
 namespace atlas {
 namespace {
@@ -766,21 +769,48 @@ std::string describe(std::istream& in) {
     }
     throw std::logic_error("No matching embedding of the minimal polynomial.");
 }
+void load_power_basis(Polynomial& p, const std::vector<mpq_class>& coeffs) {
+    Fraction coefficient;
+    for (size_t j=0; j<coeffs.size(); ++j) {
+        fmpq_set_mpq(coefficient.value, coeffs[j].get_mpq_t());
+        fmpq_poly_set_coeff_fmpq(p.p, j, coefficient.value);
+    }
+}
 }  // namespace
+
+bool certify_power_basis_roots(const std::vector<mpq_class>& minimal,
+        const std::vector<mpq_class>& equation, const std::vector<std::vector<mpq_class>>& roots) {
+    if (minimal.size() < 2 || minimal.back() == 0 || equation.size() < 2 ||
+        equation.back() == 0 || equation.size()-1 != roots.size()) return false;
+    Polynomial modulus;
+    load_power_basis(modulus, minimal);
+    std::set<std::vector<mpq_class>> distinct;
+    for (const auto& root : roots) {
+        // The zero element is encoded as an empty row. Requiring reduced,
+        // trimmed rows makes a direct equality check exact in the field.
+        if (root.size() >= minimal.size() || (!root.empty() && root.back() == 0) ||
+            !distinct.insert(root).second) return false;
+        Polynomial value, remainder;
+        load_power_basis(value, root);
+        Fraction c;
+        for (auto it=equation.rbegin(); it!=equation.rend(); ++it) {
+            fmpq_poly_mul(remainder.p, remainder.p, value.p);
+            fmpq_poly_rem(remainder.p, remainder.p, modulus.p);
+            fmpq_set_mpq(c.value, it->get_mpq_t());
+            fmpq_poly_add_fmpq(remainder.p, remainder.p, c.value);
+        }
+        if (!fmpq_poly_is_zero(remainder.p)) return false;
+    }
+    return true;
+}
+
 std::optional<std::vector<std::vector<mpq_class>>> roots_in_power_basis(
         const std::vector<mpq_class>& minimal, const std::vector<mpq_class>& equation) {
     if (minimal.size() < 2 || equation.size() < 2)
         throw std::invalid_argument("Expected nonconstant field and root polynomials.");
-    auto load = [](Polynomial& p, const std::vector<mpq_class>& coeffs) {
-        Fraction coefficient;
-        for (size_t j=0; j<coeffs.size(); ++j) {
-            fmpq_set_mpq(coefficient.value, coeffs[j].get_mpq_t());
-            fmpq_poly_set_coeff_fmpq(p.p, j, coefficient.value);
-        }
-    };
     Polynomial m, f;
-    load(m, minimal);
-    load(f, equation);
+    load_power_basis(m, minimal);
+    load_power_basis(f, equation);
     Roots embeddings(fmpq_poly_degree(m.p)), roots(fmpq_poly_degree(f.p));
     qqbar_roots_fmpq_poly(embeddings.r, m.p, 0);
     qqbar_roots_fmpq_poly(roots.r, f.p, 0);
@@ -802,6 +832,10 @@ std::optional<std::vector<std::vector<mpq_class>>> roots_in_power_basis(
 }
 
 }  // namespace atlas
+
+extern "C" const char* atlas_common_field(const char* input) noexcept {
+    return atlas::sparse_json::invoke(input, atlas::common_field);
+}
 
 extern "C" char* atlas_field_coefficient(const char* input, size_t length) noexcept {
     try {

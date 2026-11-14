@@ -60,8 +60,18 @@ class AlgebraSession {
           throw new Error("The vertex of “" + name + "” has all tangent coordinates zero. Clear the point or enter the vertex.");
         }
       }
-      if (key === "ideal" && saved.result.type === "basis" && (["normal-form", "membership"].includes(form.operation)
-          || (form.operation === "multiplicity" && saved.basisRef))) {
+      if (saved.result.type === "quotient-element") {
+        if (form.operation !== "quotient-ring" || saved.quotientOwner !== form.sources.ideal ||
+            !["polynomial", "other_polynomial"].includes(key)) {
+          throw new Error("Choose the quotient ring “" + saved.quotientOwner + "” to reuse “" + name + "”.");
+        }
+        operands[key] = saved.result.representative;
+      } else if (saved.result.type === "quotient-ring") {
+        if (form.operation !== "quotient-ring" || key !== "ideal") throw new Error("Select a quotient-ring action.");
+        if (saved.basisRef) operands.basis_ref = saved.basisRef;
+        else operands.ideal = saved.result.relations;
+      } else if (key === "ideal" && saved.result.type === "basis" && (["normal-form", "membership"].includes(form.operation)
+          || (["multiplicity", "quotient-ring"].includes(form.operation) && saved.basisRef))) {
         if (!saved.basisRef) throw new Error("Compute and save this basis again to obtain a reference from the server.");
         delete operands.ideal;
         operands.basis_ref = saved.basisRef;
@@ -107,7 +117,15 @@ class AlgebraSession {
         result: { ring: answer.result.ring, ...result }, owner: form.name, field, origin, space, ...context,
       });
     };
-    if (answer.result.type === "factorization") {
+    if (answer.result.type === "quotient-element") {
+      // Two independently declared rings can have identical relations.
+      const ringSource = this.objects.get(form.sources.ideal);
+      const quotientOwner = ringSource?.result.type === "quotient-ring" ? form.sources.ideal : form.name + ".parent";
+      this.objects.get(form.name).quotientOwner = quotientOwner;
+      if (quotientOwner === form.name + ".parent") {
+        saveField(".parent", { type: "quotient-ring", relations: answer.result.relations }, { basisRef: answer.basis_ref });
+      }
+    } else if (answer.result.type === "factorization") {
       answer.result.factors.forEach(({ polynomial }, index) => {
         saveField(".factors[" + index + "].polynomial", { type: "polynomial", polynomial });
       });
@@ -205,7 +223,23 @@ class AlgebraSession {
       const resultName = form.name ? names.get(form.name) : local("", "answer");
       if (form.name && resultName !== form.name) lines.push("# " + form.name + " is stored as " + resultName);
       let expression;
-      if (operation === "ideal") {
+      if (operation === "quotient-ring") {
+        const source = this.objects.get(sources.ideal);
+        const compute = "compute=" + quote(form.compute);
+        const declared = source?.result.type === "quotient-ring";
+        const quotient = declared ? names.get(sources.ideal) : "quotient_ring(" + ideal("ideal") + ", " + compute + ")";
+        if (operands.action === "declare" && !declared) {
+          expression = quotient;
+        } else {
+          const args = [quote(operands.action)];
+          for (const key of ["polynomial", "other_polynomial"]) {
+            if (key in operands || sources[key]) args.push(poly(key));
+          }
+          if ("exponent" in operands) args.push("exponent=" + quote(operands.exponent));
+          args.push(compute);
+          expression = quotient + ".apply(" + args.join(", ") + ")";
+        }
+      } else if (operation === "ideal") {
         expression = ideal("ideal");
       } else {
         let args;
@@ -266,7 +300,7 @@ AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate radical ideal_power symbolic_power primary_decomposition normalization localize localization dimension multiplicity gcd factor resultant algebra_request help quit exit " +
+  "quotient_ring quotient saturation saturate radical ideal_power symbolic_power primary_decomposition normalization localize localization dimension multiplicity gcd factor resultant algebra_request help quit exit " +
   "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form " +
   "hilbert_series hilbert_samuel_function hilbert_samuel_multiplicity tangent_cone tangent_cone_hilbert_series " +
   "zariski_tangent_space embedding_dimension local_dimension local_smoothness"

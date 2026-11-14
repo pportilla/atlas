@@ -19,6 +19,7 @@ OPERATION_DESCRIPTIONS = {
     "membership": "test whether a polynomial belongs to an ideal",
     "eliminate": "eliminate variables from an ideal",
     "radical": "compute the radical of a polynomial ideal over QQ",
+    "quotient-ring": "declare a quotient ring over QQ and compute with its residue classes",
     "ideal-power": "compute an ordinary power of a polynomial ideal over QQ",
     "symbolic-power": "compute a symbolic power of a prime or radical ideal over QQ",
     "localization": "localize an ideal at a prime and optionally test a fraction",
@@ -70,7 +71,7 @@ def _comma_list(value):
 
 
 def register_parser(subparsers):
-    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS
+    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS, QUOTIENT_ACTION_OPERANDS
 
     command = subparsers.add_parser("algebra", help="compute with polynomials and ideals over QQ")
     operations = command.add_subparsers(dest="operation", required=True, parser_class=_OperandParser)
@@ -88,6 +89,12 @@ def register_parser(subparsers):
         if "ideal" in keys:
             parser.add_argument("--gen", dest="ideal", action="append", default=[], metavar="POLY",
                                 help="ideal generator (repeatable; omit for the zero ideal)")
+        if name == "quotient-ring":
+            parser.add_argument("--action", metavar="ACTION", default="declare",
+                                help="quotient-ring action (default: declare): " + ", ".join(QUOTIENT_ACTION_OPERANDS))
+            parser.add_argument("--poly", dest="polynomial", metavar="POLY", help="first residue class representative")
+            parser.add_argument("--other-poly", dest="other_polynomial", metavar="POLY", help="second residue class representative")
+            parser.add_argument("--exponent", metavar="N", help="signed integer for the power action")
         if "exponent" in keys:
             parser.add_argument("--exponent", required=True, metavar="N", help="nonnegative integer exponent")
         if "polynomial" in keys:
@@ -174,6 +181,12 @@ def _show(record):
             print("H(t) =", format_hilbert_series(result["numerator"], result["denominator_power"]))
         print("Dimension:", integer_text(result["dimension"]))
         print("Multiplicity:", integer_text(result["multiplicity"]))
+    elif record["operation"] == "quotient-ring":
+        print("Relations: (" + (", ".join(result["relations"]) or "0") + ")")
+        if "representative" in result:
+            print("Representative:", result["representative"])
+        if "value" in result:
+            print("Result:", str(result["value"]).lower())
     elif record["operation"] in ("zariski-tangent-space", "embedding-dimension"):
         space = result["type"] == "zariski-tangent-space"
         if space:
@@ -262,7 +275,10 @@ def run(args):
         "ring": ring,
         "operands": {key: getattr(args, key) for key in OPERATION_OPERANDS[args.operation]},
     }
-    for key in ("point", "degrees", "numerator", "denominator"):
+    optional = ("point", "degrees", "numerator", "denominator")
+    if args.operation == "quotient-ring":
+        optional = ("action", "polynomial", "other_polynomial", "exponent")
+    for key in optional:
         value = getattr(args, key, None)
         if value is not None:
             request["operands"][key] = value

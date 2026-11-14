@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 from engine.app import AtlasServer
 from engine.polynomial import integer_from_decimal
-from tests.test_cli_session import ROOT, run_prompt, run_script
-from tests.test_http import QuietHandler
+from tests.cli_support import ROOT, run_prompt, run_script
+from tests.http_support import QuietHandler
 
 
 RING = {"field": "QQ", "variables": ["x", "y"], "order": "lex"}

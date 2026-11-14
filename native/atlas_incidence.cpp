@@ -370,6 +370,32 @@ Value product_torus(const Value& request) {
     return result;
 }
 
+// The standard opens have already been reconstructed as the saturated graph
+// of this ideal. Blowing up a coordinate subspace of codimension k has one
+// exceptional prime: the P^(k-1)-bundle over that subspace. Match its ideal
+// and label on every open before using the geometric incidence of this bundle.
+Value coordinate_exceptional(const Value& request) {
+    const Names base = names(request["variables"]), centre = names(request["centre"]);
+    const std::set<std::string> variables(base.begin(), base.end()), axes(centre.begin(), centre.end());
+    const auto& charts = request["charts"];
+    if (axes.size() < 2 || axes.size() != centre.size() || charts.size() != axes.size() ||
+        !std::includes(variables.begin(), variables.end(), axes.begin(), axes.end())) return {};
+    std::string label;
+    for (const auto& chart : charts) {
+        const auto& boundary = chart["exceptional"];
+        if (boundary.size() != 1) return {};
+        const auto& component = boundary[0];
+        const Names equations = names(component["ideal"]);
+        if (std::set<std::string>(equations.begin(), equations.end()) != axes) return {};
+        const auto id = component["id"].asString();
+        if (id.size() < 2 || id.front() != 'E' ||
+            !std::all_of(id.begin()+1, id.end(), [](char c) { return c >= '0' && c <= '9'; }) ||
+            (!label.empty() && id != label)) return {};
+        label = id;
+    }
+    return label;
+}
+
 Value execute(const Value& r) {
     const auto op=r["operation"].asString();
     if (op=="dimension") return r["ambient"].asInt() - r["removed"].asInt();
@@ -381,6 +407,7 @@ Value execute(const Value& r) {
     if (op=="binomial_layout") return binomial_layout(r);
     if (op=="product_axes") return product_axes(r["charts"],r["dimension"].asInt());
     if (op=="product_torus") return product_torus(r);
+    if (op=="coordinate_exceptional") return coordinate_exceptional(r);
     if (op=="cells") return Intersections(r).cells();
     if (op=="boundary") return boundary(r,Intersections(r));
     if (op=="aliases") return aliases(r["old"],r["found"]);
@@ -388,3 +415,5 @@ Value execute(const Value& r) {
 }
 }
 extern "C" const char* atlas_incidence(const char* input) { return atlas::sparse_json::invoke(input,execute); }
+
+extern "C" int atlas_coordinate_exceptional_abi() noexcept { return 1; }

@@ -9,6 +9,32 @@ from engine.local_blowups import Chart
 
 
 class FiniteCentre(unittest.TestCase):
+    def test_section_root_images_are_certified_in_the_current_field(self):
+        from engine.absolute_sections import absolute_primes, extend_section_field
+        from engine.chart_expressions import runtime_expressions
+        from engine.marked_field import flint_literal
+
+        x,y = runtime_expressions().symbols("x y")
+        large = 2**139+7
+        section = (2*x**2+3, y-large*x)
+        chart = Chart((x,y), (), (), (), (), (), ())
+        marks = tuple(flint_literal((2,0,3),i) for i in (1,2))
+        marked, = extend_section_field([chart], marks)
+        (p,rows), = marked.section_root_images
+        self.assertEqual(p, ("3","0","2"))
+        self.assertEqual(len(set(rows)), 2)
+        # Put x last so its eliminant tests the transported nonmonic
+        # equation. The remaining coordinate contains a wide coefficient.
+        t = marked.coefficient_field[0]
+        marked = replace(marked, variables=(y,x,t))
+        expected = absolute_primes(replace(marked, section_root_images=()), section, 0)
+        self.assertEqual(len(set(expected)), 2)
+        for candidate in (rows, rows[:1], (rows[0],rows[0]), ((),rows[1]),
+                          (rows[0]+("0",),rows[1])):
+            with self.subTest(candidate=candidate):
+                tested = replace(marked, section_root_images=((p,candidate),))
+                self.assertCountEqual(absolute_primes(tested, section, 0), expected)
+
     def test_absolute_points_in_lex_shape_need_only_the_separating_coordinate(self):
         from engine.absolute_sections import ExtendSectionField, absolute_primes, extend_section_field
         from engine.chart_expressions import runtime_expressions
@@ -29,6 +55,21 @@ class FiniteCentre(unittest.TestCase):
         rational = (x-large*z, y-z, (z+1)**3*(z-2)**2)
         self.assertCountEqual(absolute_primes(chart, rational, 0),
                               [(x+large, y+1, z+1), (x-2*large, y-2, z-2)])
+
+        # y separates the four points; the final coordinate is constant.
+        with self.assertRaises(ExtendSectionField) as exc:
+            absolute_primes(chart, (x-y**2, y**4+1, z-1), 0)
+        self.assertCountEqual(exc.exception.args[0],
+                              [flint_literal((1,0,0,0,1),i) for i in range(1,5)])
+
+        # Neither y nor x separates this product, and a graph with no
+        # eliminant is a curve. Each must pass through its proper fallback.
+        grid = (x**2-1, y**2-1, z-x*y)
+        self.assertCountEqual(absolute_primes(chart, grid, 0),
+                              [(x-a,y-b,z-a*b) for a in (-1,1) for b in (-1,1)])
+        curve = (x-z**2, y-z)
+        self.assertIsNone(absolute_primes(chart, curve, 0))
+        self.assertEqual(absolute_primes(chart, curve, 1), [curve])
 
     def test_ownership_is_checked_independently_on_rational_orbits(self):
         t, v, w = sp.symbols("t v w")

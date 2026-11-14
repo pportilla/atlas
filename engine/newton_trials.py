@@ -97,3 +97,20 @@ def bounded_first_trial(poly, names, *, verified=None, integrals=False):
             or any(value > 3 for ray in fan["rays"] for value in ray)):
         return None
     return _try(poly, names, first, fan=fan, bounded=True, verified=verified, integrals=integrals)
+
+
+def bounded_coordinate_graph(poly, names):
+    """Test the exhaustive solver’s ordered graph prefix after a certified Newton obstruction."""
+    from . import native_library
+    if (native_library._MODE != "native"
+            or not all(hasattr(native_library._library(), marker) for marker in
+                       ("atlas_transverse_pencil_abi", "atlas_coordinate_exceptional_abi"))
+            or any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64 for c in poly.values())):
+        return None
+    from .point_geometry import encode_terms
+    from .kernel_json import kernel_json
+    centre = kernel_json("atlas_resolution_candidate", "transverse_pencil", width=len(names), terms=encode_terms(poly))
+    if centre is None:
+        return None
+    from .general_resolution import search
+    return search(poly, names, "embedded", exhaustive=True, transverse_centre=centre)

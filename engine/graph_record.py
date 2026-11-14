@@ -178,6 +178,53 @@ def graph_record_charts(record, polynomial):
     return charts
 
 
+def _coordinate_outputs(record, charts, *, complex, intrinsic, integrals):
+    from .chart_kernel import crossings_rows, strata_rows, strata_totals
+    from .incidence import incidence, stratum_dimension
+    from .strata import records
+    if (intrinsic or native_library._MODE != "native" or record.get("coefficient_field")
+            or record.get("input_divisor")
+            or not hasattr(native_library._library(), "atlas_coordinate_exceptional_abi")):
+        return None
+    # graph_record_charts has verified every saturated graph open and its
+    # pivot. The native certificate checks the actual exceptional ideals.
+    pieces = [{"exceptional": [c for c in chart["components"] if c["id"] != "strict"]} for chart in charts]
+    label = incidence("coordinate_exceptional", variables=record["variables"],
+                      centre=record["steps"][0]["generators"], charts=pieces)
+    if label is None:
+        return None
+    data, contributions = {}, []
+    for chart in charts:
+        coords = tuple(chart["coordinates"])
+        ambient = [_row(eq, coords) for eq in chart["ambient_ideal"]]
+        fibre = [_row(eq, coords) for eq in (*chart["region"], *chart["fibre"])]
+        components = chart["components"]
+        ideals = [[_row(eq, coords) for eq in c["ideal"]] for c in components]
+        if crossings_rows(len(coords), len(record["variables"]), ambient, ideals, fibre, ()) != []:
+            return None
+        if integrals:
+            for c in components:
+                numbers = (c["multiplicity"], c["nu"])
+                if data.setdefault(c["id"], numbers) != numbers:
+                    return None
+            strata = strata_rows(len(coords), [*ambient, *fibre], ideals, ())
+            if strata is None:
+                return None
+            for indices, chi in strata.items():
+                labels = frozenset(components[i]["id"] for i in indices)
+                contributions.append((labels, 1, chi))
+    answer = {"reason": None, "cells": None}
+    if complex:
+        vertex = dict(id=label, dimension=stratum_dimension(len(record["variables"]), 1))
+        boundary = dict(status="complete", vertices=[vertex], cells=[],
+                        convention="Ambient exceptional divisor in the germ over the origin over Qbar.")
+        answer.update(dual_complex=boundary, cells=boundary["cells"])
+    if integrals:
+        values, strata = records({"data": data, "strata": strata_totals(contributions)})
+        answer.update(numerical_data=values, strata=strata)
+    return answer
+
+
 def graph_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
     if native_library._MODE == "sympy" or record.get("engine") != "verified-ideal-blowup":
         return None
@@ -218,6 +265,12 @@ def graph_outputs(record, polynomial, *, complex=True, intrinsic=False, integral
                 if (any(type(given[k]) != int or given[k] != v[k] for k in ("multiplicity","nu"))
                         or basis([*ambient,*given["ideal"]]) != basis([*ambient,*v["ideal"]])):
                     raise InputError("The saved graph changed a divisor ideal or its orders.")
+    try:
+        coordinate = _coordinate_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
+    except native_library.Unavailable:
+        coordinate = None
+    if coordinate is not None:
+        return (saved or expected), coordinate
     from .general_atlas import native_general_outputs
     output = native_general_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
     if output is None:

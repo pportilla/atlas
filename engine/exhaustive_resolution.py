@@ -13,10 +13,31 @@ from .polynomial import LimitError, NonReducedError, integer_from_decimal, ratio
 
 
 NEWTON_GRACE_SECONDS = 2
+# A short wall-clock prefix for the canonical rule only when the native
+# proof excludes Newton and the early identity/origin/coordinate graphs.
+ORIGIN_GRACE_SECONDS = 0.25
+
+
+def _canonical_head_start(poly, variables, mode):
+    from .native_library import Unavailable, _MODE, _kernel
+    if (mode != "embedded" or _MODE != "native" or len(variables) != 3 or not 6 <= len(poly) <= 128
+            or not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi")):
+        return False
+    # Bound decimal transport even for unbounded exhaustive caller inputs.
+    if any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64 or
+           any(k > 16 for k in e) for e, c in poly.items()):
+        return False
+    from .kernel_json import kernel_json
+    from .point_geometry import encode_terms
+    try:
+        return kernel_json("atlas_resolution_candidate", "repeated_tangent_obstruction",
+                           width=len(variables), terms=encode_terms(poly))
+    except (Unavailable, OSError):
+        return False
 
 
 def search(poly, variables, mode, *, compute=None):
-    """Give Newton a short head start, then accept the first verified resolution.
+    """Give the first eligible method a short head start, then race the remaining workers.
 
     Each method has its own process group. Its inherited pipe closes if
     the outer job is killed, so cancellation also reaches native descendants.
@@ -63,15 +84,19 @@ def search(poly, variables, mode, *, compute=None):
         readers.append(reader)
 
     try:
-        start("newton")
+        if _canonical_head_start(poly, variables, mode):
+            first, others, grace = "origin", ("certificates",), ORIGIN_GRACE_SECONDS
+        else:
+            first, others, grace = "newton", ("origin", "certificates"), NEWTON_GRACE_SECONDS
+        start(first)
         head_start = bool(children)
         if not head_start:
-            start("origin")
-            start("certificates")
+            for method in others:
+                start(method)
         received = 0
         while received < len(children):
             try:
-                method, reply = replies.get(timeout=NEWTON_GRACE_SECONDS if head_start else None)
+                method, reply = replies.get(timeout=grace if head_start else None)
             except queue.Empty:
                 pass
             else:
@@ -86,8 +111,8 @@ def search(poly, variables, mode, *, compute=None):
                     errors.append(f"{method}: {reply['error']}")
             if head_start:
                 head_start = False
-                start("origin")
-                start("certificates")
+                for method in others:
+                    start(method)
         if errors:
             raise RuntimeError("Exhaustive resolution could not finish. " + " / ".join(errors))
         return None

@@ -1,5 +1,6 @@
 // Sparse division in the original affine coordinates at a rational point.
 #include "local_point_normal_form.hpp"
+#include "local_monomial.hpp"
 #include "local_point_basis.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
@@ -7,22 +8,6 @@
 
 namespace atlas::local {
 namespace {
-mpz_class degree(const Powers& e) {
-    mpz_class d = 0;
-    for (const auto& k : e) d += k;
-    return d;
-}
-
-mpz_class max_degree(const Polynomial& f) {
-    mpz_class d = 0;
-    for (const auto& term : f) d = std::max(d, degree(term.first));
-    return d;
-}
-
-bool divides(const Powers& head, const Powers& e) {
-    return std::equal(head.begin(), head.end(), e.begin(), std::less_equal<>());
-}
-
 void add_multiple(Polynomial& target, const Polynomial& source, const mpq_class& scale) {
     for (const auto& [e, c] : source) {
         auto it = target.try_emplace(e, 0).first;
@@ -53,8 +38,8 @@ NormalForm mora(const Basis& basis, Polynomial pending, const PointRow& point, b
     std::vector<Divisor> reducers;
     for (const auto& row : basis) if (!row.empty()) {
         auto [h, c] = leading_term_at_point(row, point, lex);
-        if (degree(h) == 0) return {unit, {}, false};
-        reducers.push_back({row, h, c, max_degree(row) - degree(h), {}});
+        if (total_degree(h) == 0) return {unit, {}, false};
+        reducers.push_back({row, h, c, max_total_degree(row) - total_degree(h), {}});
     }
     const auto back = inverse(point);
     std::map<Powers, Polynomial> shifts;
@@ -62,17 +47,17 @@ NormalForm mora(const Basis& basis, Polynomial pending, const PointRow& point, b
         auto [h, c] = leading_term_at_point(pending, point, lex);
         size_t choice = reducers.size();
         for (size_t j = 0; j < reducers.size(); ++j)
-            if (divides(reducers[j].head, h) &&
+            if (monomial_divides(reducers[j].head, h) &&
                 (choice == reducers.size() || reducers[j].ecart < reducers[choice].ecart)) choice = j;
         if (choice == reducers.size()) break;
-        const mpz_class ecart = max_degree(pending)-degree(h);
+        const mpz_class ecart = max_total_degree(pending)-total_degree(h);
         if (reducers[choice].ecart > ecart)
             reducers.push_back({pending, h, c, ecart, track_unit ? unit : Polynomial{}});
         const auto& divisor = reducers[choice];
         Powers shift = h;
         for (size_t i = 0; i < width; ++i) shift[i] -= divisor.head[i];
         const mpq_class scale = -c/divisor.coefficient;
-        if (degree(shift) == 0) {
+        if (total_degree(shift) == 0) {
             add_multiple(pending, divisor.row, scale);
             if (track_unit) add_multiple(unit, divisor.unit, scale);
         } else {
@@ -95,7 +80,7 @@ NormalForm mora(const Basis& basis, Polynomial pending, const PointRow& point, b
 // test in the original coordinates also decides divisibility in the shift.
 bool may_reduce(const Polynomial& f, const std::vector<Powers>& heads) {
     for (const auto& [e, c] : f)
-        for (const auto& h : heads) if (divides(h, e)) return true;
+        for (const auto& h : heads) if (monomial_divides(h, e)) return true;
     return false;
 }
 
@@ -196,7 +181,7 @@ Polynomial project_standard(Polynomial f, const std::vector<Powers>& heads, cons
 // substitution for x_i can bypass an arbitrarily long series of Mora steps.
 std::optional<NormalForm> linear_fraction(const Polynomial& row, const Powers& head,
         const Polynomial& query, const PointRow& point, bool lex) {
-    if (degree(head) != 1) return std::nullopt;
+    if (total_degree(head) != 1) return std::nullopt;
     const size_t axis = std::find(head.begin(), head.end(),1)-head.begin();
     Polynomial a, b;
     for (const auto& [e, c] : row) {
@@ -241,7 +226,7 @@ NormalForm normal_form_at_point(const Basis& generators, const Polynomial& query
     if (query.empty() || generators.empty()) return {one, query, false};
     // If every generator belongs to m^(d+1), so does the entire local
     // ideal. A degree-d query has no divisible centered term.
-    const mpz_class query_degree = max_degree(query);
+    const mpz_class query_degree = max_total_degree(query);
     if (query_degree <= 4 && std::all_of(generators.begin(), generators.end(),[&](const auto& g) {
         return g.empty() || order_at_point(g, point) > query_degree;
     })) return {one, query, false};
@@ -249,7 +234,7 @@ NormalForm normal_form_at_point(const Basis& generators, const Polynomial& query
     std::vector<Powers> heads;
     for (const auto& row : basis) if (!row.empty()) {
         auto h = leading_term_at_point(row, point, lex).first;
-        if (degree(h) == 0) return {one, {}, false};
+        if (total_degree(h) == 0) return {one, {}, false};
         heads.push_back(std::move(h));
     }
     if (!may_reduce(query, heads)) return {one, query, false};
@@ -259,10 +244,10 @@ NormalForm normal_form_at_point(const Basis& generators, const Polynomial& query
     for (size_t i = 0, index = 0; i < basis.size(); ++i) {
         if (basis[i].empty()) continue;
         const auto& head = heads[index++];
-        if (degree(head) != 1) continue;
+        if (total_degree(head) != 1) continue;
         const size_t axis = std::find(head.begin(), head.end(), 1) - head.begin();
         Polynomial image;
-        if (max_degree(basis[i]) == 1) {
+        if (max_total_degree(basis[i]) == 1) {
             const auto coefficient = basis[i].at(head);
             for (const auto& [e, c] : basis[i]) if (!e[axis]) {
                 auto m = e;
@@ -285,7 +270,7 @@ NormalForm normal_form_at_point(const Basis& generators, const Polynomial& query
         std::map<mpz_class, Polynomial> powers;
         auto substitute = [&](const Polynomial& f) {
             if (image.empty()) return specialize_coordinate(f, axis, 0);
-            if (image.size() == 1 && degree(image.begin()->first) == 0)
+            if (image.size() == 1 && total_degree(image.begin()->first) == 0)
                 return specialize_coordinate(f, axis, image.begin()->second);
             return primary::substitute(f, axis, image, point.size() - 1, powers);
         };
@@ -315,7 +300,7 @@ NormalForm normal_form_at_point(const Basis& generators, const Polynomial& query
     size_t j = 0;
     for (const auto& row : basis) if (!row.empty()) {
         if (monomials) monomials = monomial_associate(row, heads[j], point);
-        homogeneous &= max_degree(row)==degree(heads[j]);
+        homogeneous &= max_total_degree(row)==total_degree(heads[j]);
         ++j;
     }
     const auto cutoff = finite_cutoff(heads, point.size());

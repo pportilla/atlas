@@ -1,4 +1,5 @@
 #include "local_division.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "local_point_basis.hpp"
 
@@ -13,24 +14,6 @@ namespace {
 
 using Exponent = mpz_class;
 
-Exponent degree(const Powers& powers) {
-    Exponent sum = 0;
-    for (const auto& e : powers) sum += e;
-    return sum;
-}
-
-Exponent max_degree(const Polynomial& p) {
-    Exponent highest = 0;
-    for (const auto& term : p) highest = std::max(highest, degree(term.first));
-    return highest;
-}
-
-bool divides(const Powers& divisor, const Powers& target) {
-    for (std::size_t i = 0; i < target.size(); ++i)
-        if (divisor[i] > target[i]) return false;
-    return true;
-}
-
 void accumulate(Polynomial& p, Powers powers, const mpq_class& coefficient) {
     if (coefficient == 0) return;
     auto [it, added] = p.try_emplace(std::move(powers), coefficient);
@@ -42,8 +25,7 @@ void accumulate(Polynomial& p, Powers powers, const mpq_class& coefficient) {
 
 }
 std::optional<mpz_class> finite_cutoff(const std::vector<Powers>& heads, std::size_t width) {
-    // If x_i^b_i belongs to the initial ideal for each i, all graded
-    // pieces of degree >= N vanish. Nakayama gives m^N=0 locally.
+    // The pure powers bound the standard monomials inside a finite box.
     Powers bounds(width, 0);
     for (const auto& h : heads) {
         std::size_t axis = width;
@@ -56,8 +38,56 @@ std::optional<mpz_class> finite_cutoff(const std::vector<Powers>& heads, std::si
     }
     if (std::find(bounds.begin(), bounds.end(), 0UL) != bounds.end()) return std::nullopt;
     Exponent cutoff = 1;
-    for (auto b : bounds) cutoff += b - 1;
-    return cutoff;
+    for (const auto& b : bounds) cutoff += b - 1;
+    if (heads.size() <= width || !width) return cutoff;
+
+    // Refine the box using the mixed heads. Cap the number of coordinate
+    // comparisons/copies: a large staircase can always use the pure-power bound.
+    std::size_t budget = 4096 / width;
+    if (heads.size() > budget) return cutoff;
+    auto inside = [](const Powers& h, const Powers& upper) {
+        return std::equal(h.begin(), h.end(), upper.begin(), std::less<>{});
+    };
+    std::vector<const Powers*> mixed;
+    for (const auto& h : heads)
+        if (inside(h, bounds)) mixed.push_back(&h);
+    if (mixed.empty()) return cutoff;
+
+    struct Box { Powers upper; Exponent cutoff; std::size_t next; };
+    std::vector<Box> pending;
+    pending.push_back({std::move(bounds), cutoff, 0});
+    Exponent best = 0;
+    while (!pending.empty()) {
+        Box box = std::move(pending.back());
+        pending.pop_back();
+        if (box.cutoff <= best) continue;
+        const auto checks = mixed.size() - box.next;
+        if (checks > budget) return cutoff;
+        budget -= checks;
+        auto hit = std::find_if(mixed.begin() + box.next, mixed.end(),
+                                [&](const Powers* h) { return inside(*h, box.upper); });
+        if (hit == mixed.end()) {
+            // The top corner survives. Its degree plus one is box.cutoff.
+            best = std::move(box.cutoff);
+            continue;
+        }
+        // A surviving monomial must lie below this head on at least one
+        // axis. The union of those smaller boxes covers all survivors.
+        const auto& head = **hit;
+        const auto next = static_cast<std::size_t>(hit - mixed.begin()) + 1;
+        for (std::size_t i = 0; i < width; ++i) {
+            if (!head[i]) continue;
+            Exponent smaller = box.cutoff - box.upper[i] + head[i];
+            if (smaller <= best) continue;
+            if (!budget) return cutoff;
+            --budget;
+            pending.push_back({box.upper, std::move(smaller), next});
+            pending.back().upper[i] = head[i];
+        }
+    }
+    // The associated graded quotient vanishes from this degree on, hence
+    // the corresponding power of the local maximal ideal vanishes by Nakayama.
+    return best;
 }
 
 namespace {
@@ -75,7 +105,7 @@ void subtract_multiple(Polynomial& p, const Polynomial& row, const Powers& shift
         Powers shifted = m;
         for (std::size_t i = 0; i < shifted.size(); ++i)
             shifted[i] += shift[i];
-        if (!cutoff || degree(shifted) < *cutoff) accumulate(p, std::move(shifted), -factor * c);
+        if (!cutoff || total_degree(shifted) < *cutoff) accumulate(p, std::move(shifted), -factor * c);
     }
 }
 
@@ -116,7 +146,7 @@ void reduce_homogeneous_binomial(Polynomial& pending, const Powers& m, const Red
     // In (x-2*y, y), the terminal monomial of x^N is already zero;
     // the intermediate coefficient 2^N need never be materialized.
     if (std::any_of(reducers.begin(), reducers.end(), [&](const Reducer& other) {
-            return other.row.size() == 1 && divides(other.head, end);
+            return other.row.size() == 1 && monomial_divides(other.head, end);
         })) return;
     const mpq_class ratio = -tail->second / r.row.at(r.head);
     mpq_class coefficient = source.mapped() * rational_power(ratio, count);
@@ -265,17 +295,17 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
         auto head = local_head(g, lex);
         heads.push_back(head);
         bool associate = std::all_of(g.begin(), g.end(), [&](const auto& term) {
-            return divides(head, term.first);
+            return monomial_divides(head, term.first);
         });
         if (associate) reducers.push_back({{{head, 1}}, head, 0, {}});
-        else reducers.push_back({g, head, max_degree(g) - degree(head), {}});
+        else reducers.push_back({g, head, max_total_degree(g) - total_degree(head), {}});
     }
     auto reducible = [&](const Powers& m) {
-        return std::any_of(heads.begin(), heads.end(), [&](const Powers& h) { return divides(h, m); });
+        return std::any_of(heads.begin(), heads.end(), [&](const Powers& h) { return monomial_divides(h, m); });
     };
     if (std::all_of(reducers.begin(), reducers.end(), [](const Reducer& r) { return r.row.size() == 1; })) {
         for (const auto& [m, c] : centered)
-            if ((!known_cutoff || degree(m) < *known_cutoff) && !reducible(m)) result.remainder.emplace(m, c);
+            if ((!known_cutoff || total_degree(m) < *known_cutoff) && !reducible(m)) result.remainder.emplace(m, c);
         return result;
     }
     const bool homogeneous = std::all_of(reducers.begin(), reducers.end(),
@@ -289,7 +319,7 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
     const bool full = homogeneous || cutoff.has_value();
     Polynomial pending;
     for (const auto& [m, c] : centered) {
-        if (cutoff && degree(m) >= *cutoff) continue;
+        if (cutoff && total_degree(m) >= *cutoff) continue;
         if (full && !reducible(m)) result.remainder.emplace(m, c);
         else pending.emplace(m, c);
     }
@@ -297,7 +327,7 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
         Powers head = local_head(pending, lex);
         std::size_t choice = reducers.size();
         for (std::size_t i = 0; i < reducers.size(); ++i) {
-            if (divides(reducers[i].head, head) &&
+            if (monomial_divides(reducers[i].head, head) &&
                     (choice == reducers.size() || reducers[i].ecart < reducers[choice].ecart)) choice = i;
         }
         if (choice == reducers.size()) {
@@ -316,7 +346,7 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
             continue;
         }
         if (!full && reducers[choice].ecart > 0) {
-            Exponent ecart = max_degree(pending) - degree(head);
+            Exponent ecart = max_total_degree(pending) - total_degree(head);
             if (reducers[choice].ecart > ecart)
                 reducers.push_back({pending, head, ecart, result.unit});
         }
@@ -340,7 +370,7 @@ Polynomial point_jet_below(const mpz_class& cutoff, const Polynomial& original, 
     for (const auto& [m, c] : original) {
         Powers base = m;
         for (std::size_t i = 0; i < m.size(); ++i) if (point[i] != 0) base[i] = 0;
-        Exponent fixed = degree(base);
+        Exponent fixed = total_degree(base);
         if (fixed >= cutoff) continue;
         std::vector<Term> terms{{std::move(base), center_coefficient(c, m, point), cutoff - 1 - fixed}};
         for (std::size_t i = 0; i < m.size(); ++i) {
@@ -401,7 +431,7 @@ std::optional<Polynomial> finite_query_jet(const Basis& basis, const Polynomial&
     for (const auto& g : basis) {
         if (g.empty()) continue;
         auto head = local_head(g, lex);
-        if (degree(head) == 0) return Polynomial{};
+        if (total_degree(head) == 0) return Polynomial{};
         heads.push_back(std::move(head));
     }
     auto cutoff = finite_cutoff(heads, point.size());

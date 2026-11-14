@@ -10,6 +10,7 @@ from .session_algebra import algebra_bindings
 from .session_expressions import Evaluator, SessionError
 from .session_monodromy import check_resolution, unavailable_check
 from .session_polynomial import QQ, Polynomial, coordinates
+from .session_quotient import QuotientElement, QuotientRing, quotient_ring
 from .session_values import Resolution
 
 
@@ -50,6 +51,10 @@ HELP = """Define coordinates and keep the results of calculations:
 
   I = ideal(x^2*(x-1), y)
   J = radical(I)                         # the ideal of the two reduced points
+  A = quotient_ring(ideal(x*y - 1))
+  u, v = A.gens                         # residue classes of x and y
+  u.inverse() == v                      # True in A
+  (u^3 / u).representative              # x^2 in the ambient coordinates
   K = ideal_power(I, 2)                  # ordinary square
   S = symbolic_power(J, 2)               # symbolic square of the radical ideal
   D = primary_decomposition(I)           # each component has a primary ideal and its prime
@@ -121,6 +126,8 @@ Run the same expressions in a file with ./atlas run FILE.atlas."""
 
 
 def _json_value(value):
+    if isinstance(value, (QuotientElement, QuotientRing)):
+        return value.result
     if isinstance(value, Polynomial):
         return str(value)
     if isinstance(value, Fraction):
@@ -195,7 +202,7 @@ def new_session(calculate):
     return Evaluator({"QQ": QQ, "coordinates": coordinates, "resolve": resolve,
                       "dual_complex": dual_complex,
                       "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
-                      **algebra_bindings()}, reserved=("help", "quit", "exit"))
+                      "quotient_ring": quotient_ring, **algebra_bindings()}, reserved=("help", "quit", "exit"))
 
 
 def run_script(filename, calculate):

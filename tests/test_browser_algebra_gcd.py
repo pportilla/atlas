@@ -3,7 +3,8 @@
 import json
 import subprocess
 
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 LEFT = "(x+y)*(x+1)"

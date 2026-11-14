@@ -17,27 +17,17 @@ gpu: all
 	$(MAKE) -C native gpu
 	$(MAKE) -C native -f groebner.mk gpu
 test-gpu: gpu
-	python3 native/test_opencl.py
-	python3 native/test_chart_batch.py
-	python3 -m unittest discover -s tests -p 'test_gpu_trace_rows.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_normal_form.py'
-	python3 -m unittest discover -s tests -p 'test_replay_scope.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_resolution.py'
+	python3 -m unittest tests.test_native_opencl tests.test_native_chart_batch \
+		tests.test_gpu_trace_rows tests.test_gpu_normal_form tests.test_replay_scope tests.test_gpu_resolution
 test-triton: all
 	python3 -c 'import sys; from engine.gpu_replay import triton_available; sys.exit(0 if triton_available() else "No usable physical Triton device at the selected index")'
-	python3 native/test_chart_batch.py
-	python3 -m unittest discover -s tests -p 'test_gpu_trace_rows.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_normal_form.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_rank.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_replay.py'
-	python3 -m unittest discover -s tests -p 'test_gpu_resolution.py'
+	python3 -m unittest tests.test_native_chart_batch tests.test_gpu_trace_rows tests.test_gpu_normal_form \
+		tests.test_gpu_rank tests.test_gpu_replay tests.test_gpu_resolution
 check-native-boundary:
 	python3 -m unittest tests.test_native_math_boundary.NativeMathBoundaryTests
 test: all
 	$(MAKE) -C native -f groebner.mk test-verify
 	python3 -m unittest discover -s tests -v
-	python3 native/test_ordinary.py
-	python3 native/test_chain.py
 bench: all
 	python3 benchmarks/resolve.py
 clean:

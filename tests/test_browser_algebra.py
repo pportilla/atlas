@@ -11,7 +11,8 @@ import tempfile
 from unittest.mock import patch
 
 from engine.app import MAX_SECONDS
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class AlgebraBrowserTests(AlgebraBrowserCase):

@@ -7,6 +7,7 @@
 #include "normalization.hpp"
 #include "localization.hpp"
 #include "ideal_powers.hpp"
+#include "quotient_ring.hpp"
 #include "resolution_tangents.hpp"
 #include <flint/mpoly.h>
 #include <flint/fmpq_mpoly.h>
@@ -1353,6 +1354,8 @@ std::string affine(std::istream& in) {
         const auto op = line(in), left = line(in), right = line(in);
         return scalar_arithmetic(op, left, right);
     }
+    if (operation == "quotient_ring" || operation == "quotient_ring_prepared")
+        return quotient_ring::operation(in,operation == "quotient_ring_prepared");
     if (operation == "ideal_power" || operation == "symbolic_power")
         return ideal_powers::operation(in,operation == "symbolic_power");
     if (operation == "localization") return localization::operation(in);

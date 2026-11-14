@@ -10,10 +10,12 @@ if [ "$1" = resolve ] && [ -x "$atlas_dir/native/build/resolve_supervisor" ]; th
     exec "$atlas_dir/native/build/resolve_supervisor" "$0" "$@"
 fi
 case "$1/$2" in
-    algebra/local-standard-basis|algebra/local-normal-form|algebra/local-dimension|algebra/local-smoothness)
+    algebra/local-standard-basis|algebra/local-normal-form|algebra/local-dimension|algebra/local-smoothness|\
+    algebra/local-quotient-basis|algebra/local-jacobian-algebra|algebra/milnor-number|algebra/tjurina-number)
         atlas_binary=local_algebra ;;
     algebra/localization|algebra/localize) atlas_binary=localization ;;
     algebra/normalization) atlas_binary=normalization ;;
+    algebra/quotient-ring) atlas_binary=quotient_ring ;;
     algebra/ideal-power) atlas_binary=ideal_power ;;
     algebra/symbolic-power) atlas_binary=symbolic_power ;;
     algebra/primary-decomposition) atlas_binary=primary_decomposition ;;

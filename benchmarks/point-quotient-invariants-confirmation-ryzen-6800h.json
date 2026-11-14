@@ -1,0 +1,718 @@
+{
+  "date_utc": "2026-11-14T10:28:37.438263+00:00",
+  "command": [
+    "benchmarks/point_quotient_invariants.py",
+    "--atlas-root",
+    "/tmp/atlas-local-dimension-cpu-l3qgot9l",
+    "--cpu",
+    "0",
+    "--seconds",
+    "3",
+    "--memory-mib",
+    "768",
+    "--repeats",
+    "21",
+    "--case",
+    "quotient-tie-grevlex",
+    "--output",
+    "benchmarks/point-quotient-invariants-confirmation-ryzen-6800h.json"
+  ],
+  "affinity": [
+    0
+  ],
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "seconds": 3.0,
+  "address_space_mib": 768,
+  "repeats": 21,
+  "singular_affinity": [
+    0
+  ],
+  "atlas_sha256": {
+    "atlas": "f9b2c808877f9e1d3ddc0b48230f99320d20b03481530b9feb5ba2afca60903b",
+    "engine/local_algebra.py": "e628f18a73f85d7dac8fd50b1dfb094010b672ed039d8fff3f2a590f94cb11fe",
+    "engine/point_germs.py": "67159ee37f448eb5d554aa6eeffd2122b8bd882931519e2004fd7319d66c28b6",
+    "native/build/libgroebner.so": "a97eda6bcafd3b40bf5977fc337c379ee6dc1bd36716977d051b902de6c0cf64",
+    "native/build/local_algebra": "3ec08958f232c0779bf279e33f98f3150c71f530e6e037f95f7cb18ca541d28b",
+    "native/local_cli.cpp": "4b8927ef6b5faafde35aa5726d414ea55e61aaaba07a554aa4f8bc2379853d1c",
+    "native/local_operations.cpp": "1b49343010814f6dfab3ce908b10cc3d86c5e4887bfe6722c99ebfa9e66972e7",
+    "native/local_point_basis.cpp": "149461b6c4c8acf59a1b7964e3b3bd7214de3189c196c65417297e4afea9b9ea",
+    "native/local_parameter_basis.cpp": "8a024b22b1bd17e618114a79eb8622f61c947feafbac89f753de5e681bd485cc",
+    "native/local_point_normal_form.cpp": "7c8571b43b3a8f0213e701a134762174b966a294a847f0f8076bf9f9760ccee2",
+    "native/local_point_quotient.cpp": "189e5c680a1dc5ec96eb9966db60e11a32773e095bda4a6229c3247905cc69bc",
+    "native/local_quotient_initial.cpp": "9c1216a90bc19dade3234a80b34ff30ada06eef97e8f2372d8dd40bd80e4732b",
+    "native/monomial_quotient.cpp": "939bb39b98073babfc47ff3e934aca4a9dd1e59bbbe8739662c98ee98a0dbd74",
+    "native/point_geometry.cpp": "934a63090480ec157bfce4489c5eb049b4429c262d71cd819df5e9e55eaee2ec"
+  },
+  "baseline_sha256": null,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "harness_sha256": {
+    "benchmarks/point_quotient_invariants.py": "c4d97cd7317f0ebb0af17d2dde922de2b3d3dfca3c7edce068d698a7c3efd25e",
+    "benchmarks/shifted_local_standard.py": "21bcd0520f044e69ed41ec9dfc8852585553ddac0fd0778072027d8288879371",
+    "benchmarks/large_coupled_local.py": "41c558ad65e8a84f4124651f816e516275c72fddf2e1fc255f2c817f64e0dbba"
+  },
+  "cases": [
+    {
+      "name": "quotient-tie-grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1/2",
+        "-2/3",
+        "2"
+      ],
+      "ideal": [
+        "(1-(x-1/2))*((x-1/2)^2+(y+2/3)^3)",
+        "(1-(x-1/2))*((y+2/3)^3)",
+        "(1-(x-1/2))*((z-2)^2)",
+        "(1-(x-1/2))*((x-1/2)*(z-2)-(y+2/3)^2+(z-2)^3)"
+      ],
+      "polynomial": "",
+      "dimension": 7,
+      "tjurina": 7,
+      "order": "grevlex",
+      "model_ideal": [],
+      "model_polynomial": "",
+      "wide": false,
+      "scalar_only": false
+    }
+  ],
+  "results": [
+    {
+      "case": "quotient-tie-grevlex",
+      "operation": "local-quotient-basis",
+      "medians_ms": {
+        "atlas": 6.258313980652019,
+        "singular": 8.4048259886913,
+        "singular-global-first": 8.516708010574803,
+        "singular-unit-factors": 9.095754008740187,
+        "singular-components": 8.560841000871733,
+        "singular-jets": 10.265988996252418
+      },
+      "samples": {
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.37433398514986
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.782563996035606
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.838098004460335
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.314130005193874
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.041704007657245
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.504870019853115
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.054638011846691
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.1819890106562525
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.839560995809734
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.787662987131625
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.054828001651913
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.6622789890971035
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.258313980652019
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.074488006765023
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.4007629989646375
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.36985499295406
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.2568309949710965
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.513667001854628
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.891981010790914
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.143890019506216
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.524968019220978
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.040567015996203
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.337359002325684
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.43100599013269
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.979644015198573
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.258298999862745
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.053852012380958
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.43463302589953
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.558606990845874
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.182124991435558
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.035077014937997
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.311058016261086
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.669677015859634
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.84414798929356
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.973502001026645
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.481080003548414
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.4048259886913
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.3447530050762
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.021242993185297
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.36403900757432
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.572667011525482
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.261084003606811
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 9.018707991344854
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.8831189894117415
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.998907996807247
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.96564801223576
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.473024994600564
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.946679019369185
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.091183000942692
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.044844988035038
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.811336010694504
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.0870550009422
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.961958006490022
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.213657001964748
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.018588025355712
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.910593023756519
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.732790000271052
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.516708010574803
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.346515998709947
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.796957990853116
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.567764976760373
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.437319997232407
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.412280003540218
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.734511986607686
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.260081987828016
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.426307002082467
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.587852003984153
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.59125898568891
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.634530997369438
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.150166995823383
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.676258992636576
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.262549981940538
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.923096989747137
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.958854974480346
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.774448000825942
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.19106398941949
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.555713972076774
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.933408990036696
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.093358996324241
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.134988009463996
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.769937994657084
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.245927998563275
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.226280002621934
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.095754008740187
+          }
+        ],
+        "singular-components": [
+          {
+            "status": "ok",
+            "milliseconds": 8.674517011968419
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.302402013214305
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.220920997904614
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.9007930180523545
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.358068007510155
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.213655004510656
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.05566500639543
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.560841000871733
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.142027974827215
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.131198002956808
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.135868003591895
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.017595992190763
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.23831298132427
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.070768999867141
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.171306999633089
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.593483013100922
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.10715598729439
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.344240981386974
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.310210007242858
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.199568022973835
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.649501997046173
+          }
+        ],
+        "singular-jets": [
+          {
+            "status": "ok",
+            "milliseconds": 10.281116992700845
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.530036011710763
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.659731003921479
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.265988996252418
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.943197976099327
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.506282997084782
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.731336002005264
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.784006018890068
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.702823008410633
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.5438520074822
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.842817991739139
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.697955993236974
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.961313993902877
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.135192995425314
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.954511002637446
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.734794981544837
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.59851998090744
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.30468099634163
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.3403020077385
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.16275299480185
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.228837985778227
+          }
+        ]
+      },
+      "certificates": {
+        "atlas": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "1",
+                "x-1/2",
+                "y+2/3",
+                "z-2",
+                "(x-1/2)*(y+2/3)",
+                "(x-1/2)*(z-2)",
+                "(y+2/3)*(z-2)"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "y*z-2*y+2/3*z-4/3",
+                "x*z-2*x-1/2*z+1",
+                "z-2",
+                "x*y+2/3*x-1/2*y-1/3",
+                "y+2/3",
+                "x-1/2",
+                "1"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "y*z-2*y+2/3*z-4/3",
+                "x*z-2*x-1/2*z+1",
+                "z-2",
+                "x*y+2/3*x-1/2*y-1/3",
+                "y+2/3",
+                "x-1/2",
+                "1"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "y*z-2*y+2/3*z-4/3",
+                "x*z-2*x-1/2*z+1",
+                "z-2",
+                "x*y+2/3*x-1/2*y-1/3",
+                "y+2/3",
+                "x-1/2",
+                "1"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ],
+        "singular-components": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "y*z-2*y+2/3*z-4/3",
+                "x*z-2*x-1/2*z+1",
+                "z-2",
+                "x*y+2/3*x-1/2*y-1/3",
+                "y+2/3",
+                "x-1/2",
+                "1"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ],
+        "singular-jets": [
+          {
+            "output": {
+              "dimension": 7,
+              "basis": [
+                "y*z-2*y+2/3*z-4/3",
+                "x*z-2*x-1/2*z+1",
+                "z-2",
+                "x*y+2/3*x-1/2*y-1/3",
+                "y+2/3",
+                "x-1/2",
+                "1"
+              ]
+            },
+            "verified": "local length and full source-basis rank"
+          }
+        ]
+      }
+    }
+  ]
+}

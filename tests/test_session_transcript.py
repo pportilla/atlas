@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.test_cli_session import ROOT, run_prompt
+from tests.cli_support import ROOT, run_prompt
 
 
 class SessionTranscriptTests(unittest.TestCase):

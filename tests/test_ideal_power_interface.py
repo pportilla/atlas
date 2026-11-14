@@ -4,9 +4,8 @@ import shlex
 import unittest
 from textwrap import dedent
 
-from tests.test_cli_session import run_prompt, run_script
-from tests.test_http_basis_refs import endpoint, post
-from tests.test_point_standard_interface import shell
+from tests.cli_support import run_prompt, run_script, shell
+from tests.http_support import endpoint, post
 
 
 class IdealPowerInterfaceTests(unittest.TestCase):

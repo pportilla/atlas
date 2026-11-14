@@ -4,7 +4,7 @@ from textwrap import dedent
 import unittest
 
 from engine.session import SessionError, new_session
-from tests.test_cli_session import run_prompt, run_script
+from tests.cli_support import run_prompt, run_script
 
 
 class HilbertSeriesSessionTests(unittest.TestCase):

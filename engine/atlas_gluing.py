@@ -479,6 +479,56 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
             "convention": "Exceptional divisor on the smooth strict transform in the germ over the origin over Qbar."}
 
 
+def _ordinary_overlaps(charts, boundaries):
+    """Prepare ordinary affine chart maps once and close each requested diagonal."""
+    from .kernel import exprs
+    from .native_library import Unavailable, _MODE, _kernel, ideal_request
+    if _MODE != "native" or not hasattr(_kernel(), "atlas_affine_overlap_abi"):
+        return None
+
+    @cache
+    def prepare(i):
+        chart = charts[i]
+        if (chart.ambient or chart.coefficient_field or chart.repair_projection
+                or not np.native_ring(chart.variables)):
+            return None
+        images = {name: np.row(chart.variables, value) for name, value in chart.coordinates}
+        ideals = tuple(boundaries[i].values())
+        sizes = " ".join(map(str, (len(ideals), *(len(ideal) for ideal in ideals))))
+        rows = tuple(np.row(chart.variables, value) for ideal in ideals for value in ideal)
+        return images, sizes, rows
+
+    @cache
+    def block(i, prefix):
+        variables = charts[i].variables
+        coordinates = np.symbols(f"{prefix}0:{len(variables)}")
+        rename = dict(zip(variables, coordinates))
+        # Deleted centres restrict the open *after* closure of the diagonal.
+        removed = tuple(tuple(g.xreplace(rename) for g in ideal) for ideal in charts[i].removed)
+        return coordinates, rename, removed
+
+    def overlap(i, j):
+        a, b = prepare(i), prepare(j)
+        if a is None or b is None:
+            return None
+        images_a, sizes_a, divisors_a = a
+        images_b, sizes_b, divisors_b = b
+        if images_a.keys() != images_b.keys():
+            raise ValueError("The chart maps use different base coordinates.")
+        va, rename_a, holes_a = block(i, "atlasLeft")
+        vb, rename_b, holes_b = block(j, "atlasRight")
+        header = f"affine_overlap {len(va)} {len(vb)} {len(images_a)} {sizes_a} {sizes_b}"
+        rows = (*images_a.values(), *(images_b[name] for name in images_a), *divisors_a, *divisors_b)
+        try:
+            diagonal = ideal_request(header, rows)
+        except Unavailable:
+            return None
+        coords = (*va, *vb)
+        return coords, rename_a, rename_b, exprs(coords, diagonal), holes_a + holes_b
+
+    return overlap
+
+
 def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended=False):
     """Return the full complex when local geometric primes can be identified.
 
@@ -529,8 +579,14 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
     if _descended:
         from .repair_gluing import parent_transitions
         parent_equations = parent_transitions(charts)
+    ordinary = None if _descended else _ordinary_overlaps(charts, boundaries)
+
     @cache
     def overlap(i, j):
+        if ordinary is not None:
+            result = ordinary(i, j)
+            if result is not None:
+                return result
         a, b = charts[i], charts[j]
         # All functions on each side are renamed simultaneously. The two
         # coordinate blocks span a fresh product ring, so positional names

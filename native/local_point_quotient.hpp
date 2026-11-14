@@ -1,8 +1,15 @@
 #pragma once
 
 #include "local_point_basis.hpp"
+#include <stdexcept>
 
 namespace atlas::local {
+struct HypersurfaceOutside : std::invalid_argument {
+    explicit HypersurfaceOutside(bool origin) : std::invalid_argument(
+        origin ? "The hypersurface must pass through the origin." :
+                 "The hypersurface must pass through the supplied point.") {}
+};
+
 struct PointQuotient {
     std::optional<mpz_class> dimension;
     std::vector<Powers> monomials;

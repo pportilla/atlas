@@ -97,6 +97,11 @@ def _covers(variables, removed):
 
 def _present(variables, ideal, removed=()):
     """Whether V(ideal) has a point outside the removed centres."""
+    if removed and _MODE == "native":
+        from .kernel import present_outside
+        certified = present_outside(variables, ideal, removed)
+        if certified is not None:
+            return certified
     if empty_locus(variables, ideal):
         return False
     basis = groebner(ideal, variables) if removed else None

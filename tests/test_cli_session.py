@@ -2,46 +2,13 @@ import io
 import os
 import subprocess
 import sys
-import tempfile
 import unittest
-from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
 
-from engine.app import main
 from engine.session import new_session
 from engine.session_polynomial import coordinates
-
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class Terminal(io.StringIO):
-    def isatty(self):
-        return True
-
-
-def run_script(source):
-    with tempfile.TemporaryDirectory() as directory:
-        script = Path(directory) / "curve.atlas"
-        script.write_text(dedent(source).lstrip(), encoding="utf-8")
-        return subprocess.run(
-            [str(ROOT / "atlas"), "run", str(script)],
-            capture_output=True, text=True, timeout=15,
-        )
-
-
-def run_prompt(source):
-    stdout, stderr = Terminal(), io.StringIO()
-    with (
-        patch.object(sys, "argv", ["atlas"]),
-        patch.object(sys, "stdin", Terminal(dedent(source).lstrip())),
-        patch.object(sys, "stdout", stdout),
-        patch.object(sys, "stderr", stderr),
-        patch("engine.welcome.print_welcome"),
-    ):
-        status = main()
-    return status, stdout.getvalue(), stderr.getvalue()
+from tests.cli_support import ROOT, run_prompt, run_script
 
 
 class CliSessionTests(unittest.TestCase):

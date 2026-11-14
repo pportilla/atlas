@@ -14,6 +14,40 @@ from engine.resolve import resolve
 
 
 class FieldAndOpenOverlaps(unittest.TestCase):
+    def test_ordinary_diagonal_uses_named_rational_projections_and_ordered_holes(self):
+        from fractions import Fraction
+        from engine import native_polynomial as np
+        from engine.atlas_gluing import _ordinary_overlaps
+        from engine.blowup_ideal import saturate
+
+        x, y = np.symbols("x y")
+        z = np.Symbol("z")
+        a = Chart((x, y), (), (), (), (), (("u", (x+1)*Fraction(-3,7)), ("v", y), ("w", np.S.Zero)), (),
+                  removed=((x-1, y), ()))
+        b = Chart((z,), (), (), (), (), (("w", np.S.Zero), ("v", z*z), ("u", (z+2)*Fraction(5,13))), (),
+                  removed=((z+1,),))
+        boundaries = [{"D": (np.S.Zero, x, y)}, {"E": (z,)}]
+        factory = _ordinary_overlaps([a,b], boundaries)
+        if factory is None:
+            self.skipTest("the packed native overlap operation is unavailable")
+        coords, left, right, graph, holes = factory(0, 1)
+        xl, yl, zr = coords
+        self.assertEqual(left, {x: xl, y: yl})
+        self.assertEqual(right, {z: zr})
+        self.assertEqual(holes, ((xl-1, yl), (), (zr+1,)))
+        self.assertEqual(graph, saturate(coords, ((xl+1)*Fraction(-3,7)-(zr+2)*Fraction(5,13), yl-zr*zr), xl*zr))
+        for ineligible in (replace(a, ambient=(x,)), replace(a, coefficient_field=(x,x*x-2,2,"root")),
+                           replace(a, repair_projection=(0,(x,y)))):
+            self.assertIsNone(_ordinary_overlaps([ineligible,b], boundaries)(0,1))
+
+        # Empty exceptional ideals must still reach the general validator;
+        # the operation must likewise decline exponents outside its packed range.
+        self.assertIsNone(_ordinary_overlaps([a,b], [{"D": ()}, {}])(0,1))
+        wide = replace(a, coordinates=(("u",x**65536), ("v",y), ("w",np.S.Zero)))
+        self.assertIsNone(_ordinary_overlaps([wide,b], boundaries)(0,1))
+        with self.assertRaisesRegex(ValueError, "different base coordinates"):
+            _ordinary_overlaps([replace(a, coordinates=(("bad",x),)),b], boundaries)(0,1)
+
     def test_branch_aliases_preserve_parallel_edges_and_loops(self):
         from engine.strata import _vertex_aliases
 

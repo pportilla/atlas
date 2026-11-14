@@ -12,8 +12,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from engine.app import AtlasServer, MAX_REQUEST, MAX_SECONDS
-from tests.test_cli_session import ROOT
-from tests.test_http import QuietHandler
+from tests.cli_support import ROOT
+from tests.http_support import QuietHandler
 
 
 def post(url, data):

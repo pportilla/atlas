@@ -1158,6 +1158,54 @@ std::string op_saturate(Reader& in) {
     return out;
 }
 
+// The closure of the graph of the identification of two ordinary affine
+// charts off their exceptional divisors. Embed their projections in the
+// two independent coordinate blocks before clearing denominators in each
+// difference. Saturating uses exactly the same basis order as op_saturate.
+std::string op_affine_overlap(Reader& in) {
+    const Ring left = grevlex(in.number(0)), right = grevlex(in.number(1));
+    // Elimination adjoins an inverse to the product ring.
+    if (left.n + right.n >= MAX_VARIABLES) throw Limit("Unsupported number of variables.");
+    const Ring product = grevlex(left.n + right.n);
+    const auto left_places = shifted(left.n, 0), right_places = shifted(right.n, left.n);
+    const size_t maps = in.count(2);
+    const Ideal left_images = in.ideal(left, maps);
+    Ideal graph;
+    for (const Gen& image : left_images) {
+        const Gen a = convert(left, product, image, left_places.data());
+        const Gen b = convert(right, product, in.gen(right), right_places.data());
+        Z ca, cb;
+        fmpz_mul(&ca.v, &a.num.v, &b.den.v);
+        fmpz_mul(&cb.v, &b.num.v, &a.den.v);
+        fmpz_neg(&cb.v, &cb.v);
+        Poly difference;
+        merge(product, difference, a.p, 0, &ca.v, nullptr, b.p, 0, &cb.v, nullptr);
+        graph.push_back(normal(std::move(difference)));
+    }
+
+    size_t header = 3;
+    Poly unit = one(product);
+    auto include_divisors = [&](const Ring& ring, const std::vector<int>& places) {
+        const size_t divisors = in.count(header++);
+        for (size_t j = 0; j < divisors; ++j) {
+            const size_t count = in.count(header++);
+            Poly pivot;
+            for (size_t k = 0; k < count; ++k) {
+                Gen g = in.gen(ring);
+                if (pivot.empty() && !g.p.empty()) pivot = std::move(g.p);
+            }
+            if (pivot.empty()) throw std::invalid_argument("The exceptional ideal vanishes on its entire chart.");
+            unit = multiply(product, unit, convert(ring, product, pivot, places.data()));
+        }
+    };
+    include_divisors(left, left_places);
+    include_divisors(right, right_places);
+    if (header != in.numbers.size() || in.at != in.end) throw std::invalid_argument("Bad overlap request.");
+    std::string out;
+    put(product, out, saturate(product, graph, normal(std::move(unit)), true));
+    return out;
+}
+
 // "radical n s": s generators of the smaller ideal, then the larger one.
 std::string op_radical(Reader& in) {
     const Ring R = grevlex(in.number(0));
@@ -2386,24 +2434,25 @@ std::vector<Poly> fibre_factors(const Ring& R, const Poly& equation) {
     return out;
 }
 
+// V(base) minus the union of the holes is a union of D(product), taking
+// one generator per hole. Keep products reduced in the base ring.
+bool outside_holes(const Ring& R, Basis& base, const std::vector<std::vector<Poly>>& removed,
+                   const Poly& product, size_t i = 0) {
+    if (product.empty() || base.unit()) return false;
+    if (i == removed.size()) return !empty_off_basis(R, base, product);
+    for (const Poly& g : removed[i]) {
+        Poly unit = base.remainder(multiply(R, product, base.remainder(g)));
+        if (outside_holes(R, base, removed, unit, i+1)) return true;
+    }
+    return false;
+}
+
 struct OwnedCrossings {
     const Ring& R;
     long codimension;
     std::vector<Poly> ambient, fibre;
     std::vector<std::vector<Poly>> divisors, removed;
     std::vector<bool> strict;
-
-    // V(base) minus the union of the holes is a union of D(product), taking
-    // one generator per hole. Keep products reduced in the base ring.
-    bool outside_holes(Basis& base, const Poly& product, size_t i = 0) const {
-        if (product.empty() || base.unit()) return false;
-        if (i == removed.size()) return !empty_off_basis(R, base, product);
-        for (const Poly& g : removed[i]) {
-            Poly unit = base.remainder(multiply(R, product, base.remainder(g)));
-            if (outside_holes(base, unit, i+1)) return true;
-        }
-        return false;
-    }
 
     bool regular(const std::vector<Poly>& piece, const std::vector<size_t>& subset) const {
         std::vector<Poly> equations = ambient, base = piece;
@@ -2418,7 +2467,7 @@ struct OwnedCrossings {
             if (strict[j])
                 for (const Poly& g : divisors[j]) locus.push_back(boundary.remainder(g));
         Basis cut(R, present(locus));
-        if (!outside_holes(cut, one(R))) return true;
+        if (!outside_holes(R, cut, removed, one(R))) return true;
         const long rank = codimension + static_cast<long>(subset.size());
         Matrix matrix = jacobian(R, equations);
         if (rank < 1 || rank > R.n || static_cast<size_t>(rank) > matrix.rows) return false;
@@ -2433,7 +2482,7 @@ struct OwnedCrossings {
             }
         } while (minors.next());
         Basis bad(R, present(locus));
-        return !outside_holes(bad, one(R));
+        return !outside_holes(R, bad, removed, one(R));
     }
 
     bool over(const std::vector<Poly>& piece, std::vector<size_t>& subset, size_t first = 0) const {
@@ -2459,6 +2508,25 @@ struct OwnedCrossings {
         return true;
     }
 };
+
+std::string op_open_locus(Reader& in) {
+    const size_t holes = in.count(2);
+    // The general verifier eliminates redundant holes before expanding opens.
+    // Defer large products to it, and bound the depth of this recursive test.
+    if (holes > 16) return "unknown\n";
+    size_t combinations = 1;
+    for (size_t i = 0; i < holes; ++i) {
+        const size_t count = in.count(3+i);
+        if (count > 128/combinations) return "unknown\n";
+        combinations *= std::max<size_t>(1, count);
+    }
+    const Ring R = grevlex(in.number(0));
+    Basis closed(R, present(polys(in.ideal(R, in.count(1)))));
+    std::vector<std::vector<Poly>> removed;
+    for (size_t i = 0; i < holes; ++i)
+        removed.push_back(present(polys(in.ideal(R, in.count(3+i)))));
+    return outside_holes(R, closed, removed, one(R)) ? "yes\n" : "no\n";
+}
 
 std::string op_owned_crossings(Reader& in) {
     const Ring R = grevlex(in.number(0));
@@ -2992,6 +3060,7 @@ using namespace atlas;
 extern "C" {
 
 int atlas_monomial_strata_abi() noexcept { return 1; }
+int atlas_affine_overlap_abi() noexcept { return 1; }
 
 // One request: a header line naming the operation with its integers, then
 // one polynomial per line as read by atlas_groebner. The operations are
@@ -3007,6 +3076,7 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "graph_orders") out = op_graph_orders(in);
         else if (in.op == "dimension") out = op_dimension(in);
         else if (in.op == "saturate") out = op_saturate(in);
+        else if (in.op == "affine_overlap") out = op_affine_overlap(in);
         else if (in.op == "finite_radical") out = op_finite_radical(in);
         else if (in.op == "radical") out = op_radical(in);
         else if (in.op == "smooth") out = op_smooth(in);
@@ -3017,6 +3087,7 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "strata" || in.op == "monomial_strata") out = op_strata(in);
         else if (in.op == "strata_totals") out = op_strata_totals(in);
         else if (in.op == "crossings" || in.op == "bounded_crossings") out = op_crossings(in);
+        else if (in.op == "open_locus") out = op_open_locus(in);
         else if (in.op == "owned_crossings") out = op_owned_crossings(in);
         else if (in.op == "blowup") out = op_blowup(in);
         else throw std::invalid_argument("Unknown operation.");
@@ -3062,4 +3133,5 @@ char* atlas_groebner_colon(const char* input, size_t length) noexcept {
 
 }
 
+extern "C" int atlas_open_locus_abi() noexcept { return 1; }
 extern "C" int atlas_bounded_crossings_abi() noexcept { return 1; }

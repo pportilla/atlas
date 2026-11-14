@@ -3,6 +3,7 @@
 // gives one geometric component per tuple of roots. A coordinate ratio on the
 // original space that extends to a chart determines that root on all overlaps.
 #include "local_io.hpp"
+#include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 #include "rational_sparse_json.hpp"
 #include <flint/fmpq.h>
@@ -91,11 +92,10 @@ std::optional<Section> section(Chart& chart,Basis basis,int dimension) {
         if (first==head.end()) return {};
         size_t axis=first-head.begin();
         if (!pivots.insert(axis).second) return {};
-        auto degree=std::accumulate(head.begin(),head.end(),mpz_class(0));
-        if (degree==1) continue;
+        if (total_degree(head) == 1) continue;
         Polynomial p;
         for (const auto& [e,c]:f) {
-            if (std::accumulate(e.begin(),e.end(),mpz_class(0))!=e[axis]) return {};
+            if (total_degree(e) != e[axis]) return {};
             p[{e[axis]}]=c/f.rbegin()->second;
         }
         auto key=chart.ratio(axis);

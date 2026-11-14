@@ -41,6 +41,40 @@ def requests():
 
 
 class LocalAlgebraDeviceTests(unittest.TestCase):
+    @unittest.skipUnless(os.getenv("ATLAS_TEST_ALGEBRA_GPU") == "1",
+                         "Set ATLAS_TEST_ALGEBRA_GPU=1 to require a physical GPU")
+    def test_shifted_primitive_powers_use_certified_device_work(self):
+        exponent = 2**64 + 7
+        u = f"(x^{exponent}+x-2+2*y)"
+        v = "(3*(x-1)+y)"
+        f = f"{u}^4+{v}^4*({v}-1)"
+        derivatives = [f"4*{u}^3*({exponent}*x^{exponent-1}+1)+3*{v}^3*(5*{v}-4)",
+                       f"8*{u}^3+{v}^3*(5*{v}-4)"]
+        # u,v form local coordinates at (1,0). The Jacobian there is
+        # (u³,v³), and contains f, so all four local lengths are nine.
+        for op in ("local-quotient-basis", "local-jacobian-algebra", "milnor-number", "tjurina-number"):
+            with self.subTest(operation=op):
+                operands = {"ideal": derivatives} if op == "local-quotient-basis" else {"polynomial": f}
+                req = {"operation": op, "ring": {"variables": ["x", "y"]},
+                       "operands": dict(operands, point=["1", "0"])}
+                cpu = dispatch(dict(req, compute="cpu"))
+                result = cpu["result"]
+                self.assertEqual(result.get("value", result.get("dimension")), 9)
+                self.assertEqual(cpu["execution"]["backend"], "cpu")
+                if "basis" in result:
+                    self.assertEqual(len(result["basis"]), 9)
+                if op == "local-jacobian-algebra":
+                    self.assertEqual([parse_expression(s, ["x", "y"]) for s in result["generators"]],
+                                     [parse_expression(s, ["x", "y"]) for s in derivatives])
+                self.assertEqual(dispatch(dict(req, compute="auto"))["result"], result)
+                gpu = dispatch(dict(req, compute="gpu"))
+                self.assertEqual(gpu["result"], result)
+                stages = gpu["execution"]["stages"]
+                self.assertTrue(any(s["operation"] == "groebner_replay" and s.get("device")
+                                    and s["backend"] in ("opencl", "triton") and s["primes"] > 0 for s in stages), stages)
+                self.assertTrue(any(s["operation"] == "groebner_certification" and s["backend"] == "cpu"
+                                    and s["bases"] > 0 for s in stages), stages)
+
     def test_cpu_auto_and_unavailable_gpu_agree(self):
         # Use an unassigned OpenCL index to exercise the same fallback on hosts
         # with a device and on build workers with no OpenCL implementation.

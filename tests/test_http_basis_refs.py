@@ -1,48 +1,15 @@
 """Provenance, isolation and portability of reusable bases over the public API."""
 
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 import json
 import shlex
 import subprocess
-import threading
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 from engine.algebra import calculate_algebra
-from engine.algebra_basis_store import AlgebraBasisStore
-from engine.app import AtlasServer
-from tests.test_cli_session import ROOT, run_script
-from tests.test_http import QuietHandler
-
-
-RING = {"field": "QQ", "variables": ["x", "y"], "order": "lex"}
-
-
-@contextmanager
-def endpoint(**limits):
-    with AtlasServer(("127.0.0.1", 0), QuietHandler) as server:
-        server.algebra_bases = AlgebraBasisStore(**limits)
-        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02})
-        thread.start()
-        try:
-            yield f"http://127.0.0.1:{server.server_port}/api/algebra"
-        finally:
-            server.shutdown()
-            thread.join()
-
-
-def post(url, operation, operands, ring=RING, **extra):
-    request = {"operation": operation, "operands": operands, "ring": ring, "compute": "cpu", **extra}
-    req = Request(url, data=json.dumps(request).encode(), headers={"Content-Type": "application/json"})
-    try:
-        response = urlopen(req, timeout=30)
-    except HTTPError as error:
-        response = error
-    with response:
-        return response.status, json.load(response)
+from tests.cli_support import ROOT, run_script
+from tests.http_support import RING, endpoint, post
 
 
 class HttpBasisTests(unittest.TestCase):

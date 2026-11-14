@@ -10,10 +10,15 @@ import hashlib
 import json
 from math import comb
 import os
+import re
+import resource
+import signal
 from pathlib import Path
+import select
 import subprocess
 import statistics
 import sys
+from time import perf_counter
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
@@ -43,8 +48,10 @@ class Case:
     model_ideal: tuple = ()
     model_polynomial: str = ""
     wide: bool = False
+    scalar_only: bool = False
 
     def operations(self):
+        if self.scalar_only:return (MILNOR,TJURINA)
         return (JACOBIAN,MILNOR,TJURINA) if self.polynomial else (QUOTIENT,)
 
 
@@ -71,6 +78,12 @@ def corpus():
         cases.append(Case(f"power-cusp-{n}",xy,(str(sign),"0"),(),f"{a}^3+y^2",2,2,
                           model_polynomial="h0^3+h1^2",wide=n>500000))
     n=1001
+    a=f"(x^{n}-1)"
+    cases.append(Case("power-unequal",xy,("1","0"),(),a+"^5+y^5+"+a+"^3*y^3",16,15,
+                      model_polynomial="h0^5+h1^5+h0^3*h1^3"))
+    d=2**65
+    cases.append(Case("bigint-length",xy,("0","1"),(),f"x^{d+1}+(y-1)^2",d,d,
+                      wide=True,scalar_only=True))
     a,b=f"(x^{n}-1)",f"(y^{n}-1)"
     cases.append(Case("coupled-nonisolated-quotient",xyz,("1","1","0"),(a+"*"+b,a+"*z",b+"*z"),
                       "",-1,-1,model_ideal=("h0*h1","h0*h2","h1*h2")))
@@ -95,6 +108,52 @@ def parsed(s,names):
     return parse_expression(s,list(names),_reference=True)
 
 
+def singular_basis_output(case, local_ring, standard_basis, dimension):
+    back = ",".join(f"{x}-({p})" for x, p in zip(case.variables, case.point))
+    return (f"if({dimension}>0){{ideal B=kbase({standard_basis});setring S;"
+            f"map back={local_ring},{back};ideal A=back(B);int vindex;"
+            'for(vindex=1;vindex<=size(A);vindex++){print("B "+string(A[vindex]));}}')
+
+
+def singular_certified_shortcuts(case, op):
+    # An axis contained in the germ, or a repeated hypersurface factor through
+    # the point, proves infinite colength without a full coordinate shift.
+    src = []
+    for i, x in enumerate(case.variables):
+        line = ",".join(x if k == i else p for k,p in enumerate(case.point))
+        src.append(f'map axis{i}=S,{line};if(size(axis{i}(J))==0){{print("L -1");quit;}}')
+    if op != QUOTIENT and len(case.variables) > 1:
+        src.extend(["list factors=factorize(F);ideal primes=factors[1];intvec multiplicities=factors[2];int fi;poly factor;",
+                    'for(fi=1;fi<=size(primes);fi++){factor=primes[fi];if(multiplicities[fi]>1 && ev(factor)==0){print("L -1");quit;}}'])
+    return src
+
+
+def singular_jets(case, op):
+    # Equal lengths at m^4 and m^5 imply m^4=0 in the local quotient by
+    # Nakayama. Otherwise continue to the unrestricted local std procedure.
+    h = [f"h{i}" for i in range(len(case.variables))]
+    src = [
+        """proc taylorAt(poly P,map at,int index,int budget,poly mon,number scale)
+{
+  if(index>nvars(basering)){return(mon*at(P)*scale);}
+  int k; poly term=1; number fac=1; poly total=0; poly axis=var(index);
+  for(k=0;k<=budget;k++){
+    if(P==0){break;}
+    total=total+taylorAt(P,at,index+1,budget-k,mon*term,scale/fac);
+    P=diff(P,axis);term=term*axis;fac=fac*(k+1);
+  }
+  return(total);
+}""","ideal truncated;int idx;for(idx=1;idx<=ncols(J);idx++){truncated[idx]=taylorAt(J[idx],ev,1,4,1,1);}",
+        "ring Jet=0,("+",".join(h)+"),"+{"lex":"Ds","grevlex":"ds"}[case.order]+";",
+        "short=0;map toJet=S,"+",".join(h)+";ideal jets=toJet(truncated);",
+        "ideal J4=std(jets+maxideal(4));ideal J5=std(jets+maxideal(5));int d5=vdim(J5);",
+        'if(d5==vdim(J4)){print("L "+string(d5));'
+    ]
+    if op in BASIS:
+        src.append(singular_basis_output(case,"Jet","J5","d5"))
+    return src+["quit;}setring S;"]
+
+
 def singular_source(case,op,method):
     h=[f"h{i}" for i in range(len(case.variables))]
     src=[singular_ring("S",case.variables,"dp",case.wide),"short=0;","map ev=S,"+",".join(case.point)+";"]
@@ -107,6 +166,10 @@ def singular_source(case,op,method):
             src+=['int ix;for(ix=1;ix<=nvars(S);ix++){print("D "+string(Jac[ix]));}']
         if op==TJURINA:src+=["J=J+ideal(F);"]
     src+=['if(size(ev(J))!=0){print("L 0");quit;} if(size(J)==0){print("L -1");quit;}']
+    if method=="singular-components":
+        src+=singular_certified_shortcuts(case,op)
+    if method=="singular-jets":
+        src+=singular_jets(case,op)
     if method=="singular-global-first":
         src+=["J=std(J);"]
     if method=="singular-unit-factors":
@@ -117,14 +180,54 @@ def singular_source(case,op,method):
           "map move=S,"+",".join(f"{v}+({p})" for v,p in zip(h,case.point))+";",
           'ideal I=move(J);ideal G=std(I);int d=vdim(G);print("L "+string(d));']
     if op in BASIS:
-        src+=["if(d>0){ideal B=kbase(G);setring S;map back=L,"+
-              ",".join(f"{v}-({p})" for v,p in zip(case.variables,case.point))+";ideal A=back(B);"
-              'int vindex;for(vindex=1;vindex<=size(A);vindex++){print("B "+string(A[vindex]));}}']
+        src.append(singular_basis_output(case,"L","G","d"))
     return "\n".join(src+["quit;",""])
 
 
 def expected(case,op):
     return case.tjurina if op==TJURINA else case.dimension
+
+
+def timed_atlas(args,seconds,memory):
+    # The Python CLI creates the math worker in a second session. Interrupt
+    # both the child and any detached descendants to enforce a wall-time bound.
+    def limits():
+        resource.setrlimit(resource.RLIMIT_AS,(memory*1024**2,)*2)
+        resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+    env={**os.environ,"ATLAS_GROEBNER":"native"}
+    env.pop("ATLAS_GROEBNER_GPU",None);env.pop("PYTHONINTMAXSTRDIGITS",None)
+    st=perf_counter()
+    proc=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+                          env=env,start_new_session=True,preexec_fn=limits)
+    try:
+        out,err=proc.communicate(timeout=max(0,seconds-(perf_counter()-st)))
+    except subprocess.TimeoutExpired:
+        pending=[proc.pid]
+        descendants=[]
+        while pending:
+            pid=pending.pop()
+            descendants.append(pid)
+            for child_file in Path(f"/proc/{pid}/task").glob("*/children"):
+                try: pending.extend(int(c) for c in child_file.read_text().split() if int(c) not in descendants)
+                except FileNotFoundError: pass
+        for pid in reversed(descendants):
+            try: os.kill(pid,signal.SIGKILL)
+            except ProcessLookupError: pass
+        proc.communicate(timeout=2)
+        return {"status":"timeout","lower_bound_seconds":seconds},None
+    ms=(perf_counter()-st)*1000
+    diagnostic=(out+" "+err).strip()
+    if re.search("bad_alloc|out of memory|no more memory|cannot (?:re)?allocate",diagnostic,re.I):
+        return {"status":"allocation_failure","message":diagnostic[-260:]},None
+    if "polynomial pullback exceeds FLINT's limits" in diagnostic:
+        return {"status":"pullback_overflow","message":"The polynomial pullback exceeds FLINT's limits."},None
+    try:record=json.loads(out)
+    except ValueError as e: raise ValueError(f"Atlas exit {proc.returncode}: {diagnostic[-350:]}") from e
+    if bool(record.get("error"))!=(proc.returncode==2):raise ValueError(record)
+    error = record.get("error", {})
+    if error.get("code") == "worker_unavailable":
+        return {"status": "worker_unavailable", "message": error["message"]}, None
+    return {"status":"ok","milliseconds":ms},record
 
 
 def atlas_output(root,case,op,seconds,memory):
@@ -133,13 +236,8 @@ def atlas_output(root,case,op,seconds,memory):
     if op==QUOTIENT:
         for g in case.ideal:args+=["--gen",g]
     else:args+=["--poly",case.polynomial]
-    if expected(case,op)==-2:
-        # Ordinary launch treats nonzero subprocess status as computation
-        # failure. This fixture intentionally verifies the documented CLI error.
-        args=["/bin/sh","-c",' "$@" ; exit 0',"atlas-check",*args]
-    info,out=launch(args,"",seconds,memory)
+    info,data=timed_atlas(args,seconds,memory)
     if info["status"]!="ok":return info,None
-    data=json.loads(out)
     if expected(case,op)==-2:
         err=data.get("error",{})
         if err.get("code")!="invalid_request" or "pass through" not in err.get("message",""):raise ValueError(data)
@@ -212,6 +310,21 @@ def verify(case,op,v,seconds,memory):
     if op==JACOBIAN:
         got=[parsed(g,case.variables) for g in v["derivatives"]]
         if got!=original:raise ValueError(f"incorrect source-coordinate derivatives: {v}")
+    if case.scalar_only:
+        # x^(2^65)=0 admits a monic quadratic tower in x, x², x⁴, ...
+        # Each extension doubles the vector-space rank, including the initial
+        # QQ[t]/t² of rank 2. Singular verifies a two-step prototype and the
+        # arbitrary-precision integer product; no basis of length 2^65 is built.
+        if case.name!="bigint-length":raise ValueError(case.name)
+        coef=2**65+1
+        assert original[:2]==[{(coef-1,0):Fraction(coef)},{(0,1):Fraction(2),(0,0):Fraction(-2)}]
+        if op==TJURINA:
+            assert original[-1]=={(coef,0):1,(0,2):1,(0,1):-2,(0,0):1}
+        code=('ring P=0,(w,t),dp; ideal G=std(ideal(t^2,w^2-t));int k;bigint total=bigint(1);'
+              'for(k=1;k<=65;k++){total=total*2;}print("T "+string(vdim(G))+" "+string(total));quit;')
+        info,ans=launch(SINGULAR,code,seconds,memory)
+        if info["status"]!="ok" or ans.strip()!=f"T 4 {d}":raise ValueError(ans)
+        return "exact derivative ideal and rank of 65 monic quadratic extensions"
     if op in BASIS:
         if (d<0 and v["basis"] is not None) or (d>=0 and len(v["basis"])!=d):raise ValueError(v)
     if d==0:
@@ -252,8 +365,24 @@ def verify(case,op,v,seconds,memory):
 def fingerprints(root):
     names=["atlas","engine/local_algebra.py","engine/point_germs.py","native/build/libgroebner.so","native/build/local_algebra",
            "native/local_cli.cpp","native/local_operations.cpp","native/local_point_basis.cpp","native/local_parameter_basis.cpp",
-           "native/local_point_normal_form.cpp","native/local_quotient.cpp","native/monomial_quotient.cpp","native/point_geometry.cpp"]
+           "native/local_point_normal_form.cpp","native/local_point_quotient.cpp","native/local_quotient_initial.cpp",
+           "native/monomial_quotient.cpp","native/point_geometry.cpp"]
     return {f:hashlib.sha256((root/f).read_bytes()).hexdigest() for f in names if (root/f).is_file()}
+
+
+def singular_affinity():
+    # This Singular package repins the interpreter during startup. Observe its
+    # actual mask after parsing a command, while it waits for further input.
+    with subprocess.Popen(SINGULAR, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True) as process:
+        try:
+            process.stdin.write('print("ATLAS_AFFINITY_READY");\n')
+            process.stdin.flush()
+            if not select.select([process.stdout], [], [], 5)[0] or process.stdout.readline().strip() != "ATLAS_AFFINITY_READY":
+                raise RuntimeError("Singular did not acknowledge the affinity probe")
+            return sorted(os.sched_getaffinity(process.pid))
+        finally:
+            process.kill()
 
 
 def main():
@@ -269,10 +398,13 @@ def main():
     opts=ap.parse_args()
     if opts.repeats<1 or opts.seconds<=0 or opts.memory_mib<64:ap.error("invalid measurement limits")
     if opts.cpu is not None:os.sched_setaffinity(0,{opts.cpu})
-    methods=(["before"] if opts.baseline_root else [])+["atlas","singular","singular-global-first","singular-unit-factors"]
+    singular_cpus = singular_affinity()
+    if opts.cpu is not None and singular_cpus != [opts.cpu]:
+        ap.error(f"Singular selected CPUs {singular_cpus} after startup. Set --cpu to its actual CPU for paired timings.")
+    methods=(["before"] if opts.baseline_root else [])+["atlas","singular","singular-global-first","singular-unit-factors","singular-components","singular-jets"]
     report={"date_utc":datetime.now(timezone.utc).isoformat(),"command":sys.argv,"affinity":sorted(os.sched_getaffinity(0)),
             "cpu":next(v.split(":",1)[1].strip() for v in Path("/proc/cpuinfo").read_text().splitlines() if v.startswith("model name")),
-            "seconds":opts.seconds,"address_space_mib":opts.memory_mib,"repeats":opts.repeats,
+            "seconds":opts.seconds,"address_space_mib":opts.memory_mib,"repeats":opts.repeats,"singular_affinity":singular_cpus,
             "atlas_sha256":fingerprints(opts.atlas_root),"baseline_sha256":fingerprints(opts.baseline_root) if opts.baseline_root else None,
             "singular":subprocess.check_output(["Singular","--version"],text=True).splitlines()[0],
             "harness_sha256":{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ("benchmarks/point_quotient_invariants.py","benchmarks/shifted_local_standard.py","benchmarks/large_coupled_local.py")},

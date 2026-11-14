@@ -1,0 +1,3607 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "affinity": [
+    1
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "trials": 7,
+  "cold_trials": 7,
+  "batch": 80,
+  "binary_sha256": {
+    "bench_quotient_ring": "5c997e8fa40b9b4ed8a3531e27880d11ed5d1b51288be490f82ee72c54ffcaf1",
+    "local_algebra": "3ec08958f232c0779bf279e33f98f3150c71f530e6e037f95f7cb18ca541d28b",
+    "quotient_ring": "3ec08958f232c0779bf279e33f98f3150c71f530e6e037f95f7cb18ca541d28b",
+    "libgroebner.so": "c3d15b33e7adc011f0726fd16b9812c4dbe870e5574033723cd0bf1114be56c9",
+    "atlas": "f9b2c808877f9e1d3ddc0b48230f99320d20b03481530b9feb5ba2afca60903b",
+    "Singular": "2253a110cfa9be8a5289b16246f0da4b4f518f3159dbd78d70d3ed32eb09d196"
+  },
+  "scopes": {
+    "prepared": "Pre-parsed operands, each system prepares a quotient and its basis once; timed result is canonical.",
+    "setup": "Pre-parsed ambient inputs, each system rebuilds the quotient and computes a canonical result on every iteration.",
+    "cold": "Fresh public ./atlas algebra quotient-ring --json and Singular process; includes expression parsing, quotient, operation and output."
+  },
+  "cases": [
+    {
+      "input": {
+        "name": "declare_hyperbola",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "declare",
+        "operands": [],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-ring"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0007988875,
+            0.0007713375,
+            0.0007354,
+            0.0007612,
+            0.0007505375,
+            0.0007370125,
+            0.00075655
+          ],
+          "median_ms": 0.00075655
+        },
+        "singular": {
+          "samples_ms": [
+            0.015775,
+            0.016275,
+            0.0163625,
+            0.0158625,
+            0.015975,
+            0.0164375,
+            0.016175
+          ],
+          "median_ms": 0.016175
+        },
+        "median_speedup": 21.37994845020157,
+        "wins": 7,
+        "worst_paired_speedup": 19.746209572687018,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.07944,
+            5.701294,
+            5.271111,
+            5.618017,
+            5.288804,
+            5.743494,
+            5.463815
+          ],
+          "median_ms": 5.618017
+        },
+        "singular": {
+          "samples_ms": [
+            8.27925,
+            7.426077,
+            7.671431,
+            7.470992,
+            7.561844,
+            7.349532,
+            7.672663
+          ],
+          "median_ms": 7.561844
+        },
+        "median_speedup": 1.3459987750126068,
+        "wins": 7,
+        "worst_paired_speedup": 1.2796273487880374,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "declare_curve",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "w"
+        ],
+        "relations": [
+          "x*z-y^2",
+          "x*w-y*z",
+          "y*w-z^2",
+          "x^2*w-x*y*z"
+        ],
+        "action": "declare",
+        "operands": [],
+        "exponent": 0,
+        "order": "lex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*z-y^2",
+          "x*w-y*z",
+          "y*w-z^2"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "lex",
+          "variables": [
+            "x",
+            "y",
+            "z",
+            "w"
+          ]
+        },
+        "type": "quotient-ring"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0279694,
+            0.02932485,
+            0.0287550125,
+            0.0296375625,
+            0.02975015,
+            0.02808925,
+            0.0289855875
+          ],
+          "median_ms": 0.0289855875
+        },
+        "singular": {
+          "samples_ms": [
+            0.219075,
+            0.2200125,
+            0.2208125,
+            0.22,
+            0.2184,
+            0.22045,
+            0.2209875
+          ],
+          "median_ms": 0.2200125
+        },
+        "median_speedup": 7.590410234051665,
+        "wins": 7,
+        "worst_paired_speedup": 7.341139456439716,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.354791,
+            5.871426,
+            5.771397,
+            5.86283,
+            5.427016,
+            5.835449,
+            5.494312
+          ],
+          "median_ms": 5.835449
+        },
+        "singular": {
+          "samples_ms": [
+            8.256557,
+            7.816075,
+            8.032624,
+            7.971068,
+            8.280613,
+            7.860819,
+            8.035019
+          ],
+          "median_ms": 8.032624
+        },
+        "median_speedup": 1.3765220122736057,
+        "wins": 7,
+        "worst_paired_speedup": 1.2992649168163046,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "circle_reduce_lex",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^2+y^2-1",
+          "x*y-1/3"
+        ],
+        "action": "reduce",
+        "operands": [
+          "x^7+3*x^3*y^2-5*y^9"
+        ],
+        "exponent": 0,
+        "order": "lex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "3*y^3+x-3*y",
+          "y^4-y^2+1/9"
+        ],
+        "representative": "-65/9*y^3+286/81*y",
+        "ring": {
+          "field": "QQ",
+          "order": "lex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0042846125,
+            0.0043334375,
+            0.0042831,
+            0.004695375,
+            0.004612975,
+            0.0043760375,
+            0.0045992
+          ],
+          "median_ms": 0.0043760375
+        },
+        "singular": {
+          "samples_ms": [
+            0.011175,
+            0.0108375,
+            0.0107375,
+            0.010475,
+            0.0109375,
+            0.0115125,
+            0.010625
+          ],
+          "median_ms": 0.0108375
+        },
+        "median_speedup": 2.4765555596815614,
+        "wins": 7,
+        "worst_paired_speedup": 2.230918723211671,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0233096125,
+            0.0245949125,
+            0.023963975,
+            0.0240008,
+            0.0244550375,
+            0.024237875,
+            0.0248956125
+          ],
+          "median_ms": 0.024237875
+        },
+        "singular": {
+          "samples_ms": [
+            0.263675,
+            0.2655375,
+            0.26745,
+            0.2667,
+            0.2635,
+            0.2653,
+            0.2674625
+          ],
+          "median_ms": 0.2655375
+        },
+        "median_speedup": 10.955477738869435,
+        "wins": 7,
+        "worst_paired_speedup": 10.743358895066349,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.448945,
+            6.598958,
+            6.493268,
+            5.953958,
+            5.703714,
+            6.583079,
+            6.133989
+          ],
+          "median_ms": 6.448945
+        },
+        "singular": {
+          "samples_ms": [
+            8.603712,
+            8.310638,
+            9.04629,
+            8.589455,
+            8.430815,
+            8.302883,
+            8.825442
+          ],
+          "median_ms": 8.589455
+        },
+        "median_speedup": 1.3319163056903105,
+        "wins": 7,
+        "worst_paired_speedup": 1.259386406156851,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "circle_reduce_grevlex",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^2+y^2-1",
+          "x*y-1/3"
+        ],
+        "action": "reduce",
+        "operands": [
+          "x^7+3*x^3*y^2-5*y^9"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^3+1/3*x-y",
+          "x^2+y^2-1",
+          "x*y-1/3"
+        ],
+        "representative": "65/27*x-299/81*y",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0032524125,
+            0.00351265,
+            0.003183275,
+            0.0034501625,
+            0.0034569125,
+            0.0032748125,
+            0.0032848375
+          ],
+          "median_ms": 0.0032848375
+        },
+        "singular": {
+          "samples_ms": [
+            0.0089375,
+            0.0089,
+            0.0088625,
+            0.0086875,
+            0.0090125,
+            0.0086375,
+            0.0088125
+          ],
+          "median_ms": 0.0088625
+        },
+        "median_speedup": 2.6980025648148502,
+        "wins": 7,
+        "worst_paired_speedup": 2.517997340704967,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0256623125,
+            0.024693475,
+            0.0242920875,
+            0.0251913,
+            0.024813575,
+            0.026457575,
+            0.027651575
+          ],
+          "median_ms": 0.0251913
+        },
+        "singular": {
+          "samples_ms": [
+            0.03585,
+            0.03555,
+            0.0351625,
+            0.035625,
+            0.0355625,
+            0.035225,
+            0.03765
+          ],
+          "median_ms": 0.0355625
+        },
+        "median_speedup": 1.4116976892816169,
+        "wins": 7,
+        "worst_paired_speedup": 1.3313767418215765,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.576496,
+            6.185326,
+            6.750736,
+            6.341551,
+            6.143377,
+            6.054077,
+            5.316521
+          ],
+          "median_ms": 6.185326
+        },
+        "singular": {
+          "samples_ms": [
+            8.336006,
+            7.971886,
+            8.593503,
+            8.412371,
+            8.194589,
+            8.360332,
+            7.938223
+          ],
+          "median_ms": 8.336006
+        },
+        "median_speedup": 1.3477068144831816,
+        "wins": 7,
+        "worst_paired_speedup": 1.2675452094854158,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "nilpotent_add",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3",
+          "y^4"
+        ],
+        "action": "add",
+        "operands": [
+          "x^2+2*x*y+3*y^2-1/2",
+          "x^3*y-x*y^2+5"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^4",
+          "x^3"
+        ],
+        "representative": "-x*y^2+x^2+2*x*y+3*y^2+9/2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0011603125,
+            0.001282425,
+            0.0013020875,
+            0.001360825,
+            0.0013496875,
+            0.0014061625,
+            0.0013723375
+          ],
+          "median_ms": 0.0013496875
+        },
+        "singular": {
+          "samples_ms": [
+            0.004275,
+            0.0041875,
+            0.004775,
+            0.0047875,
+            0.0045375,
+            0.004625,
+            0.0046125
+          ],
+          "median_ms": 0.0046125
+        },
+        "median_speedup": 3.417457744848345,
+        "wins": 7,
+        "worst_paired_speedup": 3.265298165584732,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.003395175,
+            0.0029525875,
+            0.0029388125,
+            0.0028053125,
+            0.00289385,
+            0.0031103875,
+            0.00293205
+          ],
+          "median_ms": 0.0029388125
+        },
+        "singular": {
+          "samples_ms": [
+            0.03025,
+            0.0289375,
+            0.02685,
+            0.0292625,
+            0.0266625,
+            0.02815,
+            0.0272125
+          ],
+          "median_ms": 0.02815
+        },
+        "median_speedup": 9.578698879224177,
+        "wins": 7,
+        "worst_paired_speedup": 8.909702739917677,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.815147,
+            6.391846,
+            5.802622,
+            6.449556,
+            5.914824,
+            6.321614,
+            6.144529
+          ],
+          "median_ms": 6.321614
+        },
+        "singular": {
+          "samples_ms": [
+            8.941472,
+            8.637066,
+            8.842174,
+            8.612068,
+            8.277134,
+            8.344672,
+            8.505446
+          ],
+          "median_ms": 8.612068
+        },
+        "median_speedup": 1.3623210781297308,
+        "wins": 7,
+        "worst_paired_speedup": 1.311999873223571,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "torus_subtract",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "subtract",
+        "operands": [
+          "x*y*z^2+x^2*y+2/3",
+          "x+z^2-1/7"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "representative": "17/21",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0006512375,
+            0.0006642625,
+            0.00070495,
+            0.000741275,
+            0.000691925,
+            0.0006785375,
+            0.0007111
+          ],
+          "median_ms": 0.000691925
+        },
+        "singular": {
+          "samples_ms": [
+            0.004375,
+            0.00425,
+            0.0043125,
+            0.0044625,
+            0.0042625,
+            0.0043125,
+            0.0042875
+          ],
+          "median_ms": 0.0043125
+        },
+        "median_speedup": 6.232611916031362,
+        "wins": 7,
+        "worst_paired_speedup": 6.02003305116185,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.001872925,
+            0.0017781125,
+            0.0018950875,
+            0.001640725,
+            0.002407425,
+            0.001638725,
+            0.00177385
+          ],
+          "median_ms": 0.0017781125
+        },
+        "singular": {
+          "samples_ms": [
+            0.027025,
+            0.0274625,
+            0.027575,
+            0.0276375,
+            0.02645,
+            0.02695,
+            0.0280625
+          ],
+          "median_ms": 0.0274625
+        },
+        "median_speedup": 15.444748293485366,
+        "wins": 7,
+        "worst_paired_speedup": 10.986842788456547,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.386406,
+            6.306876,
+            5.429516,
+            6.302227,
+            5.802081,
+            6.474162,
+            6.079285
+          ],
+          "median_ms": 6.302227
+        },
+        "singular": {
+          "samples_ms": [
+            8.369419,
+            8.273017,
+            7.935639,
+            8.134555,
+            8.081595,
+            7.99481,
+            8.519784
+          ],
+          "median_ms": 8.134555
+        },
+        "median_speedup": 1.2907429389642742,
+        "wins": 7,
+        "worst_paired_speedup": 1.2348795102748433,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "wide_rational_negate",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [],
+        "action": "negate",
+        "operands": [
+          "(18446744073709551629/11)*x^2*y+2/7"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [],
+        "representative": "-18446744073709551629/11*x^2*y-2/7",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0002464625,
+            0.0002363125,
+            0.000238575,
+            0.00024635,
+            0.0002368125,
+            0.000236325,
+            0.0002420875
+          ],
+          "median_ms": 0.000238575
+        },
+        "singular": {
+          "samples_ms": [
+            0.002475,
+            0.0032375,
+            0.0029125,
+            0.002475,
+            0.0024625,
+            0.00255,
+            0.00255
+          ],
+          "median_ms": 0.00255
+        },
+        "median_speedup": 10.68846274756366,
+        "wins": 7,
+        "worst_paired_speedup": 10.042095653496984,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0002721375,
+            0.000284675,
+            0.000290425,
+            0.000289925,
+            0.0002660125,
+            0.000277775,
+            0.0002821625
+          ],
+          "median_ms": 0.0002821625
+        },
+        "singular": {
+          "samples_ms": [
+            0.0152875,
+            0.014275,
+            0.015325,
+            0.0141125,
+            0.0146125,
+            0.0146375,
+            0.0157375
+          ],
+          "median_ms": 0.0146375
+        },
+        "median_speedup": 51.87613520577681,
+        "wins": 7,
+        "worst_paired_speedup": 48.676381822885226,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.547561,
+            6.519258,
+            6.155249,
+            6.374654,
+            6.022137,
+            6.327996,
+            6.128839
+          ],
+          "median_ms": 6.327996
+        },
+        "singular": {
+          "samples_ms": [
+            8.112002,
+            8.161816,
+            8.250575,
+            7.986505,
+            7.934055,
+            7.860215,
+            8.639701
+          ],
+          "median_ms": 8.112002
+        },
+        "median_speedup": 1.2819227445782204,
+        "wins": 7,
+        "worst_paired_speedup": 1.238934925539449,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "grid_multiply",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3-x",
+          "y^3-y"
+        ],
+        "action": "multiply",
+        "operands": [
+          "x^2+2*x*y+3*y^2-1/2",
+          "x^3*y-x*y^2+5"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^3-x",
+          "y^3-y"
+        ],
+        "representative": "2*x^2*y^2-2*x^2*y-7/2*x*y^2+5*x^2+27/2*x*y+15*y^2-5/2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0023841375,
+            0.00255245,
+            0.0025151375,
+            0.0023723625,
+            0.0025564625,
+            0.0026731875,
+            0.0025173875
+          ],
+          "median_ms": 0.0025173875
+        },
+        "singular": {
+          "samples_ms": [
+            0.00625,
+            0.0061625,
+            0.006675,
+            0.005825,
+            0.0062,
+            0.006075,
+            0.0062875
+          ],
+          "median_ms": 0.0062
+        },
+        "median_speedup": 2.462870734044719,
+        "wins": 7,
+        "worst_paired_speedup": 2.2725678614014164,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0056069875,
+            0.0055428625,
+            0.00543015,
+            0.0054263875,
+            0.00566485,
+            0.0054949,
+            0.00565145
+          ],
+          "median_ms": 0.0055428625
+        },
+        "singular": {
+          "samples_ms": [
+            0.030025,
+            0.0306375,
+            0.0309375,
+            0.0306875,
+            0.0315125,
+            0.0326625,
+            0.0298875
+          ],
+          "median_ms": 0.0306875
+        },
+        "median_speedup": 5.536399288273884,
+        "wins": 7,
+        "worst_paired_speedup": 5.288465791964894,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.042806,
+            5.978644,
+            5.615958,
+            6.03969,
+            5.71228,
+            5.943829,
+            5.63247
+          ],
+          "median_ms": 5.943829
+        },
+        "singular": {
+          "samples_ms": [
+            7.664365,
+            8.062628,
+            8.014147,
+            8.065924,
+            8.348539,
+            8.171715,
+            8.197954
+          ],
+          "median_ms": 8.065924
+        },
+        "median_speedup": 1.3570249076815637,
+        "wins": 7,
+        "worst_paired_speedup": 1.268345368029356,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "curve_multiply",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "w"
+        ],
+        "relations": [
+          "x*z-y^2",
+          "x*w-y*z",
+          "y*w-z^2"
+        ],
+        "action": "multiply",
+        "operands": [
+          "x^2+w^2+3*y*z-2*z^2+1/2",
+          "x*z+w^2-x*w+y^2"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "-x*z+y^2",
+          "-x*w+y*z",
+          "-y*w+z^2"
+        ],
+        "representative": "2*x^3*z-x^3*w+6*x^2*z*w-6*x^2*w^2+2*x*y*w^2+2*x*z*w^2+2*x*w^3-2*y*w^3+w^4+x*z-1/2*x*w+1/2*w^2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z",
+            "w"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0052376625,
+            0.00559935,
+            0.0052526875,
+            0.0050285125,
+            0.005272475,
+            0.0052499375,
+            0.005324825
+          ],
+          "median_ms": 0.0052526875
+        },
+        "singular": {
+          "samples_ms": [
+            0.0073375,
+            0.0076625,
+            0.0072625,
+            0.00755,
+            0.007925,
+            0.0076875,
+            0.0076375
+          ],
+          "median_ms": 0.0076375
+        },
+        "median_speedup": 1.4540175862356175,
+        "wins": 7,
+        "worst_paired_speedup": 1.368462410815541,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.01409455,
+            0.01437095,
+            0.0146457125,
+            0.0140876625,
+            0.014766075,
+            0.0149789625,
+            0.015047975
+          ],
+          "median_ms": 0.0146457125
+        },
+        "singular": {
+          "samples_ms": [
+            0.0354875,
+            0.0355875,
+            0.03545,
+            0.0374625,
+            0.036025,
+            0.036725,
+            0.0349
+          ],
+          "median_ms": 0.0355875
+        },
+        "median_speedup": 2.4298920247137175,
+        "wins": 7,
+        "worst_paired_speedup": 2.3192489354879977,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.715887,
+            6.219671,
+            5.7329,
+            6.157363,
+            5.971411,
+            6.19803,
+            5.818241
+          ],
+          "median_ms": 5.971411
+        },
+        "singular": {
+          "samples_ms": [
+            8.090571,
+            8.561623,
+            8.246957,
+            7.833826,
+            7.879102,
+            8.122111,
+            8.387524
+          ],
+          "median_ms": 8.122111
+        },
+        "median_speedup": 1.3601661315893347,
+        "wins": 7,
+        "worst_paired_speedup": 1.2722696388047936,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "torus_equal",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "equal",
+        "operands": [
+          "x^2*y^2*z^3",
+          "z^3"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "boolean",
+        "value": true
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0002811625,
+            0.0002702625,
+            0.000291675,
+            0.000282525,
+            0.000279525,
+            0.0002675125,
+            0.0002963125
+          ],
+          "median_ms": 0.0002811625
+        },
+        "singular": {
+          "samples_ms": [
+            0.0046875,
+            0.0043125,
+            0.0047125,
+            0.0043375,
+            0.0048125,
+            0.0043875,
+            0.0044375
+          ],
+          "median_ms": 0.0044375
+        },
+        "median_speedup": 15.7826879473614,
+        "wins": 7,
+        "worst_paired_speedup": 14.975743514026574,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0012555,
+            0.001189375,
+            0.0011908875,
+            0.0012076625,
+            0.00123585,
+            0.0011648375,
+            0.001188125
+          ],
+          "median_ms": 0.0011908875
+        },
+        "singular": {
+          "samples_ms": [
+            0.026625,
+            0.025775,
+            0.0245625,
+            0.0256625,
+            0.025625,
+            0.0257625,
+            0.027625
+          ],
+          "median_ms": 0.0257625
+        },
+        "median_speedup": 21.6330257895897,
+        "wins": 7,
+        "worst_paired_speedup": 20.625373933306044,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.719848,
+            6.2719,
+            5.833089,
+            6.276248,
+            5.752767,
+            6.381227,
+            5.569139
+          ],
+          "median_ms": 6.2719
+        },
+        "singular": {
+          "samples_ms": [
+            8.35958,
+            8.468626,
+            8.402541,
+            8.52866,
+            8.078148,
+            8.152469,
+            7.980413
+          ],
+          "median_ms": 8.35958
+        },
+        "median_speedup": 1.3328624499752866,
+        "wins": 7,
+        "worst_paired_speedup": 1.2440132574427278,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "curve_unequal",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "w"
+        ],
+        "relations": [
+          "x*z-y^2",
+          "x*w-y*z",
+          "y*w-z^2"
+        ],
+        "action": "equal",
+        "operands": [
+          "x*z^2+w",
+          "y^2*z"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "-x*z+y^2",
+          "-x*w+y*z",
+          "-y*w+z^2"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z",
+            "w"
+          ]
+        },
+        "type": "boolean",
+        "value": false
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0009822375,
+            0.0010015125,
+            0.0011698375,
+            0.001058625,
+            0.0009853625,
+            0.001067525,
+            0.00106865
+          ],
+          "median_ms": 0.001058625
+        },
+        "singular": {
+          "samples_ms": [
+            0.004725,
+            0.004975,
+            0.0050375,
+            0.00495,
+            0.004875,
+            0.0046625,
+            0.0048375
+          ],
+          "median_ms": 0.004875
+        },
+        "median_speedup": 4.605030109812256,
+        "wins": 7,
+        "worst_paired_speedup": 4.306153632448952,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0092237,
+            0.00841605,
+            0.0084982,
+            0.00868945,
+            0.00894405,
+            0.009085575,
+            0.008682425
+          ],
+          "median_ms": 0.00868945
+        },
+        "singular": {
+          "samples_ms": [
+            0.03255,
+            0.0311375,
+            0.03105,
+            0.0305,
+            0.0301375,
+            0.0305875,
+            0.030275
+          ],
+          "median_ms": 0.0305875
+        },
+        "median_speedup": 3.52007319220434,
+        "wins": 7,
+        "worst_paired_speedup": 3.36660035275698,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.345399,
+            6.285886,
+            6.138837,
+            6.225813,
+            5.961893,
+            6.469684,
+            5.892803
+          ],
+          "median_ms": 6.225813
+        },
+        "singular": {
+          "samples_ms": [
+            8.487012,
+            8.55505,
+            8.054263,
+            8.368838,
+            8.600967,
+            8.891177,
+            8.262667
+          ],
+          "median_ms": 8.487012
+        },
+        "median_speedup": 1.3631973848234762,
+        "wins": 7,
+        "worst_paired_speedup": 1.3120177323489777,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "field_power",
+        "variables": [
+          "x"
+        ],
+        "relations": [
+          "x^4+x+1"
+        ],
+        "action": "power",
+        "operands": [
+          "2*x^3-x^2+1"
+        ],
+        "exponent": 41,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^4+x+1"
+        ],
+        "representative": "-205156933399*x^3+433488955935*x^2-485500310626*x+188448833977",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0041437125,
+            0.00406445,
+            0.0039635,
+            0.0041059,
+            0.0040522875,
+            0.0039591125,
+            0.0041139125
+          ],
+          "median_ms": 0.00406445
+        },
+        "singular": {
+          "samples_ms": [
+            0.074925,
+            0.073775,
+            0.0729,
+            0.0743875,
+            0.07395,
+            0.0743625,
+            0.0771125
+          ],
+          "median_ms": 0.0743625
+        },
+        "median_speedup": 18.295833384590782,
+        "wins": 7,
+        "worst_paired_speedup": 18.08161159829501,
+        "singular_method": "modular_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.074925,
+              0.073775,
+              0.0729,
+              0.0743875,
+              0.07395,
+              0.0743625,
+              0.0771125
+            ],
+            "median_ms": 0.0743625
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.418825,
+              0.4187,
+              0.4257625,
+              0.416525,
+              0.4124375,
+              0.41295,
+              0.4185375
+            ],
+            "median_ms": 0.4185375
+          }
+        }
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.00597055,
+            0.00579935,
+            0.005486625,
+            0.0060192625,
+            0.0059822,
+            0.0059738,
+            0.0062852625
+          ],
+          "median_ms": 0.0059738
+        },
+        "singular": {
+          "samples_ms": [
+            0.098475,
+            0.0946125,
+            0.0987,
+            0.1004,
+            0.094075,
+            0.097975,
+            0.102525
+          ],
+          "median_ms": 0.098475
+        },
+        "median_speedup": 16.484482239110783,
+        "wins": 7,
+        "worst_paired_speedup": 15.725819932466317,
+        "singular_method": "modular_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.098475,
+              0.0946125,
+              0.0987,
+              0.1004,
+              0.094075,
+              0.097975,
+              0.102525
+            ],
+            "median_ms": 0.098475
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.43625,
+              0.4442375,
+              0.4318875,
+              0.43625,
+              0.4387875,
+              0.4372625,
+              0.4947125
+            ],
+            "median_ms": 0.4372625
+          }
+        }
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.886681,
+            6.388059,
+            6.010364,
+            5.963907,
+            6.608135,
+            6.006277,
+            6.051031
+          ],
+          "median_ms": 6.010364
+        },
+        "singular": {
+          "samples_ms": [
+            8.098226,
+            8.235816,
+            7.92612,
+            8.303174,
+            7.71984,
+            8.25359,
+            9.688295
+          ],
+          "median_ms": 8.235816
+        },
+        "median_speedup": 1.3702690885277498,
+        "wins": 7,
+        "worst_paired_speedup": 1.1682327918542825,
+        "singular_method": "modular_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              8.098226,
+              8.235816,
+              7.92612,
+              8.303174,
+              7.71984,
+              8.25359,
+              9.688295
+            ],
+            "median_ms": 8.235816
+          },
+          "builtin_power": {
+            "samples_ms": [
+              8.259892,
+              8.329884,
+              8.657625,
+              8.30643,
+              8.460231,
+              8.7028,
+              9.033586
+            ],
+            "median_ms": 8.460231
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "nilpotent_power",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3",
+          "y^4"
+        ],
+        "action": "power",
+        "operands": [
+          "x+y"
+        ],
+        "exponent": 37,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^4",
+          "x^3"
+        ],
+        "representative": "0",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0099487,
+            0.009618575,
+            0.00977775,
+            0.0099725,
+            0.009175875,
+            0.0094615375,
+            0.0092501375
+          ],
+          "median_ms": 0.009618575
+        },
+        "singular": {
+          "samples_ms": [
+            0.012575,
+            0.0127625,
+            0.0127125,
+            0.012525,
+            0.0109875,
+            0.0125375,
+            0.012575
+          ],
+          "median_ms": 0.012575
+        },
+        "median_speedup": 1.3073662158895676,
+        "wins": 7,
+        "worst_paired_speedup": 1.1974334872696064,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.06545,
+              0.0643625,
+              0.069375,
+              0.064775,
+              0.065625,
+              0.0685625,
+              0.0651
+            ],
+            "median_ms": 0.06545
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.012575,
+              0.0127625,
+              0.0127125,
+              0.012525,
+              0.0109875,
+              0.0125375,
+              0.012575
+            ],
+            "median_ms": 0.012575
+          }
+        }
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.01137565,
+            0.0108901125,
+            0.011306275,
+            0.0114590625,
+            0.011373275,
+            0.01179295,
+            0.0115835375
+          ],
+          "median_ms": 0.01137565
+        },
+        "singular": {
+          "samples_ms": [
+            0.034425,
+            0.036775,
+            0.03455,
+            0.0343625,
+            0.0363125,
+            0.0353375,
+            0.03665
+          ],
+          "median_ms": 0.0353375
+        },
+        "median_speedup": 3.1064158971135716,
+        "wins": 7,
+        "worst_paired_speedup": 2.9964936678269645,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.0901375,
+              0.09015,
+              0.096275,
+              0.0918875,
+              0.0902375,
+              0.092575,
+              0.09335
+            ],
+            "median_ms": 0.0918875
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.034425,
+              0.036775,
+              0.03455,
+              0.0343625,
+              0.0363125,
+              0.0353375,
+              0.03665
+            ],
+            "median_ms": 0.0353375
+          }
+        }
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.102439,
+            5.869659,
+            5.923922,
+            5.620467,
+            5.523603,
+            5.769448,
+            5.842237
+          ],
+          "median_ms": 5.842237
+        },
+        "singular": {
+          "samples_ms": [
+            7.740439,
+            7.521996,
+            8.085382,
+            7.835048,
+            7.488642,
+            7.752171,
+            8.090261
+          ],
+          "median_ms": 7.752171
+        },
+        "median_speedup": 1.3269182677799616,
+        "wins": 7,
+        "worst_paired_speedup": 1.268417267259861,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              8.203285,
+              7.759384,
+              7.9682,
+              7.798839,
+              7.948152,
+              7.833866,
+              7.958051
+            ],
+            "median_ms": 7.948152
+          },
+          "builtin_power": {
+            "samples_ms": [
+              7.740439,
+              7.521996,
+              8.085382,
+              7.835048,
+              7.488642,
+              7.752171,
+              8.090261
+            ],
+            "median_ms": 7.752171
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "dual_negative_power",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3"
+        ],
+        "action": "power",
+        "operands": [
+          "1+x*y"
+        ],
+        "exponent": -7,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^3"
+        ],
+        "representative": "28*x^2*y^2-7*x*y+1",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0211058125,
+            0.0219935,
+            0.02087075,
+            0.0216448375,
+            0.0215843375,
+            0.0219609375,
+            0.021557675
+          ],
+          "median_ms": 0.0215843375
+        },
+        "singular": {
+          "samples_ms": [
+            0.0514375,
+            0.052275,
+            0.051725,
+            0.0535,
+            0.051775,
+            0.0521875,
+            0.050725
+          ],
+          "median_ms": 0.051775
+        },
+        "median_speedup": 2.3987300976923662,
+        "wins": 7,
+        "worst_paired_speedup": 2.3529902923204844,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.094225,
+              0.0936625,
+              0.09335,
+              0.094375,
+              0.09435,
+              0.099075,
+              0.0922875
+            ],
+            "median_ms": 0.094225
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.0514375,
+              0.052275,
+              0.051725,
+              0.0535,
+              0.051775,
+              0.0521875,
+              0.050725
+            ],
+            "median_ms": 0.051775
+          }
+        }
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0222572375,
+            0.021943275,
+            0.0221689625,
+            0.0222890625,
+            0.0218335625,
+            0.022317475,
+            0.0224894375
+          ],
+          "median_ms": 0.0222572375
+        },
+        "singular": {
+          "samples_ms": [
+            0.0759125,
+            0.0755125,
+            0.0770125,
+            0.0759875,
+            0.076475,
+            0.0752,
+            0.0779625
+          ],
+          "median_ms": 0.0759875
+        },
+        "median_speedup": 3.4140580114670565,
+        "wins": 7,
+        "worst_paired_speedup": 3.3695568159032327,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              0.1189875,
+              0.1178875,
+              0.1215375,
+              0.119875,
+              0.120075,
+              0.1198375,
+              0.120425
+            ],
+            "median_ms": 0.119875
+          },
+          "builtin_power": {
+            "samples_ms": [
+              0.0759125,
+              0.0755125,
+              0.0770125,
+              0.0759875,
+              0.076475,
+              0.0752,
+              0.0779625
+            ],
+            "median_ms": 0.0759875
+          }
+        }
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.464825,
+            6.418497,
+            5.761704,
+            6.000776,
+            6.028428,
+            5.8809,
+            6.064648
+          ],
+          "median_ms": 6.028428
+        },
+        "singular": {
+          "samples_ms": [
+            9.128195,
+            8.229154,
+            8.666712,
+            8.083158,
+            7.935558,
+            8.243551,
+            8.595847
+          ],
+          "median_ms": 8.243551
+        },
+        "median_speedup": 1.3674462065400799,
+        "wins": 7,
+        "worst_paired_speedup": 1.2820998436238265,
+        "singular_method": "builtin_power",
+        "singular_alternatives": {
+          "modular_power": {
+            "samples_ms": [
+              9.255566,
+              8.703632,
+              8.350824,
+              8.301431,
+              8.045136,
+              8.488144,
+              8.635112
+            ],
+            "median_ms": 8.488144
+          },
+          "builtin_power": {
+            "samples_ms": [
+              9.128195,
+              8.229154,
+              8.666712,
+              8.083158,
+              7.935558,
+              8.243551,
+              8.595847
+            ],
+            "median_ms": 8.243551
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "constant_power_zero",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3",
+          "y^4"
+        ],
+        "action": "power",
+        "operands": [
+          "0"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^4",
+          "x^3"
+        ],
+        "representative": "1",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0002449625,
+            0.000242075,
+            0.0002420875,
+            0.0002476,
+            0.000240575,
+            0.0002330625,
+            0.0002291875
+          ],
+          "median_ms": 0.000242075
+        },
+        "singular": {
+          "samples_ms": [
+            0.0035375,
+            0.0035375,
+            0.0039625,
+            0.0038375,
+            0.0036125,
+            0.0034,
+            0.0034625
+          ],
+          "median_ms": 0.0035375
+        },
+        "median_speedup": 14.613239698440566,
+        "wins": 7,
+        "worst_paired_speedup": 14.440985865183446,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0015689625,
+            0.0015811125,
+            0.001571475,
+            0.0015901375,
+            0.0016393625,
+            0.0016773,
+            0.0015711
+          ],
+          "median_ms": 0.0015811125
+        },
+        "singular": {
+          "samples_ms": [
+            0.02525,
+            0.02515,
+            0.0254,
+            0.025725,
+            0.02495,
+            0.02515,
+            0.02515
+          ],
+          "median_ms": 0.02515
+        },
+        "median_speedup": 15.906521515704924,
+        "wins": 7,
+        "worst_paired_speedup": 14.994336135455791,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.305684,
+            6.344827,
+            6.211214,
+            5.901098,
+            5.469772,
+            5.543852,
+            5.354654
+          ],
+          "median_ms": 5.901098
+        },
+        "singular": {
+          "samples_ms": [
+            8.507471,
+            8.518371,
+            8.437738,
+            7.853854,
+            7.168446,
+            7.295277,
+            7.569836
+          ],
+          "median_ms": 7.853854
+        },
+        "median_speedup": 1.3309140095622882,
+        "wins": 7,
+        "worst_paired_speedup": 1.3105566374613056,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "torus_unit",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "unit",
+        "operands": [
+          "x^2"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "boolean",
+        "value": true
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.00188745,
+            0.00182095,
+            0.00186315,
+            0.0018422375,
+            0.001838225,
+            0.00185915,
+            0.001854
+          ],
+          "median_ms": 0.001854
+        },
+        "singular": {
+          "samples_ms": [
+            0.015825,
+            0.0157875,
+            0.016175,
+            0.0157375,
+            0.015775,
+            0.015775,
+            0.01575
+          ],
+          "median_ms": 0.015775
+        },
+        "median_speedup": 8.508629989212514,
+        "wins": 7,
+        "worst_paired_speedup": 8.384328061670507,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0035592375,
+            0.004099375,
+            0.0035354375,
+            0.0035462125,
+            0.0035677625,
+            0.003540575,
+            0.0034671875
+          ],
+          "median_ms": 0.0035462125
+        },
+        "singular": {
+          "samples_ms": [
+            0.0374875,
+            0.037425,
+            0.03735,
+            0.037925,
+            0.0385625,
+            0.037575,
+            0.03795
+          ],
+          "median_ms": 0.037575
+        },
+        "median_speedup": 10.59581172871056,
+        "wins": 7,
+        "worst_paired_speedup": 9.129440463485288,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.398597,
+            6.050631,
+            5.86539,
+            5.516179,
+            5.402515,
+            6.028239,
+            6.378892
+          ],
+          "median_ms": 5.86539
+        },
+        "singular": {
+          "samples_ms": [
+            7.089787,
+            7.457834,
+            7.726482,
+            7.153528,
+            7.928895,
+            7.169759,
+            8.279269
+          ],
+          "median_ms": 7.457834
+        },
+        "median_speedup": 1.2714983999358953,
+        "wins": 7,
+        "worst_paired_speedup": 1.1893621006068273,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "domain_nonunit",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "y-x^2"
+        ],
+        "action": "unit",
+        "operands": [
+          "x+1"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^2-y"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "boolean",
+        "value": false
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.000608025,
+            0.0006180375,
+            0.0006248,
+            0.000935275,
+            0.0006165375,
+            0.000620425,
+            0.000621425
+          ],
+          "median_ms": 0.000620425
+        },
+        "singular": {
+          "samples_ms": [
+            0.0162875,
+            0.0162875,
+            0.0164125,
+            0.016675,
+            0.0164875,
+            0.0162875,
+            0.0164125
+          ],
+          "median_ms": 0.0164125
+        },
+        "median_speedup": 26.453640649554742,
+        "wins": 7,
+        "worst_paired_speedup": 17.8289807810537,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0023415625,
+            0.0023289,
+            0.0023296625,
+            0.0023115,
+            0.0023167625,
+            0.0023072375,
+            0.0023698625
+          ],
+          "median_ms": 0.0023289
+        },
+        "singular": {
+          "samples_ms": [
+            0.039175,
+            0.03895,
+            0.0386875,
+            0.0388125,
+            0.039325,
+            0.0391375,
+            0.0389125
+          ],
+          "median_ms": 0.03895
+        },
+        "median_speedup": 16.72463394735712,
+        "wins": 7,
+        "worst_paired_speedup": 16.41972899271582,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.624724,
+            5.686572,
+            5.239235,
+            5.511721,
+            5.390461,
+            5.552939,
+            5.236099
+          ],
+          "median_ms": 5.511721
+        },
+        "singular": {
+          "samples_ms": [
+            7.638495,
+            7.305616,
+            7.707467,
+            7.354108,
+            7.673272,
+            7.280428,
+            7.616614
+          ],
+          "median_ms": 7.616614
+        },
+        "median_speedup": 1.3818939674196138,
+        "wins": 7,
+        "worst_paired_speedup": 1.2847135321596208,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "nilpotent_nonunit",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3",
+          "y^4"
+        ],
+        "action": "unit",
+        "operands": [
+          "x+y"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^4",
+          "x^3"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "boolean",
+        "value": false
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.000593,
+            0.00058585,
+            0.0005873625,
+            0.00058035,
+            0.0005862375,
+            0.0005792125,
+            0.0005786
+          ],
+          "median_ms": 0.00058585
+        },
+        "singular": {
+          "samples_ms": [
+            0.016,
+            0.015875,
+            0.016275,
+            0.01665,
+            0.016425,
+            0.0161,
+            0.01595
+          ],
+          "median_ms": 0.0161
+        },
+        "median_speedup": 27.481437227959375,
+        "wins": 7,
+        "worst_paired_speedup": 26.981450252951095,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.002220075,
+            0.002215075,
+            0.002162725,
+            0.0021994125,
+            0.0021439375,
+            0.002180375,
+            0.0022119375
+          ],
+          "median_ms": 0.0021994125
+        },
+        "singular": {
+          "samples_ms": [
+            0.0383625,
+            0.0386125,
+            0.0383375,
+            0.038525,
+            0.038225,
+            0.0392375,
+            0.037475
+          ],
+          "median_ms": 0.0383625
+        },
+        "median_speedup": 17.442157848971032,
+        "wins": 7,
+        "worst_paired_speedup": 16.94216043626911,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.893434,
+            5.983383,
+            5.550624,
+            6.032016,
+            5.72783,
+            6.054628,
+            6.36171
+          ],
+          "median_ms": 5.983383
+        },
+        "singular": {
+          "samples_ms": [
+            8.542837,
+            8.452126,
+            8.130136,
+            8.284479,
+            8.115739,
+            7.997375,
+            8.768705
+          ],
+          "median_ms": 8.284479
+        },
+        "median_speedup": 1.3845810973491082,
+        "wins": 7,
+        "worst_paired_speedup": 1.320869754508452,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "zero_ring_unit",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "1"
+        ],
+        "action": "unit",
+        "operands": [
+          "0"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "1"
+        ],
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "boolean",
+        "value": true
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            4.17e-05,
+            4.045e-05,
+            4.13375e-05,
+            4.195e-05,
+            4.0575e-05,
+            4.145e-05,
+            4.095e-05
+          ],
+          "median_ms": 4.13375e-05
+        },
+        "singular": {
+          "samples_ms": [
+            0.0051125,
+            0.0049875,
+            0.005075,
+            0.0050375,
+            0.005075,
+            0.0050875,
+            0.005125
+          ],
+          "median_ms": 0.005075
+        },
+        "median_speedup": 122.76988206833987,
+        "wins": 7,
+        "worst_paired_speedup": 120.0834326579261,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0005063375,
+            0.0005093375,
+            0.0005232375,
+            0.0005151,
+            0.000512975,
+            0.0005218625,
+            0.0005129625
+          ],
+          "median_ms": 0.000512975
+        },
+        "singular": {
+          "samples_ms": [
+            0.025,
+            0.02615,
+            0.0256,
+            0.0248,
+            0.0247,
+            0.025675,
+            0.0249625
+          ],
+          "median_ms": 0.025
+        },
+        "median_speedup": 48.7353184853063,
+        "wins": 7,
+        "worst_paired_speedup": 48.14599106969521,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            5.517452,
+            5.376304,
+            5.277127,
+            5.442049,
+            5.229797,
+            5.135069,
+            4.815563
+          ],
+          "median_ms": 5.277127
+        },
+        "singular": {
+          "samples_ms": [
+            7.502388,
+            7.444098,
+            7.583021,
+            7.157867,
+            7.615472,
+            7.351152,
+            8.043943
+          ],
+          "median_ms": 7.502388
+        },
+        "median_speedup": 1.4216803954121247,
+        "wins": 7,
+        "worst_paired_speedup": 1.3152889656083582,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "torus_inverse",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "inverse",
+        "operands": [
+          "x^2"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "representative": "y^2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0017908875,
+            0.00166965,
+            0.0010106625,
+            0.0018302125,
+            0.0018222,
+            0.001898725,
+            0.0018840625
+          ],
+          "median_ms": 0.0018222
+        },
+        "singular": {
+          "samples_ms": [
+            0.02215,
+            0.022725,
+            0.024,
+            0.0250625,
+            0.026025,
+            0.0266625,
+            0.0254875
+          ],
+          "median_ms": 0.0250625
+        },
+        "median_speedup": 13.753978707057405,
+        "wins": 7,
+        "worst_paired_speedup": 12.36816941320993,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0036598,
+            0.0041693875,
+            0.0033985625,
+            0.0034391375,
+            0.003499375,
+            0.0032491375,
+            0.0036128375
+          ],
+          "median_ms": 0.003499375
+        },
+        "singular": {
+          "samples_ms": [
+            0.0505125,
+            0.051,
+            0.0517375,
+            0.049175,
+            0.0477125,
+            0.048275,
+            0.04805
+          ],
+          "median_ms": 0.049175
+        },
+        "median_speedup": 14.052509376674408,
+        "wins": 7,
+        "worst_paired_speedup": 12.232012495840216,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.166119,
+            5.963115,
+            5.898613,
+            5.767075,
+            5.683646,
+            5.97071,
+            5.636197
+          ],
+          "median_ms": 5.898613
+        },
+        "singular": {
+          "samples_ms": [
+            8.293897,
+            8.044313,
+            8.002936,
+            8.389908,
+            8.427919,
+            8.14749,
+            8.103115
+          ],
+          "median_ms": 8.14749
+        },
+        "median_speedup": 1.3812552205069224,
+        "wins": 7,
+        "worst_paired_speedup": 1.3450757275362346,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "thick_axis_inverse",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x^3",
+          "y*z"
+        ],
+        "action": "inverse",
+        "operands": [
+          "1+x*y+x^2*z"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^3",
+          "y*z"
+        ],
+        "representative": "x^2*y^2-x^2*z-x*y+1",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0093640875,
+            0.0092612875,
+            0.0088821875,
+            0.009123775,
+            0.0089212625,
+            0.009412575,
+            0.009470675
+          ],
+          "median_ms": 0.0092612875
+        },
+        "singular": {
+          "samples_ms": [
+            0.038425,
+            0.03895,
+            0.0383375,
+            0.03805,
+            0.038625,
+            0.0381875,
+            0.0376125
+          ],
+          "median_ms": 0.0383375
+        },
+        "median_speedup": 4.139543233054799,
+        "wins": 7,
+        "worst_paired_speedup": 3.9714698265963095,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.01188625,
+            0.0116909875,
+            0.0119653875,
+            0.0119920625,
+            0.0114196125,
+            0.011163,
+            0.0118570625
+          ],
+          "median_ms": 0.0118570625
+        },
+        "singular": {
+          "samples_ms": [
+            0.0624625,
+            0.0637,
+            0.0647125,
+            0.0635125,
+            0.0634125,
+            0.062075,
+            0.0664875
+          ],
+          "median_ms": 0.0635125
+        },
+        "median_speedup": 5.3565122052784995,
+        "wins": 7,
+        "worst_paired_speedup": 5.255021558523504,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.619037,
+            6.001989,
+            5.904875,
+            6.600772,
+            5.985929,
+            5.93369,
+            5.660312
+          ],
+          "median_ms": 5.985929
+        },
+        "singular": {
+          "samples_ms": [
+            9.277458,
+            8.498373,
+            8.543128,
+            8.903681,
+            7.734227,
+            8.006482,
+            8.304266
+          ],
+          "median_ms": 8.498373
+        },
+        "median_speedup": 1.4197249917264307,
+        "wins": 7,
+        "worst_paired_speedup": 1.292067948016089,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "grid_inverse",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3",
+          "y^4"
+        ],
+        "action": "inverse",
+        "operands": [
+          "2+x+y+x^2*y"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "y^4",
+          "x^3"
+        ],
+        "representative": "-11/32*x^2*y^3+7/16*x^2*y^2+1/8*x*y^3-7/16*x^2*y-3/16*x*y^2-1/16*y^3+1/8*x^2+1/4*x*y+1/8*y^2-1/4*x-1/4*y+1/2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.01367675,
+            0.013447575,
+            0.013883025,
+            0.0135976,
+            0.0137973625,
+            0.0136371875,
+            0.013881275
+          ],
+          "median_ms": 0.01367675
+        },
+        "singular": {
+          "samples_ms": [
+            0.062125,
+            0.0612,
+            0.0618,
+            0.0638,
+            0.06405,
+            0.0616,
+            0.0622
+          ],
+          "median_ms": 0.062125
+        },
+        "median_speedup": 4.542380316961267,
+        "wins": 7,
+        "worst_paired_speedup": 4.451479414608848,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0165699875,
+            0.0159905125,
+            0.0161676,
+            0.016206425,
+            0.0161503125,
+            0.0161984,
+            0.015483425
+          ],
+          "median_ms": 0.0161676
+        },
+        "singular": {
+          "samples_ms": [
+            0.0884875,
+            0.0886625,
+            0.089025,
+            0.0894625,
+            0.0893,
+            0.0867875,
+            0.0885125
+          ],
+          "median_ms": 0.0886625
+        },
+        "median_speedup": 5.483961750661818,
+        "wins": 7,
+        "worst_paired_speedup": 5.340227323647649,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.104863,
+            6.058356,
+            5.633321,
+            5.835403,
+            5.370203,
+            6.146022,
+            5.850712
+          ],
+          "median_ms": 5.850712
+        },
+        "singular": {
+          "samples_ms": [
+            8.365371,
+            8.048431,
+            8.012754,
+            8.176384,
+            8.243652,
+            8.124305,
+            8.636074
+          ],
+          "median_ms": 8.176384
+        },
+        "median_speedup": 1.397502389452771,
+        "wins": 7,
+        "worst_paired_speedup": 1.3218802340766107,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "reduced_grid_inverse",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "relations": [
+          "x^3-x",
+          "y^3-y"
+        ],
+        "action": "inverse",
+        "operands": [
+          "5+x+2*y"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^3-x",
+          "y^3-y"
+        ],
+        "representative": "47/3360*x^2*y^2-13/672*x^2*y-1/32*x*y^2+1/120*x^2+5/96*x*y+4/105*y^2-1/24*x-2/21*y+1/5",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0111946875,
+            0.011291375,
+            0.0113663875,
+            0.0114069625,
+            0.011358625,
+            0.0118132375,
+            0.011498125
+          ],
+          "median_ms": 0.0113663875
+        },
+        "singular": {
+          "samples_ms": [
+            0.04225,
+            0.0427125,
+            0.0439625,
+            0.0430875,
+            0.044125,
+            0.0432,
+            0.0433
+          ],
+          "median_ms": 0.0432
+        },
+        "median_speedup": 3.8006798554070063,
+        "wins": 7,
+        "worst_paired_speedup": 3.6569145418434195,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.015299575,
+            0.0155154875,
+            0.01576985,
+            0.0150522375,
+            0.015453,
+            0.014504575,
+            0.0150926875
+          ],
+          "median_ms": 0.015299575
+        },
+        "singular": {
+          "samples_ms": [
+            0.0707375,
+            0.0704375,
+            0.069475,
+            0.0717125,
+            0.07155,
+            0.0729375,
+            0.0700125
+          ],
+          "median_ms": 0.0707375
+        },
+        "median_speedup": 4.623494443473103,
+        "wins": 7,
+        "worst_paired_speedup": 4.405558708548274,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.461789,
+            6.239277,
+            5.818642,
+            5.99185,
+            6.025543,
+            6.239739,
+            5.685549
+          ],
+          "median_ms": 6.025543
+        },
+        "singular": {
+          "samples_ms": [
+            8.418031,
+            8.209636,
+            8.104057,
+            7.928705,
+            8.14826,
+            8.164291,
+            8.127872
+          ],
+          "median_ms": 8.14826
+        },
+        "median_speedup": 1.3522864246425592,
+        "wins": 7,
+        "worst_paired_speedup": 1.302739999712154,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "mixed_torus_inverse",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-2",
+          "x*z-3"
+        ],
+        "action": "inverse",
+        "operands": [
+          "y+z"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*z-3",
+          "y-2/3*z"
+        ],
+        "representative": "1/5*x",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.00229935,
+            0.0022361,
+            0.0023094875,
+            0.002236725,
+            0.0022525125,
+            0.0023673625,
+            0.002346075
+          ],
+          "median_ms": 0.00229935
+        },
+        "singular": {
+          "samples_ms": [
+            0.028125,
+            0.0267375,
+            0.027875,
+            0.0290875,
+            0.02815,
+            0.0287875,
+            0.0272
+          ],
+          "median_ms": 0.028125
+        },
+        "median_speedup": 12.231717659338509,
+        "wins": 7,
+        "worst_paired_speedup": 11.593832251739608,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.01920435,
+            0.0193596375,
+            0.0195816875,
+            0.019418,
+            0.01912895,
+            0.0194672125,
+            0.01932495
+          ],
+          "median_ms": 0.0193596375
+        },
+        "singular": {
+          "samples_ms": [
+            0.0563125,
+            0.0583875,
+            0.060125,
+            0.0571875,
+            0.056275,
+            0.0577625,
+            0.0587
+          ],
+          "median_ms": 0.0577625
+        },
+        "median_speedup": 2.983656073105708,
+        "wins": 7,
+        "worst_paired_speedup": 2.932278364016486,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.758991,
+            6.607706,
+            6.712633,
+            6.378721,
+            5.952345,
+            6.296597,
+            5.805206
+          ],
+          "median_ms": 6.378721
+        },
+        "singular": {
+          "samples_ms": [
+            8.667233,
+            8.095941,
+            9.174773,
+            8.508643,
+            8.346506,
+            8.167567,
+            8.399386
+          ],
+          "median_ms": 8.399386
+        },
+        "median_speedup": 1.3167821574262302,
+        "wins": 7,
+        "worst_paired_speedup": 1.2252271817178306,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "sum_inverse_on_hypersurface",
+        "variables": [
+          "x",
+          "y",
+          "z",
+          "w"
+        ],
+        "relations": [
+          "(x+y)*(z+w)-1"
+        ],
+        "action": "inverse",
+        "operands": [
+          "x+y"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*z+x*w+y*z+y*w-1"
+        ],
+        "representative": "z+w",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z",
+            "w"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.0058547,
+            0.0061904625,
+            0.00621865,
+            0.0062792625,
+            0.0059098125,
+            0.00640625,
+            0.00599935
+          ],
+          "median_ms": 0.0061904625
+        },
+        "singular": {
+          "samples_ms": [
+            0.0255875,
+            0.0254625,
+            0.0262625,
+            0.0258125,
+            0.026375,
+            0.0251125,
+            0.0259125
+          ],
+          "median_ms": 0.0258125
+        },
+        "median_speedup": 4.169720759959373,
+        "wins": 7,
+        "worst_paired_speedup": 3.92,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.009799175,
+            0.0097945375,
+            0.0101517125,
+            0.0103906625,
+            0.010106875,
+            0.00988295,
+            0.0100646625
+          ],
+          "median_ms": 0.0100646625
+        },
+        "singular": {
+          "samples_ms": [
+            0.0500875,
+            0.0518625,
+            0.0508125,
+            0.051675,
+            0.0526875,
+            0.0511375,
+            0.0521875
+          ],
+          "median_ms": 0.051675
+        },
+        "median_speedup": 5.134300330487982,
+        "wins": 7,
+        "worst_paired_speedup": 4.97321513426117,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.335219,
+            6.079817,
+            6.027457,
+            6.022057,
+            5.618713,
+            5.938228,
+            5.6483
+          ],
+          "median_ms": 6.022057
+        },
+        "singular": {
+          "samples_ms": [
+            8.397261,
+            7.920319,
+            8.130166,
+            7.665096,
+            8.094068,
+            7.696736,
+            8.492823
+          ],
+          "median_ms": 8.094068
+        },
+        "median_speedup": 1.3440703068735482,
+        "wins": 7,
+        "worst_paired_speedup": 1.2728368396380174,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "field_division",
+        "variables": [
+          "x"
+        ],
+        "relations": [
+          "x^4+x+1"
+        ],
+        "action": "divide",
+        "operands": [
+          "x^6-2*x+3",
+          "x^2+x+3"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x^4+x+1"
+        ],
+        "representative": "11/115*x^3-32/115*x^2-116/115*x+108/115",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.015769225,
+            0.015852375,
+            0.01615695,
+            0.0160196875,
+            0.016051125,
+            0.01601005,
+            0.016285325
+          ],
+          "median_ms": 0.0160196875
+        },
+        "singular": {
+          "samples_ms": [
+            0.035025,
+            0.03275,
+            0.0357125,
+            0.0324875,
+            0.035,
+            0.034,
+            0.0357
+          ],
+          "median_ms": 0.035
+        },
+        "median_speedup": 2.1848116575307728,
+        "wins": 7,
+        "worst_paired_speedup": 2.027973392115171,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0176336125,
+            0.0180805875,
+            0.0184440375,
+            0.0180467875,
+            0.018111275,
+            0.018574275,
+            0.017262175
+          ],
+          "median_ms": 0.0180805875
+        },
+        "singular": {
+          "samples_ms": [
+            0.0609375,
+            0.0627625,
+            0.06185,
+            0.0605125,
+            0.0643375,
+            0.0604125,
+            0.0625125
+          ],
+          "median_ms": 0.06185
+        },
+        "median_speedup": 3.420795922698862,
+        "wins": 7,
+        "worst_paired_speedup": 3.2524822637761095,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.81142,
+            6.579882,
+            6.296937,
+            7.196228,
+            7.077534,
+            6.396746,
+            6.093753
+          ],
+          "median_ms": 6.579882
+        },
+        "singular": {
+          "samples_ms": [
+            8.631966,
+            8.331818,
+            8.051687,
+            8.79275,
+            8.362666,
+            7.985753,
+            8.352588
+          ],
+          "median_ms": 8.352588
+        },
+        "median_speedup": 1.2694130381061548,
+        "wins": 7,
+        "worst_paired_speedup": 1.181579064120356,
+        "singular_method": "builtin"
+      }
+    },
+    {
+      "input": {
+        "name": "torus_division",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relations": [
+          "x*y-1"
+        ],
+        "action": "divide",
+        "operands": [
+          "x*z+y+1/2",
+          "y^3"
+        ],
+        "exponent": 0,
+        "order": "grevlex"
+      },
+      "verified": true,
+      "result": {
+        "relations": [
+          "x*y-1"
+        ],
+        "representative": "x^4*z+1/2*x^3+x^2",
+        "ring": {
+          "field": "QQ",
+          "order": "grevlex",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "type": "quotient-element"
+      },
+      "prepared": {
+        "atlas": {
+          "samples_ms": [
+            0.004846675,
+            0.0048463,
+            0.0049471125,
+            0.0047752875,
+            0.004773525,
+            0.0046941375,
+            0.0047266875
+          ],
+          "median_ms": 0.0047752875
+        },
+        "singular": {
+          "samples_ms": [
+            0.0273,
+            0.02715,
+            0.0262625,
+            0.026625,
+            0.0266625,
+            0.027225,
+            0.0269125
+          ],
+          "median_ms": 0.0269125
+        },
+        "median_speedup": 5.635786327001253,
+        "wins": 7,
+        "worst_paired_speedup": 5.308652269379361,
+        "singular_method": "builtin"
+      },
+      "setup": {
+        "atlas": {
+          "samples_ms": [
+            0.0065603,
+            0.0065690625,
+            0.006446075,
+            0.0064817625,
+            0.006881525,
+            0.00659185,
+            0.0065479
+          ],
+          "median_ms": 0.0065603
+        },
+        "singular": {
+          "samples_ms": [
+            0.0524375,
+            0.0533875,
+            0.0531625,
+            0.0526625,
+            0.053725,
+            0.0540125,
+            0.05395
+          ],
+          "median_ms": 0.0533875
+        },
+        "median_speedup": 8.137966251543375,
+        "wins": 7,
+        "worst_paired_speedup": 7.807135772957302,
+        "singular_method": "builtin"
+      },
+      "cold": {
+        "atlas": {
+          "samples_ms": [
+            6.288801,
+            5.907219,
+            5.563659,
+            6.008982,
+            5.594898,
+            6.258274,
+            5.483137
+          ],
+          "median_ms": 5.907219
+        },
+        "singular": {
+          "samples_ms": [
+            8.518381,
+            7.866397,
+            8.243951,
+            9.186556,
+            8.040206,
+            7.956888,
+            7.943764
+          ],
+          "median_ms": 8.040206
+        },
+        "median_speedup": 1.3610814158066595,
+        "wins": 7,
+        "worst_paired_speedup": 1.2714189247706316,
+        "singular_method": "builtin"
+      }
+    }
+  ]
+}

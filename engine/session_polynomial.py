@@ -77,6 +77,7 @@ class Polynomial:
 
     _space: _CoordinateSpace
     _value: native.Expr
+    _fields = {"variables", "coeffs", "multiplicity"}
 
     def __post_init__(self):
         if self._space.coeffs is not QQ:
@@ -92,7 +93,7 @@ class Polynomial:
         return self._space.coeffs
 
     def session_attribute(self, name):
-        if name in ("variables", "coeffs", "multiplicity"):
+        if name in self._fields:
             return getattr(self, name)
         raise AttributeError(f"A polynomial has no Atlas field {name!r}.")
 
@@ -157,22 +158,30 @@ class Polynomial:
         return Polynomial(self._space, -self._value)
 
     def __add__(self, other):
+        if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
+            return NotImplemented
         return Polynomial(self._space, self._value + self._operand(other))
 
     __radd__ = __add__
 
     def __sub__(self, other):
+        if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
+            return NotImplemented
         return Polynomial(self._space, self._value - self._operand(other))
 
     def __rsub__(self, other):
         return Polynomial(self._space, self._operand(other) - self._value)
 
     def __mul__(self, other):
+        if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
+            return NotImplemented
         return Polynomial(self._space, self._value * self._operand(other))
 
     __rmul__ = __mul__
 
     def __truediv__(self, other):
+        if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
+            return NotImplemented
         divisor = self._operand(other)
         if not divisor.is_number or not divisor:
             raise ValueError("Division requires a nonzero rational constant.")

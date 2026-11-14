@@ -243,26 +243,31 @@ def read_expression(line):
 
 
 def run_session(parser, panel):
+    from .prompt_readline import prompt_completion
+    from .session import new_session
+    from .welcome import interactive_welcome
+    session = new_session(calculate_resolution)
+    shell_names = {*parser.command_names, ":save", ":workspace", "quit", "exit"}
+    with interactive_welcome(panel) as finish_welcome:
+        with prompt_completion(session, parser, shell_names | {"help"}, on_tab=finish_welcome):
+            return _session_loop(parser, panel, session, shell_names, finish_welcome)
+
+
+def _session_loop(parser, panel, session, shell_names, finish_welcome):
     from .prompt_help import command_hint, help_request, show_help, topic_names
-    from .session import SessionError, new_session
+    from .session import SessionError
     from .session_hints import error_hint
     from .session_panel import print_workspace
     from .session_transcript import SessionTranscript
-    session = new_session(calculate_resolution)
     transcript = SessionTranscript()
-    try:
-        import readline  # Enable arrow-key editing and in-session history for input().
-    except ImportError:
-        pass
-
-    # Derive shell-command names from argparse so newly registered subcommands
-    # are available here. An opening parenthesis selects function-call syntax.
-    shell_names = {*parser.command_names, ":save", ":workspace", "quit", "exit"}
     topics = topic_names(session, parser)
     while True:
         try:
             panel.refresh(session.variables)
-            line = input('atlas> ')
+            try:
+                line = input('atlas> ')
+            finally:
+                finish_welcome()
             words = line.split(maxsplit=1)
             if not words:
                 continue
@@ -345,7 +350,6 @@ def main(*, unlimited_decimals=False):
     if interactive:
         from .session_panel import SessionPanel
         with session_decimals(unlimited_decimals), SessionPanel(sys.stdout) as panel:
-            print_welcome(interactive=True)
             return run_session(parser, panel)
     print_welcome(interactive=False)
     return 0

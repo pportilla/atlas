@@ -182,7 +182,7 @@ def check_record(raw, case, zetas, oracle):
         if (mono["status"] != "computed" or topo["status"] != "computed"
                 or mono["expression"] != oracle["monodromy"] or topo["expression"] != oracle["topological"]
                 or mono["milnor_fiber_euler_characteristic"] != oracle["milnor_fibre_euler"]
-                or mono["factors"] != [{"multiplicity": 2, "exponent": -1}]):
+                or mono["factors"] != [{"multiplicity": oracle["exceptional_N_nu"][0], "exponent": -1}]):
             raise ValueError("Atlas zeta functions disagree with the independently certified Singular fibre")
     # The binomial producer repeats its measured chart-batch latency in the
     # certificate and execution report. Preserve every timing in the receipt.
@@ -207,7 +207,8 @@ def replay(root, record, timeout):
         raise ValueError(f"Saved atlas replay changed the zeta record in {root}")
 
 
-def run(args):
+def run(args, *, cases=CASES, fibre_oracle=singular_fibre, chart_oracle=check_atlas_charts, driver=__file__,
+        chart_changes=False, enforce_equal=False):
     roots = {"before": args.baseline.resolve(), "after": args.atlas_root.resolve()}
     python_command = shutil.which("python3") or sys.executable
     exe = shutil.which("Singular")
@@ -218,7 +219,7 @@ def run(args):
         os.sched_setaffinity(0, {args.cpu})
     def hashes():
         binaries = ("libgroebner.so", "libresolution.so", "libchain.so", "newton_fan", "libsmall_newton_fan.so",
-                    "resolve_supervisor", "face_gb", "toricfan", "plane", "libmonomial*.so", "libcertified*.so")
+                    "resolve_supervisor", "graph_verify", "face_gb", "toricfan", "plane", "libmonomial*.so", "libcertified*.so")
         manifests = {}
         for name, root in roots.items():
             files = [root/"atlas", *(root/"engine").glob("*.py")]
@@ -226,14 +227,14 @@ def run(args):
                 files.extend((root/"native/build").glob(pattern))
             manifests[name] = {str(f.relative_to(root)): digest(f.read_bytes()) for f in sorted(files)}
         return manifests
-    report = {"conditions": __doc__, "trials": args.trials, "cpu_affinity": sorted(os.sched_getaffinity(0)),
+    report = {"conditions": args.__dict__.get("conditions", __doc__), "trials": args.trials, "cpu_affinity": sorted(os.sched_getaffinity(0)),
               "search": args.search, "platform": platform.platform(), "python": python_command, "singular":
               subprocess.check_output([exe, "--version"], text=True).splitlines()[0],
               "roots": {name: str(root) for name, root in roots.items()}, "sha256": hashes(),
-              "benchmark_sha256": digest(Path(__file__).read_bytes()), "cases": {}}
+              "benchmark_sha256": digest(Path(driver).read_bytes()), "cases": {}}
     for label in args.cases:
-        case = CASES[label]
-        oracle = singular_fibre(case, singular, args.timeout)
+        case = cases[label]
+        oracle = fibre_oracle(case, singular, args.timeout)
         result = report["cases"][label] = {"polynomial": case.polynomial, "variables": list(case.variables),
                                             "singular_oracle": oracle, "runs": [], "agreed_records": {}}
         labels = ["before", "after", "singular_default", "singular_checked", "before_zetas", "after_zetas"]
@@ -253,23 +254,46 @@ def run(args):
                     if zetas:
                         cmd.append("--monodromy")
                     row, raw = measure(cmd, roots[root_label], args.timeout)
+                    if row["status"] != "complete":
+                        raise TimeoutError(f"{solver} did not return a complete Atlas resolution of {label}")
                     record, row["reported_ms"] = check_record(raw, case, zetas, oracle)
                     mode = "zetas" if zetas else "geometry"
-                    agreed = result["agreed_records"].setdefault(mode, record)
+                    record_key = f"{root_label}_{mode}" if chart_changes else mode
+                    agreed = result["agreed_records"].setdefault(record_key, record)
                     if record != agreed:
                         raise ValueError(f"Complete Atlas record differs in {label}, {solver}, trial {trial + 1}")
                     row["record_sha256"] = digest(json.dumps(record, sort_keys=True).encode())
                     if trial < 0 and zetas:
                         replay(roots[root_label], record, args.timeout)
-                        if "singular_checks_on_atlas" not in result:
-                            result["singular_checks_on_atlas"] = check_atlas_charts(record, case, singular, args.timeout)
+                        if chart_changes:
+                            result.setdefault("singular_checks_on_atlas", {})[root_label] = chart_oracle(
+                                record, case, singular, args.timeout)
+                        elif "singular_checks_on_atlas" not in result:
+                            result["singular_checks_on_atlas"] = chart_oracle(record, case, singular, args.timeout)
                 if trial >= 0:
                     result["runs"].append(dict(trial=trial+1, solver=solver, **row))
-        with_zetas = dict(result["agreed_records"]["zetas"])
-        for key in ("monodromy_zeta", "topological_zeta"):
-            del with_zetas[key]
-        if with_zetas != result["agreed_records"]["geometry"]:
-            raise ValueError(f"Requesting zeta functions changed the geometry of {label}")
+        for prefix in (("before_", "after_") if chart_changes else ("",)):
+            records = result["agreed_records"]
+            with_zetas = dict(records[prefix+"zetas"])
+            for key in ("monodromy_zeta", "topological_zeta"):
+                del with_zetas[key]
+            geometry = records[prefix+"geometry"]
+            if with_zetas != geometry:
+                # Canonical blowups may attach separately computed strata to their certificate.
+                with_zetas["certificate"] = {**with_zetas["certificate"]}
+                for key in ("numerical_data", "strata"):
+                    if key not in geometry["certificate"]:
+                        with_zetas["certificate"].pop(key, None)
+                if with_zetas != geometry:
+                    raise ValueError(f"Requesting zeta functions changed the geometry of {label}")
+        if chart_changes:
+            equal = {mode: records["before_"+mode] == records["after_"+mode] for mode in ("geometry", "zetas")}
+            result["identical_full_record_between_roots"] = equal
+            if enforce_equal and not all(equal.values()):
+                changed = {mode: sorted(k for k in records["before_"+mode].keys() | records["after_"+mode].keys()
+                                        if records["before_"+mode].get(k) != records["after_"+mode].get(k))
+                           for mode, same in equal.items() if not same}
+                raise ValueError(f"Pre/post resolution records differ for {label}: {changed}")
         result["median_s"] = {solver: {key: statistics.median(row[key] for row in result["runs"]
                               if row["solver"] == solver) for key in ("wall_s", "cpu_s")} for solver in labels}
         result["paired_speedup"] = {}
@@ -283,12 +307,12 @@ def run(args):
         args.output.write_text(json.dumps(report, indent=2)+"\n")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+def arguments(cases, description):
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--baseline", required=True, type=Path)
     parser.add_argument("--atlas-root", default=ROOT, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--cases", nargs="+", choices=CASES, default=list(CASES))
+    parser.add_argument("--cases", nargs="+", choices=cases, default=list(cases))
     parser.add_argument("--search", choices=("default", "quick", "exhaustive"), default="default")
     parser.add_argument("--cpu", type=int)
     parser.add_argument("--timeout", type=float, default=30)
@@ -296,4 +320,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.trials < 1 or args.timeout <= 0:
         parser.error("Use a positive trial count and timeout")
-    run(args)
+    args.conditions = description
+    return args
+
+
+if __name__ == "__main__":
+    run(arguments(CASES, __doc__))

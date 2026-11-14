@@ -7,7 +7,8 @@ import shlex
 import subprocess
 
 from engine.polynomial import integer_from_decimal
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class HilbertSamuelBrowserTests(AlgebraBrowserCase):

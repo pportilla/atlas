@@ -1,6 +1,7 @@
 // Primary decomposition over QQ by zero-dimensional extension and contraction.
 // Block lex bases implement arithmetic over QQ(U) without building fractions.
 #include "primary_decomposition.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "local_dimension.hpp"
 #include "polynomial_factors.hpp"
@@ -129,16 +130,12 @@ Polynomial variable(size_t index, size_t n) {
     return {{std::move(e),1}};
 }
 
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
-}
-
 // All membership checks during the dimension induction use block lex.
 bool member(Polynomial f, const Basis& g) {
     while (!f.empty()) {
         const auto [head, coeff] = *f.rbegin();
         auto divisor = std::find_if(g.begin(), g.end(), [&](const auto& p) {
-            return divides(p.rbegin()->first, head);
+            return local::monomial_divides(p.rbegin()->first, head);
         });
         if (divisor == g.end()) return false;
         const auto& [lead, lc] = *divisor->rbegin();
@@ -286,7 +283,7 @@ Polynomial denominator(const Basis& g, size_t dep, size_t n) {
     for (const auto& [head,lc] : coefficients) {
         if (constant(lc)) continue;
         const bool minimal = std::none_of(coefficients.begin(), coefficients.end(), [&](const auto& pair) {
-            return pair.first != head && divides(pair.first, head);
+            return pair.first != head && local::monomial_divides(pair.first, head);
         });
         if (minimal) h = product(h,lc);
     }
@@ -687,7 +684,7 @@ bool geometrically_prime(const Basis& prime, size_t n, bool marked, int dim) {
         if (marked && std::all_of(e.begin(),e.end()-1,[](const auto& k){return k==0;})) continue;
         equation = &f;
         ++equations;
-        if (std::accumulate(e.begin(),e.end(),mpz_class(0)) != 1) affine_space = false;
+        if (local::total_degree(e) != 1) affine_space = false;
     }
     if (affine_space || dim == 0) return affine_space;
     if (equations == 1) {
@@ -760,6 +757,29 @@ std::optional<std::vector<mpq_class>> dense_coefficients(const Polynomial& f) {
     return coefficients;
 }
 
+// A reduced finite lex basis with heads x_i (i != j) and x_j^d
+// presents QQ[t]/(h) with t=x_j. In particular this also recognizes a
+// separating coordinate followed in the order by fixed rational coordinates.
+const Polynomial* finite_shape(const Basis& g, size_t n, size_t& axis) {
+    if (g.size()!=n) return nullptr;
+    const Polynomial* eliminant=nullptr;
+    for (const auto& f : g) {
+        const auto& head=f.rbegin()->first;
+        const auto i=std::find_if(head.begin(),head.end(),[](const auto& e){return e!=0;});
+        if (i==head.end() || std::any_of(i+1,head.end(),[](const auto& e){return e!=0;})) return nullptr;
+        if (*i>1) {
+            if (eliminant) return nullptr;
+            axis=i-head.begin();
+            eliminant=&f;
+        }
+    }
+    if (!eliminant) {
+        axis=n-1;
+        return shape(g,axis);
+    }
+    return supported_on(*eliminant,complement({axis},n)) ? eliminant : nullptr;
+}
+
 bool finite_marked_points(const Basis& g, size_t n, const std::vector<mpq_class>& minimal,
                           RootCache& roots, std::vector<Basis>& points) {
     if (g == Basis{one(n)}) return true;
@@ -767,7 +787,7 @@ bool finite_marked_points(const Basis& g, size_t n, const std::vector<mpq_class>
     for (const auto& f : g) {
         const auto& head=f.rbegin()->first;
         for (size_t j=0; j+1<n; ++j) {
-            if (head[j]>1 && std::accumulate(head.begin(),head.end(),mpz_class(0))==head[j]) axis=j;
+            if (head[j]>1 && local::total_degree(head)==head[j]) axis=j;
         }
     }
     if (axis==n) {
@@ -823,12 +843,13 @@ Json::Value absolute_sections(const Json::Value& input) {
         // Its geometric points are determined by t alone, even if h has
         // repeated factors. Splitting every coordinate eliminant separately
         // would construct algebraic numbers already contained in this field.
-        if (const auto* h=shape(gb,n-1)) {
+        size_t axis;
+        if (const auto* h=finite_shape(gb,n,axis)) {
             found_points=true;
-            const auto split=field_factors(*h,n-1,n);
+            const auto split=field_factors(*h,axis,n);
             for (const auto& [p,multiplicity] : split) {
-                if (p.rbegin()->first.back()>1) {
-                    fields.append(sparse_json::term_list(remap(p,{n-1})));
+                if (p.rbegin()->first[axis]>1) {
+                    fields.append(sparse_json::term_list(remap(p,{axis})));
                 } else {
                     auto point=split.size()==1 && multiplicity==1 ? gb : with(gb,p,n);
                     components.push_back({{},std::move(point)});
@@ -840,6 +861,15 @@ Json::Value absolute_sections(const Json::Value& input) {
         const auto minimal=dense_coefficients(remap(modulus,{n-1}));
         std::vector<Basis> points;
         RootCache roots;
+        if (minimal) for (const auto& entry : input["root_images"]) {
+            const auto equation=sparse_json::read_row(entry[0]);
+            RootList images;
+            for (const auto& row : entry[1]) images.push_back(sparse_json::read_row(row));
+            if (!atlas::certify_power_basis_roots(*minimal,equation,images)) continue;
+            Polynomial key;
+            for (size_t i=0; i<equation.size(); ++i) add(key,{i},equation[i]/equation.back());
+            roots.emplace(std::move(key),std::move(images));
+        }
         if (minimal && finite_marked_points(gb,n,*minimal,roots,points)) {
             found_points=true;
             for (auto& point : points) components.push_back({{},std::move(point)});

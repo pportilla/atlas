@@ -3,11 +3,9 @@ import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from engine.app import AtlasServer, Handler
+from engine.app import AtlasServer
+from tests.http_support import QuietHandler
 
-class QuietHandler(Handler):
-    def log_message(self, *args):
-        pass
 
 class WebAPITests(unittest.TestCase):
     @classmethod

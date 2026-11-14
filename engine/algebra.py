@@ -36,6 +36,12 @@ LOCAL_DIMENSION_OPERANDS = {
 POINT_OPERATIONS = (LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
                     | HILBERT_SAMUEL_OPERANDS.keys() | TANGENT_CONE_OPERANDS.keys()
                     | TANGENT_SPACE_OPERANDS.keys() | LOCAL_DIMENSION_OPERANDS.keys())
+QUOTIENT_ACTION_OPERANDS = {
+    "declare": (),
+    **dict.fromkeys(("reduce", "negate", "unit", "inverse"), ("polynomial",)),
+    **dict.fromkeys(("add", "subtract", "multiply", "equal", "divide"), ("polynomial", "other_polynomial")),
+    "power": ("polynomial", "exponent"),
+}
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "resultant": ("polynomial", "other_polynomial", "variables"),
@@ -53,6 +59,7 @@ OPERATION_OPERANDS = {
     "localization": ("ideal", "prime"),
     "intersection": ("ideal", "other_ideal"),
     "quotient": ("ideal", "other_ideal"),
+    "quotient-ring": ("ideal",),
     "saturation": ("ideal", "polynomial"),
     "dimension": ("ideal",),
     "quotient-basis": ("ideal",),
@@ -131,14 +138,25 @@ def _request(data):
         optional += ("degrees",)
     if operation == "localization":
         optional += ("numerator", "denominator")
-    _fields(operands, "operands", OPERATION_OPERANDS[operation], optional)
+    required = OPERATION_OPERANDS[operation]
+    if operation == "quotient-ring" and isinstance(operands, dict):
+        action = operands.get("action", "declare")
+        if not isinstance(action, str) or action not in QUOTIENT_ACTION_OPERANDS:
+            raise InputError("Choose a quotient-ring action: " + ", ".join(QUOTIENT_ACTION_OPERANDS) + ".")
+        operands = dict(operands, action=action)
+        required += ("action", *QUOTIENT_ACTION_OPERANDS[action])
+    _fields(operands, "operands", required, optional)
     if "exponent" in operands:
         exponent = operands["exponent"]
         if type(exponent) is int:
             exponent = integer_text(exponent)
-        if not isinstance(exponent, str) or not re.fullmatch(r"[0-9]+", exponent):
+        signed = operation == "quotient-ring"
+        if not isinstance(exponent, str) or not re.fullmatch(r"[+-]?[0-9]+" if signed else r"[0-9]+", exponent):
+            if signed:
+                raise InputError("The quotient-ring exponent must be a signed decimal integer.")
             raise InputError("The exponent must be a nonnegative integer or an unsigned decimal string.")
-        operands = dict(operands, exponent=exponent.lstrip("0") or "0")
+        digits = exponent.lstrip("+-").lstrip("0") or "0"
+        operands = dict(operands, exponent=("-" if exponent.startswith("-") and digits != "0" else "") + digits)
     if "degrees" in operands:
         operands = dict(operands, degrees=_degrees(operands["degrees"]))
     if "point" in operands:
@@ -237,6 +255,8 @@ def dispatch(data, *, known_basis=False):
             from . import local_dimension as handler
         else:
             from . import algebra_ideals as handler
+            if known_basis and operation == "quotient-ring":
+                handler_options["known_basis"] = True
         result = handler.handle(operation, ring, result_operands, **handler_options)
         observed = execution.report()
     return {"status": "ok", "operation": operation, "result": result,

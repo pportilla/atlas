@@ -4,8 +4,8 @@ import shlex
 import subprocess
 import unittest
 
-from tests.test_cli_session import ROOT, run_script
-from tests.test_http_basis_refs import RING, endpoint, post
+from tests.cli_support import ROOT, run_script
+from tests.http_support import RING, endpoint, post
 
 
 class LocalAlgebraInterfaceTests(unittest.TestCase):

@@ -9,6 +9,72 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MarkedRecordTests(unittest.TestCase):
+    def test_binomial_field_coordinates_preserve_each_requested_root_index(self):
+        from fractions import Fraction
+        from engine.marked_field import flint_literal, program
+        from engine.native_library import field_request
+        from engine.plane_backend import coefficient_field
+        from engine.polynomial import parse_expression
+
+        sextic = (1,0,0,0,0,0,-2)
+        def family(p):
+            return tuple((p,i) for i in reversed(range(1,len(p))))
+        for requests, degree in (
+            (family(sextic), 12),
+            (family((1,0,0,0,2**181)), 8),
+            (family((3,0,0,0,2)), 8),
+            (family((1,0,0,0,0,-1)), 4),
+            (family((2,0,0,0,0,0,-128)), 2),
+            (((sextic,2),(sextic,1)), 6),
+            (((sextic,1),(sextic,1)), 6),
+            (((sextic,1),((1,0,-3),2)), 12),
+        ):
+            with self.subTest(requests=requests):
+                roots = tuple(flint_literal(p,i) for p,i in requests)
+                value = coefficient_field(roots, exhaustive=True, root_images=True)
+                self.assertEqual(value["degree"], degree)
+                self.assertEqual(coefficient_field(roots, root_images=True), value)
+                self.assertEqual(len(value["values"]), len(roots))
+                for (p,i),image in zip(requests, value["values"]):
+                    # Independently embed the original selected root with the
+                    # generic QQbar solver in exactly the returned mark.
+                    source = f"flintroot {len(p)-1} " + " ".join(map(str,reversed(p))) + f" {i-1}"
+                    row = field_request("atlas_field_coefficient", (program(value["exact"]),source))
+                    expected = {(j,):Fraction(c) for j,c in enumerate(row.split()) if Fraction(c)}
+                    self.assertEqual(parse_expression(image,["T"]), expected)
+
+    def test_earlier_root_coordinates_follow_successive_primitive_elements(self):
+        from unittest.mock import patch
+        import sympy as sp
+        from engine.marked_field import flint_literal
+        from engine.plane_backend import coefficient_field
+
+        # The two conjugates of sqrt(2) must retain their separate marks
+        # when sqrt(3) and sqrt(5) enlarge the field. Include a rational input.
+        roots = (flint_literal((2,-1), 1), flint_literal((1,0,-2), 1),
+                 flint_literal((1,0,-2), 2), flint_literal((1,0,-3), 1),
+                 flint_literal((1,0,-5), 1))
+        with patch("engine.plane_backend.subprocess.run", side_effect=AssertionError("unexpected worker")):
+            field = coefficient_field(roots, exhaustive=True, root_images=True)
+        self.assertEqual(field["degree"], 8)
+        t = sp.Symbol("T")
+        def parse(text):
+            return sp.Poly(sp.sympify(text, locals={"T":t}), t, domain=sp.QQ)
+        modulus = parse(field["minimal_polynomial"])
+        images = list(map(parse, field["values"]))
+        self.assertEqual(images[0], parse("1/2"))
+        self.assertEqual(images[1], -images[2])
+        for image, square in zip(images[1:], (2,2,3,5)):
+            self.assertTrue((image**2-square).rem(modulus).is_zero)
+        # FLINT's first root in each of these real quadratic pairs is positive.
+        # The marked generator is their sum with 1/2. The positive square
+        # roots choose one embedding of this irreducible degree-eight field.
+        theta = sp.Rational(1,2) + sp.sqrt(2) + sp.sqrt(3) + sp.sqrt(5)
+        self.assertEqual(sp.expand(modulus.eval(theta)), 0)
+        for image, value in zip(images[1:], (sp.sqrt(2), -sp.sqrt(2), sp.sqrt(3), sp.sqrt(5))):
+            self.assertEqual(sp.expand(image.eval(theta) - value), 0)
+        self.assertEqual(coefficient_field(roots, root_images=True), field)
+
     def test_marked_angles_and_scaled_polynomials(self):
         from engine.marked_field import description, record_field
         from engine.polynomial import InputError

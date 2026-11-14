@@ -16,9 +16,9 @@ class AlgebraBasisStore:
         self._bytes = 0
         self._lock = Lock()
 
-    def _remember(self, basis):
+    def _remember(self, ring, generators):
         # Serialized entries are immutable and their aggregate storage is bounded.
-        data = json.dumps([basis["ring"], basis["generators"]], separators=(",", ":")).encode()
+        data = json.dumps([ring, generators], separators=(",", ":")).encode()
         if len(data) > self.max_bytes or self.max_entries < 1:
             return None
         ref = secrets.token_urlsafe(24)
@@ -41,9 +41,9 @@ class AlgebraBasisStore:
     def calculate(self, request, timeout, *, owner=None):
         operands = request.get("operands") if isinstance(request, dict) else None
         if isinstance(operands, dict) and "basis_ref" in operands:
-            if request.get("operation") not in ("normal-form", "membership", "multiplicity") or "ideal" in operands:
+            if request.get("operation") not in ("normal-form", "membership", "multiplicity", "quotient-ring") or "ideal" in operands:
                 return 400, error_record("invalid_request",
-                    "Use basis_ref in place of ideal for normal-form, membership or multiplicity.")
+                    "Use basis_ref in place of ideal for normal-form, membership, multiplicity or quotient-ring.")
             ref = operands["basis_ref"]
             if not isinstance(ref, str) or not ref:
                 return 400, error_record("invalid_request", "basis_ref must be a nonempty string.")
@@ -62,11 +62,16 @@ class AlgebraBasisStore:
             del expanded["basis_ref"]
             # Only a stored server result can set this worker argument. The
             # expanded request also yields portable command and script replays.
-            return calculate_algebra(dict(request, operands=expanded), known_basis=True, timeout=timeout, owner=owner)
+            status, record = calculate_algebra(dict(request, operands=expanded), known_basis=True, timeout=timeout, owner=owner)
+            if status == 200 and record["result"]["type"] in ("quotient-ring", "quotient-element"):
+                record["basis_ref"] = ref
+            return status, record
 
         status, record = calculate_algebra(request, timeout=timeout, owner=owner)
-        if status == 200 and record["operation"] == "groebner":
-            ref = self._remember(record["result"])
+        if status == 200 and record["result"]["type"] in ("basis", "quotient-ring", "quotient-element"):
+            result = record["result"]
+            key = "relations" if record["operation"] == "quotient-ring" else "generators"
+            ref = self._remember(result["ring"], result[key])
             if ref is not None:
                 record["basis_ref"] = ref
         return status, record

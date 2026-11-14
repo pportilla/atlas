@@ -1,5 +1,6 @@
 // Ordinary and symbolic powers using exponent vectors of monomial ideals.
 #include "ideal_powers.hpp"
+#include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 #include <algorithm>
 #include <array>
@@ -11,10 +12,6 @@ namespace {
 using local::Powers;
 using Monomials = std::vector<Powers>;
 
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(),a.end(),b.begin(),std::less_equal<>());
-}
-
 // Sort by degree so a strict divisor can only occur in an earlier degree.
 // In a homogeneous group only equal vectors can be redundant.
 Monomials minimal(Monomials rows) {
@@ -23,7 +20,7 @@ Monomials minimal(Monomials rows) {
     rows.erase(std::unique(rows.begin(),rows.end()),rows.end());
     std::map<mpz_class,Monomials> by_degree;
     for (auto& row : rows) {
-        auto degree = std::accumulate(row.begin(),row.end(),mpz_class(0));
+        auto degree = local::total_degree(row);
         by_degree[std::move(degree)].push_back(std::move(row));
     }
     Monomials result;
@@ -31,7 +28,7 @@ Monomials minimal(Monomials rows) {
     for (auto& [degree,group] : by_degree) {
         const size_t smaller = result.size();
         for (auto& row : group)
-            if (std::none_of(result.begin(),result.begin()+smaller,[&](const auto& g){return divides(g,row);}))
+            if (std::none_of(result.begin(),result.begin()+smaller,[&](const auto& g){return local::monomial_divides(g,row);}))
                 result.push_back(std::move(row));
     }
     return result;
@@ -150,11 +147,11 @@ std::optional<PackedBasis> packed_homogeneous(const Monomials& base,size_t width
     if (!width || width>4 || n>64 || base.size()<2) return std::nullopt;
     Ring ring;
     ring.init(width,lex ? 1 : 0);
-    const auto degree = std::accumulate(base.front().begin(),base.front().end(),mpz_class(0));
+    const auto degree = local::total_degree(base.front());
     if (degree*n>MAX_DEGREE) return std::nullopt;
     std::vector<u64> heads;
     for (const auto& m : base) {
-        if (std::accumulate(m.begin(),m.end(),mpz_class(0)) != degree) return std::nullopt;
+        if (local::total_degree(m) != degree) return std::nullopt;
         std::array<long,4> exponents{};
         for (size_t k=0;k<width;++k) exponents[k]=m[k].get_si();
         u64 words[2];

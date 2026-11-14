@@ -13,6 +13,10 @@ std::pair<Powers, mpq_class> leading_term_at_point(const Polynomial& f, const Po
 Polynomial specialize_coordinate(const Polynomial& f, size_t axis, const mpq_class& coordinate);
 Polynomial grouped_point_jet(const Polynomial& f, const PointRow& point, const mpz_class& cutoff,
                              const Powers& axis_bounds = {});
+// A Taylor jet up to a nonzero rational scalar. Decline when even the
+// relative coefficients of the row would require large integer powers.
+std::optional<Polynomial> bounded_ideal_jet(const Polynomial& f, const PointRow& point,
+                                            const mpz_class& cutoff);
 Basis standard_basis_at_point(const Basis& ideal, const std::vector<std::string>& names,
                               const PointRow& point, bool lex, bool prefer_modular = false);
 }

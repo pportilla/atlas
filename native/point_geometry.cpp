@@ -4,6 +4,7 @@
 #include "local_dimension_graph.hpp"
 #include "local_point_basis.hpp"
 #include "local_point_quotient.hpp"
+#include "local_quotient_jets.hpp"
 #include "primary_decomposition.hpp"
 #include "local_io.hpp"
 #include <algorithm>
@@ -292,28 +293,29 @@ void accumulate_product(Terms& out, const Terms& left, const Terms& right, int s
     }
 }
 
+bool insert_power_row(const Point& p, PowerRow row, std::map<size_t,PowerRow>& pivots) {
+    for (size_t i = 0; i < row.size(); ++i) {
+        if (!weights_nonzero(p.bases, row[i])) continue;
+        const auto prior = pivots.find(i);
+        if (prior == pivots.end()) {
+            pivots.emplace(i, std::move(row));
+            return true;
+        }
+        const auto& pivot = prior->second;
+        for (size_t j = i+1; j < row.size(); ++j) {
+            Terms difference;
+            accumulate_product(difference, pivot[i], row[j], 1);
+            accumulate_product(difference, row[i], pivot[j], -1);
+            row[j] = std::move(difference);
+        }
+    }
+    return false;
+}
+
 int power_row_rank(const Point& p, const std::vector<Terms>& ideal, const Json::Value& witness = {}) {
     std::map<size_t,PowerRow> pivots;
     const size_t width = p.coordinates.size();
-    auto insert_row = [&](const Terms& f) {
-        auto row = differential_weights(p, f);
-        for (size_t i = 0; i < width; ++i) {
-            if (!weights_nonzero(p.bases, row[i])) continue;
-            const auto prior = pivots.find(i);
-            if (prior == pivots.end()) {
-                pivots.emplace(i, std::move(row));
-                return true;
-            }
-            const auto& pivot = prior->second;
-            for (size_t j = i+1; j < width; ++j) {
-                Terms difference;
-                accumulate_product(difference, pivot[i], row[j], 1);
-                accumulate_product(difference, row[i], pivot[j], -1);
-                row[j] = std::move(difference);
-            }
-        }
-        return false;
-    };
+    auto insert_row = [&](const Terms& f) { return insert_power_row(p, differential_weights(p,f), pivots); };
     if (!witness.isNull()) {
         for (const auto& index : witness)
             if (!insert_row(ideal.at(index.asUInt()))) return -1;
@@ -438,7 +440,7 @@ void taylor_slice(const Point& p, const Powers& e, const Powers& key, size_t j, 
     }
     powers[axis] = 0;
 }
-Terms initial_form(const Point& p, const Terms& f, bool bounded = false) {
+Coefficients initial_weights(const Point& p, const Terms& f) {
     const Z degree = order_at_point(p, f);
     Coefficients coefficients;
     for (const auto& [e, c] : f) {
@@ -451,6 +453,10 @@ Terms initial_form(const Point& p, const Terms& f, bool bounded = false) {
         if (extra >= f.size()) throw std::logic_error("Sparse point order exceeds its interpolation bound.");
         taylor_slice(p, e, p.key(e), 0, extra.get_ui(), powers, p.signed_value(e, c), coefficients);
     }
+    return coefficients;
+}
+Terms initial_form(const Point& p, const Terms& f, bool bounded = false) {
+    auto coefficients = initial_weights(p,f);
     std::vector<Terms> weights;
     for (auto& entry : coefficients) weights.push_back(std::move(entry.second));
     const auto values = materialize(p.bases, weights, bounded);
@@ -834,7 +840,11 @@ Basis simplify_point_generators(const Basis& ideal, const PointRow& point) {
 }
 
 Powers head_at_point(const Polynomial& f, const PointRow& point, bool lex) {
-    return local_head(initial_form(Point(point),f),lex);
+    const Point p(point);
+    Polynomial support;
+    for (const auto& [e, weights] : initial_weights(p,f))
+        if (weights_nonzero(p.bases,weights)) support.emplace(e,1);
+    return local_head(support,lex);
 }
 
 bool nonzero_at_point(const Polynomial& f, const PointRow& point) {
@@ -877,11 +887,11 @@ Polynomial specialize_coordinate(const Polynomial& f, size_t axis, const mpq_cla
     return result;
 }
 
-Polynomial grouped_point_jet(const Polynomial& f, const PointRow& point, const mpz_class& cutoff,
-                             const Powers& axis_bounds) {
+namespace {
+Coefficients point_jet_weights(const Polynomial& f, const Point& p, const mpz_class& cutoff,
+                               const Powers& axis_bounds) {
     // Sum contributions to each Taylor coefficient before building the
     // integer powers. Coordinates such as 2 and 1/4 share a numeric base.
-    Point p(point);
     Coefficients sums;
     for (const auto& [e,c] : f) {
         Powers k(e.size(),0);
@@ -906,16 +916,70 @@ Polynomial grouped_point_jet(const Polynomial& f, const PointRow& point, const m
                 k[axis]=a;
                 self(self,j+1,room-a,weight);
                 weight*=e[axis]-a;
-                weight/=(a+1)*point[axis];
+                weight/=(a+1)*p.coordinates[axis];
             }
             k[axis]=0;
         };
         visit(visit,0,cutoff-fixed-1,signed_coefficient);
     }
+    return sums;
+}
+}
+
+Polynomial grouped_point_jet(const Polynomial& f, const PointRow& point, const mpz_class& cutoff,
+                             const Powers& axis_bounds) {
+    const Point p(point);
     Polynomial result;
-    for (const auto& [k,weights] : sums)
+    for (const auto& [k,weights] : point_jet_weights(f,p,cutoff,axis_bounds))
         if (weights_nonzero(p.bases, weights)) result.emplace(k, evaluated_weights(p, weights));
     return result;
+}
+
+std::vector<std::map<Powers, Polynomial>> symbolic_point_jets(const Basis& ideal, const PointRow& point,
+                                                              unsigned cutoff) {
+    const Point p(point);
+    std::vector<Coefficients> jets;
+    jets.reserve(ideal.size());
+    for (const auto& f : ideal) {
+        auto jet = point_jet_weights(f,p,cutoff,{});
+        for (auto it = jet.begin(); it != jet.end();) {
+            if (!weights_nonzero(p.bases,it->second)) it = jet.erase(it);
+            else ++it;
+        }
+        jets.push_back(std::move(jet));
+    }
+    return jets;
+}
+
+std::vector<size_t> symbolic_pivot_columns(const PointRow& point, std::vector<std::vector<Polynomial>>&& rows) {
+    const Point p(point);
+    std::map<size_t,PowerRow> pivots;
+    for (auto& row : rows) insert_power_row(p,std::move(row),pivots);
+    std::vector<size_t> columns;
+    columns.reserve(pivots.size());
+    for (const auto& entry : pivots) columns.push_back(entry.first);
+    return columns;
+}
+
+std::optional<Polynomial> bounded_ideal_jet(const Polynomial& f, const PointRow& point,
+                                            const mpz_class& cutoff) {
+    const Point p(point);
+    auto sums = point_jet_weights(f,p,cutoff,{});
+    std::vector<Terms> weights;
+    weights.reserve(sums.size());
+    for (auto& [e,row] : sums) weights.push_back(std::move(row));
+    try {
+        const auto coefficients = materialize(p.bases, weights, true);
+        Polynomial jet;
+        size_t i = 0;
+        for (const auto& entry : sums) {
+            if (coefficients[i] != 0) jet.emplace(entry.first, coefficients[i]);
+            ++i;
+        }
+        return jet;
+    } catch (const WidePointRow&) {
+        return std::nullopt;
+    }
 }
 
 std::pair<Powers, mpq_class> leading_term_at_point(const Polynomial& f, const PointRow& point, bool lex) {

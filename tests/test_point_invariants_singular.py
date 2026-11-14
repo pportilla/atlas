@@ -120,6 +120,37 @@ class PointInvariantsSingularTests(unittest.TestCase):
             with self.subTest(operation=operation), self.assertRaises(InputError):
                 calculate(operation, point=["1/2", "-2/3"], polynomial=f)
 
+    def test_65_bit_coupled_parameters_at_a_rational_point(self):
+        n = 2**64 + 7
+        point = ["2", "1/2"]
+        g, h = f"(x^{n}*y^{n}+x+y-7/2)", "(x-4*y)"
+        f = f"{g}^5+{h}^5+{g}^3*{h}^3"
+        # At p, xy=1. The linear parts of (g,h) are independent, so
+        # these are formal coordinates in which Singular can check mu,tau.
+        mu, tau = singular("ds", [
+            "poly F=x^5+y^5+x^3*y^3;", answer("milnor(F)"), answer("tjurina(F)"),
+        ])
+        self.assertEqual((mu, tau), (16, 15))
+        for op, value in (("milnor-number", mu), ("tjurina-number", tau)):
+            self.assertEqual(calculate(op, point=point, polynomial=f)["value"], value)
+        algebra = calculate("local-jacobian-algebra", point=point, polynomial=f)
+        replay = calculate("local-quotient-basis", point=point, ideal=algebra["generators"])
+        self.assertEqual(replay["basis"], algebra["basis"])
+        self.assertEqual(algebra["dimension"], mu)
+        # Initial forms of the two derivatives span (lin(g)^4,lin(h)^4).
+        # This regular sequence gives the associated graded Jacobian algebra.
+        # Compare every returned monomial to Singular's kbase in the original
+        # tangent coordinates, where the two independent linear forms mix axes.
+        verified = singular("dp", [
+            f"ideal A={','.join(algebra['basis'])};",
+            "ring T=0,(u,v),ds;", "map center=R,u+2,v+1/2;",
+            f"number n={n};", "ideal G=std(ideal(((n/2+1)*u+(2*n+1)*v)^4,(u-4*v)^4));",
+            "ideal B=kbase(G); ideal C=center(A); int i,j,matches;",
+            "for(i=1;i<=size(B);i++){for(j=1;j<=size(C);j++){if(B[i]==C[j]){matches++;}}}",
+            answer("size(C)"), answer("matches"),
+        ])
+        self.assertEqual(verified, [mu, mu])
+
     def test_explicit_origin_and_legacy_result(self):
         for operation in ("local-quotient-basis", "local-jacobian-algebra", "milnor-number", "tjurina-number"):
             with self.subTest(operation=operation):

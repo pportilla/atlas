@@ -4,19 +4,12 @@ import re
 import subprocess
 import sys
 import unittest
-from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from engine.app import main
-from engine.welcome import SMALL_WORDMARK, WORDMARK, atlas_version, print_welcome, render_welcome
-
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class Terminal(io.StringIO):
-    def isatty(self):
-        return True
+from engine.welcome import SMALL_WORDMARK, WORDMARK, _animation_frames, atlas_version, interactive_welcome, render_welcome
+from tests.cli_support import ROOT, Terminal
 
 
 class CliWelcomeTests(unittest.TestCase):
@@ -91,42 +84,35 @@ class CliWelcomeTests(unittest.TestCase):
             self.assertEqual(main(), 0)
         return stdout.getvalue(), stderr.getvalue(), stdin.read()
 
-    def test_animation_finishes_at_the_original_wordmark_and_prompt(self):
-        for interrupted in (False, True):
-            with self.subTest(interrupted=interrupted):
-                stdout = Terminal()
-                frame_ends = []
+    def test_animation_finishes_at_the_original_wordmark(self):
+        frames = [rows for rows, delay in _animation_frames(color=False)]
+        self.assert_unfolding_sequence(frames)
+        self.assertEqual(frames[-1], ["  " + row for row in WORDMARK])
 
-                def pause(_seconds):
-                    frame_ends.append(stdout.tell())
-                    if interrupted:
-                        raise KeyboardInterrupt
-
-                with (
-                    patch.object(stdout, 'fileno', return_value=1),
-                    patch('os.get_terminal_size', return_value=os.terminal_size((80, 24))),
-                    patch('engine.welcome.time') as clock,
-                ):
-                    clock.sleep.side_effect = pause
-                    out, err, _ = self.launch_session('quit\n', stdout=stdout)
-
-                self.assertEqual(err, '')
-                if interrupted:
-                    self.assertEqual(len(frame_ends), 1)
-                else:
-                    frames = [
-                        out[start:end].rsplit('\x1b[J', 1)[-1].strip('\r\n').splitlines()
-                        for start, end in zip([0] + frame_ends[:-1], frame_ends)
-                    ]
-                    self.assert_unfolding_sequence(frames)
-                final = out[frame_ends[-1]:]
-                cleanup = final.index('\x1b[J')
-                self.assertIn('\x1b8', final[:cleanup])
-                self.assertIn('\x1b[?25h', final[cleanup:])
-                self.assertIn('\x1b7', out[:frame_ends[0]])
-                self.assert_logo(final[cleanup:], WORDMARK)
-                self.assertLess(final.index('Welcome to Atlas'), final.index('atlas>'))
-                self.assertEqual(out.count('Welcome to Atlas'), 1)
+    def test_leaving_the_first_input_restores_the_workspace_and_wordmark(self):
+        size = os.terminal_size((80, 24))
+        for interrupt in (False, True):
+            with self.subTest(interrupt=interrupt):
+                stream = Terminal()
+                panel = SimpleNamespace(size=size, stream=stream, color=False)
+                with patch.object(stream, 'fileno', return_value=1), patch('os.get_terminal_size', return_value=size):
+                    if interrupt:
+                        with self.assertRaises(KeyboardInterrupt), interactive_welcome(panel):
+                            stream.write('atlas> ')
+                            raise KeyboardInterrupt
+                    else:
+                        with interactive_welcome(panel) as finish:
+                            stream.write('atlas> ')
+                            finish()
+                            after_tab = stream.getvalue()
+                        self.assertEqual(stream.getvalue(), after_tab)
+                output = stream.getvalue()
+                self.assertLess(output.index('Welcome to Atlas'), output.index('atlas> '))
+                for row in WORDMARK:
+                    self.assertIn(row, output[output.index('atlas> '):])
+                self.assertTrue(output.endswith('\x1b7\x1b[3;r\x1b8'))
+                self.assertNotIn('\x1b[J', output)
+                self.assertNotIn('\x1b[?25l', output)
 
     def assert_unfolding_sequence(self, frames):
         reveals = []
@@ -169,19 +155,17 @@ class CliWelcomeTests(unittest.TestCase):
         self.assertGreater(wordmark_widths[0], wordmark_widths[-1])
         self.assertEqual(sorted(wordmark_widths, reverse=True), wordmark_widths)
 
-    def test_static_welcome_skips_animation(self):
-        for stream, interactive, term in ((io.StringIO(), False, 'xterm'),
-                                          (Terminal(), False, 'xterm'), (Terminal(), True, 'dumb')):
-            with (
-                self.subTest(interactive=interactive, term=term),
-                patch.object(sys, 'stdout', stream),
-                patch.object(stream, 'fileno', return_value=1),
-                patch('os.get_terminal_size', return_value=os.terminal_size((80, 24))),
-                patch.dict(os.environ, {'TERM': term, 'COLUMNS': '80', 'NO_COLOR': '1'}),
-                patch('engine.welcome.time') as clock,
-            ):
-                print_welcome(interactive=interactive)
-                clock.sleep.assert_not_called()
+    def test_small_or_unavailable_terminal_uses_static_welcome(self):
+        for size in (None, os.terminal_size((80, 10)), os.terminal_size((45, 24))):
+            stream = Terminal()
+            panel = SimpleNamespace(size=size, stream=stream, color=False)
+            with (self.subTest(size=size), patch.object(sys, 'stdout', stream),
+                  patch.dict(os.environ, {'COLUMNS': '80', 'NO_COLOR': '1'}),
+                  patch('engine.welcome.Thread') as worker):
+                with interactive_welcome(panel) as finish:
+                    stream.write('atlas> ')
+                    finish()
+                worker.assert_not_called()
                 self.assertNotIn('\x1b', stream.getvalue())
                 self.assert_logo(stream.getvalue(), WORDMARK)
 

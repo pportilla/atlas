@@ -6,7 +6,8 @@ import subprocess
 import unittest
 
 from engine.polynomial import parse_expression
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class LocalAlgebraBrowserTests(AlgebraBrowserCase):
@@ -29,6 +30,39 @@ class LocalAlgebraBrowserTests(AlgebraBrowserCase):
                                 text=True, timeout=65)
         self.assertEqual(result.returncode, 0, result.stderr)
         return [json.loads(line) for line in result.stdout.splitlines()]
+
+    def test_wide_shifted_cusp_and_replay_of_its_derivative_ideal(self):
+        page = self.page
+        choose = page.locator("#operation").select_option
+        n = 2**64 + 7
+        f = f"(x^{n}-1)^3+(y+2/3)^2"
+        choose("local-jacobian-algebra")
+        page.locator("#polynomial").fill(f)
+        page.locator("#local-point").fill("1, -2/3")
+        jacobian = self.submit("A", "gpu")["result"]
+        self.assertEqual(jacobian["basis"], ["1", "x-1"])
+        expected = [f"3*{n}*x^{n-1}*(x^{n}-1)^2", "2*(y+2/3)"]
+        self.assertEqual([parse_expression(g, ["x", "y"]) for g in jacobian["generators"]],
+                         [parse_expression(g, ["x", "y"]) for g in expected])
+        self.assertEqual(json.loads(self.download("#export"))["result"], jacobian)
+        results = [jacobian]
+        for operation in ("milnor-number", "tjurina-number"):
+            choose(operation)
+            expect(page.locator("#polynomial")).to_have_value(f)
+            result = self.submit()["result"]
+            self.assertEqual(result["value"], 2)
+            results.append(result)
+        choose("local-quotient-basis")
+        page.locator("#ideal-source").select_option("A")
+        expect(page.locator("#local-point")).to_have_value("1, -2/3")
+        quotient = self.submit("Q")["result"]
+        self.assertEqual(quotient["basis"], jacobian["basis"])
+        results.append(quotient)
+        self.assertEqual(self.replay(self.download("#download-script"))[0]["result"], quotient)
+        page.locator("#session-replay summary").click()
+        script = self.download("#download-session")
+        self.assertIn("ideal(A.generators,", script)
+        self.assertEqual([row["result"] for row in self.replay(script)], results)
 
     def test_global_and_origin_quotients_replay_the_saved_ideal(self):
         page = self.page

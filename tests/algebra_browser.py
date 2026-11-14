@@ -4,8 +4,7 @@ import threading
 import unittest
 
 from engine.app import AtlasServer
-from tests.test_http import QuietHandler
-from tests.test_cli_session import ROOT
+from tests.http_support import QuietHandler
 
 try:
     from playwright.sync_api import Error as PlaywrightError, expect, sync_playwright
@@ -51,6 +50,15 @@ class AlgebraBrowserCase(unittest.TestCase):
             self.page.locator(group + " button").last.click()
         for row, value in zip(rows.all(), values):
             row.fill(value)
+
+    def compute(self, name=""):
+        self.page.locator("#result-name").fill(name)
+        with self.page.expect_response(self.url + "/api/algebra") as pending:
+            self.page.locator("#run").click()
+        record = pending.value.json()
+        self.assertEqual(record["status"], "ok", record)
+        expect(self.page.locator("#result")).to_be_visible()
+        return record["result"]
 
     def download(self, selector):
         with self.page.expect_download() as download:

@@ -66,6 +66,14 @@ def coefficient_field(roots, rectangles=None, *, exhaustive=False, root_images=F
         request["root_images"] = True
     if rectangles is not None:
         request["root_rectangles"] = rectangles
+    if exhaustive:
+        # The running kernel can construct the field directly. Quick requests
+        # still use the worker's process-local memory bound.
+        from .kernel_json import kernel_json
+        try:
+            return kernel_json("atlas_common_field", "common_field", **request)
+        except InputError as error:
+            raise LimitError(str(error)) from error
     done = subprocess.run([str(_WORKER)], input=json.dumps(request),
                           capture_output=True, text=True, check=True)
     field = json.loads(done.stdout)

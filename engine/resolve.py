@@ -257,6 +257,14 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             r = bounded_first_trial(p, variables, verified=verified, integrals=request.get("monodromy", False))
         except (LimitError, Unavailable, OSError):
             pass  # The isolated exhaustive workers still test all three methods.
+    if (r is None and parallel_search and mode == "embedded" and len(variables) == 3
+            and 4 <= len(p) <= 32 and degree <= 16):
+        from .newton_trials import bounded_coordinate_graph
+        from .native_library import Unavailable
+        try:
+            r = bounded_coordinate_graph(p, variables)
+        except (LimitError, Unavailable, OSError):
+            pass
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
         r = exhaustive_search(p, variables, mode, compute=compute)

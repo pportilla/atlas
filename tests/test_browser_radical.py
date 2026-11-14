@@ -3,20 +3,11 @@ import json
 import shlex
 import subprocess
 
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
-from tests.test_cli_session import run_script
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT, run_script
 
 
 class RadicalBrowserTests(AlgebraBrowserCase):
-    def compute(self, name=""):
-        self.page.locator("#result-name").fill(name)
-        with self.page.expect_response(self.url + "/api/algebra") as pending:
-            self.page.locator("#run").click()
-        record = pending.value.json()
-        self.assertEqual(record["status"], "ok", record)
-        expect(self.page.locator("#result")).to_be_visible()
-        return record["result"]
-
     def test_named_ideal_basis_and_radical_replay(self):
         page = self.page
         select = page.locator("#operation").select_option

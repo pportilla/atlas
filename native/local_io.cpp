@@ -1,5 +1,6 @@
 // Use the existing Atlas expression parser and FLINT pullback in the CLI process.
 #include "local_io.hpp"
+#include "local_monomial.hpp"
 #include "groebner.hpp"
 #include "sparse_flint.hpp"
 #include <algorithm>
@@ -7,7 +8,6 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <numeric>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -184,7 +184,7 @@ std::string format_polynomial(const Polynomial& f, const std::vector<std::string
     std::vector<std::pair<mpz_class, const Entry*>> sorted;
     sorted.reserve(f.size());
     for (const auto& t : f)
-        sorted.emplace_back(std::accumulate(t.first.begin(), t.first.end(), mpz_class(0)), &t);
+        sorted.emplace_back(total_degree(t.first), &t);
     std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
         return a.first != b.first ? a.first > b.first : a.second->first > b.second->first;
     });
@@ -234,7 +234,7 @@ Basis project_monomials(const Basis& generators, const std::vector<mpq_class>& p
         auto head = f.begin()->first;
         if (f.begin()->second == 0) continue;
         for (std::size_t i = 0; i < point.size(); ++i) if (point[i] != 0) head[i] = 0;
-        const auto degree = std::accumulate(head.begin(), head.end(), mpz_class(0));
+        const auto degree = total_degree(head);
         if (!degree) return {Polynomial{{std::move(head), 1}}};
         heads.emplace_back(degree, std::move(head));
     }
@@ -243,7 +243,7 @@ Basis project_monomials(const Basis& generators, const std::vector<mpq_class>& p
     for (auto& head : heads) {
         const bool redundant = std::any_of(result.begin(), result.end(), [&](const Polynomial& f) {
             const auto& divisor = f.begin()->first;
-            return std::equal(divisor.begin(), divisor.end(), head.second.begin(), std::less_equal<>());
+            return monomial_divides(divisor, head.second);
         });
         if (!redundant) result.push_back(Polynomial{{std::move(head.second), 1}});
     }

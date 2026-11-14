@@ -6,7 +6,8 @@ import subprocess
 from unittest.mock import patch
 
 from engine.algebra_basis_store import AlgebraBasisStore
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class MultiplicityBrowserTests(AlgebraBrowserCase):

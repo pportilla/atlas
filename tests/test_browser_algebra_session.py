@@ -5,7 +5,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from tests.algebra_browser import AlgebraBrowserCase, ROOT, expect
+from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.cli_support import ROOT
 
 
 class AlgebraSessionBrowserTests(AlgebraBrowserCase):

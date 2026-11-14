@@ -6,7 +6,7 @@ from textwrap import dedent
 
 from engine.session import new_session
 from engine.session_expressions import SessionError
-from tests.test_cli_session import run_prompt, run_script
+from tests.cli_support import run_prompt, run_script
 
 
 class ZariskiTangentSessionTests(unittest.TestCase):

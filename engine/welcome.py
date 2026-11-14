@@ -1,11 +1,12 @@
 """The cartographic wordmark shown when opening Atlas from a terminal."""
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import textwrap
-import time
+from threading import Event, Thread
 
 WORDMARK = (
     "     ___   ______  __      ___    _____",
@@ -96,7 +97,7 @@ def _ink(text, style, color):
     return f"\033[{style}m{text}\033[0m" if color and style and text else text
 
 
-def render_welcome(columns, *, color, interactive):
+def render_welcome(columns, *, color, interactive, art_rows=None):
     margin = "  " if columns >= 24 else ""
     width = max(1, columns - len(margin))
     lines = []
@@ -110,7 +111,10 @@ def render_welcome(columns, *, color, interactive):
 
     wordmark = next((art for art in (WORDMARK, SMALL_WORDMARK) if max(map(len, art)) <= width), None)
     if wordmark:
-        lines.extend(_ink(row, "1", color) for row in wordmark)
+        if art_rows is None:
+            lines.extend(_ink(row, "1", color) for row in wordmark)
+        else:
+            lines.extend([""] * art_rows)
     else:
         paragraph("ATLAS", "1")
 
@@ -119,7 +123,7 @@ def render_welcome(columns, *, color, interactive):
     paragraph(contact)
     lines.append("")
     paragraph(GREETING, "1")
-    paragraph("Type help for topics, help NAME for an example, or quit to leave." if interactive
+    paragraph("Tab completes names. Type help for topics, help NAME for an example, or quit." if interactive
               else "Run ./atlas --help for all commands.")
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"
 
@@ -172,34 +176,72 @@ def _animation_frames(color):
         yield rows, 0.20 if remaining == 1 else 0.095
 
 
-def _unfold(stream, size, color):
-    # Reserve two workspace rows plus a blank line above and below the map.
-    if size.lines < 15 or size.columns < max(map(len, FOLDS[-1])) + 3:
+@contextmanager
+def interactive_welcome(panel):
+    """Play above the editable prompt. Finish early to give completion the full workspace."""
+    size = panel.size
+    height = max(map(len, FOLDS))
+    banner = ""
+    if size and size.columns >= max(map(len, FOLDS[-1])) + 3:
+        banner = render_welcome(size.columns, color=panel.color, interactive=True, art_rows=height)
+    # The session panel starts the welcome at row 3. Leave room for a
+    # wrapped input line and completion choices below the welcome.
+    prompt_row = 3 + len(banner.splitlines()) + 1
+    if not banner or prompt_row + 2 > size.lines:
+        print_welcome(interactive=True)
+        yield lambda: None
         return
-    stream.write("\0337\033[?25l")
-    try:
-        for rows, delay in _animation_frames(color):
-            if os.get_terminal_size(stream.fileno()) != size:
-                return
-            stream.write("\0338\033[J\r\n" + "\r\n".join(rows))
-            stream.flush()
-            time.sleep(delay)
-    except KeyboardInterrupt:
-        pass  # Skip the remaining frames and continue to the prompt.
-    finally:
-        stream.write("\0338\033[J\033[?25h")
+
+    stream = panel.stream
+    print(banner, file=stream)
+    stream.write(f"\033[{prompt_row};r\033[{prompt_row};1H")
+    stream.flush()
+    stop = Event()
+
+    def paint(rows):
+        # One write saves the live editing cursor, updates just the
+        # map's rows, and restores the cursor (including its column).
+        commands = ["\0337"]
+        for i in range(height):
+            commands.append(f"\033[{4 + i};1H\033[2K")
+            if i < len(rows):
+                commands.append(rows[i])
+        commands.append("\0338")
+        stream.write("".join(commands))
         stream.flush()
+
+    def play():
+        try:
+            for rows, delay in _animation_frames(panel.color):
+                if os.get_terminal_size(stream.fileno()) != size:
+                    return
+                paint(rows)
+                if stop.wait(delay):
+                    break
+            if os.get_terminal_size(stream.fileno()) == size:
+                paint(["  " + _ink(row, "1", panel.color) for row in WORDMARK])
+        finally:
+            # DECSTBM also homes the cursor. Restore readline's
+            # position as well as the session panel's scroll region.
+            stream.write("\0337\033[3;r\0338")
+            stream.flush()
+
+    thread = Thread(target=play, name="atlas-welcome")
+
+    def finish():
+        stop.set()
+        if thread.ident is not None:
+            thread.join()
+
+    try:
+        thread.start()
+        yield finish
+    finally:
+        finish()
 
 
 def print_welcome(*, interactive):
     stream = sys.stdout
     terminal = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
     color = terminal and not os.environ.get("NO_COLOR")
-    if interactive and terminal:
-        try:
-            size = os.get_terminal_size(stream.fileno())
-        except (OSError, ValueError):
-            pass
-        else:
-            _unfold(stream, size, color)
     print(render_welcome(shutil.get_terminal_size().columns, color=color, interactive=interactive))

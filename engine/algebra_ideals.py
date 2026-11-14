@@ -32,10 +32,10 @@ def _primary_decomposition(ring, variables, generators):
     return {"type": "primary-decomposition", "ring": ring, "components": components}
 
 
-def handle(operation, ring, operands):
+def handle(operation, ring, operands, *, known_basis=False):
     variables = tuple(map(polynomial.Symbol, ring["variables"]))
     generators = operands["ideal"]
-    if operation in ("normalization", "localization", "ideal-power", "symbolic-power"):
+    if operation in ("normalization", "localization", "quotient-ring", "ideal-power", "symbolic-power"):
         opcode = operation.replace("-", "_")
         request = [opcode, " ".join(ring["variables"]), ring["order"]]
         rows = generators
@@ -46,6 +46,11 @@ def handle(operation, ring, operands):
             rows = [*generators, *prime]
             if query:
                 rows.extend(operands.get(key, 1) for key in ("numerator", "denominator"))
+        elif operation == "quotient-ring":
+            if known_basis:
+                request[0] = "quotient_ring_prepared"
+            request.extend([operands["action"], operands.get("exponent", "0"), str(len(generators))])
+            rows = [*generators, *(operands[k] for k in ("polynomial", "other_polynomial") if k in operands)]
         elif "exponent" in operands:
             request.append(operands["exponent"])
         with cpu_stage(opcode, generators=len(generators)):

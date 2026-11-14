@@ -1,5 +1,6 @@
 // Integral closure of affine QQ domains by the Grauert–Remmert criterion.
 #include "normalization.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
 #include "resolution_tangents.hpp"
@@ -178,13 +179,9 @@ std::optional<Fraction> enlargement(const Basis& relations, const Basis& test, s
         if (!r.empty()) J.push_back(std::move(r));
     }
     if (J.empty()) throw std::logic_error("A normalization test ideal vanished on its component.");
-    auto degree = [](const Polynomial& f) {
-        mpz_class d = 0;
-        for (const auto& term : f)
-            d = std::max(d,std::accumulate(term.first.begin(),term.first.end(),mpz_class(0)));
-        return d;
-    };
-    std::stable_sort(J.begin(),J.end(),[&](const auto& a,const auto& b) { return degree(a) < degree(b); });
+    std::stable_sort(J.begin(), J.end(), [](const auto& a, const auto& b) {
+        return local::max_total_degree(a) < local::max_total_degree(b);
+    });
     const auto& g = J.front();
     if (g == one(n)) return std::nullopt;
     Basis principal = relations;

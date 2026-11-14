@@ -229,11 +229,32 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
     if not proved:
         return 'rejected', None
     charts,pieces,snc_checks = proved
+    return _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks)
+
+
+def _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks,*,coordinate_line=False):
+    domain, center, u = candidate.domain, candidate.center, candidate.projective
     used = {v.name for chart in charts for v in chart.variables} | {v.name for v in candidate.projective}
     generator = "field_generator"
     while generator in used:
         generator += "_"
-    result=_component_atlas(charts,variables,pieces,mode,domain,effort,generator)
+    if coordinate_line:
+        from .incidence import incidence, stratum_dimension
+        axes = [str(x) for x in center]
+        divisors = []
+        for (piece,) in pieces:
+            ideal = [_text(g,domain,generator) for g in piece]
+            divisors.append([dict(id="E1",equation=", ".join(ideal),ideal=ideal)])
+        ident = incidence("coordinate_exceptional", variables=[str(x) for x in variables], centre=axes,
+                          charts=[{"exceptional":components} for components in divisors])
+        if ident is None:
+            return "undecided", None
+        dual = {"status":"complete", "convention":"Ambient exceptional divisor in the algebraic germ over Qbar. "
+                "Cells are geometric intersection components meeting the origin fiber.",
+                "vertices":[{"id":ident,"dimension":stratum_dimension(len(variables),1)}], "cells":[]}
+        result = dual,divisors
+    else:
+        result=_component_atlas(charts,variables,pieces,mode,domain,effort,generator)
     if result is None:
         return 'undecided', None
     dual,divisors=result
@@ -597,13 +618,44 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
     return "undecided", None
 
 
-def search(poly,names,mode,*,exhaustive=False,seconds=4):
+def _isolated_graph_prefix(variables, active, candidates, seconds):
+    # The native worker verifies the actual scheduled candidates and can be
+    # killed during a saturation. Traced requests stay on the replay-aware path.
+    worker = Path(__file__).resolve().parents[1] / "native" / "build" / "graph_verify"
+    if not worker.is_file():
+        return None
+    frames = []
+    for candidate in candidates:
+        rows = kernel._lines(variables, (active, *candidate.center))
+        for ideal in candidate.boundary:
+            rows.extend(kernel._lines((*variables, *candidate.projective), ideal))
+        header = " ".join(map(str, ("verify",len(variables),len(candidate.center),
+                                    len(candidate.boundary),*(len(ideal) for ideal in candidate.boundary))))
+        frames.append("\n".join([header,*rows])+"\n")
+    try:
+        answer = subprocess.run([str(worker)], input="\f".join(frames), text=True,
+                                capture_output=True, timeout=seconds)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if answer.returncode or not answer.stdout:
+        return None
+    proof = kernel.graph_proof_rows(answer.stdout.splitlines())
+    if proof is None:
+        return None
+    candidate = candidates[-1]
+    charts, count = assemble_charts(variables,candidate.center,proof)
+    return _verified_record(variables,candidate,"embedded",1,charts,_pieces(candidate,charts),
+                            count,coordinate_line=True)
+
+
+def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
     from .affine_kernel import _sparse_expression, _sparse_terms, frame_function, rational_factor_rows
     from .resolution_search import priority_candidates, scheduled_candidates
     api = runtime_expressions()
     variables=tuple(api.Symbol(s) for s in names)
     f=expression(poly,variables)
-    _workers.warm()  # the interpreter starts while the candidates are prepared
+    if transverse_centre is None:
+        _workers.warm()  # the interpreter starts while the candidates are prepared
     # Over the germ, repeated global factors that miss zero are units. Preserve
     # them in ordinary charts, or record the unit if this fallback removes it.
     scalar, factors = rational_factor_rows(variables, f)
@@ -630,6 +682,11 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4):
               ((c,1.25) for c in priority_candidates(variables,active)))
     attempts=0
     rejected_priority = set()
+    prefix = []
+    if transverse_centre is not None:
+        expected = (((api.S.One,), "identity"), (variables, "origin"),
+                    (tuple(variables[j] for j in transverse_centre), "singular coordinate subspace"))
+
     for candidate,allowance in schedule:
         seconds_left=allowance if exhaustive else min(allowance,deadline-monotonic())
         if seconds_left<=0:
@@ -640,7 +697,18 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4):
         if priority_key is not None and priority_key in rejected_priority:
             continue
         attempts+=1
-        state,result=_attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left)
+        if transverse_centre is None:
+            state,result = _attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left)
+        else:
+            if attempts > len(expected) or (candidate.center, candidate.source) != expected[attempts-1]:
+                return None
+            prefix.append(candidate)
+            if len(prefix) < len(expected):
+                continue
+            outcome = _isolated_graph_prefix(variables, active, prefix, seconds_left)
+            if outcome is None:
+                return None
+            state,result = outcome
         if state=="rejected" and priority_key is not None:
             rejected_priority.add(priority_key)
         if state=="certified" and result is not None:

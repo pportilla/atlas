@@ -3,7 +3,7 @@ import os
 import unittest
 
 from engine.gpu_devices import triton_device
-from native.test_opencl import reference_rank
+from tests.test_native_opencl import reference_rank
 
 
 class TritonRank(unittest.TestCase):

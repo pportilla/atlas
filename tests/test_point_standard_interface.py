@@ -2,14 +2,13 @@
 from fractions import Fraction
 import json
 import shlex
-import subprocess
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from engine.polynomial import parse_expression
-from tests.test_cli_session import ROOT, run_script
-from tests.test_http_basis_refs import RING, endpoint, post
+from tests.cli_support import run_script, shell
+from tests.http_support import RING, endpoint, post
 
 
 def substitute_x(text, x, *, derivative=False):
@@ -27,10 +26,6 @@ def substitute_x(text, x, *, derivative=False):
 
 def at_point(text, x, y, *, derivative=False):
     return sum(c * y**j for j, c in substitute_x(text, x, derivative=derivative).items())
-
-
-def shell(args):
-    return subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=30)
 
 
 class PointStandardInterfaceTests(unittest.TestCase):

@@ -2,7 +2,8 @@
 #include <flint/fexpr.h>
 #include <flint/qqbar.h>
 #include <flint/fmpq_mpoly.h>
-#include <flint/fmpq_poly.h>
+#include "algebraic_number.hpp"
+#include "common_field.hpp"
 #include <flint/fmpz_poly.h>
 #include <flint/gr_poly.h>
 #include <flint/gr_vec.h>
@@ -37,19 +38,8 @@ Exp multiply_powers(Exp a, Exp b) {
     return a*b;
 }
 
-struct Num {
-    qqbar_t n;
-    Num(long i=0) { qqbar_init(n); qqbar_set_si(n,i); }
-    Num(const Num& x) { qqbar_init(n); qqbar_set(n,x.n); }
-    Num(Num&& x) noexcept { qqbar_init(n); qqbar_swap(n,x.n); }
-    Num& operator=(Num x) { qqbar_swap(n,x.n); return *this; }
-    ~Num() { qqbar_clear(n); }
-    bool zero() const { return qqbar_is_zero(n); }
-};
-Num operator+(const Num& a,const Num& b) { Num r; qqbar_add(r.n,a.n,b.n); return r; }
-Num operator*(const Num& a,const Num& b) { Num r; qqbar_mul(r.n,a.n,b.n); return r; }
+using Num = atlas::AlgebraicNumber;
 Num inverse(const Num& a) { Num r; qqbar_inv(r.n,a.n); return r; }
-string taken(char* p) { string r(p); flint_free(p); return r; }
 J arr(initializer_list<J> xs={}) { J j(Json::arrayValue); for(const auto& x:xs) j.append(x); return j; }
 using Poly=map<Key,Num>;
 using Pair=array<Poly,2>;
@@ -194,9 +184,9 @@ vector<string> indexed_labels(const vector<Num>& values) {
     for(size_t i=0;i<values.size();++i){
         if(qqbar_is_rational(values[i].n)){
             fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q,values[i].n);
-            labels[i]=taken(fmpq_get_str(nullptr,10,q)); fmpq_clear(q);
+            labels[i]=atlas::flint_string(fmpq_get_str(nullptr,10,q)); fmpq_clear(q);
         }else{
-            families[taken(fmpz_poly_get_str(QQBAR_POLY(values[i].n)))].push_back(i);
+            families[atlas::flint_string(fmpz_poly_get_str(QQBAR_POLY(values[i].n)))].push_back(i);
         }
     }
     for(const auto& group:families){
@@ -206,7 +196,7 @@ vector<string> indexed_labels(const vector<Num>& values) {
         string prefix="PolynomialRootIndexed(List(";
         for(slong i=0;i<=degree;++i){
             if(i) prefix+=", ";
-            prefix+=taken(fmpz_get_str(nullptr,10,QQBAR_COEFFS(first.n)+i));
+            prefix+=atlas::flint_string(fmpz_get_str(nullptr,10,QQBAR_COEFFS(first.n)+i));
         }
         prefix+="), ";
         if(members.size()==static_cast<size_t>(degree)){
@@ -292,14 +282,14 @@ struct Resolver {
     string scalar(const Num& x) {
         if(qqbar_is_rational(x.n)){
             fmpq_t q;fmpq_init(q);qqbar_get_fmpq(q,x.n);
-            string s=taken(fmpq_get_str(nullptr,10,q));fmpq_clear(q);return s;
+            string s=atlas::flint_string(fmpq_get_str(nullptr,10,q));fmpq_clear(q);return s;
         }
         size_t i=0;
         for(;i<algebraics.size();++i) if(qqbar_equal(x.n,algebraics[i].n)) break;
         string id="a"+to_string(i+1);
         if(i==algebraics.size()){
             algebraics.push_back(x);
-            numbers[id]["approximation"]=taken(qqbar_get_str_nd(x.n,10));
+            numbers[id]["approximation"]=atlas::flint_string(qqbar_get_str_nd(x.n,10));
         }
         return id;
     }
@@ -476,150 +466,6 @@ struct Resolver {
         return r;
     }
 };
-// Present a finite set of exact chart coefficients in one number field.
-// Each input uses FLINT's own root order (as in PolynomialRootIndexed).
-J coefficient_field(const J& roots, const J& rectangles, bool root_images) {
-    vector<Num> values;
-    map<J, vector<Num>> families;
-    for (const auto& row : roots) {
-        auto [family, inserted] = families.try_emplace(row["coefficients"]);
-        if (inserted) {
-        fmpz_poly_t polynomial;
-        fmpz_poly_init(polynomial);
-        fmpz_t coefficient;
-        fmpz_init(coefficient);
-        slong i = 0;
-        for (const auto& c : row["coefficients"]) {
-            if (fmpz_set_str(coefficient, c.asCString(), 10))
-                throw invalid_argument("Invalid number field coefficient.");
-            fmpz_poly_set_coeff_fmpz(polynomial, i++, coefficient);
-        }
-        fmpz_clear(coefficient);
-        slong degree = fmpz_poly_degree(polynomial);
-        if (degree < 1) throw invalid_argument("Expected a nonconstant root polynomial.");
-        qqbar_ptr conjugates = _qqbar_vec_init(degree);
-        qqbar_roots_fmpz_poly(conjugates, polynomial, 0);
-        family->second.resize(degree);
-        for (slong j = 0; j < degree; ++j) qqbar_swap(family->second[j].n, conjugates + j);
-        _qqbar_vec_clear(conjugates, degree);
-        fmpz_poly_clear(polynomial);
-        }
-        slong index = row["index"].asInt64();
-        if (index < 1 || static_cast<size_t>(index) > family->second.size())
-            throw invalid_argument("Invalid algebraic root index.");
-        values.push_back(family->second[index-1]);
-    }
-    if (values.empty()) throw invalid_argument("No algebraic constants.");
-    if (!rectangles.isNull()) {
-        // The public expression syntax numbers roots by disjoint rational
-        // isolating rectangles. Exact qqbar comparisons locate this marked
-        // embedding, including real roots or roots on a rectangle edge.
-        if (values.size() != 1) throw invalid_argument("Expected one marked root.");
-        Num real, imaginary;
-        qqbar_re_im(real.n, imaginary.n, values[0].n);
-        int index = -1;
-        for (Json::ArrayIndex j = 0; j < rectangles.size(); ++j) {
-            if (rectangles[j].size() != 4) throw invalid_argument("Expected four rectangle bounds.");
-            array<Num,4> bounds;
-            for (Json::ArrayIndex k = 0; k < bounds.size(); ++k) {
-                fmpq_t q;
-                fmpq_init(q);
-                bool valid = fmpq_set_str(q, rectangles[j][k].asCString(), 10) == 0;
-                if (valid) qqbar_set_fmpq(bounds[k].n, q);
-                fmpq_clear(q);
-                if (!valid) throw invalid_argument("Invalid root rectangle bound.");
-            }
-            if (qqbar_cmp_re(real.n, bounds[0].n) >= 0 && qqbar_cmp_re(real.n, bounds[1].n) <= 0 &&
-                qqbar_cmp_re(imaginary.n, bounds[2].n) >= 0 && qqbar_cmp_re(imaginary.n, bounds[3].n) <= 0) {
-                if (index != -1) throw invalid_argument("The root belongs to several rectangles.");
-                index = static_cast<int>(j);
-            }
-        }
-        if (index < 0) throw invalid_argument("The marked root was absent from the isolating rectangles.");
-        J result;
-        result["root_index"] = index;
-        return result;
-    }
-    Num generator = values.front();
-    fmpq_poly_t expression;
-    fmpq_poly_init(expression);
-    // The containment test already produces coordinates in the current
-    // power basis. They stay valid until a new primitive element is chosen.
-    vector<string> expressions(values.size());
-    vector<J> coefficients(values.size());
-    auto save_expression = [&](size_t i) {
-        expressions[i] = taken(fmpq_poly_get_str_pretty(expression, "T"));
-        if (root_images) {
-            J row(Json::arrayValue);
-            fmpq_t c;
-            fmpq_init(c);
-            for (slong j=0; j<fmpq_poly_length(expression); ++j) {
-                fmpq_poly_get_coeff_fmpq(c, expression, j);
-                row.append(taken(fmpq_get_str(nullptr,10,c)));
-            }
-            fmpq_clear(c);
-            coefficients[i] = move(row);
-        }
-    };
-    size_t last_enlargement = 0;
-    for (size_t i = 1; i < values.size(); ++i) {
-        // Only finitely many integers k fail to separate the embeddings of
-        // Q(generator, value) by generator + k*value. For a good k, increasing
-        // precision finds both field inclusions. FLINT verifies each exactly.
-        for (slong round = 1, prec = 128; ; ++round, prec *= 2) {
-            bool found = false;
-            for (slong k = 0; k <= round; ++k) {
-                if (k == 0) {
-                    if (qqbar_degree(generator.n) % qqbar_degree(values[i].n) == 0 &&
-                        qqbar_express_in_field(expression, generator.n, values[i].n, 0, 0, prec)) {
-                        save_expression(i);
-                        found = true;
-                        break;
-                    }
-                    continue;
-                }
-                Num candidate = generator + Num(k)*values[i];
-                // Q(candidate, value) contains generator = candidate-k*value.
-                // Expressing value alone certifies both field inclusions.
-                if (qqbar_express_in_field(expression, candidate.n, values[i].n, 0, 0, prec)) {
-                    last_enlargement = i;
-                    save_expression(i);
-                    generator = std::move(candidate);
-                    found = true;
-                    break;
-                }
-            }
-            if (found) break;
-            if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
-        }
-    }
-    J out;
-    out["minimal_polynomial"] = taken(fmpz_poly_get_str_pretty(QQBAR_POLY(generator.n), "T"));
-    out["degree"] = Json::Int64(qqbar_degree(generator.n));
-    fexpr_t exact;
-    fexpr_init(exact);
-    qqbar_get_fexpr_root_indexed(exact, generator.n);
-    out["exact"] = taken(fexpr_get_str(exact));
-    fexpr_clear(exact);
-    map<J,J> images;
-    for (size_t i=0; i<values.size(); ++i) {
-        if (i < last_enlargement || expressions[i].empty()) {
-            for (slong prec = 128; !qqbar_express_in_field(expression, generator.n, values[i].n, 0, 0, prec); prec *= 2)
-                if (prec > WORD_MAX/2) throw Fail("Number field precision exceeds a signed word.");
-            save_expression(i);
-        }
-        out["values"].append(expressions[i]);
-        if (root_images) images[roots[static_cast<Json::ArrayIndex>(i)]["coefficients"]].append(coefficients[i]);
-    }
-    if (root_images) {
-        out["root_images"] = arr();
-        for (auto& [equation,rows] : images) {
-            if (rows.size() + 1 == equation.size()) out["root_images"].append(arr({equation,rows}));
-        }
-    }
-    fmpq_poly_clear(expression);
-    return out;
-}
 int main(){
     J req,out;
     try{
@@ -634,7 +480,7 @@ int main(){
         if (req.isMember("ordered_roots")) {
             out=ordered_root_labels(req["ordered_roots"]);
         } else if (req.isMember("field_roots")) {
-            out=coefficient_field(req["field_roots"], req["root_rectangles"], req.get("root_images", false).asBool());
+            out=atlas::common_field(req);
         } else {
             Resolver solver;solver.names={req["variables"][0].asString(),req["variables"][1].asString()};
             solver.embedded=req["mode"].asString()=="embedded";

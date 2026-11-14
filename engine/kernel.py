@@ -71,6 +71,22 @@ def _optional(function):
 
 
 @_optional
+def present_outside(variables, ideal, removed):
+    """Decide nonemptiness of a closed locus outside a union of closed centres."""
+    _require(len(variables))
+    if not hasattr(_kernel(), "atlas_open_locus_abi"):
+        return None
+    sizes = " ".join(map(str, (len(variables), len(ideal), len(removed), *map(len, removed))))
+    rows = _lines(variables, (*ideal, *(g for hole in removed for g in hole)))
+    answer = _ask("open_locus "+sizes, rows)
+    if answer == ["yes"]:
+        return True
+    if answer == ["no"]:
+        return False
+    return None
+
+
+@_optional
 def dimension(variables, ideal):
     """Krull dimension, with -1 for the empty scheme."""
     try:
@@ -228,6 +244,10 @@ def blowup_charts(variables, ambient, strict, center, exceptional, coordinates):
 def _verify_rows(variables, lines, center_size, boundary_sizes):
     header = " ".join(map(str, ("verify", variables, center_size, len(boundary_sizes), *boundary_sizes)))
     rows = _ask(header, lines)
+    return graph_proof_rows(rows)
+
+
+def graph_proof_rows(rows):
     if rows[0].startswith("rejected"):
         return None
     charts, at = [], 1

@@ -48,6 +48,101 @@ class ExhaustiveFallback(unittest.TestCase):
             self.assertIsNone(exhaustive._run("newton", payload)["record"])
         self.assertEqual(newton.call_args.kwargs, {"compute": "cpu", "seconds": 1200, "defer_outputs": True})
 
+    def test_canonical_head_start_covers_only_certified_newton_failures(self):
+        from engine.newton_backend import coordinate_choices, resolve_newton
+        from engine.newton_faces import face_search
+        from engine.newton_fan import build_fan
+        from engine.native_library import _MODE, _kernel
+        if _MODE != "native" or not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi"):
+            self.skipTest("Packed tangent obstruction unavailable.")
+        names = list("xyz")
+        for source in ("(x+y+z)^2-z*(x-y)^2", "(x/2+2*y/3-z/5)^2-z*(3*x/4-y/5)^2",
+                       "(x+y+z)^3/7+x*y*z^2", "(2*x+4*y-3*z)^2+z^5", "(1+x)*((x+y+z)^2-x*y*z)",
+                       "(x+y+z)^2*(1+x)", "(x+y+z)^2+z^3/65521"):
+            with self.subTest(source=source), face_search(True):
+                poly = parse(source,names)
+                self.assertTrue(exhaustive._canonical_head_start(poly,names,"embedded"))
+                self.assertEqual([(f, changes) for f,_,changes in coordinate_choices(poly,3)], [(poly,[])])
+                fan = build_fan(poly, exhaustive=True)
+                self.assertEqual(fan["rays"][3:], [[1,1,1]])
+                self.assertIsNone(resolve_newton(poly,names,"embedded",compute="cpu",defer_outputs=True))
+                self.assertFalse(exhaustive._canonical_head_start(poly,names,"intrinsic"))
+        for source in ("(x+y)^2-z*(x-y)^2", "(x+y+z)^2+x*y+z^3", "(x+y+z)^2+x^17", "2^70*(x+y+z)^2+z^3"):
+            with self.subTest(source=source):
+                self.assertFalse(exhaustive._canonical_head_start(parse(source,names),names,"embedded"))
+        from engine.native_library import Unavailable
+        for exc in (Unavailable("unavailable"), OSError("optional kernel missing")):
+            with patch("engine.kernel_json.kernel_json", side_effect=exc):
+                self.assertFalse(exhaustive._canonical_head_start(parse("(x+y+z)^2-z*(x-y)^2",names),names,"embedded"))
+        with patch("engine.native_library._kernel", return_value=None):
+            self.assertFalse(exhaustive._canonical_head_start(parse("(x+y+z)^2-z*(x-y)^2",names),names,"embedded"))
+
+    def test_obstructed_newton_releases_certificates_on_origin_decline_failure_and_timeout(self):
+        from subprocess import Popen
+        from pathlib import Path
+        import time
+        program = """
+import sys,json,time
+from pathlib import Path
+method, outcome, mode, path = sys.argv[1:]
+args=json.load(sys.stdin)
+assert args['mode']==mode and args['replay']['compute']=='cpu'
+p=Path(path)
+if method=='origin':
+    (p/'started').touch()
+    if outcome=='slow':
+        for _ in range(200):
+            if (p/'racing').exists(): break
+            time.sleep(.01)
+        else: raise AssertionError('certificate lane was never started')
+        time.sleep(1)
+    if outcome=='error': sys.exit(3)
+    if outcome=='nonreduced': print(json.dumps({'nonreduced':'repeated factor'}));sys.exit(0)
+elif method=='certificates':
+    (p/'racing').touch()
+else:
+    raise AssertionError('proven Newton failure should never start')
+record = None if outcome=='decline' and method=='origin' else {'engine':method}
+print(json.dumps({'record':record, 'replay':{'winner':method}}))
+"""
+        for outcome in ("win","decline","error","slow","failed_start","nonreduced"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as path:
+                processes={}; elapsed={}
+                def launch(argv, **kwargs):
+                    method = argv[-2]
+                    elapsed[method] = time.monotonic()
+                    if outcome=="failed_start" and method=="origin":
+                        raise OSError("cannot start canonical worker")
+                    worker=Popen([argv[0],"-c",program,method,outcome,"embedded",path], **kwargs)
+                    processes[method]=worker
+                    return worker
+                replay=Mock()
+                replay.settings.return_value={"compute":"cpu"}
+                # A long grace makes early release distinguishable from expiration.
+                grace=.1 if outcome=="slow" else 5
+                with patch.object(exhaustive,"_canonical_head_start",return_value=True), \
+                     patch.object(exhaustive,"ORIGIN_GRACE_SECONDS",grace), \
+                     patch.object(exhaustive.subprocess,"Popen",side_effect=launch), \
+                     patch.object(exhaustive,"current_replay_scope",return_value=replay):
+                    if outcome=="nonreduced":
+                        from engine.polynomial import NonReducedError
+                        with self.assertRaisesRegex(NonReducedError,"repeated factor"):
+                            exhaustive.search({(2,0,0):1},list("xyz"),"embedded",compute="cpu")
+                        replay.merge.assert_not_called()
+                    else:
+                        expected = "origin" if outcome=="win" else "certificates"
+                        result=exhaustive.search({(2,0,0):1},list("xyz"),"embedded",compute="cpu")
+                        self.assertEqual(result,{"engine":expected})
+                        replay.merge.assert_called_once_with({"winner":expected})
+                self.assertTrue(all(p.poll() is not None for p in processes.values()))
+                self.assertEqual(set(elapsed), {"origin"} if outcome in ("win","nonreduced") else {"origin","certificates"})
+                if "certificates" in elapsed:
+                    wait=elapsed["certificates"]-elapsed["origin"]
+                    self.assertLess(wait,3)
+                    if outcome=="slow":
+                        self.assertGreaterEqual(wait,grace)
+                        self.assertTrue((Path(path)/"racing").exists())
+
     def test_newton_and_fallbacks_complete_independently(self):
         # Real workers use marker files to synchronize, so a slow CI machine
         # cannot change which method wins a given case.

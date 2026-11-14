@@ -9,7 +9,7 @@ from unittest.mock import patch
 from engine import native_polynomial as native
 from engine.algebra import calculate_algebra
 from engine.algebra_replay import make_replay
-from tests.test_cli_session import ROOT
+from tests.cli_support import ROOT
 
 
 class AlgebraReplayTests(unittest.TestCase):

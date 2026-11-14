@@ -286,22 +286,13 @@ class _LocalNormalForm(_PointResult):
 @dataclass(frozen=True, eq=False, repr=False)
 class _OrderedPolynomial(Polynomial):
     order: str
-
-    def session_attribute(self, name):
-        if name == "order":
-            return self.order
-        return super().session_attribute(name)
+    _fields = Polynomial._fields | {"order"}
 
 
 @dataclass(frozen=True, eq=False, repr=False)
 class _PolynomialResult(_Result, _OrderedPolynomial):
     _record: dict
-    _fields = _Result._fields | {"polynomial"}
-
-    def session_attribute(self, name):
-        if name in self._fields:
-            return super().session_attribute(name)
-        return Polynomial.session_attribute(self, name)
+    _fields = _Result._fields | _OrderedPolynomial._fields | {"polynomial"}
 
     @property
     def polynomial(self):
@@ -608,7 +599,7 @@ def ideal(*generators, order=None, variables=None):
     return Ideal(space, generators, order)
 
 
-def _typed(record, space):
+def _typed(record, space, *, quotient_parent=None):
     result = record["result"]
     kind = result["type"]
     names = result["ring"]["variables"]
@@ -628,6 +619,18 @@ def _typed(record, space):
     def polynomials(expressions, coordinate_space=space):
         return tuple(Polynomial(coordinate_space, decode(text, coordinate_space)) for text in expressions)
 
+    if kind in ("quotient-ring", "quotient-element"):
+        from .session_quotient import QuotientElement, QuotientRing, quotient_ring
+        if kind == "quotient-ring":
+            relations = Ideal(space, polynomials(result["relations"]), order)
+            return QuotientRing(space, order, record, relations)
+        if quotient_parent is None:
+            # Replayed one-shot operations also provide a usable parent, with
+            # its own declaration record and the replay's fresh coordinates.
+            relations = Ideal(space, polynomials(result["relations"]), order)
+            quotient_parent = quotient_ring(relations, compute=record["execution"]["requested"])
+        representative = _OrderedPolynomial(space, decode(result["representative"]), order)
+        return QuotientElement(quotient_parent, representative, record)
     if kind == "localization":
         element = result.get("element")
         if element is not None:

@@ -1,4 +1,5 @@
 #include "local_point_basis.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "local_division.hpp"
 #include "local_power_coordinates.hpp"
@@ -89,10 +90,6 @@ Basis strip_units(const Basis& ideal, const PointRow& point) {
     std::sort(rows.begin(), rows.end());
     rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
     return rows;
-}
-
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
 }
 
 // A separated factor h(x_i) is a unit times (x_i-p_i)^m in the local
@@ -242,7 +239,7 @@ Basis sparse_point_standard_basis(const Basis& generators, const PointRow& point
     for (size_t j = 0; j < basis.size(); ++j) {
         bool minimal = true;
         for (size_t k = 0; k < heads.size(); ++k)
-            if (k != j && divides(heads[k],heads[j]) && (heads[k] != heads[j] || k < j)) {
+            if (k != j && monomial_divides(heads[k],heads[j]) && (heads[k] != heads[j] || k < j)) {
                 minimal = false;
                 break;
             }

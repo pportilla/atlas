@@ -1,7 +1,9 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 import subprocess
 import unittest
+from unittest.mock import patch
 
 import sympy as sp
 
@@ -73,6 +75,47 @@ class MonodromyTests(unittest.TestCase):
         archived = monodromy_zeta(record | req)
         self.assertEqual(archived["expression"], graph["expression"])
         self.assertEqual(archived["contributions"], graph["contributions"])
+
+    def test_coordinate_graph_replay_and_unavailable_sparse_kernel(self):
+        from engine import native_library
+        from engine.graph_record import graph_outputs
+        from engine.incidence import incidence
+        from engine.polynomial import parse
+        from engine.strata import InvalidChart
+        if native_library._MODE != "native":
+            self.skipTest("Sparse graph replay runs in native mode.")
+        x, y, z = sp.symbols("x y z")
+        u, v = sp.symbols("U V")
+        centre = (x, y)
+        candidate = ResolutionCandidate(centre, (u, v), (centre,), sp.QQ, None, "test")
+        equation = (x+y)**2 - z*(x-y)**2
+        record = verify_candidate((x,y,z), equation, candidate, "embedded")
+        names = ["x", "y", "z"]
+        record.update(variables=names, polynomial=str(equation), mode="embedded")
+        poly = parse(str(equation), names)
+        expected = graph_outputs(record, poly)
+        atlas, outputs = expected
+        self.assertEqual(outputs["dual_complex"]["vertices"], [{"id":"E1", "dimension":2}])
+        self.assertEqual([row["euler_characteristic"] for row in outputs["strata"]], [1, 1])
+        saved = {**record, "atlas":atlas}
+
+        for failure in ({"return_value":None}, {"side_effect":native_library.Unavailable("Exponent out of range.")}):
+            with (self.subTest(failure=failure), patch("engine.chart_kernel.crossings_rows", **failure),
+                  patch("engine.general_atlas.native_general_outputs", return_value=outputs) as general):
+                self.assertEqual(graph_outputs(saved, poly), expected)
+                general.assert_called_once()
+        self.assertIsNone(incidence("coordinate_exceptional", variables=names, centre=["x", "x"],
+                                    charts=[{"exceptional":[{"id":"E1", "ideal":["x"]}]}]*2))
+        for change in ("region", "order", "pivot"):
+            broken = deepcopy(saved)
+            if change == "region":
+                broken["atlas"][1]["region"] = []
+            elif change == "order":
+                broken["atlas"][0]["components"][0]["nu"] = 17
+            else:
+                broken["charts"][1] = deepcopy(broken["charts"][0])
+            with self.subTest(change=change), self.assertRaises(InvalidChart):
+                graph_outputs(broken, poly)
 
 
     def test_archived_graph_reconstructs_its_marked_field(self):

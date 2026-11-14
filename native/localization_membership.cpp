@@ -1,6 +1,7 @@
 // Membership tests on reduced lex bases. Batch reductions of wide sparse
 // monomials without expanding the corresponding (potentially enormous) powers.
 #include "localization.hpp"
+#include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 #include "local_point_basis.hpp"
 #include <flint/fmpz.h>
@@ -10,10 +11,6 @@
 namespace atlas::localization {
 namespace {
 using local::Powers;
-
-bool divisible(const Powers& e, const Powers& divisor) {
-    return std::equal(divisor.begin(),divisor.end(),e.begin(),std::less_equal<>());
-}
 
 // The coefficient of a reduced monomial is stored as a polynomial in the
 // (nonzero) rational multipliers from the binomial divisors, evaluated only
@@ -35,7 +32,7 @@ bool binomial_member(const Polynomial& f, const Basis& basis) {
         mpq_class scalar = c;
         for (;;) {
             auto row = std::find_if(basis.begin(),basis.end(),[&](const auto& g) {
-                return divisible(monomial,g.rbegin()->first);
+                return local::monomial_divides(g.rbegin()->first, monomial);
             });
             if (row == basis.end()) {
                 auto& group = remainders[monomial];

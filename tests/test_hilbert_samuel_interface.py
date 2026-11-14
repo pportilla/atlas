@@ -5,9 +5,8 @@ import unittest
 from urllib.request import Request, urlopen
 
 from engine.polynomial import integer_from_decimal
-from tests.test_cli_session import run_script
-from tests.test_http_basis_refs import RING, endpoint, post
-from tests.test_point_standard_interface import shell
+from tests.cli_support import run_script, shell
+from tests.http_support import RING, endpoint, post
 
 
 FUNCTION = "hilbert-samuel-function"

@@ -2,7 +2,7 @@
 import unittest
 from textwrap import dedent
 
-from tests.test_cli_session import run_prompt, run_script
+from tests.cli_support import run_prompt, run_script
 
 
 class IdealSessionTests(unittest.TestCase):

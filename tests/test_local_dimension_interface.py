@@ -6,9 +6,8 @@ import unittest
 from engine.session import new_session
 from engine.session_expressions import SessionError
 from tests.large_coupled_ideal import COUPLED_SQUARES, EXPONENT, POINT, VARIABLES
-from tests.test_cli_session import run_script
-from tests.test_http_basis_refs import endpoint, post
-from tests.test_point_standard_interface import shell
+from tests.cli_support import run_script, shell
+from tests.http_support import endpoint, post
 
 
 class LocalDimensionInterfaceTests(unittest.TestCase):

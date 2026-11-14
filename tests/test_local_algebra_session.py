@@ -8,7 +8,7 @@ from textwrap import dedent
 
 from engine.session import new_session
 from engine.session_algebra import algebra_request
-from tests.test_cli_session import ROOT, run_prompt, run_script
+from tests.cli_support import ROOT, run_prompt, run_script
 
 
 class LocalAlgebraSessionTests(unittest.TestCase):

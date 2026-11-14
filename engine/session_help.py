@@ -23,6 +23,7 @@ _RING_EXAMPLES = {
     "local_normal_form": "local_normal_form(x + y, ideal(x), point=(0, 0)).remainder",
     "eliminate": "eliminate(ideal(x - y, y^2), y)",
     "intersection": "intersection(ideal(x), ideal(y))",
+    "quotient_ring": "A = quotient_ring(ideal(x*y - 1))\nu, v = A.gens\nu.inverse() == v",
     "quotient": "quotient(ideal(x*y), ideal(x))",
     "saturation": "saturation(ideal(x*y), x)",
     "radical": "radical(ideal(x^2, y))",

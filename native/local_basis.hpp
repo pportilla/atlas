@@ -19,6 +19,8 @@ Powers local_head(const Polynomial& polynomial, bool lex);
 bool global_less(const Powers& a, const Powers& b, bool lex);
 const Powers& global_head(const Polynomial& polynomial, bool lex);
 Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex, bool prefer_modular = false);
+Basis standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex,
+                     bool prefer_modular, bool& used_finite_jet);
 std::optional<std::vector<std::vector<int>>> local_leading_supports(
     const Basis& centered, size_t width, bool lex, bool prefer_modular);
 
@@ -40,8 +42,8 @@ public:
 
 std::optional<HomogeneousReducer> homogeneous_reducer(const Basis& centered, size_t width,
                                                       bool lex, bool prefer_modular = false);
-// A standard basis specialized for finite normal forms; decline if the
-// finite-jet calculation cannot certify the result within its work budget.
+// A finite local standard basis, ordered like the ordinary basis. Decline
+// when the jet cannot certify the local initial ideal within its work budget.
 std::optional<Basis> finite_standard_basis(const Basis& generators, const std::vector<std::string>& names, bool lex);
 
 }

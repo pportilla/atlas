@@ -1,5 +1,6 @@
 // Contraction shortcuts in QQ[x]_P. The caller has certified P is prime.
 #include "localization.hpp"
+#include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "sparse_flint.hpp"
 #include "primary_decomposition.hpp"
@@ -9,10 +10,6 @@
 namespace atlas::localization {
 namespace {
 using local::Powers;
-
-bool divides(const Powers& a, const Powers& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), std::less_equal<>());
-}
 
 Basis monomial_contraction(const Basis& rows, const Basis& prime, size_t n) {
     // A coordinate outside P becomes a unit. Among the remaining variables,
@@ -27,8 +24,8 @@ Basis monomial_contraction(const Basis& rows, const Basis& prime, size_t n) {
     for (const auto& f : rows) {
         auto e = f.begin()->first;
         for (size_t i = 0; i < n; ++i) if (!retained[i]) e[i] = 0;
-        if (std::any_of(minimal.begin(),minimal.end(),[&](const auto& g) { return divides(g,e); })) continue;
-        minimal.erase(std::remove_if(minimal.begin(),minimal.end(),[&](const auto& g) { return divides(e,g); }),minimal.end());
+        if (std::any_of(minimal.begin(),minimal.end(),[&](const auto& g) { return local::monomial_divides(g,e); })) continue;
+        minimal.erase(std::remove_if(minimal.begin(),minimal.end(),[&](const auto& g) { return local::monomial_divides(e,g); }),minimal.end());
         minimal.push_back(std::move(e));
     }
     std::sort(minimal.begin(),minimal.end(),std::greater<>());
@@ -108,9 +105,7 @@ Polynomial nonunit_part(const Polynomial& f, const Basis& prime, size_t n, bool*
         if (member_lex(factor,prime)) {
             if (linear_factors && *linear_factors) {
                 for (const auto& [e,c] : factor) {
-                    mpz_class degree = 0;
-                    for (const auto& a : e) degree += a;
-                    if (degree > 1) { *linear_factors = false; break; }
+                    if (local::total_degree(e) > 1) { *linear_factors = false; break; }
                 }
             }
             auto p = exponent == 1 ? factor : primary::power(factor,exponent,n);

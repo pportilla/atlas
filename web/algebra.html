@@ -55,6 +55,7 @@
                 <option value="gcd">Polynomial GCD</option>
                 <option value="factor">Polynomial factorization</option>
                 <option value="resultant">Polynomial resultant</option>
+                <option value="quotient-ring">Quotient ring arithmetic</option>
                 <option value="quotient-basis">Quotient basis (global)</option>
                 <option value="multiplicity">Quotient multiplicity</option>
                 <option value="hilbert-series">Hilbert series</option>
@@ -97,8 +98,27 @@
               </label>
               <p class="helper" id="degrees-help">Enter comma-separated nonnegative integers in the order you want. Leave blank for degrees 0 through 5, or enter [] for no degrees.</p>
             </fieldset>
+            <fieldset id="quotient-action-field" hidden disabled>
+              <legend>Quotient ring</legend>
+              <label class="field algebra-field" for="quotient-action">
+                <span>Action in R/I</span>
+                <select id="quotient-action">
+                  <option value="declare">Declare a quotient ring</option>
+                  <option value="reduce">Reduce a representative</option>
+                  <option value="add">Add</option>
+                  <option value="subtract">Subtract</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="negate">Negate</option>
+                  <option value="power">Raise to a power</option>
+                  <option value="equal">Test equality</option>
+                  <option value="unit">Test invertibility</option>
+                  <option value="inverse">Invert</option>
+                  <option value="divide">Divide by a unit</option>
+                </select>
+              </label>
+            </fieldset>
             <fieldset id="first-ideal">
-              <legend>Ideal <i>I</i></legend>
+              <legend id="first-ideal-label">Ideal <i>I</i></legend>
               <label class="field algebra-field operand-source" id="ideal-source-field" for="ideal-source" hidden>
                 <span class="visually-hidden">Source of ideal I</span>
                 <select id="ideal-source" name="ideal-source">

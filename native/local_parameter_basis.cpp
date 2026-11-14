@@ -1,4 +1,5 @@
 #include "local_parameter_basis.hpp"
+#include "local_monomial.hpp"
 #include "local_division.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
@@ -18,16 +19,6 @@ void add_scaled(Polynomial& out, const Polynomial& f, const mpq_class& scale) {
 bool constant(const Polynomial& f) {
     return f.size() == 1 && std::all_of(f.begin()->first.begin(),f.begin()->first.end(),
                                         [](const auto& e) { return e == 0; });
-}
-
-mpz_class total_degree(const Polynomial& f) {
-    mpz_class bound = 0;
-    for (const auto& [e,c] : f) {
-        mpz_class degree = 0;
-        for (const auto& a : e) degree += a;
-        bound = std::max(bound,degree);
-    }
-    return bound;
 }
 
 // A sparse exact quotient is a factor certificate. Stop speculative
@@ -110,7 +101,7 @@ std::optional<Products> parameter_products(const Basis& ideal, const PointRow& p
         units.push_back(unit);
         return true;
     };
-    for (const auto& f : ideal) if (f.size() <= 64 && total_degree(f) <= 6)
+    for (const auto& f : ideal) if (f.size() <= 64 && max_total_degree(f) <= 6)
         for (auto& [g,k] : primary::factors(f,width)) candidate(std::move(g));
 
     bool tried_gcd = false;
@@ -149,8 +140,8 @@ std::optional<Products> parameter_products(const Basis& ideal, const PointRow& p
         if (tried_gcd) return std::nullopt;
         tried_gcd = true;
         for (size_t j=0; j<ideal.size(); ++j) {
-            if (total_degree(ideal[j]) > 8192) continue;
-            for (size_t i=0; i<j; ++i) if (total_degree(ideal[i]) <= 8192) {
+            if (max_total_degree(ideal[j]) > 8192) continue;
+            for (size_t i=0; i<j; ++i) if (max_total_degree(ideal[i]) <= 8192) {
                 auto g = polynomial_gcd({ideal[i],ideal[j]},width);
                 if (g) candidate(std::move(*g));
             }
