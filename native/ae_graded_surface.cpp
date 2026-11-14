@@ -5,6 +5,7 @@
 #include <flint/nmod_mat.h>
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <numeric>
 
 namespace atlas::local {
@@ -89,6 +90,7 @@ struct TangentRanks {
     std::vector<Residues> powers_mod{{1}};
     std::array<Binary,2> derivative;
     std::array<Residues,2> derivative_mod;
+    std::vector<std::array<Residues,2>> carried_products;
     explicit TangentRanks(const Projection& map) : f(map) {
         derivative[0].resize(f.c);
         derivative[1].resize(f.c);
@@ -97,6 +99,26 @@ struct TangentRanks {
             derivative[1][i] = (f.c-i)*f.h[i];
         }
         for (int j=0; j<2; ++j) derivative_mod[j] = residues(derivative[j]);
+        cache_carried_products();
+    }
+
+    // Dividing a whole pullback by its Jacobian pivot leaves a monomial
+    // shift of -h^k * dh/dx or -h^k * dh/dy. Reuse it across weights.
+    void cache_carried_products() {
+        auto& products = carried_products.emplace_back();
+        const auto& power = powers_mod.back();
+        const int degree = static_cast<int>(power.size())-1;
+        for (int j=0; j<2; ++j) {
+            auto& carried = products[j];
+            carried.resize(degree+f.c);
+            for (int i=0; i<degree+f.c; ++i) {
+                // At most max_degree products of two residues fit in 64 bits.
+                std::uint64_t sum = 0;
+                for (int l=std::max(0,i-degree); l<=std::min(i,f.c-1); ++l)
+                    sum += std::uint64_t(prime-derivative_mod[j][l]) * power[i-l];
+                carried[i] = sum % prime;
+            }
+        }
     }
 
     // Coefficients written are identical over QQ and over a prime field. Use
@@ -122,6 +144,15 @@ struct TangentRanks {
             // row H in either position perform the monomial division, carrying
             // the eliminated terms into the third position via the derivative.
             const int pivot_degree = j==0 ? f.a-1 : f.b-1;
+            if constexpr (modular) {
+                const int y = degrees[j]-x-static_cast<int>(coeff.size())+1;
+                if ((j==0 ? x : y) >= pivot_degree) {
+                    const auto& carried = carried_products[row.power][j];
+                    const int shift = j==0 ? x-pivot_degree : x;
+                    std::copy(carried.begin(),carried.end(),&nmod_mat_entry(mat.m,r,base+shift));
+                    continue;
+                }
+            }
             Binary carried;
             if constexpr (!modular) carried.resize(std::max(0,degrees[2]+1));
             for (int i=0; i<static_cast<int>(coeff.size()); ++i) if (coeff[i]) {
@@ -182,6 +213,7 @@ struct TangentRanks {
             while (static_cast<int>(powers.size()) <= generator.power) {
                 powers.push_back(product(powers.back(),f.h));
                 powers_mod.push_back(residues(powers.back()));
+                cache_carried_products();
             }
         ModularMatrix mod(rows.size(),cols);
         fill<true>(mod,rows,degrees,first,base);
