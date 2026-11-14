@@ -6,9 +6,6 @@ import subprocess
 import sys
 import textwrap
 
-from .welcome_curve import resolve_welcome_curve
-
-
 WORDMARK = (
     "     ___   ______  __      ___    _____",
     "    /   | /_  __/ / /     /   |  / ___/",
@@ -26,15 +23,15 @@ SMALL_WORDMARK = (
 GREETING = "Welcome to Atlas."
 
 
-# ASCII redraws of web/atlas-mark.svg. The colons mark the two folds.
+# The folds frame the cusp's E1--E3--E2 chain. The strict transform meets E3.
 LOGO = (
     "       .-+-.             .-.",
     "   _.-'  :  `-._     _.-'  |",
     ".-'      :      `-.-'      |",
+    "|        :    ^   :        |",
+    "|        :    |   :        |",
+    "|    o--------o------o     |",
     "|        :        :        |",
-    "|        .-o-._   :      o |",
-    "|     .-'      `-._   .-'  |",
-    "|  o-'   :        :o-'     |",
     "|        :        :        |",
     "|      .-+-.      :      .-'",
     "|  _.-'     `-._  :  _.-'",
@@ -44,9 +41,9 @@ LOGO = (
 SMALL_LOGO = (
     "   .-+.      .-.",
     ".-'  : `-.--'  |",
-    "|    :   :   o |",
-    "|   .o-. : .-' |",
-    "| o' :  `o'    |",
+    "|    : ^ :     |",
+    "|    : | :     |",
+    "|  o---o----o  |",
     "|  .-+.  :   .-'",
     ".-'    `-.--'",
 )
@@ -65,7 +62,7 @@ def atlas_version():
     return "development"
 
 
-def render_welcome(columns, *, color, interactive, example=None):
+def render_welcome(columns, *, color, interactive):
     margin = "  " if columns >= 24 else ""
     width = max(1, columns - len(margin))
     lines = []
@@ -77,9 +74,8 @@ def render_welcome(columns, *, color, interactive, example=None):
         for row in textwrap.wrap(text, width, break_on_hyphens=False):
             lines.append(ink(row, code))
 
-    paragraph(f"Atlas version {atlas_version()}", "1")
-    paragraph("Developer: pportilla <p.portilla@upm.es>")
-    lines.append("")
+    version = f"version {atlas_version()}"
+    contact = "pportilla <p.portilla@upm.es>"
 
     # Pick the largest pair that fits on one line, in terminal character cells.
     layout = next(((mark, title) for mark in (LOGO, SMALL_LOGO)
@@ -87,29 +83,33 @@ def render_welcome(columns, *, color, interactive, example=None):
                    if max(map(len, title)) + 3 + max(map(len, mark)) <= width), None)
     if layout:
         logo, lettering = layout
-        labels = (*lettering, "", GREETING)
-        top = (len(logo) - len(labels)) // 2
-        column = max(map(len, lettering)) + 3
-        for i, row in enumerate(logo):
-            label = labels[i - top] if top <= i < top + len(labels) else ""
-            lines.append(ink(label, "1") + " " * (column - len(label)) + ink(row, "32"))
+        column = width - max(map(len, logo)) - 3
+        column = min(column, max(max(map(len, lettering)), len(contact)))
+        labels = [(row, "1") for row in lettering]
+        labels.append(("", None))
+        for text, style in ((version, "2"), (contact, None)):
+            labels.extend((row, style) for row in textwrap.wrap(text, column, break_on_hyphens=False))
+        height = max(len(labels), len(logo))
+        title_top = (height - len(labels)) // 2
+        map_top = (height - len(logo)) // 2
+        for i in range(height):
+            label, style = labels[i - title_top] if title_top <= i < title_top + len(labels) else ("", None)
+            line = ink(label, style)
+            if map_top <= i < map_top + len(logo):
+                line += " " * (column + 3 - len(label)) + ink(logo[i - map_top], "32")
+            lines.append(line)
     else:
-        if max(map(len, SMALL_LOGO)) <= width:
-            lines.extend(ink(row, "32") for row in SMALL_LOGO)
-            lines.append("")
         title = SMALL_WORDMARK if max(map(len, SMALL_WORDMARK)) <= width else ("ATLAS",)
         for row in title:
             paragraph(row, "1")
         lines.append("")
-        paragraph(GREETING, "1")
+        paragraph(version, "2")
+        paragraph(contact)
+        if max(map(len, SMALL_LOGO)) <= width:
+            lines.append("")
+            lines.extend(ink(row, "32") for row in SMALL_LOGO)
     lines.append("")
-
-    try:
-        polynomial, _ = resolve_welcome_curve() if example is None else example
-    except (ArithmeticError, OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
-        paragraph("Startup resolution unavailable. " + str(exc))
-    else:
-        paragraph("Resolved curve  " + polynomial, "36")
+    paragraph(GREETING, "1")
     paragraph("Type help for commands or quit to leave." if interactive
               else "Run ./atlas --help for all commands.")
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"

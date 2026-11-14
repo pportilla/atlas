@@ -34,9 +34,10 @@ Install a C++17 compiler, Make, pkg-config, Python 3.10 or later and the develop
 make -j4
 ~~~
 
-Run `./atlas` to open a terminal session. The welcome screen shows the
-Atlas version, developer contact, folded map logo and a freshly resolved
-two-branch plane curve. Type `help resolve` for resolution options or `quit` to leave.
+Run `./atlas` to open a terminal session. Beneath the ATLAS wordmark are the
+version and contact details. The folded map shows the dual graph of the cusp
+`y^2 = x^3`, with an arrow for the strict transform.
+Type `help resolve` for resolution options or `quit` to leave.
 
 You can also run commands directly from your shell.
 

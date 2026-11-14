@@ -1,20 +1,14 @@
 import io
 import os
+import re
 import subprocess
 import sys
 import unittest
-from collections import Counter
 from pathlib import Path
-from random import Random
 from unittest.mock import patch
 
 from engine.app import main
-from engine.identity_atlas import rational_factors
-from engine.plane_backend import resolve_plane
-from engine.polynomial import parse
-from engine.welcome import LOGO, SMALL_LOGO, atlas_version, render_welcome
-from engine.welcome_curve import resolve_welcome_curve
-from engine.welcome_graph import graph_rows
+from engine.welcome import LOGO, SMALL_LOGO, WORDMARK, atlas_version, render_welcome
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,29 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 class Terminal(io.StringIO):
     def isatty(self):
         return True
-
-
-def divisors_on_arrow_path(rows):
-    """Count exceptional vertices on the connected path between the two arrowheads."""
-    cells = {(x, y): glyph for y, row in enumerate(rows)
-             for x, glyph in enumerate(row) if glyph != ' '}
-    start, end = (p for p, glyph in cells.items() if glyph in '<>^v')
-    pending = [(start, 0)]
-    visited = {start}
-    # Both glyphs must have a stroke in the direction of travel.
-    links = [(1, 0, 'o+-<', 'o+->'), (-1, 0, 'o+->', 'o+-<'),
-             (0, 1, 'o+|^', 'o+|v'), (0, -1, 'o+|v', 'o+|^')]
-    while pending:
-        (x, y), count = pending.pop()
-        if (x, y) == end:
-            return count
-        for dx, dy, outgoing, incoming in links:
-            neighbor = (x + dx, y + dy)
-            if (cells[x, y] in outgoing and neighbor not in visited
-                    and cells.get(neighbor, ' ') in incoming):
-                visited.add(neighbor)
-                pending.append((neighbor, count + (cells[neighbor] == 'o')))
-    raise AssertionError("The two branch arrows are disconnected.")
 
 
 class CliWelcomeTests(unittest.TestCase):
@@ -63,9 +34,14 @@ class CliWelcomeTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, '')
-        first, second, *_ = result.stdout.strip().splitlines()
-        self.assertEqual(first, 'Atlas version ' + atlas_version())
-        self.assertIn('Developer: pportilla <p.portilla@upm.es>', second)
+        rows = result.stdout.splitlines()
+        wordmark_end = next(i for i, row in enumerate(rows) if WORDMARK[-1] in row)
+        version = next(i for i, row in enumerate(rows) if row.lstrip().startswith('version ' + atlas_version()))
+        contact = next(i for i, row in enumerate(rows) if row.lstrip().startswith('pportilla <p.portilla@upm.es>'))
+        self.assertLess(wordmark_end, version)
+        self.assertLess(version, contact)
+        self.assertNotIn('Developer', result.stdout)
+        self.assertNotIn('Resolved curve', result.stdout)
         self.assertIn('Welcome to Atlas', result.stdout)
         self.assertNotIn('Try ', result.stdout)
         self.assertNotIn('./atlas resolve', result.stdout)
@@ -79,18 +55,35 @@ class CliWelcomeTests(unittest.TestCase):
         git.assert_not_called()
 
     def test_welcome_art_fits_terminal_width(self):
-        example = resolve_welcome_curve(Random(0))
-        for width in range(1, 121):
-            with self.subTest(width=width):
-                banner = render_welcome(width, color=False, interactive=True, example=example)
-                self.assertTrue(banner.isascii())
-                self.assertLessEqual(max(map(len, banner.splitlines())), width)
+        for version in ('abc1234', 'release-' + 'b' * 160):
+            with patch('engine.welcome.atlas_version', return_value=version):
+                for width in range(1, 121):
+                    with self.subTest(width=width, version=version):
+                        banner = render_welcome(width, color=False, interactive=True)
+                        self.assertTrue(banner.isascii())
+                        self.assertLessEqual(max(map(len, banner.splitlines())), width)
 
     def test_compact_logo_survives_side_by_side_and_stacked_layouts(self):
         for width in (18, 50):
             with self.subTest(width=width):
-                output = render_welcome(width, color=False, interactive=False, example=("x*y", {}))
+                output = render_welcome(width, color=False, interactive=False)
                 self.assert_logo(output, SMALL_LOGO)
+
+    def test_paper_map_has_three_divisors_and_the_strict_transform(self):
+        for logo in (LOGO, SMALL_LOGO):
+            with self.subTest(logo=logo):
+                drawing = '\n'.join(logo)
+                self.assertEqual(drawing.count('o'), 3)
+                self.assertEqual(drawing.count('^'), 1)
+                self.assertNotRegex(drawing, r'[0-9A-Z<>v]')
+                row = next(i for i, line in enumerate(logo) if 'o' in line)
+                chain = re.search(r'o-+o-+o', logo[row])
+                self.assertIsNotNone(chain)
+                column = logo[row].index('o', chain.start() + 1)
+                tip = next(i for i, line in enumerate(logo) if '^' in line)
+                self.assertLess(tip, row)
+                self.assertEqual(logo[tip].index('^'), column)
+                self.assertTrue(all(line[column] == '|' for line in logo[tip + 1:row]))
 
     def launch_session(self, commands, term='xterm', no_color='1'):
         stdin, stdout, stderr = Terminal(commands), Terminal(), io.StringIO()
@@ -128,90 +121,27 @@ class CliWelcomeTests(unittest.TestCase):
                 self.assertEqual('\x1b[' in out, has_color)
                 self.assertEqual(err, '')
 
-    def test_each_launch_computes_once_and_uses_its_own_example(self):
-        examples = [resolve_welcome_curve(Random(seed)) for seed in (0, 1)]
-        with patch('engine.welcome.resolve_welcome_curve', side_effect=examples) as compute:
-            for polynomial, _ in examples:
-                out, err, _ = self.launch_session('quit\n')
-                self.assertIn(polynomial, out)
-                self.assertNotIn('Try ', out)
-                self.assert_logo(out, LOGO)
-                self.assertEqual(err, '')
-        self.assertEqual(compute.call_count, len(examples))
-
-    def test_unavailable_solver_leaves_prompt_usable(self):
-        with patch('engine.welcome.resolve_welcome_curve', side_effect=RuntimeError('missing worker')):
-            out, _, _ = self.launch_session('help resolve\nquit\n')
-        self.assertIn(LOGO[0], out)
-        self.assertIn('missing worker', out)
-        self.assertIn('--vars', out)
-        self.assertIn('atlas>', out)
-
-    def test_sampled_germs_have_two_branches_and_at_most_two_pairs(self):
-        variables = ['x', 'y']
-        seen = set()
-        for seed in range(8):
-            polynomial, result = resolve_welcome_curve(Random(seed))
-            with self.subTest(polynomial=polynomial):
-                poly = parse(polynomial, variables)
-                self.assertEqual(poly, parse(result['polynomial'], variables))
-                self.assertEqual(result['mode'], 'embedded')
-                self.assertEqual(result['dual_complex']['status'], 'complete')
-                self.assertEqual(len(result['branches']), 2)
-                factors = rational_factors(poly, variables)
-                self.assertEqual([multiplicity for _, multiplicity in factors], [1, 1])
-                pairs = []
-                for factor, _ in factors:
-                    if min(sum(exponents) for exponents in factor) == 1:
-                        pairs.append(0)
-                        continue
-                    branch = resolve_plane(factor, variables, 'embedded')
-                    self.assertEqual(len(branch['branches']), 1)
-                    # A plane branch has one rupture vertex per Puiseux pair.
-                    # Its valency counts the strict transform as an incident edge.
-                    degree = Counter(v for c in branch['dual_complex']['cells'] for v in c['vertices'])
-                    degree.update(branch['branches'][0]['ambient_components'])
-                    pairs.append(sum(d >= 3 for d in degree.values()))
-                self.assertLessEqual(sum(pairs), 2)
-                seen.add(tuple(sorted(pairs)))
-        self.assertIn((0, 2), seen)
-        self.assertGreater(len(seen), 1)
-
-    def test_both_branch_arrows_survive_at_every_graph_size(self):
-        variables = ['x', 'y']
-        cases = [('y*(y-x^3)', ['E3', 'E3'], 1),
-                 ('(y^2-x^3)*(x^2-y^3)', ['E3', 'E5'], 3)]
-        for polynomial, attachments, nodes_between_arrows in cases:
-            result = resolve_plane(parse(polynomial, variables), variables, 'embedded')
-            self.assertCountEqual([b['ambient_components'][0] for b in result['branches']], attachments)
-            for width in (5, 13, 29):
-                with self.subTest(polynomial=polynomial, width=width):
-                    rows = graph_rows(result, width)
-                    self.assertLessEqual(max(map(len, rows)), width)
-                    drawing = ''.join(rows)
-                    self.assertEqual(drawing.count('o'), len(result['dual_complex']['vertices']))
-                    self.assertEqual(sum(c in '<>^v' for c in drawing), 2)
-                    self.assertEqual(divisors_on_arrow_path(rows), nodes_between_arrows)
-
-    def test_distinct_attachments_share_a_horizontal_path_on_wide_paper(self):
-        variables = ['x', 'y']
-        curve = parse('(y^2-x^3)*(x^2-y^3)', variables)
-        rows = graph_rows(resolve_plane(curve, variables, 'embedded'), 29)
-        # The unique path between the two attachment points is E3--E1--E5.
-        self.assertRegex('\n'.join(rows), r'<-{1,2}o-+o-+o-{1,2}>')
-
-    def test_shared_attachment_has_short_up_and_right_arrows_on_wide_paper(self):
-        variables = ['x', 'y']
-        curve = parse('y*(y-x^3)', variables)
-        rows = graph_rows(resolve_plane(curve, variables, 'embedded'), 29)
-        tip_rows = [i for i, row in enumerate(rows) if '^' in row]
-        self.assertEqual(len(tip_rows), 1)
-        top = tip_rows[0]
-        column = rows[top].index('^')
-        vertical = ''.join(row.ljust(column + 1)[column] for row in rows[top:])
-        self.assertRegex(vertical, r'^\^\|{1,2}o')
-        attachment_row = rows[top + vertical.index('o')]
-        self.assertRegex(attachment_row[column:], r'^o-{1,2}>')
+    def test_both_launch_modes_work_without_the_solver(self):
+        with (
+            patch('engine.app.calculate_resolution', side_effect=AssertionError('unexpected resolution')) as solve,
+            patch('engine.native_library._kernel', side_effect=OSError('missing native kernel')) as kernel,
+        ):
+            out, err, _ = self.launch_session('help resolve\nquit\n')
+            self.assertIn('--vars', out)
+            self.assertIn('atlas>', out)
+            self.assertEqual(err, '')
+            self.assert_logo(out, LOGO)
+            redirected = io.StringIO()
+            with (
+                patch.object(sys, 'argv', ['atlas']),
+                patch.object(sys, 'stdin', io.StringIO()),
+                patch.object(sys, 'stdout', redirected),
+                patch.dict(os.environ, {'COLUMNS': '80'}),
+            ):
+                self.assertEqual(main(), 0)
+            self.assert_logo(redirected.getvalue(), LOGO)
+            solve.assert_not_called()
+            kernel.assert_not_called()
 
 
 if __name__ == '__main__':
