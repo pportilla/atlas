@@ -21,12 +21,14 @@ class RationalCharts(unittest.TestCase):
     def test_worker_certifies_single_component_with_4501_digit_multiplicity(self):
         digits = "1" + "0" * 4499 + "7"
         power = 10**4500 + 7
+        # The comparison backend uses a dense factorization oracle at this degree.
+        env = dict(os.environ, ATLAS_GROEBNER="native")
         for names in (["x"], ["x", "y"]):
             with self.subTest(names=names):
                 request = dict(polynomial="x^" + digits, variables=names, mode="embedded")
                 reply = subprocess.run([sys.executable, "-m", "engine.worker"], cwd=ROOT,
                                        input=json.dumps(request), text=True, capture_output=True,
-                                       timeout=15, check=True)
+                                       timeout=15, check=True, env=env)
                 # Read JSON integers exactly without changing this process's decimal limit.
                 status, record = json.loads(reply.stdout, parse_int=lambda s: int(Decimal(s)))
                 self.assertEqual(status, 200, reply.stderr)
