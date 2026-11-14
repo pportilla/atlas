@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 
 WORDMARK = (
     "     ___   ______  __      ___    _____",
@@ -22,32 +23,59 @@ SMALL_WORDMARK = (
 
 GREETING = "Welcome to Atlas."
 
-
-# The folds show the cusp, tangency after the first blowup, and the resolution graph.
-LOGO = (
-    "        .-+-.                 _.-.",
-    "    _.-'  :  `-._         _.-'   |",
-    ".--'      :      `-.+._.-'       |",
-    r"|       / :\       /:     ^      |",
-    r"|    .-'  : \     / :     |      |",
-    r"| .--     :  \   /  :  o--o---o  |",
-    r"|    `-.  :___\_/___:            |",
-    r"|       \ :         :            |",
-    "|       .-+-.       :        _.-'",
-    "|   _.-'     `-._   :    _.-'",
-    ".--'             `-.+.-'",
-)
-
-SMALL_LOGO = (
-    "    .+.        .-.",
-    "_.-' : `-.+_.-'  |",
-    "|   /:    :      |",
-    "|  .':|  |:  ^   |",
-    r"|.-- :\__/:  |   |",
-    "|  `.:----:o-o-o |",
-    r"|   \:    :      |",
-    "|   .+.   :   _.-'",
-    "`.-'   `-.+.-'",
+FOLDS = (
+    (
+        " .-+.",
+        " |::|",
+        " |::|",
+        " |::|",
+        " |::|",
+        " `-+'",
+    ),
+    (
+        "   +     +     .",
+        ".-':`-+-':`-+-'|",
+        "|  :  :  :  :  |",
+        "|  :  :  :  :  |",
+        "|  :  :  :  :  |",
+        "|  :  :  :  :  |",
+        "|  +  :  +  :  .",
+        ".-' `-+-' `-+-'",
+    ),
+    (
+        "   -+-     -+-     -.",
+        ".-' : `-+-' : `-+-' |",
+        "|   :   :   :   :   |",
+        "|   :   :   :   :   |",
+        "|   :   :   :   :   |",
+        "|   :   :   :   :   |",
+        "|  -+-  :  -+-  :  -.",
+        ".-'   `-+-'   `-+-'",
+    ),
+    (
+        "      +           +           .",
+        "   _.':`._     _.':`._     _.'|",
+        ".-'   :   `-+-'   :   `-+-'   |",
+        "|     :     :     :     :     |",
+        "|     :     :     :     :     |",
+        "|     :     :     :     :     |",
+        "|     +     :     +     :     .",
+        "|  _.' `._  :  _.' `._  :  _.'",
+        ".-'       `-+-'       `-+-'",
+    ),
+    (
+        "         _.-+-._                 _.-+-._                 _.-.",
+        "    _.--'   :   `--._       _.--'   :   `--._       _.--'   |",
+        ".--'        :        `--+--'        :        `--+--'        |",
+        "|           :           :           :           :           |",
+        "|           :           :           :           :           |",
+        "|           :           :           :           :           |",
+        "|           :           :           :           :           |",
+        "|           :           :           :           :           |",
+        "|        _.-+-._        :        _.-+-._        :        _.-'",
+        "|   _.--'       `--._   :   _.--'       `--._   :   _.--'",
+        ".--'                 `--+--'                 `--+--'",
+    ),
 )
 
 
@@ -64,52 +92,31 @@ def atlas_version():
     return "development"
 
 
+def _ink(text, style, color):
+    return f"\033[{style}m{text}\033[0m" if color and style and text else text
+
+
 def render_welcome(columns, *, color, interactive):
     margin = "  " if columns >= 24 else ""
     width = max(1, columns - len(margin))
     lines = []
 
-    def ink(text, code):
-        return f"\033[{code}m{text}\033[0m" if color and code and text else text
-
     def paragraph(text, code=None):
         for row in textwrap.wrap(text, width, break_on_hyphens=False):
-            lines.append(ink(row, code))
+            lines.append(_ink(row, code, color))
 
     version = f"version {atlas_version()}"
     contact = "pportilla <p.portilla@upm.es>"
 
-    # Pick the largest pair that fits on one line, in terminal character cells.
-    layout = next(((mark, title) for mark in (LOGO, SMALL_LOGO)
-                   for title in (WORDMARK, SMALL_WORDMARK)
-                   if max(map(len, title)) + 3 + max(map(len, mark)) <= width), None)
-    if layout:
-        logo, lettering = layout
-        column = width - max(map(len, logo)) - 3
-        column = min(column, max(max(map(len, lettering)), len(contact)))
-        labels = [(row, "1") for row in lettering]
-        labels.append(("", None))
-        for text, style in ((version, "2"), (contact, None)):
-            labels.extend((row, style) for row in textwrap.wrap(text, column, break_on_hyphens=False))
-        height = max(len(labels), len(logo))
-        title_top = (height - len(labels)) // 2
-        map_top = (height - len(logo)) // 2
-        for i in range(height):
-            label, style = labels[i - title_top] if title_top <= i < title_top + len(labels) else ("", None)
-            line = ink(label, style)
-            if map_top <= i < map_top + len(logo):
-                line += " " * (column + 3 - len(label)) + ink(logo[i - map_top], "32")
-            lines.append(line)
+    wordmark = next((art for art in (WORDMARK, SMALL_WORDMARK) if max(map(len, art)) <= width), None)
+    if wordmark:
+        lines.extend(_ink(row, "1", color) for row in wordmark)
     else:
-        title = SMALL_WORDMARK if max(map(len, SMALL_WORDMARK)) <= width else ("ATLAS",)
-        for row in title:
-            paragraph(row, "1")
-        lines.append("")
-        paragraph(version, "2")
-        paragraph(contact)
-        if max(map(len, SMALL_LOGO)) <= width:
-            lines.append("")
-            lines.extend(ink(row, "32") for row in SMALL_LOGO)
+        paragraph("ATLAS", "1")
+
+    lines.append("")
+    paragraph(version, "2")
+    paragraph(contact)
     lines.append("")
     paragraph(GREETING, "1")
     paragraph("Type help for commands or quit to leave." if interactive
@@ -117,6 +124,82 @@ def render_welcome(columns, *, color, interactive):
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"
 
 
+def _animation_frames(color):
+    # The slanted T and L share columns on different rows. Two blank
+    # cells before the L's top keep its strokes on their original diagonal.
+    starts = (1, 9, 15, 23, 31)
+    glyphs = list(zip(*(
+        (row[1:9], row[9:cut], " " * (cut - 15) + row[cut:22], row[23:31], row[31:])
+        for row, cut in zip(WORDMARK, (17, 17, 16, 15, 15))
+    )))
+
+    sheet = FOLDS[-1]
+    width = max(map(len, sheet))
+    pitch = (width - 1) // len(glyphs)
+    for frame in FOLDS:
+        indent = " " * (2 + (width - max(map(len, frame))) // 2)
+        yield [_ink(indent + row, "32", color) for row in frame], 0.4 if frame is sheet else 0.25
+
+    positions = [i * pitch + (pitch + 1 - max(len(row.rstrip()) for row in glyph)) // 2
+                 for i, glyph in enumerate(glyphs)]
+    body = next(i for i, row in enumerate(sheet) if row.count(":") == 4)
+    seam = _ink(":", "32", color)
+    side = _ink("|", "32", color)
+    # Start the next letter as the preceding one receives its last stroke.
+    stagger = len(WORDMARK) - 1
+    last_stroke = (len(glyphs) - 1) * stagger + len(WORDMARK) - 1
+    for stroke in range(last_stroke + 1):
+        rows = ["  " + _ink(row, "32", color) for row in sheet]
+        for y in range(len(WORDMARK)):
+            cells = []
+            for i, glyph in enumerate(glyphs):
+                left = positions[i] - i * pitch - 1
+                ink = glyph[y] if stroke >= i * stagger + y else ""
+                cells.append((" " * left + ink).ljust(pitch - 1))
+            rows[body + y] = "  " + side + seam.join(_ink(cell, "1", color) for cell in cells) + side
+        yield rows, 0.4 if stroke == last_stroke else 0.085
+
+    for remaining in (1, 0.78, 0.54, 0.32, 0.15, 0):
+        offsets = [end + round((start - end) * remaining) for start, end in zip(positions, starts)]
+        rows = [""] * round(body * remaining)
+        for y in range(len(WORDMARK)):
+            line = [" "] * width
+            for x, glyph in zip(offsets, glyphs):
+                for dx, stroke in enumerate(glyph[y]):
+                    if stroke != " ":
+                        line[x + dx] = stroke
+            rows.append("  " + _ink("".join(line).rstrip(), "1", color))
+        yield rows, 0.20 if remaining == 1 else 0.095
+
+
+def _unfold(stream, size, color):
+    # Reserve two workspace rows plus a blank line above and below the map.
+    if size.lines < 15 or size.columns < max(map(len, FOLDS[-1])) + 3:
+        return
+    stream.write("\0337\033[?25l")
+    try:
+        for rows, delay in _animation_frames(color):
+            if os.get_terminal_size(stream.fileno()) != size:
+                return
+            stream.write("\0338\033[J\r\n" + "\r\n".join(rows))
+            stream.flush()
+            time.sleep(delay)
+    except KeyboardInterrupt:
+        pass  # Skip the remaining frames and continue to the prompt.
+    finally:
+        stream.write("\0338\033[J\033[?25h")
+        stream.flush()
+
+
 def print_welcome(*, interactive):
-    color = sys.stdout.isatty() and os.environ.get("TERM") != "dumb" and not os.environ.get("NO_COLOR")
+    stream = sys.stdout
+    terminal = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
+    color = terminal and not os.environ.get("NO_COLOR")
+    if interactive and terminal:
+        try:
+            size = os.get_terminal_size(stream.fileno())
+        except (OSError, ValueError):
+            pass
+        else:
+            _unfold(stream, size, color)
     print(render_welcome(shutil.get_terminal_size().columns, color=color, interactive=interactive))
