@@ -11,7 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 from .resolve_cli import (MAX_SECONDS, add_resolution_options, calculate_resolution as _calculate_resolution,
-                          resolution_arguments, run_job, run_resolution, session_decimals, show, show_zeta)
+                          needs_exhaustive_search, resolution_arguments, run_job, run_resolution,
+                          session_decimals, show, show_zeta)
 
 ROOT=Path(__file__).resolve().parents[1]
 WEB=ROOT/'web'
@@ -56,15 +57,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlsplit(self.path).path
         static={'/':('index.html','text/html'),'/index.html':('index.html','text/html'),
-                '/algebra.html':('algebra.html','text/html'),'/algebra.js':('algebra.js','text/javascript'),
-                '/algebra-session.js':('algebra-session.js','text/javascript'),
                 '/exact-json.js':('exact-json.js','text/javascript'),
-                '/resolution.css':('resolution.css','text/css'),'/algebra.css':('algebra.css','text/css'),
+                '/resolution.css':('resolution.css','text/css'),'/runs.css':('runs.css','text/css'),
+                '/complex.css':('complex.css','text/css'),
                 '/atlas-mark.svg':('atlas-mark.svg','image/svg+xml'),
                 '/style.css':('style.css','text/css'),'/app.js':('app.js','text/javascript')}
         if path in ('/fonts/stix-two-text.woff2', '/fonts/stix-two-text-italic.woff2', '/fonts/instrument-sans.woff2'):
             return self.send(200, (WEB / path[1:]).read_bytes(), 'font/woff2')
         if path=='/api/health': return self.obj(200,{'status':'ok'})
+        if path=='/api/searches':
+            return self.obj(200,{'jobs':self.server.search_jobs.list()})
         if path=='/api/searches/current':
             return self.obj(200,{'job':self.server.search_jobs.get()})
         if path.startswith('/api/searches/'):
@@ -76,9 +78,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path=urlsplit(self.path).path
+        parts = path.split('/')
+        zeta_job = parts[3] if len(parts) == 5 and parts[1:3] == ['api', 'searches'] and parts[4] == 'zetas' else None
+        replay = zeta_job is not None or path == '/api/zetas'
         algebra = path in ('/api/algebra', '/api/algebra/exhaustive')
         exhaustive = path in ('/api/searches', '/api/algebra/exhaustive')
-        if not algebra and path not in ('/api/resolve','/api/searches'): return self.obj(404,{'error':'Unknown endpoint.'})
+        if not replay and not algebra and path not in ('/api/resolve','/api/searches'): return self.obj(404,{'error':'Unknown endpoint.'})
         def reject(status, message, code='invalid_request'):
             if algebra:
                 from .algebra import error_record
@@ -89,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         try: size=int(self.headers.get('Content-Length',''))
         except ValueError: return reject(411, 'Content-Length is required.')
         if size <= 0: return reject(413, 'Request is empty.')
-        if size > MAX_REQUEST and not exhaustive:
+        if size > MAX_REQUEST and not exhaustive and path != '/api/zetas':
             endpoint = '/api/algebra/exhaustive' if algebra else '/api/searches'
             return reject(413, f'Standard requests accept up to {MAX_REQUEST} bytes. Choose exhaustive mode or post to {endpoint}.')
         try:
@@ -102,7 +107,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not chunk:
                     return reject(400, 'Incomplete request body.')
                 body.extend(chunk)
-            if algebra:
+            if algebra or replay:
                 from .polynomial import integer_from_decimal
                 data = json.loads(body, parse_int=integer_from_decimal)
             else:
@@ -110,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
             del body
         except (ValueError,OSError,RecursionError): return reject(400, 'Invalid JSON request.')
         except MemoryError: return reject(503, 'Insufficient memory to read the request.', 'worker_unavailable')
+        if replay:
+            return self.replay_zetas(data, zeta_job)
         def start_search():
             try: job=self.server.search_jobs.start(data)
             except ValueError as exc: return self.obj(400,{'error':str(exc)})
@@ -125,16 +132,49 @@ class Handler(BaseHTTPRequestHandler):
                 return self.obj(*self.server.algebra_bases.calculate(data, timeout=timeout, owner=self.server.workers))
             automatic=isinstance(data,dict) and 'search' not in data
             status,res=run_job(dict(data,search='quick') if automatic else data, owner=self.server.workers)
-            if automatic:
-                if status==422 and res.get('code')=='computation_limit':
-                    return start_search()
-                pending_zeta = data.get('monodromy') is True and any(
-                    res.get(field, {}).get('status') == 'unavailable'
-                    for field in ('monodromy_zeta', 'topological_zeta'))
-                if status==200 and (res.get('status')=='inconclusive' or pending_zeta):
-                    return start_search()
+            if automatic and needs_exhaustive_search(data, status, res):
+                return start_search()
             self.obj(status,res)
         finally: CAPACITY.release()
+
+    def replay_zetas(self, data, ident):
+        from .resolution_zetas import selected_zetas
+        from .worker_process import run_worker
+        if not isinstance(data, dict) or "zetas" not in data:
+            return self.obj(400, {"error": "Select a zeta function."})
+        try:
+            kinds = selected_zetas(data)
+        except ValueError as error:
+            return self.obj(400, {"error": str(error)})
+        if not kinds:
+            return self.obj(400, {"error": "Select a zeta function."})
+
+        jobs = self.server.search_jobs
+        if ident is not None:
+            job = jobs.get(ident)
+            if job is None:
+                return self.obj(404, {"error": "Search no longer available."})
+            record = job.get("result")
+        else:
+            record = data.get("record")
+        if not isinstance(record, dict) or record.get("status") != "resolved":
+            return self.obj(400, {"error": "Supply a resolved Atlas record."})
+
+        companion = jobs.embedded_companion(record)
+        source = {**record, "embedded_companion": companion} if companion else record
+        if not CAPACITY.acquire(False):
+            return self.obj(429, {"error": "Both computation slots are busy. Try again shortly."})
+        try:
+            status, outputs = run_worker(["engine.worker", "--zetas"], {"record": source, "zetas": list(kinds)},
+                                         None, owner=self.server.workers)
+        except (RuntimeError, OSError) as error:
+            return self.obj(503, {"error": str(error)})
+        finally:
+            CAPACITY.release()
+        if status != 200 or ident is None:
+            return self.obj(status, outputs)
+        updated = jobs.attach_zetas(ident, outputs, companion)
+        return self.obj(200, updated) if updated else self.obj(404, {"error": "Search no longer available."})
 
     def do_DELETE(self):
         path=urlsplit(self.path).path
@@ -157,7 +197,9 @@ def make_parser():
     zeta=sub.add_parser('monodromy',help='compute the local monodromy zeta function from a saved resolution')
     zeta.add_argument('record',help='Atlas resolution JSON file, or - for standard input')
     zeta.add_argument('--json',action='store_true',help="print factors and A'Campo contributions")
-    incidence=sub.add_parser('dual-complex',help='recompute exceptional incidence from saved resolution charts')
+    incidence=sub.add_parser('recompute-dual-complex', aliases=['dual-complex'],
+                             help='recompute the exceptional dual complex from saved resolution charts')
+    incidence.set_defaults(command='recompute-dual-complex')
     incidence.add_argument('record',help='Atlas resolution JSON or JSON.gz file, or - for standard input')
     server=sub.add_parser('serve',help='start the local web interface')
     server.add_argument('--port',type=int,default=8765)
@@ -179,7 +221,7 @@ def run_command(parser, argv):
     if args.command=='run':
         from .session import run_script
         return run_script(args.file, calculate_resolution)
-    if args.command=='dual-complex':
+    if args.command=='recompute-dual-complex':
         import gzip
         from .resolution_complex import dual_complex
         try:
@@ -277,7 +319,8 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                 continue
             tail = words[1] if len(words) == 2 else ""
             is_variable = words[0] in session.variables
-            if words[0] not in shell_names or is_variable or tail.startswith(("(", "=", ".")):
+            expression_tail = words[0].isidentifier() and tail.startswith(("(", "=", "."))
+            if words[0] not in shell_names or is_variable or expression_tail:
                 line = read_expression(line)
                 try:
                     for display, value in session.run(line, transcript=transcript):

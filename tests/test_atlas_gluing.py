@@ -269,6 +269,76 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         pieces = [((0,"strict"),(x,)),((1,"strict"),(y,))]
         self.assertEqual(len(_prime_groups(charts,pieces,overlap,transition)),2)
 
+    def test_closed_diagonal_needs_a_common_regular_open(self):
+        from engine.atlas_gluing import _prime_groups
+        from engine.chart_expressions import runtime_expressions
+        from tests.gluing_examples import crossed_blowup_charts
+
+        variables, maps, _, graph, pairs = crossed_blowup_charts(runtime_expressions())
+        # Over x=a=0 the diagonal equations give y=c=0. The inverse
+        # images of the two exceptional surfaces coincide in this graph,
+        # but both project to lines and the surfaces lie over different axes.
+        charts = [Chart(v, (), (), (), (), tuple(zip("XYZ", m)), ()) for v, m in zip(variables, maps)]
+        renames = [{v: v for v in chart.variables} for chart in charts]
+
+        def overlap(i, j):
+            return (*charts[i].variables, *charts[j].variables), renames[i], renames[j], graph, ()
+
+        # The two lines (x,y)=(a,c)=0 have both projections dominant,
+        # but the relation on them is the entire (z,b)-plane. The charts
+        # have no transition there. The strict surfaces z=0 and c=0,
+        # in contrast, agree via the inverse coordinates where x=a≠0.
+        for name, left, right, decision in pairs:
+            for order in ((0, 1), (1, 0)):
+                with self.subTest(name=name, order=order):
+                    pieces = [((i,"strict"), (left, right)[i]) for i in order]
+                    groups = _prime_groups(charts, pieces, overlap, lambda i,j: None)
+                    self.assertEqual(len(groups), 1 if decision == 1 else 2)
+
+    def test_implicit_chart_uses_alternative_regular_denominators(self):
+        from engine.atlas_gluing import _prime_groups
+        from engine.chart_expressions import runtime_expressions
+        from tests.gluing_examples import implicit_cone_charts
+
+        variables, maps, ambient, graph, pairs = implicit_cone_charts(runtime_expressions())
+        charts = [Chart(v, eqs, (), (), (), tuple(zip("XYZW", m)), ())
+                  for v, m, eqs in zip(variables, maps, ambient)]
+        names = [{v: v for v in chart.variables} for chart in charts]
+
+        def overlap(i, j):
+            return (*charts[i].variables, *charts[j].variables), names[i], names[j], graph, ()
+
+        # On the cone x*w=y*z the regularity ideal for b is (x,z).
+        # Along (x,y) only w/z works; along (z,w) only y/x works.
+        for name, left, right, _ in pairs:
+            for order in ((0, 1), (1, 0)):
+                with self.subTest(name=name, order=order):
+                    pieces = [((i,"strict"), (left, right)[i]) for i in order]
+                    groups = _prime_groups(charts, pieces, overlap, lambda i,j: None)
+                    self.assertEqual(len(groups), 1)
+
+    def test_closed_diagonal_transports_wide_sparse_prime_equations(self):
+        from engine import native_polynomial as np
+        from engine.kernel_json import kernel_json
+
+        x, y, a, b = np.symbols("x y a b")
+        blocks = ((y,x), (b,a))
+        power = 2**64 + 17
+        coefficient = 2**180 + 31
+        # The identity chart identifies y=C*x^N with b=C*a^N. The
+        # opposite sign defines a distinct irreducible curve in char 0.
+        for sign, expected in ((1,1), (-1,-1)):
+            primes = (y-coefficient*x**power, b-sign*coefficient*a**power)
+            for i, j in ((0,1), (1,0)):
+                with self.subTest(sign=sign, source=i):
+                    variables = (*blocks[i], *blocks[j])
+                    got = kernel_json("atlas_component_geometry", "generic_overlap",
+                                      left_width=2, right_width=2, removed=[],
+                                      graph=[np.row(variables, f) for f in (x-a,y-b)],
+                                      left_prime=[np.row(blocks[i], primes[i])],
+                                      right_prime=[np.row(blocks[j], primes[j])])
+                    self.assertEqual(got, expected)
+
     def test_glued_prime_representatives_on_full_and_partial_overlaps(self):
         from engine.atlas_gluing import _prime_groups
         from engine.chart_expressions import runtime_expressions

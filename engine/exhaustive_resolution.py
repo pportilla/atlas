@@ -10,6 +10,7 @@ import threading
 
 from .native_library import current_replay_scope
 from .polynomial import LimitError, NonReducedError, integer_from_decimal, rational_text
+from .resolution_progress import report
 
 
 NEWTON_GRACE_SECONDS = 2
@@ -68,9 +69,10 @@ def search(poly, variables, mode, *, compute=None):
     def start(method):
         read_fd, write_fd = os.pipe()
         try:
+            environment = {**os.environ, "ATLAS_PROGRESS_METHOD": method} if os.getenv("ATLAS_PROGRESS_FILE") else None
             child = subprocess.Popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
                                      cwd=Path(__file__).resolve().parents[1],
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=environment,
                                      start_new_session=True, pass_fds=(read_fd,))
         except OSError as error:
             os.close(write_fd)
@@ -139,6 +141,7 @@ def _run(method, payload):
         try:
             if method == "newton":
                 from .newton_backend import resolve_newton
+                report("Testing a Newton polyhedron resolution")
                 try:
                     record = resolve_newton(terms, payload["variables"], payload["mode"],
                                             compute=payload["compute"], seconds=1200, defer_outputs=True)
@@ -146,9 +149,11 @@ def _run(method, payload):
                     record = None
             elif method == "origin":
                 from .origin_backend import _resolve
+                report("Searching for smooth blow-up centres over the origin")
                 record = _resolve(terms, payload["variables"], payload["mode"], None, defer_outputs=True)
             elif method == "certificates":
                 from .general_resolution import search as certificates
+                report("Searching for a certified blow-up centre")
                 record = certificates(terms, payload["variables"], payload["mode"], exhaustive=True)
             else:
                 raise ValueError("Unknown resolution method.")

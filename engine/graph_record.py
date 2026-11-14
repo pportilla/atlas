@@ -178,7 +178,7 @@ def graph_record_charts(record, polynomial):
     return charts
 
 
-def _coordinate_outputs(record, charts, *, complex, intrinsic, integrals):
+def _graph_bundle_outputs(record, charts, *, complex, intrinsic, integrals):
     from .chart_kernel import crossings_rows, strata_rows, strata_totals
     from .incidence import incidence, stratum_dimension
     from .strata import records
@@ -188,9 +188,25 @@ def _coordinate_outputs(record, charts, *, complex, intrinsic, integrals):
         return None
     # graph_record_charts has verified every saturated graph open and its
     # pivot. The native certificate checks the actual exceptional ideals.
+    base = tuple(record["variables"])
+    centre = record["steps"][0]["generators"]
     pieces = [{"exceptional": [c for c in chart["components"] if c["id"] != "strict"]} for chart in charts]
-    label = incidence("coordinate_exceptional", variables=record["variables"],
-                      centre=record["steps"][0]["generators"], charts=pieces)
+    label = incidence("coordinate_exceptional", variables=base, centre=centre, charts=pieces)
+    if label is None and hasattr(native_library._library(), "atlas_polynomial_graph_exceptional_abi"):
+        # Compare the exceptional ideal on each open with the very same base
+        # polynomials used to prove the centre is a graph. A ratio variable in
+        # a boundary equation requires the general component calculation.
+        from .polynomial import InputError as PolynomialInputError
+        try:
+            centre_rows = [_row(g, base) for g in centre]
+            for chart in pieces:
+                chart["exceptional"] = [
+                    {"id": c["id"], "ideal": [_row(g, base) for g in c["ideal"]]}
+                    for c in chart["exceptional"]
+                ]
+        except PolynomialInputError:
+            return None
+        label = incidence("polynomial_graph_exceptional", variables=base, centre=centre_rows, charts=pieces)
     if label is None:
         return None
     data, contributions = {}, []
@@ -266,15 +282,27 @@ def graph_outputs(record, polynomial, *, complex=True, intrinsic=False, integral
                         or basis([*ambient,*given["ideal"]]) != basis([*ambient,*v["ideal"]])):
                     raise InputError("The saved graph changed a divisor ideal or its orders.")
     try:
-        coordinate = _coordinate_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
+        bundle = _graph_bundle_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
     except native_library.Unavailable:
-        coordinate = None
-    if coordinate is not None:
-        return (saved or expected), coordinate
+        bundle = None
+    if bundle is not None:
+        return (saved or expected), bundle
     from .general_atlas import native_general_outputs
     output = native_general_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
     if output is None:
         return None
+    if complex and record.get("input_divisor") and not intrinsic:
+        # Fresh weighted resolutions attach total orders to exceptional
+        # vertices. Recover them from the independently reconstructed charts.
+        orders = {}
+        for chart in expected:
+            for component in chart["components"]:
+                label, order = component["id"], component["multiplicity"]
+                if orders.setdefault(label, order) != order:
+                    raise InputError("The weighted graph has inconsistent divisor orders across charts.")
+        for vertex in output["dual_complex"]["vertices"]:
+            if vertex["id"] in orders:
+                vertex["total_multiplicity"] = orders[vertex["id"]]
     return (saved or expected), output
 
 

@@ -1,4 +1,4 @@
-"""A server-owned, cancellable exhaustive search, isolated in a process group."""
+"""A bounded queue of cancellable resolutions with retained result records."""
 from dataclasses import dataclass
 import json
 import os
@@ -8,8 +8,12 @@ import secrets
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+
+from .polynomial import integer_from_decimal
+from .resolution_zetas import selected_zetas
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,97 +22,162 @@ ROOT = Path(__file__).resolve().parents[1]
 class Job:
     id: str
     request: dict
-    child: subprocess.Popen
     started: float
-    state: str = "running"
+    state: str = "queued"
     finished: float | None = None
     result: dict | None = None
     error: str | None = None
+    child: subprocess.Popen | None = None
     watcher: threading.Thread | None = None
+    progress: dict | None = None
 
 
 class SearchJobs:
-    """Keep one current job. Only completed records expire, or are replaced."""
-    def __init__(self, *, command=None, retention=1800):
+    def __init__(self, *, command=None, retention=1800, slots=2):
         self.command = command or [sys.executable, "-m", "engine.worker"]
         self.retention = retention
+        self.slots = slots
         self.lock = threading.Lock()
-        self.job = None
-        self.expiry = None
+        self.jobs = {}
         self.closed = False
+        self.progress_dir = None
 
-    @staticmethod
-    def _view(job):
+    def _read_progress(self, job):
+        if self.progress_dir is None:
+            return
+        path = Path(self.progress_dir.name) / job.id
+        try:
+            snapshot = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            return
+        if isinstance(snapshot, dict) and isinstance(snapshot.get("stage"), str):
+            progress = {"stage": snapshot["stage"]}
+            if isinstance(snapshot.get("method"), str):
+                progress["method"] = snapshot["method"]
+            if type(snapshot.get("blowups")) is int and snapshot["blowups"] >= 0:
+                progress["blowups"] = snapshot["blowups"]
+            job.progress = progress
+
+    def _view(self, job):
+        if job.state in ("running", "cancelling"):
+            self._read_progress(job)
         end = job.finished if job.finished is not None else time.monotonic()
         view = {"id":job.id, "state":job.state, "request":job.request,
                 "elapsed_ms":round(1000*(end-job.started))}
         if job.result is not None:
             view["result"] = job.result
+        if job.progress is not None:
+            view["progress"] = job.progress
         if job.error:
             view["error"] = job.error
         return view
 
+    def _prune(self):
+        cutoff = time.monotonic() - self.retention
+        for ident in [job.id for job in self.jobs.values() if job.finished is not None and job.finished < cutoff]:
+            del self.jobs[ident]
+
     def start(self, data):
-        if not isinstance(data,dict):
+        if not isinstance(data, dict):
             raise ValueError("Send a polynomial, its variables, and a resolution mode.")
-        request = {key:data[key] for key in ("polynomial","variables","mode","compute","monodromy") if key in data}
-        # All polynomial parsing/expansion belongs in the isolated worker:
-        # a large exhaustive input is permitted and may itself take time.
-        if not isinstance(request.get("polynomial"),str) or not request["polynomial"].strip():
+        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "search")
+        request = {key: data[key] for key in fields if key in data}
+        request.setdefault("search", "exhaustive")
+        if request["search"] not in ("auto", "quick", "exhaustive"):
+            raise ValueError("Search must be auto, quick or exhaustive.")
+        if not isinstance(request.get("polynomial"), str) or not request["polynomial"].strip():
             raise ValueError("Enter a nonempty polynomial.")
-        names=request.get("variables")
-        if (not isinstance(names,list) or not names or any(not isinstance(name,str) or
-            not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}",name) for name in names)
-            or len(set(names))!=len(names)):
+        names = request.get("variables")
+        if (not isinstance(names, list) or not names or any(not isinstance(name, str) or
+                not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", name) for name in names)
+                or len(set(names)) != len(names)):
             raise ValueError("Provide distinct variable names starting with a letter.")
-        if request.get("mode","embedded") not in ("embedded","intrinsic"):
+        if request.get("mode", "embedded") not in ("embedded", "intrinsic"):
             raise ValueError("Mode must be embedded or intrinsic.")
-        if request.get("compute") not in (None,"auto","cpu","gpu"):
+        if request.get("compute") not in (None, "auto", "cpu", "gpu"):
             raise ValueError("Compute must be cpu, auto, or gpu.")
-        if not isinstance(request.get("monodromy", False), bool):
-            raise ValueError("monodromy must be true or false.")
+        selected_zetas(request)
         with self.lock:
             if self.closed:
                 raise RuntimeError("The search server is shutting down.")
-            if self.job and self.job.finished is None:
-                raise RuntimeError("An exhaustive search is already running on this server.")
-            child = subprocess.Popen(self.command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     text=True, start_new_session=True)
-            if self.expiry:
-                self.expiry.cancel()
-                self.expiry = None
-            job = Job(secrets.token_hex(16), request, child, time.monotonic())
-            self.job = job
-            job.watcher = threading.Thread(target=self._collect, args=(job,), daemon=True)
-            try:
-                job.watcher.start()
-            except RuntimeError:
-                self._stop(job)
-                child.communicate()
-                self.job = None
-                raise
+            self._prune()
+            job = Job(secrets.token_hex(16), request, time.monotonic())
+            self.jobs[job.id] = job
+            self._dispatch()
             return self._view(job)
+
+    def _launch(self, job):
+        if self.progress_dir is None:
+            self.progress_dir = tempfile.TemporaryDirectory(prefix="atlas-search-")
+        path = Path(self.progress_dir.name) / job.id
+        path.unlink(missing_ok=True)
+        job.progress = None
+        return subprocess.Popen(self.command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                env={**os.environ, "ATLAS_PROGRESS_FILE": str(path)},
+                                text=True, start_new_session=True)
+
+    def _dispatch(self):
+        """Start waiting jobs in submission order. Caller holds the lock."""
+        if self.closed:
+            return
+        active = sum(job.state in ("running", "cancelling") for job in self.jobs.values())
+        for job in self.jobs.values():
+            if active >= self.slots:
+                break
+            if job.state != "queued":
+                continue
+            try:
+                job.child = self._launch(job)
+                job.watcher = threading.Thread(target=self._collect, args=(job,), daemon=True)
+                job.watcher.start()
+            except (OSError, RuntimeError) as exc:
+                if job.child is not None:
+                    self._stop(job)
+                    job.child.communicate()
+                job.state, job.error, job.finished = "failed", str(exc), time.monotonic()
+                continue
+            job.state = "running"
+            active += 1
 
     @staticmethod
     def _stop(job):
         try:
-            os.killpg(job.child.pid,signal.SIGKILL)
+            os.killpg(job.child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
-    def _collect(self, job):
-        result, error = None, None
+    def _run_attempt(self, job, policy):
+        from .resolve_cli import MAX_SECONDS, _timed_out
+        timeout = MAX_SECONDS if policy == "quick" else None
         try:
-            output, _ = job.child.communicate(json.dumps({**job.request, "search":"exhaustive"}))
-            if job.child.returncode == 0:
-                code, payload = json.loads(output)
-                if code==200 and isinstance(payload,dict):
-                    result = payload
-                else:
-                    error = payload.get("error","The exhaustive search did not finish.")
+            output, _ = job.child.communicate(json.dumps({**job.request, "search": policy}), timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self._stop(job)
+            job.child.communicate()
+            return _timed_out(job.request, timeout)
+        if job.child.returncode:
+            raise RuntimeError("The search process exited before returning a result.")
+        return json.loads(output, parse_int=integer_from_decimal)
+
+    def _collect(self, job):
+        from .resolve_cli import needs_exhaustive_search
+        result, error = None, None
+        policy = job.request["search"]
+        try:
+            code, payload = self._run_attempt(job, "quick" if policy == "auto" else policy)
+            if policy == "auto" and needs_exhaustive_search(job.request, code, payload):
+                with self.lock:
+                    if job.state != "running":
+                        raise RuntimeError("Search cancelled.")
+                    job.child = self._launch(job)
+                code, payload = self._run_attempt(job, "exhaustive")
+            if code == 200 and isinstance(payload, dict):
+                result = payload
             else:
-                error = "The search process exited before returning a result."
-        except (OSError, ValueError, TypeError, AttributeError):
+                error = payload.get("error", "The search did not finish.")
+        except (OSError, RuntimeError) as exc:
+            error = str(exc)
+        except (ValueError, TypeError, AttributeError):
             error = "The search process did not return a readable result."
         with self.lock:
             if job.state == "cancelling":
@@ -117,42 +186,72 @@ class SearchJobs:
                 job.state, job.error = "failed", error
             else:
                 job.state, job.result = "completed", result
+            self._read_progress(job)
+            (Path(self.progress_dir.name) / job.id).unlink(missing_ok=True)
             job.finished = time.monotonic()
-            if not self.closed and self.job is job:
-                self.expiry = threading.Timer(self.retention,self._expire,args=(job.id,))
-                self.expiry.daemon = True
-                self.expiry.start()
-
-    def _expire(self, ident):
-        with self.lock:
-            if self.job and self.job.id==ident and self.job.finished is not None:
-                self.job = self.expiry = None
+            self._dispatch()
 
     def get(self, ident=None):
         with self.lock:
-            if self.job is None or (ident is not None and ident!=self.job.id):
+            self._prune()
+            job = next(reversed(self.jobs.values()), None) if ident is None else self.jobs.get(ident)
+            return self._view(job) if job else None
+
+    def list(self):
+        with self.lock:
+            self._prune()
+            return [self._view(job) for job in reversed(self.jobs.values())]
+
+    def embedded_companion(self, record):
+        """Locate a finished embedded atlas for exactly the same canonical input."""
+        if record.get("mode") != "intrinsic" or record.get("embedded_companion"):
+            return None
+        with self.lock:
+            for job in reversed(self.jobs.values()):
+                other = job.result
+                if (other and other.get("mode") == "embedded" and other.get("status") == "resolved"
+                        and other.get("variables") == record.get("variables")
+                        and other.get("origin") == record.get("origin")
+                        and other.get("polynomial") == record.get("polynomial") and other.get("atlas")):
+                    return {"atlas": other["atlas"]}
+        return None
+
+    def attach_zetas(self, ident, outputs, companion=None):
+        with self.lock:
+            job = self.jobs.get(ident)
+            if job is None:
                 return None
-            return self._view(self.job)
+            # Replace the mapping: earlier snapshots can be serialized on another thread.
+            job.result = {**job.result, **outputs}
+            if companion is not None:
+                job.result["embedded_companion"] = companion
+            return self._view(job)
 
     def cancel(self, ident):
         with self.lock:
-            if self.job is None or self.job.id!=ident:
+            self._prune()
+            job = self.jobs.get(ident)
+            if job is None:
                 return None
-            if self.job.state=="running":
-                self.job.state="cancelling"
-                self._stop(self.job)
-            return self._view(self.job)
+            if job.state == "running":
+                job.state = "cancelling"
+                self._stop(job)
+            elif job.state == "queued":
+                job.state, job.finished = "cancelled", time.monotonic()
+            return self._view(job)
 
     def close(self):
         with self.lock:
             self.closed = True
-            job = self.job
-            if self.expiry:
-                self.expiry.cancel()
-            if job and job.finished is None:
-                job.state="cancelling"
-                self._stop(job)
-        if job and job.watcher:
-            job.watcher.join()
+            for job in self.jobs.values():
+                if job.state in ("running", "cancelling"):
+                    job.state = "cancelling"
+                    self._stop(job)
+            watchers = [job.watcher for job in self.jobs.values() if job.watcher is not None and job.watcher.ident]
+        for watcher in watchers:
+            watcher.join()
         with self.lock:
-            self.job = self.expiry = None
+            self.jobs.clear()
+            if self.progress_dir is not None:
+                self.progress_dir.cleanup()
+                self.progress_dir = None

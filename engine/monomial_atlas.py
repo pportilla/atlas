@@ -22,8 +22,8 @@ import re
 from . import native_library
 from .chart_kernel import InconsistentSheets, crossings_rows, strata_rows, strata_totals
 from .fan_geometry import _determinant, complete_fan, fan_cover, split_cone
-from .polynomial import (InputError, format_poly, integer_from_decimal, integer_text,
-                         parse_expression, rational_text, sparse_row)
+from .polynomial import (InputError, encode_sparse_row, format_poly, integer_from_decimal, integer_text,
+                         parse_expression, sparse_row)
 from .strata import InvalidChart, records
 
 
@@ -31,13 +31,9 @@ def _unit(i, n):
     return tuple(int(i == j) for j in range(n))
 
 
-def _polynomial_row(terms):
-    return ";".join(rational_text(c) + " " + " ".join(map(integer_text, e)) for e, c in terms.items())
-
-
 @lru_cache(maxsize=16384)
 def _row(text, coords):
-    return _polynomial_row(parse_expression(text, coords))
+    return encode_sparse_row(parse_expression(text, coords))
 
 
 def _strict_equation(row, coords):
@@ -514,7 +510,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             if internal_surface:
                 # After removing the marked parameter these equations are
                 # defined over Q, on each of the identical geometric sheets.
-                fibre = [_polynomial_row({e: 1}) for e in monomials]
+                fibre = [encode_sparse_row({e: 1}) for e in monomials]
                 partition = [_row(g, coords[:n]) for g in region]
                 surface_charts.append((*details, tuple(dict.fromkeys([*fibre, *partition]))))
         elif complex:
@@ -525,7 +521,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         # Invertibility of the verified constant matrix gives (L*m)=(m).
         # Monomial fibre generators expose the coordinate restrictions to
         # the native crossings and Euler algorithms.
-        owned = list(dict.fromkeys([*(_polynomial_row({e + (0,)*len(marked): 1}) for e in monomials),
+        owned = list(dict.fromkeys([*(encode_sparse_row({e + (0,)*len(marked): 1}) for e in monomials),
                                     *(_row(g, coords) for g in region)]))
         crossing_ideals = ideals
         if has_strict and not named:

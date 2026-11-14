@@ -2,13 +2,10 @@
 
 const $ = (id) => document.getElementById(id);
 const form = $("resolve-form");
-let lastResult = null;
-let lastRequest = null;
-let busy = false;
-let searchJob = null;
-let searchStarting = false;
-let searchTransition = 0;
-let pollTimer = null;
+const runs = [];
+let opened = null;
+let serial = 0;
+const report = $("result");
 
 // The exceptional component picked in the graph or the table, and the parts of
 // the page that follow it. Both are reset for every new result.
@@ -548,6 +545,7 @@ function graphLayout(ids, edges) {
 }
 
 function drawGraph(vertices, cells, branches) {
+  if (!vertices.length || vertices.length > 64 || cells.length > 256) return null;
   const ids = vertices.map((v) => String(v.id));
   const record = new Map(vertices.map((v) => [String(v.id), v]));
   const valid = cells.map((cell) => (cell.vertices || []).map(String)).filter((list) => list.every((id) => record.has(id)));
@@ -750,43 +748,23 @@ function componentsOf(chart) {
   return ids;
 }
 
-function showComplex(data) {
-  const dual = data.dual_complex;
-  const panel = $("panel-complex");
-  panel.replaceChildren();
-  const vertices = dual?.vertices || [];
-  const cells = dual?.cells || [];
-  const complete = dual?.status === "complete";
-  // Without a resolution there is no complex, and the header already says why.
-  if (!complete && data.status !== "resolved") return;
-  const isGraph = cells.every((cell) => (cell.vertices || []).length <= 2);
-  panel.append(sectionHead(isGraph ? "Dual graph" : "Dual complex", dual?.convention));
-  if (!complete) {
-    panel.append(el("p", "notice", dual?.reason || "No dual complex was certified."));
-    return;
-  }
-  if (!vertices.length) {
-    panel.append(el("p", "empty", "The exceptional divisor is empty."));
-    return;
-  }
+// Some older records store the incident divisors without an explicit cell dimension.
+function cellDimension(cell) {
+  return cell.dimension ?? (cell.vertices.length - 1);
+}
 
-  const vertexIds = new Set(vertices.map((v) => String(v.id)));
-  const branches = (Array.isArray(data.branches) ? data.branches : []).filter((b) => !vertexIds.has(String(b.id)));
+function complexData(vertices, cells, charts, branches, dual) {
+  const side = el("div", "complex-data");
   const chartCount = new Map();
-  for (const chart of data.charts || []) {
+  for (const chart of charts) {
     for (const id of componentsOf(chart)) chartCount.set(id, (chartCount.get(id) || 0) + 1);
   }
 
-  const layout = el("div", "complex");
-  const figure = drawGraph(vertices, cells, branches);
-  if (figure) layout.append(figure);
-  else panel.append(el("p", "helper", "Too large to draw."));
-
-  const side = el("div", "components");
+  side.append(el("h4", "sub", "0-dimensional cells · vertices"));
   const keys = columnsOf(vertices, ["total_multiplicity", "multiplicity", "ambient_order", "self_intersection", "genus", "dimension"], ["id", "label"]);
   const countCharts = chartCount.size > 0;
   const rows = [];
-  side.append(table(["Component", ...keys.map(labelFor), ...(countCharts ? ["Charts"] : [])], vertices, (v, index, tr) => {
+  side.append(table(["Divisor", ...keys.map((key) => key === "dimension" ? "Divisor dimension" : labelFor(key)), ...(countCharts ? ["Charts"] : [])], vertices, (v, index, tr) => {
     const id = String(v.id);
     tr.dataset.id = id;
     tr.classList.toggle("selected", selected === id);
@@ -808,30 +786,91 @@ function showComplex(data) {
     }
   });
 
-  layout.append(side);
-  panel.append(layout);
+  // A geometric intersection can have several components with the same
+  // incident divisors. Preserve each cell and its own recorded face IDs.
+  const dimensions = new Map();
+  for (const cell of cells) {
+    const dimension = cellDimension(cell);
+    if (!dimensions.has(dimension)) dimensions.set(dimension, []);
+    dimensions.get(dimension).push(cell);
+  }
+  for (const [dimension, group] of [...dimensions].sort(([a], [b]) => a - b)) {
+    const extras = columnsOf(group, [], ["id", "vertices", "faces", "dimension"]);
+    const hasFaces = group.some((cell) => Array.isArray(cell.faces));
+    side.append(el("h4", "sub", dimension + "-dimensional cells"));
+    side.append(table(["Cell ID", "Intersecting divisors", ...(hasFaces ? ["Boundary faces"] : []), ...extras.map(labelFor)],
+      group, (cell) => [
+        cell.id ?? "—",
+        joined(cell.vertices.map(idNode), " ∩ "),
+        ...(hasFaces ? [cell.faces?.length ? joined(cell.faces.map(idNode), ", ") : "—"] : []),
+        ...extras.map((key) => valueNode(key, cell[key])),
+      ]));
+  }
 
   if (branches.length) {
-    const branchKeys = columnsOf(branches, ["ambient_components", "point", "chart"], ["id"]);
-    panel.append(disclosure("Branches of the strict transform (" + branches.length + ")",
-      () => table(["Branch", ...branchKeys.map((key) => key === "point" ? "At the point" : key === "chart" ? "Of chart" : labelFor(key))],
-        branches, (b) => [idNode(b.id), ...branchKeys.map((key) => valueNode(key, b[key]))], 40)));
-  }
-
-  if (cells.length) {
-    const cellKeys = columnsOf(cells, [], ["id", "vertices", "dimension"]);
-    const details = disclosure(isGraph ? "Intersections (" + cells.length + ")" : "Cells (" + cells.length + ")",
-      () => table(["Cell", "Components", "Dimension", ...cellKeys.map(labelFor)], cells, (cell, index) => {
-        const ids = (cell.vertices || []).map(String);
-        return [String(cell.id ?? index + 1), joined(ids.map(idNode), " ∩ "), String(ids.length - 1),
-          ...cellKeys.map((key) => valueNode(key, cell[key]))];
-      }));
-    panel.append(details);
-    if (!figure) details.open = true;
+    const keys = columnsOf(branches, ["ambient_components", "point", "chart"], ["id"]);
+    side.append(disclosure("Branches of the strict transform (" + branches.length + ")",
+      () => table(["Branch", ...keys.map((key) => key === "point" ? "At the point" : key === "chart" ? "Of chart" : labelFor(key))],
+        branches, (b) => [idNode(b.id), ...keys.map((key) => valueNode(key, b[key]))], 40)));
   }
   if (dual.root_definition) {
-    panel.append(disclosure("Algebraic directions", dataList(Object.entries(dual.root_definition))));
+    side.append(disclosure("Algebraic directions", dataList(Object.entries(dual.root_definition))));
   }
+  return side;
+}
+
+function showComplex(data) {
+  const dual = data.dual_complex;
+  const panel = $("panel-complex");
+  panel.replaceChildren();
+  if (!dual || (dual.status !== "complete" && dual.status !== "partial" && data.status !== "resolved")) return;
+
+  const vertices = dual.vertices || [];
+  const cells = dual.cells || [];
+  const isGraph = cells.every((cell) => cellDimension(cell) <= 1);
+  const head = sectionHead(isGraph ? "Dual graph" : "Dual complex", dual.convention);
+  head.classList.add("complex-heading");
+  panel.append(head);
+  if (dual.status !== "complete") {
+    const state = dual.status === "partial" ? "Partial complex" : "Dual complex unavailable";
+    panel.append(el("p", "notice", dual.reason ? state + ". " + dual.reason : state + "."));
+  }
+  if (!vertices.length) {
+    if (dual.status === "complete") panel.append(el("p", "empty", "The exceptional divisor is empty."));
+    return;
+  }
+
+  const vertexIds = new Set(vertices.map((v) => String(v.id)));
+  const branches = (data.branches || []).filter((b) => !vertexIds.has(String(b.id)));
+  const figure = drawGraph(vertices, cells, branches);
+  const controls = el("div", "complex-switch");
+  controls.setAttribute("role", "group");
+  controls.setAttribute("aria-label", "Dual complex view");
+  const picture = el("button", "", "Picture");
+  const records = el("button", "", "Data");
+  picture.type = records.type = "button";
+  controls.append(picture, records);
+  head.append(controls);
+
+  if (figure) panel.append(figure);
+  else {
+    picture.disabled = true;
+    panel.append(el("p", "helper", "The complex is too large to draw."));
+  }
+  let details;
+  function showData(open) {
+    if (open && !details) {
+      details = complexData(vertices, cells, data.charts || [], branches, dual);
+      panel.append(details);
+    }
+    picture.setAttribute("aria-pressed", String(!open));
+    records.setAttribute("aria-pressed", String(open));
+    if (figure) figure.hidden = open;
+    if (details) details.hidden = !open;
+  }
+  picture.addEventListener("click", () => showData(false));
+  records.addEventListener("click", () => showData(true));
+  showData(!figure);
 }
 
 /* The zeta function of the local monodromy, as the engine computes it from
@@ -1338,48 +1377,26 @@ function showComputation(data, request) {
   record.append(rawRecord("Full record", data));
 }
 
-function showResult(data, request) {
-  lastResult = data;
-  lastRequest = request;
-  previewRequested = false;
+function showResult(run) {
+  const {result, request} = run;
   selected = null;
   selectionViews.length = 0;
-  $("placeholder").hidden = true;
-  $("result").hidden = false;
-
-  const equation = $("result-equation");
-  equation.replaceChildren(typeset(request.polynomial, " = 0"));
-  equation.classList.toggle("long", request.polynomial.length > 70);
-  equation.classList.toggle("very-long", request.polynomial.length > 400);
-  document.title = request.polynomial + " · Resolution Atlas";
-
-  const status = { resolved: "Resolved", partial: "Partial result", unsupported: "Unsupported", inconclusive: "Search incomplete" }[data.status] || data.status || "Result";
-  $("status").textContent = status;
-  $("status").classList.toggle("incomplete", data.status !== "resolved");
-  $("result-mode").textContent = request.mode === "embedded" ? "embedded" : "intrinsic";
-  const facts = [];
-  if (Number.isFinite(data.elapsed_ms)) facts.push(duration(data.elapsed_ms));
-  if (data.certificate?.rank_backend) facts.push("rank on " + backendName(data.certificate.rank_backend));
-  if (data.certificate?.chart_batch?.backend) facts.push("chart transforms on " + backendName(data.certificate.chart_batch.backend));
-  $("metrics").textContent = facts.map((fact) => " · " + fact).join("");
-  // A resolved germ needs no sentence; anything else says what went wrong.
-  const summary = data.status === "resolved" ? "" : data.summary || data.reason || "";
+  run.body.append(report);
+  report.hidden = false;
+  const summary = result.status === "resolved" ? "" : result.summary || result.reason;
+  const diagnostic = result.diagnostic?.description || result.diagnostic?.fast_path_limit;
+  $("result-summary").textContent = summary || "";
   $("result-summary").hidden = !summary;
-  $("result-summary").textContent = summary;
-  const diagnostic = data.diagnostic?.description || data.diagnostic?.fast_path_limit;
-  $("result-diagnostic").hidden = !diagnostic;
   $("result-diagnostic").textContent = diagnostic || "";
-
-  showZeta(data);
-  showTopological(data);
-  showComplex(data);
-  showSteps(data);
-  showCharts(data);
-  showComputation(data, request);
+  $("result-diagnostic").hidden = !diagnostic;
+  report.querySelector(".result-head").hidden = !summary && !diagnostic;
+  showComplex(result);
+  showZeta(result);
+  showTopological(result);
+  showSteps(result);
+  showCharts(result);
+  showComputation(result, request);
   $("export").disabled = false;
-  $("announcements").textContent = status + ". " + (data.summary || "");
-  updateInput();
-  updateSearchOffer();
 }
 
 /* ---------- The input ---------- */
@@ -1405,13 +1422,12 @@ const planeExamples = {
 };
 const exampleButtons = form.querySelectorAll("[data-example]");
 let drawnExample = null;
-let previewRequested = false;
 
 function showInputGerm(request) {
   const equation = $("preview-equation");
   const coordinates = $("preview-coordinates");
   const empty = !request.polynomial;
-  $("preview-title").textContent = empty ? "Enter a germ" : "Input germ";
+  $("preview-title").textContent = empty ? "Polynomial preview" : "Polynomial";
   equation.hidden = coordinates.hidden = empty;
   if (empty) {
     $("preview-note").textContent = "Enter a polynomial or choose an example.";
@@ -1426,8 +1442,7 @@ function showInputGerm(request) {
   const names = request.variables.slice(0, 12).map((name) => name.length > 32 ? name.slice(0, 32) + "…" : name);
   if (request.variables.length > names.length) names.push("…");
   coordinates.textContent = names.length ? "Coordinates (" + names.join(", ") + ")" : "Enter the coordinate variables.";
-  $("preview-note").textContent = (truncated ? "Showing the first " + limit + " characters. " : "")
-    + "Resolve to inspect the dual complex and charts.";
+  $("preview-note").textContent = truncated ? "Showing the first " + limit + " characters." : "";
 }
 
 function updatePlate() {
@@ -1436,10 +1451,9 @@ function updatePlate() {
   const plane = request.variables.length === 2 && request.variables.includes("x") && request.variables.includes("y");
   const key = plane && Object.keys(planeExamples).find((name) => planeExamples[name].polynomial === polynomial);
   for (const button of exampleButtons) button.setAttribute("aria-pressed", String(button.dataset.example === key));
-  const available = !busy && !activeSearch();
-  const show = Boolean(key) && available && (previewRequested || !lastRequest || lastRequest.polynomial !== request.polynomial);
+  const show = Boolean(key) && !runs.length;
   $("germ-plate").hidden = !show;
-  $("plate-empty").hidden = !available || show || Boolean(lastResult) || !$("form-error").hidden;
+  $("plate-empty").hidden = show || runs.length > 0;
   if (!$("plate-empty").hidden) showInputGerm(request);
   if (!show || key === drawnExample) return;
   const curve = planeExamples[key];
@@ -1452,7 +1466,6 @@ function updatePlate() {
 }
 
 for (const button of exampleButtons) button.addEventListener("click", () => {
-  previewRequested = true;
   $("polynomial").value = planeExamples[button.dataset.example].polynomial;
   $("variables").value = "x, y";
   variablesFollow = true;
@@ -1477,8 +1490,8 @@ function getRequest() {
     variables: $("variables").value.split(/[\s,]+/).filter(Boolean),
     mode: form.elements.mode.value,
     compute: $("compute").value,
-    monodromy: $("zeta").checked,
-    ...($("exhaustive").checked ? { search: "exhaustive" } : {}),
+    zetas: zetaChoices.filter(({id}) => $(id).checked).map(({key}) => key),
+    search: $("exhaustive").checked ? "exhaustive" : "auto",
   };
 }
 function sameGerm(a, b) {
@@ -1508,13 +1521,6 @@ function fitInput() {
   input.style.height = "auto";
   input.style.height = input.scrollHeight + "px";
 }
-// The note about outdated results. It stays away while a search for exactly
-// this input is running, because then the page is already working on it.
-function updateStale() {
-  const request = getRequest();
-  $("stale").hidden = !lastResult || JSON.stringify(request) === JSON.stringify(lastRequest)
-    || (activeSearch() && sameGerm(request, searchJob.request));
-}
 function updateInput() {
   const request = getRequest();
   const strangers = [...new Set(request.polynomial.match(/[A-Za-z][A-Za-z0-9_]*/g) || [])].filter((name) => !request.variables.includes(name));
@@ -1526,8 +1532,6 @@ function updateInput() {
       + (/^[A-Za-z]{2,4}$/.test(name) ? " If it is a product, write " + [...name].join("*") + "." : "");
   }
   $("form-error").hidden = true;
-  updateStale();
-  updateSearchOffer();
   updatePlate();
 }
 
@@ -1555,320 +1559,391 @@ function setMode(mode) {
   const input = form.querySelector('input[name="mode"][value="' + mode + '"]');
   if (input) input.checked = true;
 }
-// Whether to compute the zeta function is remembered between visits.
-try {
-  if (localStorage.getItem("atlas-zeta") === "off") $("zeta").checked = false;
-} catch { /* Private browsing. */ }
-$("zeta").addEventListener("change", () => {
-  try { localStorage.setItem("atlas-zeta", $("zeta").checked ? "on" : "off"); } catch { /* Private browsing. */ }
-  updateInput();
-});
+const zetaChoices = [
+  { id: "zeta", key: "monodromy", label: "monodromy zeta function" },
+  { id: "topological", key: "topological", label: "topological zeta function" },
+];
+for (const {id} of zetaChoices) {
+  const input = $(id);
+  try {
+    const saved = localStorage.getItem("atlas-" + id);
+    if (saved !== null) input.checked = saved === "on";
+  } catch { /* Preferences are optional. */ }
+  input.addEventListener("change", () => {
+    try { localStorage.setItem("atlas-" + id, input.checked ? "on" : "off"); } catch { /* Optional. */ }
+  });
+}
 
-// The address keeps the last resolved input, so a reload or a copied link
-// comes back to the same germ.
-let ownHash = "";
 function writeAddress(request) {
   const params = new URLSearchParams({ f: request.polynomial, vars: request.variables.join(","), mode: request.mode });
-  if (request.compute !== "cpu") params.set("compute", request.compute);
-  if (!request.monodromy) params.set("zeta", "0");
+  if (request.compute && request.compute !== "cpu") params.set("compute", request.compute);
+  params.set("zetas", request.zetas.join(","));
   if (request.search === "exhaustive") params.set("search", request.search);
-  ownHash = "#" + params;
-  try { history.replaceState(null, "", ownHash); } catch { /* The page works without it. */ }
+  try { history.replaceState(null, "", "#" + params); } catch { /* Very large URLs can exceed browser limits. */ }
 }
+
 function readAddress() {
   const params = new URLSearchParams(location.hash.slice(1));
   const polynomial = params.get("f");
-  if (!polynomial) return false;
+  if (!polynomial) return null;
   $("polynomial").value = polynomial;
-  const variables = (params.get("vars") || "").split(",").filter(Boolean);
-  $("variables").value = (variables.length ? variables : detectVariables(polynomial)).join(", ");
-  if (["embedded", "intrinsic"].includes(params.get("mode"))) setMode(params.get("mode"));
-  if (["cpu", "auto", "gpu"].includes(params.get("compute"))) $("compute").value = params.get("compute");
-  $("zeta").checked = params.get("zeta") !== "0";
+  const names = (params.get("vars") || "").split(",").filter(Boolean);
+  $("variables").value = (names.length ? names : detectVariables(polynomial)).join(", ");
+  setMode(params.get("mode") === "intrinsic" ? "intrinsic" : "embedded");
+  $("compute").value = ["auto", "gpu"].includes(params.get("compute")) ? params.get("compute") : "cpu";
   $("exhaustive").checked = params.get("search") === "exhaustive";
+  const zetas = params.get("zetas");
+  for (const {id, key} of zetaChoices) {
+    $(id).checked = zetas === null ? params.get("zeta") !== "0" : zetas.split(",").includes(key);
+  }
   variablesFollow = followsPolynomial();
-  return true;
-}
-window.addEventListener("hashchange", () => {
-  if (location.hash === ownHash || !readAddress()) return;
-  fitInput();
-  updateInput();
-  resolveGerm();
-});
-
-/* ---------- Resolving ---------- */
-
-// The line shown below the form while there is no result yet.
-function waiting(text) {
-  $("placeholder-text").textContent = text;
-  $("placeholder").hidden = Boolean(lastResult) || !text;
-  updatePlate();
+  return getRequest();
 }
 
-async function resolveGerm(followResult = false) {
-  if (busy) return;
-  const request = getRequest();
-  $("form-error").hidden = true;
-  if (!request.polynomial || !request.variables.length) {
-    $("form-error").textContent = "Enter a polynomial and its variables.";
-    $("form-error").hidden = false;
-    return;
+/* ---------- Search history ---------- */
+
+const activeStates = new Set(["submitting", "queued", "running", "cancelling"]);
+
+function normalizeRequest(request) {
+  return {
+    ...request, mode: request.mode || "embedded", compute: request.compute || "cpu",
+    zetas: request.zetas || (request.monodromy ? ["monodromy", "topological"] : []),
+    search: request.search || "exhaustive",
+  };
+}
+
+async function requestJSON(url, method = "GET", body) {
+  const options = { method };
+  if (body) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = recordJSON(body);
   }
-  busy = true;
-  $("run").disabled = true;
-  $("run-label").textContent = "Resolving…";
-  const started = Date.now();
-  const clock = setInterval(() => {
-    $("run-label").textContent = "Resolving… " + Math.round((Date.now() - started) / 1000) + " s";
-  }, 1000);
-  $("announcements").textContent = "Computing the resolution.";
-  $("result").setAttribute("aria-busy", "true");
-  waiting("Computing the resolution…");
-  try {
-    const response = await fetch(request.search === "exhaustive" ? "/api/searches" : "/api/resolve", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
-    });
-    let data;
-    try { data = readRecord(await response.text()); } catch (error) {
-      if (error instanceof SyntaxError) throw new Error("The local server returned an unreadable response.");
-      throw error;
-    }
-    if (response.status === 409) {
-      // The server is busy with a search, possibly the one for this very input.
-      try {
-        const current = await searchFetch("/api/searches/current");
-        if (current.job) {
-          ++searchTransition;
-          renderSearch(current.job);
-          pollSearch();
-        }
-      } catch { /* The error below still says what happened. */ }
-      if (activeSearch() && sameGerm(request, searchJob.request)) {
-        waiting("");
-        return;
-      }
-    }
-    if (!response.ok || data.error) throw new Error(data.error || "Resolution failed (HTTP " + response.status + ").");
-    if (response.status === 202) {
-      ++searchTransition;
-      renderSearch(data);
-      pollSearch();
-      waiting("");
-      $("announcements").textContent = "An exhaustive search is running.";
-    } else {
-      showResult(data, request);
-      writeAddress(request);
-      if (followResult && sameGerm(request, getRequest()) && matchMedia("(max-width: 820px)").matches) {
-        $("result-equation").focus({ preventScroll: true });
-        $("result").scrollIntoView({ block: "start" });
-      }
-    }
-  } catch (error) {
-    $("form-error").textContent = error instanceof TypeError ? "Could not reach the local resolution server." : error.message;
-    $("form-error").hidden = false;
-    $("announcements").textContent = "The computation did not finish.";
-    waiting("");
-  } finally {
-    clearInterval(clock);
-    busy = false;
-    $("run").disabled = false;
-    $("run-label").textContent = "Resolve";
-    $("result").removeAttribute("aria-busy");
-    updateStale();
-    updateSearchOffer();
-    updatePlate();
-  }
-}
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  resolveGerm(true);
-});
-$("export").addEventListener("click", () => {
-  if (!lastResult) return;
-  const blob = new Blob([recordJSON(lastResult, 2) + "\n"], { type: "application/json" });
-  const address = URL.createObjectURL(blob);
-  const link = el("a");
-  link.href = address;
-  link.download = "resolution-atlas-" + lastRequest.mode + ".json";
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(address), 1000);
-});
-
-/* ---------- Exhaustive search, run by the server in the background ---------- */
-
-function activeSearch() {
-  return searchJob && ["running", "cancelling"].includes(searchJob.state);
-}
-
-function updateSearchOffer() {
-  const eligible = lastResult?.can_search === true && ["inconclusive", "unsupported"].includes(lastResult.status);
-  $("search-offer").hidden = !eligible || !($("stale").hidden) || activeSearch();
-  $("start-search").disabled = searchStarting || busy;
-}
-
-function elapsed(ms) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return seconds + " s";
-  return Math.floor(seconds / 60) + " min " + (seconds % 60) + " s";
-}
-
-// A finished search that was shown or dismissed does not come back when the
-// page is reloaded in the same tab.
-function forgetSearch() {
-  $("search-job").hidden = true;
-  try { sessionStorage.setItem("atlas-search-seen", searchJob.id); } catch { /* Private browsing. */ }
-}
-function searchSeen(job) {
-  try { return sessionStorage.getItem("atlas-search-seen") === job.id; } catch { return false; }
-}
-
-// Put a finished search on the page, with the form set to what was searched.
-function viewSearchResult() {
-  if (!searchJob?.result) return;
-  const request = { compute: "cpu", mode: "embedded", ...searchJob.request };
-  $("polynomial").value = request.polynomial;
-  $("variables").value = request.variables.join(", ");
-  setMode(request.mode);
-  $("compute").value = request.compute || "cpu";
-  $("zeta").checked = request.monodromy === true;
-  $("exhaustive").checked = true;
-  variablesFollow = followsPolynomial();
-  fitInput();
-  showResult(searchJob.result, getRequest());
-  writeAddress(getRequest());
-  forgetSearch();
-}
-
-function renderSearch(job) {
-  const wasActive = activeSearch();
-  searchJob = job;
-  $("search-job").hidden = !job;
-  updateStale();
-  updateSearchOffer();
-  updatePlate();
-  if (!job) return;
-  const states = { running: "Searching for a verified resolution", cancelling: "Cancelling search",
-    completed: "Search complete", failed: "Search stopped", cancelled: "Search cancelled" };
-  const title = states[job.state] || job.state;
-  if ($("search-job-state").textContent !== title) $("search-job-state").textContent = title;
-  if (job.error) $("search-job-description").textContent = job.error;
-  else {
-    $("search-job-description").replaceChildren(typeset(job.request.polynomial),
-      " · " + (job.request.mode || "embedded") + " · " + elapsed(job.elapsed_ms));
-  }
-  $("search-spinner").classList.toggle("idle", !activeSearch());
-  $("cancel-search").hidden = !activeSearch();
-  $("cancel-search").disabled = job.state === "cancelling";
-  $("view-search").hidden = job.state !== "completed" || !job.result;
-  $("dismiss-search").hidden = activeSearch();
-  // A search that finishes while this page waits for it, for the input still
-  // in the form, is shown at once. Otherwise the result waits behind a button.
-  if (wasActive && job.state === "completed" && job.result && !busy && sameGerm(getRequest(), job.request)) {
-    viewSearchResult();
-    $("announcements").textContent = "Search complete. " + (job.result.summary || "");
-  }
-}
-
-async function searchFetch(url, options) {
   const response = await fetch(url, options);
   const data = readRecord(await response.text());
   if (!response.ok) {
-    const error = new Error(data.error || "Search request failed.");
+    const error = new Error(data.error || "Request failed (HTTP " + response.status + ").");
     error.status = response.status;
     throw error;
   }
   return data;
 }
 
-function pollSearch(delay = 1200) {
-  clearTimeout(pollTimer);
-  if (!activeSearch()) return;
-  const id = searchJob.id, token = searchTransition;
-  pollTimer = setTimeout(async () => {
+function action(label, callback) {
+  const button = el("button", "button", label);
+  button.type = "button";
+  button.addEventListener("click", callback);
+  return button;
+}
+
+function stateLabel(run) {
+  if (run.pendingZeta) return "Computing zeta";
+  if (run.result) return ({
+    resolved: "Resolved", inconclusive: "Inconclusive", partial: "Partial", unsupported: "Unsupported",
+  })[run.result.status] || "Finished";
+  return ({
+    submitting: "Starting", queued: "Queued", running: "Searching", cancelling: "Cancelling",
+    cancelled: "Cancelled", failed: "Failed",
+  })[run.state] || run.state;
+}
+
+function makeRun(request, restored = false) {
+  const node = el("article", "resolution-run");
+  const heading = el("h2", "run-heading");
+  const toggle = el("button", "run-toggle");
+  toggle.type = "button";
+  const equation = el("span", "run-equation");
+  const source = request.polynomial;
+  equation.append(source.length <= 180 ? typeset(source, " = 0") : source.slice(0, 180) + "…");
+  const mode = el("span", "run-mode", request.mode);
+  const status = el("span", "run-status");
+  const body = el("div", "run-body");
+  body.id = "run-body-" + (++serial);
+  body.hidden = true;
+  toggle.setAttribute("aria-controls", body.id);
+  toggle.setAttribute("aria-expanded", "false");
+  const arrow = el("span", "run-chevron");
+  arrow.setAttribute("aria-hidden", "true");
+  toggle.append(arrow, equation, mode, status);
+  heading.append(toggle);
+  const message = el("p", "run-message");
+  message.setAttribute("role", "status");
+  const controls = el("div", "run-actions");
+  const progress = el("div", "run-progress");
+  const stage = el("p", "run-stage");
+  const blowups = el("span", "run-blowups");
+  const elapsed = el("span", "run-elapsed");
+  progress.append(stage, blowups, elapsed);
+  body.append(message, progress, controls);
+  node.append(heading, body);
+  const run = {request, node, toggle, body, message, controls, status, progress, stage, blowups, elapsed, state: "submitting",
+               pendingZeta: null, warning: "", connectionWarning: "", timer: null};
+  if (restored) {
+    $("runs").append(node);
+    runs.push(run);
+  } else {
+    $("runs").prepend(node);
+    runs.unshift(run);
+  }
+  toggle.addEventListener("click", () => openRun(opened === run ? null : run));
+  refreshRun(run);
+  updatePlate();
+  return run;
+}
+
+function openRun(run) {
+  if (opened) {
+    opened.toggle.setAttribute("aria-expanded", "false");
+    opened.body.hidden = true;
+    report.hidden = true;
+  }
+  opened = run;
+  if (!run) return;
+  run.toggle.setAttribute("aria-expanded", "true");
+  run.body.hidden = false;
+  writeAddress(run.request);
+  refreshRun(run);
+  if (run.result) showResult(run);
+}
+
+function matchingMode(run, mode) {
+  return runs.find(other => sameGerm(other.request, {...run.request, mode})
+    && (activeStates.has(other.state) || other.result?.status === "resolved"));
+}
+
+function refreshRun(run) {
+  run.node.dataset.state = run.state;
+  run.status.textContent = stateLabel(run);
+  const active = activeStates.has(run.state);
+  const wasFocused = document.activeElement?.parentNode === run.controls ? document.activeElement.textContent : null;
+  run.controls.replaceChildren();
+  let message = run.error || run.warning || run.connectionWarning;
+  if (!message && active) message = run.state === "queued" ? "Waiting for a computation slot."
+    : run.state === "cancelling" ? "Cancelling this search…" : "Searching for a verified resolution…";
+  if (!message && run.pendingZeta) message = "Computing " + run.pendingZeta + " zeta from the saved resolution…";
+  run.message.textContent = message || "";
+  run.message.hidden = !message;
+  updateProgress(run);
+  if (active && run.id) {
+    const cancel = action("Cancel search", () => cancelRun(run));
+    cancel.disabled = run.state === "cancelling";
+    run.controls.append(cancel);
+  }
+  if (run.result?.status === "resolved") {
+    for (const {key, label} of zetaChoices) {
+      if (run.result[key + "_zeta"]?.status === "computed") continue;
+      const button = action("Compute " + label, () => computeZeta(run, key));
+      button.disabled = Boolean(run.pendingZeta);
+      run.controls.append(button);
+    }
+    const mode = run.request.mode === "embedded" ? "intrinsic" : "embedded";
+    const other = matchingMode(run, mode);
+    run.controls.append(action((other ? "View " : "Compute ") + mode + " resolution", () => {
+      if (other) {
+        openRun(other);
+        other.toggle.focus();
+      } else submitRun({...run.request, mode});
+    }));
+  } else if (run.result?.can_search && run.request.search !== "exhaustive") {
+    run.controls.append(action("Start exhaustive search", () => submitRun({...run.request, search: "exhaustive"})));
+  } else if (["failed", "cancelled"].includes(run.state)) {
+    run.controls.append(action("Retry resolution", () => submitRun(run.request)));
+  }
+  run.controls.hidden = !run.controls.childElementCount;
+  if (wasFocused) {
+    const current = [...run.controls.children].find(button => button.textContent === wasFocused && !button.disabled);
+    (current || run.toggle).focus({preventScroll: true});
+  }
+}
+
+function updateProgress(run) {
+  run.progress.hidden = !run.id || !activeStates.has(run.state);
+  if (run.progress.hidden) return;
+  const stage = run.progressData?.stage;
+  const method = {origin: "Smooth-centre search", certificates: "Certificate search", newton: "Newton search"}[run.progressData?.method];
+  run.stage.textContent = stage && method ? method + " · " + stage : stage || "";
+  run.stage.hidden = !stage || run.state === "queued";
+  const count = run.progressData?.blowups;
+  run.blowups.hidden = run.state === "queued";
+  run.blowups.textContent = count == null ? "Blow-up count pending" : plural(count, "blowup", "blowups") + (method ? " in this attempt" : " so far");
+  run.elapsed.hidden = !Number.isFinite(run.elapsedMs);
+  const seconds = Math.floor(run.elapsedMs / 1000);
+  const elapsed = seconds >= 60 ? Math.floor(seconds / 60) + " min " + seconds % 60 + " s" : seconds + " s";
+  run.elapsed.textContent = run.elapsed.hidden ? "" : "Elapsed " + elapsed;
+}
+
+function updateJob(run, job) {
+  clearTimeout(run.timer);
+  run.id = job.id;
+  const previous = run.state;
+  run.state = job.state;
+  run.error = job.error || "";
+  run.progressData = job.progress;
+  run.elapsedMs = job.elapsed_ms;
+  run.connectionWarning = "";
+  if (job.result) run.result = job.result;
+  if (job.request) run.request = normalizeRequest(job.request);
+  // Avoid replacing a focused cancel control on every poll.
+  if (run.state !== previous || run.error || !run.controls.childElementCount || run.message.textContent.startsWith("Reconnecting")) {
+    refreshRun(run);
+  } else updateProgress(run);
+  if (run === opened && run.result) showResult(run);
+  if (activeStates.has(run.state)) schedulePoll(run);
+  else if (previous !== run.state) {
+    $("announcements").textContent = stateLabel(run) + ": " + run.request.polynomial.slice(0, 100);
+    if (opened && opened !== run) refreshRun(opened);
+  }
+}
+
+function schedulePoll(run, delay = 850) {
+  clearTimeout(run.timer);
+  run.timer = setTimeout(async () => {
+    const version = run.version;
     try {
-      const job = await searchFetch("/api/searches/" + id);
-      if (token !== searchTransition) return;
-      renderSearch(job);
-      pollSearch();
+      const job = await requestJSON("/api/searches/" + run.id);
+      if (version === run.version) updateJob(run, job);
     } catch (error) {
-      if (token !== searchTransition) return;
+      if (version !== run.version) return;
       if (error.status === 404 || error.name === "ExactIntegerError") {
-        renderSearch({ ...searchJob, state: "failed", error: error.message });
-        return;
+        run.state = "failed";
+        run.error = error.message;
+        refreshRun(run);
+        if (opened && opened !== run) refreshRun(opened);
+      } else {
+        run.connectionWarning = "Reconnecting to the search server…";
+        refreshRun(run);
+        schedulePoll(run, 3000);
       }
-      $("search-job-state").textContent = "Waiting for the local search server";
-      pollSearch(3500);
     }
   }, delay);
 }
 
-$("start-search").addEventListener("click", async () => {
-  if (searchStarting || busy || activeSearch() || !lastResult?.can_search) return;
-  searchStarting = true;
-  const token = ++searchTransition;
-  updateSearchOffer();
+async function cancelRun(run) {
+  clearTimeout(run.timer);
+  run.version = (run.version || 0) + 1;
+  run.state = "cancelling";
+  refreshRun(run);
   try {
-    const job = await searchFetch("/api/searches", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lastRequest),
-    });
-    if (token !== searchTransition) return;
-    renderSearch(job);
-    pollSearch();
+    updateJob(run, await requestJSON("/api/searches/" + run.id, "DELETE"));
   } catch (error) {
-    if (error.status === 409) {
-      try {
-        const data = await searchFetch("/api/searches/current");
-        if (data.job) { renderSearch(data.job); pollSearch(); }
-      } catch { /* Keep the original error from the start request. */ }
-    }
-    $("form-error").textContent = error.message;
-    $("form-error").hidden = false;
-  } finally {
-    searchStarting = false;
-    updateSearchOffer();
+    run.warning = error.message;
+    schedulePoll(run);
+    refreshRun(run);
   }
-});
-
-$("cancel-search").addEventListener("click", async () => {
-  if (!activeSearch()) return;
-  ++searchTransition;
-  clearTimeout(pollTimer);
-  $("cancel-search").disabled = true;
-  try {
-    renderSearch(await searchFetch("/api/searches/" + searchJob.id, { method: "DELETE" }));
-  } catch (error) {
-    $("search-job-description").textContent = error.message;
-    $("cancel-search").disabled = false;
-  }
-  pollSearch();
-});
-
-$("view-search").addEventListener("click", () => {
-  if (!searchJob?.result) return;
-  viewSearchResult();
-  $("result").scrollIntoView({ block: "start" });
-});
-
-$("dismiss-search").addEventListener("click", () => {
-  if (searchJob && !activeSearch()) forgetSearch();
-});
-
-async function restoreSearch() {
-  const token = searchTransition;
-  try {
-    const data = await searchFetch("/api/searches/current");
-    // A search cancelled before this page was opened is not worth a banner.
-    if (token === searchTransition && data.job && !searchSeen(data.job) && data.job.state !== "cancelled") {
-      renderSearch(data.job);
-      pollSearch();
-    }
-  } catch { /* Quick local calculations remain available. */ }
 }
 
-const addressed = readAddress();
-fitInput();
-updateInput();
-if (addressed) resolveGerm();
-restoreSearch();
+async function computeZeta(run, key) {
+  if (run.pendingZeta || !run.result) return;
+  run.pendingZeta = key;
+  run.warning = "";
+  refreshRun(run);
+  const zetas = [key];
+  try {
+    let fields;
+    try {
+      const job = await requestJSON("/api/searches/" + run.id + "/zetas", "POST", {zetas});
+      fields = job.result;
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      fields = await requestJSON("/api/zetas", "POST", {record: run.result, zetas});
+    }
+    Object.assign(run.result, fields);
+    if (opened === run) {
+      showZeta(run.result);
+      showTopological(run.result);
+      showComputation(run.result, run.request);
+    }
+  } catch (error) { run.warning = error.message; }
+  finally {
+    run.pendingZeta = null;
+    refreshRun(run);
+  }
+}
+
+async function submitRun(request) {
+  if (!request.polynomial || !request.variables.length) {
+    $("form-error").textContent = "Enter a polynomial and its variables.";
+    $("form-error").hidden = false;
+    return;
+  }
+  const run = makeRun(request);
+  openRun(run);
+  $("announcements").textContent = "Searching for a verified resolution.";
+  try {
+    const job = await requestJSON("/api/searches", "POST", request);
+    // A list response can already contain this submission before its POST
+    // reaches the browser. Keep the original row, its order and open state.
+    const duplicate = runs.find(other => other !== run && other.id === job.id);
+    if (duplicate) {
+      clearTimeout(duplicate.timer);
+      duplicate.version = (duplicate.version || 0) + 1;
+      runs.splice(runs.indexOf(duplicate), 1);
+      duplicate.node.remove();
+      if (opened === duplicate) openRun(run);
+    }
+    updateJob(run, job);
+  } catch (error) {
+    run.state = "failed";
+    run.error = error.message;
+    refreshRun(run);
+    if (opened && opened !== run) refreshRun(opened);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitRun(getRequest());
+  if (matchMedia("(max-width: 820px)").matches && opened) {
+    opened.toggle.focus({preventScroll: true});
+    opened.node.scrollIntoView({block: "start"});
+  }
+});
+
+$("export").addEventListener("click", () => {
+  if (!opened?.result) return;
+  const blob = new Blob([recordJSON(opened.result, 2) + "\n"], {type: "application/json"});
+  const address = URL.createObjectURL(blob);
+  const link = el("a");
+  link.href = address;
+  link.download = "resolution-atlas-" + opened.request.mode + ".json";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(address), 1000);
+});
+
+function addressedRun(request) {
+  return runs.find(run => sameGerm(run.request, request) && run.request.compute === request.compute
+    && run.request.search === request.search && run.request.zetas.join() === request.zetas.join());
+}
+function followAddress(request) {
+  const found = addressedRun(request);
+  if (found) openRun(found);
+  else submitRun(request);
+}
+window.addEventListener("hashchange", () => {
+  const request = readAddress();
+  if (request) {
+    fitInput();
+    updateInput();
+    followAddress(request);
+  }
+});
+
+async function restoreRuns() {
+  const addressed = readAddress();
+  fitInput();
+  updateInput();
+  const originalHash = location.hash;
+  try {
+    const {jobs} = await requestJSON("/api/searches");
+    // A submit can race the initial list request. Rows submitted in this tab stay first.
+    for (const job of jobs) {
+      if (runs.some(run => run.id === job.id)) continue;
+      updateJob(makeRun(normalizeRequest(job.request), true), job);
+    }
+  } catch { /* A local server can still accept a new submission. */ }
+  if (opened || location.hash !== originalHash) return;
+  if (addressed) followAddress(addressed);
+  else if (runs.length) openRun(runs[0]);
+}
+restoreRuns();

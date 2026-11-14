@@ -12,7 +12,12 @@ for its arguments and an example.
 atlas> x, y = coordinates("x", "y")
 atlas> f = y^2 - x^3
 atlas> R = resolve(f)
-atlas> R.divisors
+atlas> R.polynomial == f
+True
+atlas> R.dual_complex
+Dual complex (embedded, complete): 3 vertices, 2 edges
+  E1 — E3, E2 — E3
+atlas> R.dual_complex.vertices
 [E1, E2, E3]
 atlas> E = R.branches[0].meets[0]
 atlas> E.charts
@@ -34,6 +39,15 @@ default. The same divisor has local equation `v` in chart `B3.v`. Use
 the original variables. To read a polynomial from text in the chart, use
 `polynomial("v-1", variables=C.coordinates)`. For a divisor defined by several
 equations, `E.ideal_in(C)` gives its generators.
+
+`R.polynomial` is a polynomial in the original coordinate ring. The serialized
+equation text is available as `R.record.polynomial`. Each recorded vertex in
+`R.dual_complex.vertices` is one of `R.divisors`. The strict transform meets
+`E3`, as shown by `R.branches[0].meets`. Type `help R.dual_complex` for the
+geometric convention. To rebuild the incidence from the charts, use
+`D = recompute_dual_complex(R)` and inspect `D.cells`. The result has its own
+vertex records. The old `dual_complex(R)` spelling returns the raw replay
+dictionary for existing scripts.
 
 ## Run or save a calculation
 

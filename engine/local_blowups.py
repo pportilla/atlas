@@ -37,6 +37,7 @@ space, which gives Euler characteristics by addition.
 from dataclasses import dataclass, field, replace
 from itertools import combinations, count, islice, product
 from time import monotonic
+from .resolution_progress import report
 
 from .chart_expressions import chart_expressions
 from .binomial_kernel import exceptional_data, minimum_faces, separating_forms
@@ -938,6 +939,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
     centres, known = [], {}
     stages = count(1) if budget is None and isinstance(rule, _Canonical) else range(1, rule.stages + 1)
     for stage in stages:
+        report(f"Checking charts for normal crossings ({rule.name} method)", len(centres))
         if deadline is not None and monotonic() > deadline:
             raise GiveUp("The time allowed for the blowups is over.")
         retains = getattr(rule, "retains", False)
@@ -953,6 +955,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
                         for chart in current]
             if not any(inside for _, inside in failures):
                 return (*(_strata(current) if count_strata else ({}, {})), current, centres)
+        report(f"Searching for the next centre ({rule.name} method)", len(centres))
         chosen, detail = rule.choose(current, failures, dimension, deadline)
         if all(centre is None for centre in chosen):
             raise GiveUp("No centre was found.")
@@ -994,6 +997,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             return charts
 
         try:
+            report(f"Blowing up centre {label} ({rule.name} method)", len(centres))
             following = blown(chosen)
         except Uneven:
             # Unlike parts: for curves, those inside a divisor that does not contain the

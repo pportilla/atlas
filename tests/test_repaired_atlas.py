@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+import subprocess
 import unittest
 
 import sympy as sp
@@ -14,6 +16,47 @@ from engine.resolve import resolve
 
 
 class RepairedNewtonAtlas(unittest.TestCase):
+    def test_intrinsic_nonisolated_quartic_has_two_chains_of_seven(self):
+        cli = Path(__file__).resolve().parents[1] / "atlas"
+        record = json.loads(subprocess.check_output(
+            [cli, "resolve", "x^4-x^2+y^2*z^2", "--vars", "x,y,z", "--mode", "intrinsic", "--json"],
+            text=True, timeout=120))
+        self.assertEqual(record["status"], "resolved")
+        graph = record.pop("dual_complex")
+        self.assertEqual(graph["status"], "complete", graph.get("reason"))
+        # The two smooth local sheets yz = ±x sqrt(1-x²) have separate chains.
+        adjacency = {v["id"]: set() for v in graph["vertices"]}
+        self.assertEqual(len(adjacency), 14)
+        self.assertEqual(len(graph["vertices"]), 14)
+        self.assertEqual(len(graph["cells"]), 12)
+        for edge in graph["cells"]:
+            self.assertEqual(edge["dimension"], 1)
+            a, b = edge["vertices"]
+            self.assertCountEqual(edge["faces"], (a, b))
+            self.assertNotEqual(a, b)
+            self.assertNotIn(b, adjacency[a])
+            adjacency[a].add(b)
+            adjacency[b].add(a)
+
+        # The terminal chart divisors contain both punctured base axes.
+        # Each of the four axis-sheets therefore carries both local names.
+        tips = {v["id"] for v in graph["vertices"] if set(v.get("ambient_components", ())) == {"P1.B3","P2.B3"}}
+        self.assertEqual(tips, {v for v, neighbours in adjacency.items() if len(neighbours) == 1})
+        remaining = set(adjacency)
+        while remaining:
+            component = {remaining.pop()}
+            pending = list(component)
+            while pending:
+                neighbours = adjacency[pending.pop()] & remaining
+                remaining.difference_update(neighbours)
+                component.update(neighbours)
+                pending.extend(neighbours)
+            self.assertEqual(sorted(len(adjacency[v]) for v in component), [1, 1, 2, 2, 2, 2, 2])
+
+        replay = subprocess.check_output([cli, "dual-complex", "-"], input=json.dumps(record),
+                                         text=True, timeout=120)
+        self.assertEqual(json.loads(replay), graph)
+
     def test_repaired_cycle_over_conjugate_centres_in_a_product(self):
         from collections import Counter
         from engine.native_library import _MODE

@@ -10,6 +10,7 @@ import tokenize
 from .native_polynomial import scalar_arithmetic
 from .session_polynomial import Polynomial
 from .session_quotient import QuotientElement
+from .session_values import Divisor, DualComplex
 
 
 _EVALUATION_ERRORS = (ValueError, TypeError, KeyError, IndexError, AttributeError,
@@ -181,6 +182,9 @@ class Evaluator:
             return _field(self._value(node.value), node.attr)
         if isinstance(node, ast.Subscript):
             value, index = self._value(node.value), self._value(node.slice)
+            # Scripts can keep indexing the original complex and vertex records.
+            if isinstance(value, (DualComplex, Divisor)):
+                value = value._record
             if isinstance(value, dict):
                 if index not in value:
                     raise ValueError(f"This record has no key {index!r}.")

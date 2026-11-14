@@ -13,6 +13,14 @@ def _timed_out(data, timeout):
     return 200, inconclusive(data, {'description':f'The quick worker reached its {timeout:g}-second wall-clock limit.'},1000*timeout)
 
 
+def needs_exhaustive_search(request, status, result):
+    from .resolution_zetas import selected_zetas
+    if status == 422:
+        return result.get("code") == "computation_limit"
+    return status == 200 and (result.get("status") == "inconclusive" or any(
+        result.get(kind + "_zeta", {}).get("status") == "unavailable" for kind in selected_zetas(request)))
+
+
 def _stopped():
     return 422, {'error':'Worker stopped before it produced a certified result.'}
 

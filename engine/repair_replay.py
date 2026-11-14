@@ -80,23 +80,34 @@ def _lift_charts(charts, group):
 
 @lru_cache(maxsize=128)
 def _restore(charts):
-    # New charts already carry the maps. A finite marked chart, an ordinary
-    # plane blowup, or a single unmarked cover does not imply a Newton repair.
-    if not any(c.removed for c in charts) or any(c.point_blowup or c.coefficient_field for c in charts):
-        return charts
+    # A marked cover and the ordered charts of a plane point blowup have
+    # their own verification. One marked chart cannot vouch for a fan
+    # with deleted centres, even if its repair children were all lost.
+    known_parents = {c.repair_projection[0] for c in charts if c.repair_projection}
+    if not known_parents:
+        if not any(c.removed for c in charts):
+            return charts
+        if not any(c.torus for c in charts):
+            if all(c.coefficient_field for c in charts) or all(
+                    c.point_blowup and len(c.coordinates) == 2 for c in charts):
+                return charts
     # The old ordered plane blowup atlas stores only owners on its fibre,
     # including on the first chart. A complete Newton parent fan has an
     # owner of its dense torus. It is unchanged off the origin.
     if (not any(c.torus or c.repair_projection for c in charts)
             and all(c.region and radical_subset(c.variables, c.fibre, (*c.ambient, *c.region)) for c in charts)):
         return charts
-    known_parents = {c.repair_projection[0] for c in charts if c.repair_projection}
     ordinary = [i for i,c in enumerate(charts) if not c.repair_projection]
-    if all(charts[i].torus or i in known_parents for i in ordinary):
-        return charts if all(not charts[i].removed or i in known_parents for i in ordinary) else None
     product = _product_maps(charts)
     if product is not None:
         return product
+    if all(charts[i].torus or i in known_parents for i in ordinary):
+        # A declared parent index establishes neither the geometric map nor
+        # coverage. A single owner may have several deleted centres, and
+        # every projective pivot above each centre must be accounted for.
+        if not certified_parent_cover(charts[i] for i in ordinary):
+            return None
+        return _lift_charts(charts, ordinary)
 
     # Monomial exponent columns recover each candidate regular fan, even
     # when the record omitted the lattice metadata or changed chart order.
@@ -133,6 +144,13 @@ def _restore(charts):
         # with patches owned entirely over the origin still needs that
         # proof before counts alone can imply a complete complex.
         outside = [charts[i] for i in ordinary if i not in group]
+        if not outside:
+            # Only parent cones remain. A finite centre deleted from its
+            # owned origin fibre still requires charts above that centre.
+            if any(_dimension(c.variables, hole) == 0 and
+                   radical_subset(c.variables, (*c.region, *c.fibre), hole)
+                   for c in charts for hole in c.removed):
+                return None
         if (len(group) > 1 and outside and all(c.region and radical_subset(
                 c.variables, c.fibre, (*c.ambient, *c.region)) for c in outside)):
             return None

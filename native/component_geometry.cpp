@@ -1,5 +1,6 @@
 // Sparse geometric factor certificates and the ordered projection schedule.
 #include "rational_sparse_json.hpp"
+#include "primary_decomposition.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -223,6 +224,8 @@ Json::Value homogenize_fraction(const Json::Value& q) {
 
 Json::Value run(const Json::Value& q) {
     const auto op = q["operation"].asString();
+    if (op == "prepare_overlap") return primary::prepare_overlap(q);
+    if (op == "generic_overlap") return primary::generic_overlap(q);
     if (op == "homogenize_fraction") return homogenize_fraction(q);
     if (op == "factor_conditions") return factor_conditions(q);
     if (op == "projection") return projection(q["width"].asUInt(), Z(q["index"].asString(), 10));

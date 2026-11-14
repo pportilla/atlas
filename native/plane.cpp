@@ -11,6 +11,8 @@
 #include <json/json.h>
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -18,6 +20,7 @@
 #include <stdexcept>
 #include <vector>
 #include <sys/resource.h>
+#include <unistd.h>
 using namespace std;
 using J = Json::Value;
 using Exp = slong;
@@ -27,6 +30,20 @@ using Fail = runtime_error;
 // This worker handles exactly one request. Quick mode retains the original
 // exploration bounds; both modes check the actual exponent representation.
 bool quick = true;
+
+// The server reads a separate snapshot while stdout remains the resolution JSON.
+void report_blowups(const char* stage, unsigned completed) {
+    const char* path = std::getenv("ATLAS_PROGRESS_FILE");
+    if (!path || !*path) return;
+    const string temporary = string(path) + "." + to_string(getpid());
+    FILE* output = std::fopen(temporary.c_str(), "w");
+    if (!output) return;
+    const int written = std::fprintf(output, "{\"stage\":\"%s\",\"blowups\":%u}\n", stage, completed);
+    const int closed = std::fclose(output);
+    if (written < 0 || closed != 0 || std::rename(temporary.c_str(), path) != 0)
+        std::remove(temporary.c_str());
+}
+
 Exp add_powers(Exp a, Exp b) {
     if (a<0 || b<0 || a>numeric_limits<Exp>::max()-b)
         throw Fail("Plane exponent or multiplicity exceeds a signed FLINT word.");
@@ -327,6 +344,7 @@ struct Resolver {
         Factors factors;
     };
     void visit(Task& task,vector<Task>& todo) {
+        report_blowups("Blowing up a point", steps.size());
         auto& [f,base,ax,parent,center,domain,ancestors]=task;
         Exp m=order(f);
         if(quick && steps.size()>=192) throw Fail("Point-blowup limit (192) reached.");
@@ -370,6 +388,7 @@ struct Resolver {
                 }
             }
         }
+        report_blowups("Checking the exceptional fibre for the next centre", steps.size());
         struct Child {int i; Num a; Poly f; Axes ax; Coord pt;};
         vector<Child> pending;
         auto scan=[&](int i,const Num& a,bool simple){
@@ -434,6 +453,7 @@ struct Resolver {
         }
     }
     J run(const Poly& f){
+        report_blowups("Checking the plane curve", 0);
         if(!reduced_at_origin(f)) throw invalid_argument("The plane curve germ is nonreduced: a repeated factor vanishes at the origin.");
         if(order(f)==1) throw Fail("Expected a singular plane curve.");
         Pair identity={Poly{{{1,0},Num(1)}},Poly{{{0,1},Num(1)}}};
@@ -444,6 +464,7 @@ struct Resolver {
             todo.pop_back();
             visit(task,todo);
         }
+        report_blowups("Recording exceptional components", steps.size());
         J d;d["status"]="complete";d["vertices"]=arr();d["cells"]=arr();
         if(embedded) {
             d["convention"]="Ambient exceptional curves over the origin, over the algebraic closure of Q.";

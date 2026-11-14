@@ -96,6 +96,7 @@ class CliSessionTests(unittest.TestCase):
             branch = R.branches[0]
             E = branch.meets[0]
             print(R.status, len(R.divisors), len(R.charts))
+            print(R.polynomial == f, R.polynomial + x^3 == y^2, R.record.polynomial == "-x^3+y^2")
             print(E.id, E.self_intersection, E.total_multiplicity)
             u, v = branch.chart.coordinates
             print(branch.chart.id, branch.chart.strict_transform == v-1)
@@ -106,7 +107,7 @@ class CliSessionTests(unittest.TestCase):
         """)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), [
-            "resolved 3 6", "E3 -1 6", "B3.u True", "B3.u u 6 1", "B3.v v 6 1",
+            "resolved 3 6", "True True True", "E3 -1 6", "B3.u True", "B3.u u 6 1", "B3.v v 6 1",
         ])
 
     def test_prompt_computes_cusp_multiplicity_from_the_pulled_back_equation(self):
@@ -117,7 +118,7 @@ class CliSessionTests(unittest.TestCase):
             E = R.divisor("E3")
             C = R.branches[0].chart
             u, v = C.coordinates
-            total = C.pullback(f)
+            total = C.pullback(R.polynomial)
             total == u^6 * v^3 * C.strict_transform
             total == C.ambient_total_transform
             total.multiplicity(E.equation_in(C))
@@ -204,10 +205,27 @@ class CliSessionTests(unittest.TestCase):
             a, b = R.coordinates
             C = R.chart("B1.u")
             u, v = C.coordinates
-            print(a == u, C.pullback(b^2-a^3) == u^2*(v^2-u))
+            print(a == u, R.polynomial == b^2-a^3, C.pullback(R.polynomial) == u^2*(v^2-u))
         """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["False True"])
+        self.assertEqual(result.stdout.splitlines(), ["False True True"])
+
+    def test_archived_source_equation_retains_the_whole_ring_and_large_exponents(self):
+        from engine.session_values import Resolution
+
+        degree = 2**80
+        coefficient = 2**140 + 17
+        record = {"variables": ["x", "y"], "polynomial": f"{coefficient}*x^{degree}/3",
+                  "charts": [], "dual_complex": {"vertices": [], "cells": [], "status": "complete"},
+                  "mode": "embedded"}
+        restored = Resolution(record)
+        x, y = restored.coordinates
+        self.assertEqual(restored.polynomial + y, coefficient * x**degree / 3 + y)
+        foreign_x, _ = coordinates("x", "y")
+        self.assertNotEqual(restored.polynomial, coefficient * foreign_x**degree / 3)
+        self.assertIs(restored.polynomial, restored.polynomial)
+        restored.record["variables"].clear()
+        self.assertEqual(restored.record["variables"], ["x", "y"])
 
     def test_algebraic_center_pullback_reduces_coefficients_in_their_number_field(self):
         result = run_script("""

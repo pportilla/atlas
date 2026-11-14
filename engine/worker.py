@@ -6,14 +6,18 @@ from .resolve import resolve
 from .polynomial import InputError, LimitError
 
 
-def _response(read_request):
+def _response(read_request, *, replay=False):
     """Use the same resolution and exception mapping on the API and CLI."""
     try:
         request = read_request()
         if isinstance(request,dict) and request.get("search","exhaustive")=="exhaustive" and hasattr(sys,"set_int_max_str_digits"):
             # Generated number-field certificates may need larger exact integers.
             sys.set_int_max_str_digits(0)
-        data = resolve(request)
+        if replay:
+            from .resolution_zetas import replay_zetas
+            data = replay_zetas(request)
+        else:
+            data = resolve(request)
         status = 200
     except InputError as exc:
         data, status = {'error':str(exc)}, 400
@@ -35,7 +39,9 @@ def evaluate(request):
 
 
 def main():
-    print(json.dumps(_response(lambda: json.load(sys.stdin)), separators=(',',':')))
+    from .polynomial import integer_from_decimal
+    print(json.dumps(_response(lambda: json.load(sys.stdin, parse_int=integer_from_decimal),
+                               replay=sys.argv[1:] == ['--zetas']), separators=(',',':')))
 
 
 if __name__=='__main__':

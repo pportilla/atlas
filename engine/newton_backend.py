@@ -292,9 +292,9 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
                          f"{points} point{'s' if points!=1 else ''} where a face is degenerate.")
     proof = result['certificate']
     proof['method'] = 'regular Newton fan, exact torus Jacobian tests, and blowups certified by ideal calculations'
-    proof['description'] = ('The map is an isomorphism off the origin and every maximal cone has lattice determinant one. '
-        'Some compact face is degenerate: on the fiber over the origin the total transform has normal crossings except at the listed points, '
-        'which are blown up until it has. Normal crossings are verified in every final chart.')
+    proof['description'] = ('The initial Newton modification is an isomorphism off the origin and every maximal cone '
+        'has lattice determinant one. The repair steps list the centres blown up over the degenerate faces. '
+        'The final charts verify normal crossings on the owned fibre over the origin.')
     if CHECK:
         proof['numerical_data'], proof['strata'] = records(repair)
     return result

@@ -1,15 +1,14 @@
 """Glue geometric intersection components on overlaps of rational affine charts.
 
-On two affine opens of a separated resolution the diagonal is closed in
-their product. Off the exceptional divisors it is cut out by equality of
-the original coordinates, since the modification is an isomorphism there.
-Its closure, obtained by saturation, therefore cuts out the entire overlap.
-A single nonzero equation from each exceptional ideal suffices: inverting
-their product removes every exceptional divisor and retains a dense open.
-The diagonal of the overlap is irreducible whenever nonempty on one marked
-embedding. For a chart with centres removed, intersect this closed diagonal
-with the complement of all removed centres on both sides before using it.
-An irreducible piece supported entirely in a deleted centre never appears.
+Equal original coordinates give the transition graph off the exceptional
+divisors. Saturating by one nonzero equation from each exceptional ideal
+closes that graph in the chart product. Its closure in the supplied chart
+models can have contracted fibres. A common open requires every target
+coordinate to be regular at the source generic point and conversely.
+Elimination gives all linear relations d(X)t-n(X) for each coordinate t.
+Their denominators generate its regularity ideal on the source chart.
+Matching requires the two prime ideals to pull back into each other on
+these regular loci and the generic point to survive every removed centre.
 
 For a fixed number field, adjoining one common parameter to every chart and
 equating its two copies in the diagonal matches the chosen sheets. The
@@ -26,8 +25,7 @@ geometric primes whose identifications are tested on the same diagonal.
 For an intrinsic boundary, first split each restricted divisor into
 geometric primes and test the reduced branches for simple normal crossings
 on the owned fibre. Primes on two charts agree precisely when they have the
-same generic point on the diagonal. Testing containment on a nonempty open
-distinguishes primes that meet only in a lower-dimensional intersection. Gluing before
+same generic point on a common chart open. Gluing before
 intersecting with the origin fibre retains the parts of a component that
 join two visible charts. A face is the unique containing component of the
 smaller intersection, tested by containment of ideals on a common chart.
@@ -48,7 +46,9 @@ from .constructible_euler import euler_characteristic
 from .geometric_components import geometric_components
 from .groebner import groebner
 from .incidence import component_classes, stratum_dimension
+from .kernel_json import kernel_json
 from .local_blowups import _is_strict, _own_failures, _present
+from .polynomial import encode_sparse_row
 
 
 def _common_field(charts):
@@ -265,6 +265,20 @@ def _prime_groups(charts, pieces, overlap, transition):
                 return True
         return False
 
+    @cache
+    def rows(variables, ideal):
+        if np.native_ring(variables):
+            return tuple(np.row(variables, f) for f in ideal)
+        return tuple(encode_sparse_row(dict(sparse_terms(variables, f))) for f in ideal)
+
+    @cache
+    def closed_overlap(i, j):
+        coords, _, _, graph, holes = overlap(i, j)
+        request = dict(left_width=len(charts[i].variables), right_width=len(charts[j].variables))
+        maps = kernel_json("atlas_component_geometry", "prepare_overlap", **request,
+                           graph=rows(coords, tuple(graph)))
+        return dict(**request, maps=maps, removed=[rows(coords, tuple(h)) for h in holes])
+
     def compare(p, q):
         (i, _), prime = pieces[p]
         (j, _), other = pieces[q]
@@ -274,22 +288,24 @@ def _prime_groups(charts, pieces, overlap, transition):
         if direct is not None:
             transfer, holes = direct
             basis = basis_of(j, other)
-            if not (all(any(not basis.contains(g) for g in h) for h in holes)
-                    and all(transfer(g,basis) == 0 for g in prime)):
+            # The explicit transition is available only on affine spaces
+            # over the marked field. Its coprime denominators describe the
+            # entire pole locus there. Its other holes are removed centres.
+            if not all(any(not basis.contains(g) for g in h) for h in holes):
+                return 0
+            if not all(transfer(g, basis) == 0 for g in prime):
                 return 0
             reverse = transition(i, j)
             if reverse is not None:
-                # Both rational transitions must be regular on this prime.
-                _, target_holes = reverse
-                return int(all(any(transfer(g,basis) != 0 for g in h) for h in target_holes))
-        coords, swap_a, swap_b, graph, holes = overlap(j, i)
-        source = (*graph, *(g.xreplace(swap_a) for g in other))
-        if _present(coords, source, holes) and all(
-                not _present(coords, source, (*holes, (g.xreplace(swap_b),))) for g in prime):
-            return 1
-        # The saturated diagonal covers the whole overlap. It rules out
-        # the entire equivalence class of the other prime.
-        return -1
+                back, target_holes = reverse
+                target = basis_of(i, prime)
+                if not all(any(not target.contains(g) for g in h) for h in target_holes):
+                    return 0
+                if not all(any(transfer(g, basis) != 0 for g in h) for h in target_holes):
+                    return 0
+                return int(all(back(g, target) == 0 for g in other))
+        return kernel_json("atlas_component_geometry", "generic_overlap", **closed_overlap(j, i),
+                           left_prime=rows(charts[j].variables, other), right_prime=rows(charts[i].variables, prime))
 
     classes = component_classes([section for section, _ in pieces], compare)
     groups = defaultdict(dict)

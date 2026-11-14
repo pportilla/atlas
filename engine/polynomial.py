@@ -114,6 +114,11 @@ def integer_from_decimal(text):
     return int(Decimal(text)) if digit_limit and len(text) > digit_limit else int(text)
 
 
+def encode_sparse_row(terms):
+    """Encode coefficients and exponent tuples in the supplied coordinate order."""
+    return ";".join(rational_text(c) + " " + " ".join(map(integer_text, e)) for e, c in terms.items() if c)
+
+
 def sparse_row(row):
     """Read FLINT's rational coefficient and exponent tuples without a dense representation."""
     terms = {}

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 
+from .exact_json import result_json
 from .polynomial import integer_from_decimal
 
 
@@ -49,7 +50,7 @@ class WorkerGroup:
 
 def run_worker(module_args, data, timeout, *, owner=None):
     root = Path(__file__).resolve().parents[1]
-    payload = json.dumps(data)
+    payload = result_json(data)
     start = owner.start if owner is not None else subprocess.Popen
     child = start([sys.executable, "-m", *module_args], cwd=root,
                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,

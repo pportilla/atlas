@@ -13,6 +13,15 @@ _TOPICS = {
         "Type :workspace to see the current rings and saved variables.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),
+    "resolution.dual_complex": (
+        "R.dual_complex is the exceptional dual complex recorded by resolve.\n"
+        "In embedded mode its vertices represent exceptional divisors in the ambient space. "
+        "In intrinsic mode they represent components of the exceptional locus on the smooth strict transform. "
+        "Qbar in the convention means components are distinguished over the algebraic closure of QQ.\n"
+        "Cells record intersections. Check .status for completeness and .record for the full data.\n\n"
+        'Example\n  x, y = coordinates("x", "y")\n  R = resolve(y^2-x^3)\n'
+        "  R.dual_complex.vertices\n  R.branches[0].meets"
+    ),
     ":workspace": "Show the rings and saved variables in this session.\n\nExample\n  :workspace",
     ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
     "QQ": 'The rational coefficient field. Coordinates use QQ by default.\n\nExample\n  x = coordinates("x", coeffs=QQ)',
@@ -33,7 +42,8 @@ def help_request(line):
         if words[0] == "resolve" and words[-1] == "--help":
             return None  # Preserve the complete command-line option reference.
         names = words[:-1]
-        if all(name.lstrip(":").replace("-", "_").isidentifier() for name in names):
+        if all(all(part.isidentifier() for part in name.lstrip(":").replace("-", "_").split("."))
+               for name in names):
             return names
     return None
 
@@ -77,6 +87,10 @@ def show_help(words, session, parser):
         return
 
     name = _ALIASES.get(words[0], words[0])
+    if name.endswith(".dual_complex"):
+        from .session_values import Resolution
+        if isinstance(session.variables.get(name.removesuffix(".dual_complex")), Resolution):
+            name = "resolution.dual_complex"
     if name == "functions":
         _functions(session)
     elif name == "script":
@@ -89,6 +103,7 @@ def show_help(words, session, parser):
         if card:
             print(card)
             if name == "resolve":
+                print("\nUse help resolution.dual_complex to read the recorded vertices and cells.")
                 print('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.')
         elif name in parser.command_names:
             parser.command_names[name].print_help()

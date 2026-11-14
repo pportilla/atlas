@@ -18,9 +18,14 @@ class SearchEndpoints(unittest.TestCase):
         # One polynomial completes immediately; the other stays running until
         # the server kills its process group. The stub verifies the effective
         # worker request and avoids depending on a specific algebraic example.
-        command = """import json,sys,signal
+        command = """import json,os,sys,signal
+from pathlib import Path
 d=json.load(sys.stdin)
+if 'ATLAS_PROGRESS_FILE' in os.environ:
+    Path(os.environ['ATLAS_PROGRESS_FILE']).write_text(json.dumps({'stage': d['polynomial'], 'blowups': 2}))
 if d['polynomial']=='x^2': signal.pause()
+if d['polynomial']=='x^3' and d['search']=='quick':
+    print(json.dumps([200,{'status':'inconclusive'}])); sys.exit(0)
 print(json.dumps([200,{'status':'resolved','search':d['search']}]))
 """
         self.server.search_jobs = SearchJobs(command=[sys.executable,"-c",command],retention=60)
@@ -45,7 +50,7 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
     def wait(self, ident):
         for _ in range(150):
             _, job=self.request("GET","/api/searches/"+ident)
-            if job["state"] not in ("running","cancelling"):
+            if job["state"] not in ("queued","running","cancelling"):
                 return job
             time.sleep(0.01)
         self.fail("Worker did not terminate")
@@ -58,22 +63,79 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         _,current=self.request("GET","/api/searches/current")
         self.assertEqual(current["job"]["id"],job["id"])
 
-    def test_cancel_conflict_and_replacement(self):
-        _,job=self.post("x^2")
-        with self.assertRaises(HTTPError) as err: self.post("x+y")
-        self.assertEqual(err.exception.code,409); err.exception.close()
-        self.request("DELETE","/api/searches/"+job["id"])
-        self.assertEqual(self.wait(job["id"])["state"],"cancelled")
-        _,next_job=self.post("x+y")
-        self.assertEqual(self.wait(next_job["id"])["state"],"completed")
-        with self.assertRaises(HTTPError) as err: self.request("GET","/api/searches/"+job["id"])
-        self.assertEqual(err.exception.code,404); err.exception.close()
+    def test_parallel_and_queued_jobs_cancel_independently(self):
+        _, first = self.post("x^2")
+        _, second = self.post("x^2")
+        _, queued = self.post("x+y")
+        _, dropped = self.post("x^2")
+        self.assertEqual([first["state"], second["state"], queued["state"], dropped["state"]],
+                         ["running", "running", "queued", "queued"])
+        self.request("DELETE", "/api/searches/" + dropped["id"])
+        self.request("DELETE", "/api/searches/" + first["id"])
+        self.assertEqual(self.wait(first["id"])["state"], "cancelled")
+        self.assertEqual(self.wait(queued["id"])["state"], "completed")
+        jobs = self.request("GET", "/api/searches")[1]["jobs"]
+        self.assertEqual([(j["id"], j["state"]) for j in jobs],
+                         [(dropped["id"], "cancelled"), (queued["id"], "completed"),
+                          (second["id"], "running"), (first["id"], "cancelled")])
 
-    def test_shutdown_reaps_active_worker(self):
-        self.post("x^2")
-        worker=self.server.search_jobs.job.child
+    def test_automatic_job_retries_an_inconclusive_quick_attempt(self):
+        for polynomial, expected in (("x+y", "quick"), ("x^3", "exhaustive")):
+            _, job = self.request("POST", "/api/searches", {"variables": ["x", "y"], "polynomial": polynomial,
+                                                             "search": "auto"})
+            self.assertEqual(self.wait(job["id"])["result"]["search"], expected)
+
+    def test_live_progress_is_scoped_to_one_worker(self):
+        _, running = self.post("x^2")
+        other = self.wait(self.post("x+y")[1]["id"])
+        self.assertEqual(other["progress"], {"stage": "x+y", "blowups": 2})
+        for _ in range(150):
+            current = self.request("GET", "/api/searches/" + running["id"])[1]
+            if current.get("progress"):
+                break
+            time.sleep(0.01)
+        self.assertEqual(current.get("progress"), {"stage": "x^2", "blowups": 2})
+        self.assertEqual(current["state"], "running")
+
+    def test_independent_zetas_and_replay_on_completed_jobs(self):
+        self.server.search_jobs = SearchJobs()
+        request = {"variables": ["x", "y"], "polynomial": "y^2-x^3", "mode": "embedded", "search": "quick"}
+        _, plain = self.request("POST", "/api/searches", dict(request, zetas=[]))
+        plain_record = self.wait(plain["id"])["result"]
+        _, initial = self.request("POST", "/api/searches", dict(request, zetas=["topological"]))
+        job = self.wait(initial["id"])
+        record = job["result"]
+        self.assertEqual(record["topological_zeta"]["expression"], "(4*s + 5)/((s + 1)*(6*s + 5))")
+        self.assertNotIn("monodromy_zeta", record)
+        _, job = self.request("POST", "/api/searches/" + job["id"] + "/zetas", {"zetas": ["monodromy"]})
+        self.assertEqual(job["result"]["monodromy_zeta"]["expression"], "(1-T^6)/((1-T^2)*(1-T^3))")
+        self.assertEqual(job["result"]["topological_zeta"], record["topological_zeta"])
+        self.assertEqual(job["result"]["charts"], record["charts"])
+
+        _, intrinsic = self.request("POST", "/api/searches", dict(request, mode="intrinsic", zetas=[]))
+        saved = self.wait(intrinsic["id"])["result"]
+        self.assertNotIn("embedded_companion", saved)
+        _, updated = self.request("POST", "/api/searches/" + intrinsic["id"] + "/zetas", {"zetas": ["topological"]})
+        self.assertEqual(updated["result"]["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
+        self.assertEqual(updated["result"]["topological_zeta"]["source"], "companion embedded resolution")
+        self.assertEqual(saved["charts"], updated["result"]["charts"])
+
+        _, outputs = self.request("POST", "/api/zetas", {"record": record, "zetas": ["monodromy"]})
+        self.assertEqual(set(outputs), {"monodromy_zeta"})
+        self.assertEqual(outputs["monodromy_zeta"], job["result"]["monodromy_zeta"])
+        from engine.resolution_zetas import replay_zetas
+        with patch("engine.resolve._resolve_polynomial", side_effect=AssertionError("started a new resolution")):
+            both = replay_zetas({"record": plain_record, "zetas": ["monodromy", "topological"]})
+        self.assertEqual(both["monodromy_zeta"]["expression"], job["result"]["monodromy_zeta"]["expression"])
+        self.assertEqual(both["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
+
+    def test_shutdown_reaps_active_workers(self):
+        first = self.post("x^2")[1]
+        second = self.post("x^2")[1]
+        self.post("x+y")
+        workers = [self.server.search_jobs.jobs[j["id"]].child for j in (first, second)]
         self.server.search_jobs.close()
-        self.assertIsNotNone(worker.poll())
+        self.assertTrue(all(worker.poll() is not None for worker in workers))
         self.assertIsNone(self.server.search_jobs.get())
 
     def test_invalid_request(self):

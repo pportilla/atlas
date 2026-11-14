@@ -8,7 +8,8 @@ from .algebra_cli import OPERATION_DESCRIPTIONS
 _COORDINATES = 'x, y = coordinates("x", "y")'
 # Algebra examples share a setup so each can be copied into a fresh session.
 _RING_EXAMPLES = {
-    "resolve": "R = resolve(y^2 - x^3)",
+    "resolve": "f = y^2 - x^3\nR = resolve(f)\nR.polynomial == f\nR.dual_complex",
+    "recompute_dual_complex": "R = resolve(y^2 - x^3)\nD = recompute_dual_complex(R)\nD.vertices",
     "dual_complex": "R = resolve(y^2 - x^3)\ndual_complex(R).vertices",
     "monodromy_check": "monodromy_check(y^2 - x^3).status",
     "polynomial": 'polynomial("y^2 - x^3", variables=(x, y))',
@@ -63,7 +64,10 @@ _EXAMPLES = {
 
 _PURPOSES = {
     "resolve": "Resolve a hypersurface at the origin and return its charts and divisors.",
-    "dual_complex": "Recompute the exceptional incidence from the charts of a saved resolution.",
+    "recompute_dual_complex": ("Rebuild exceptional incidence from the charts of a resolution. "
+                               "R.dual_complex holds the complex saved by resolve."),
+    "dual_complex": ("Compatibility function returning the raw recomputed record. "
+                     "Use R.dual_complex to inspect a resolution or recompute_dual_complex(R) to rebuild incidence."),
     "monodromy_check": "Check the poles of the local topological zeta function for monodromy witnesses.",
     "print": "Display values at the prompt or write them to a script's output.",
 }

@@ -6,6 +6,9 @@
 // Every routine follows engine/blowup_ideal.py step by step and returns the
 // same generators, so the two implementations can be compared exactly.
 #include "groebner.hpp"
+#include "local_io.hpp"
+#include "primary_decomposition.hpp"
+#include "polynomial_graph.hpp"
 #include <flint/fmpz_mat.h>
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_mpoly_factor.h>
@@ -1148,6 +1151,84 @@ std::string op_residual_dimension_below(Reader& in) {
     return dimension_of_basis(R, Basis(R, all)) < threshold ? "1\n" : "0\n";
 }
 
+std::string op_verify(Reader& in, bool residual_only = false);
+
+// The reduced singular locus of a hypersurface in characteristic zero.
+// Return only a smooth positive-dimensional centre through the given origin.
+// Codimension >= 2 rules out every repeated factor, even over Qbar: any
+// repeated factor divides f and all its partial derivatives. A zero result
+// leaves the ordinary resolution search in charge of multiplicities/units.
+std::string op_smooth_reduced_centre(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const Gen f = in.gen(R);
+    if (in.at != in.end || f.p.empty()) return {};
+    Ideal jacobian{f};
+    for (int j = 0; j < R.n; ++j) jacobian.push_back(normal(derivative(R, f.p, j)));
+    for (const auto& g : jacobian) {
+        if (!g.p.empty() && g.p.m[g.p.m.size() - R.stride] == 0) return {};
+    }
+    const long dimension = dimension_of_basis(R, Basis(R, polys(jacobian)));
+    if (dimension < 1 || dimension > R.n - 2) return {};
+
+    local::Basis generators;
+    for (const auto& g : jacobian) {
+        if (g.p.empty()) continue;
+        std::string row;
+        write(R, row, g.p, &g.num.v, &g.den.v);
+        generators.push_back(local::decode_row(row, R.n));
+    }
+    const auto radical = primary::radical_lex(generators, R.n);
+    // A complete intersection is enough for this bounded candidate. Other
+    // smooth presentations and overcomplete generators retain the fallback.
+    if (radical.size() != static_cast<size_t>(R.n - dimension) ||
+        R.n + radical.size() > MAX_VARIABLES) return {};
+    Ideal centre;
+    for (const auto& generator : radical) {
+        const std::string row = local::encode_row(generator) + "\n";
+        const char* at = row.data();
+        Rational scale;
+        Poly p = parse(R, at, at + row.size(), &scale);
+        centre.push_back(normal(std::move(p), &scale.num.v, &scale.den.v));
+    }
+    if (!smooth_locus(R, centre, dimension, Test::IDEAL).smooth) return {};
+    std::string out;
+    put(R, out, centre);
+    if (in.op == "smooth_reduced_centre") return out;
+
+    // Reuse the verifier of arbitrary projective ideal blowups, including
+    // exact chart saturation and all SNC strata. The centre equations in the
+    // projective boundary have homogeneous degree zero in the ratio variables.
+    const size_t k = centre.size();
+    std::string frame = "verify " + std::to_string(R.n) + " " + std::to_string(k) +
+                        " 1 " + std::to_string(k) + "\n";
+    write(R, frame, f.p, &f.num.v, &f.den.v);
+    frame += out;
+    const Ring wide = grevlex(R.n + k);
+    const auto places = shifted(R.n,0);
+    for (const auto& g : centre) {
+        const auto lift = convert(R, wide, g, places.data());
+        write(wide, frame, lift.p, &lift.num.v, &lift.den.v);
+    }
+    // If the entire saturated ideal is the graph of polynomials over the
+    // free coordinate axes, its base change to Qbar is affine space. The
+    // exceptional divisor on the blowup is its projectivized normal bundle,
+    // geometrically irreducible, with every standard chart meeting the
+    // origin fibre. Its individual opens have precisely the centre ideal.
+    const bool graph_bundle = in.numbers.size() == 2 && in.number(1) == 1 &&
+                              local::polynomial_graph(radical, R.n);
+    Reader verify(frame.data(),frame.size());
+    const std::string proof = op_verify(verify, graph_bundle);
+    if (proof.compare(0,5,"pass ") != 0) return {};
+    if (graph_bundle) {
+        // Use the same monic grevlex exceptional-ideal presentation as
+        // geometric component decomposition; the projective pivots stay lex.
+        const Ideal display = Basis(R, polys(centre)).monic();
+        out += "exceptional " + std::to_string(display.size()) + "\n";
+        put(R, out, display);
+    }
+    return std::string(graph_bundle ? "graph " : "centre ") + std::to_string(k) + "\n" + out + proof;
+}
+
 // "saturate n s": s generators, then the element to saturate by.
 std::string op_saturate(Reader& in) {
     const Ring R = grevlex(in.number(0));
@@ -1302,7 +1383,7 @@ std::string op_charts(Reader& in) {
 // out the exceptional divisor and make normal crossings with the strict
 // transform. Answer: "rejected reason", or "pass strata" and, for each
 // chart, "a s" with the ambient ideal and the strict transform.
-std::string op_verify(Reader& in) {
+std::string op_verify(Reader& in, bool residual_only) {
     const Ring R = grevlex(in.number(0));
     const int n = R.n;
     const size_t k = in.count(1);
@@ -1368,7 +1449,13 @@ std::string op_verify(Reader& in) {
     }
     std::string out = "pass " + std::to_string(strata) + "\n";
     for (size_t i = 0; i < k; ++i) {
-        const Chart chart = blowup_chart(R, nothing, &strict, center, {}, static_cast<int>(i), true);
+        Chart chart = blowup_chart(R, nothing, &strict, center, {}, static_cast<int>(i), true);
+        if (residual_only) {
+            Basis ambient(chart.ring, polys(chart.ambient));
+            auto& residual = chart.strict;
+            residual.erase(std::remove_if(residual.begin(),residual.end(),
+                [&](const Gen& g){return ambient.contains(g.p);}), residual.end());
+        }
         out += std::to_string(chart.ambient.size());
         out += ' ';
         out += std::to_string(chart.strict.size());
@@ -3078,6 +3165,7 @@ extern "C" {
 int atlas_monomial_strata_abi() noexcept { return 1; }
 int atlas_frame_locus_abi() noexcept { return 1; }
 int atlas_affine_overlap_abi() noexcept { return 1; }
+int atlas_smooth_reduced_centre_abi() noexcept { return 1; }
 
 // One request: a header line naming the operation with its integers, then
 // one polynomial per line as read by atlas_groebner. The operations are
@@ -3093,6 +3181,7 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "graph_orders") out = op_graph_orders(in);
         else if (in.op == "dimension") out = op_dimension(in);
         else if (in.op == "saturate") out = op_saturate(in);
+        else if (in.op == "smooth_reduced_centre" || in.op == "smooth_reduced_graph") out = op_smooth_reduced_centre(in);
         else if (in.op == "affine_overlap") out = op_affine_overlap(in);
         else if (in.op == "finite_radical") out = op_finite_radical(in);
         else if (in.op == "radical") out = op_radical(in);

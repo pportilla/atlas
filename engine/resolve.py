@@ -5,6 +5,8 @@ import subprocess
 import sys
 from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text
 from .native_backend import resolve_native
+from .resolution_progress import recorded_blowups, report
+from .resolution_zetas import selected_zetas, zetas_from_strata
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'native' / 'build'
@@ -21,9 +23,7 @@ def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
             'elapsed_ms':round(elapsed_ms,3),
             'dual_complex':{'status':'unavailable','convention':'Exceptional divisor in the germ at the origin.',
                             'reason':'The search has not certified an atlas yet.','vertices':[],'cells':[]}}
-    if request.get('monodromy') is True:
-        result['monodromy_zeta'] = {'status':'unavailable', 'reason':'The resolution has not been certified.'}
-        result['topological_zeta'] = dict(result['monodromy_zeta'])
+    result.update(zetas_from_strata(result, selected_zetas(request), None))
     return result
 
 
@@ -89,11 +89,11 @@ def _resolve(request, proofs):
     policy = request.get('search','exhaustive')
     if policy not in ('quick','exhaustive'):
         raise InputError('Search must be quick or exhaustive.')
-    wants_monodromy = request.get('monodromy', False)
-    if not isinstance(wants_monodromy, bool):
-        raise InputError('monodromy must be true or false.')
+    kinds = selected_zetas(request)
+    wants_zetas = bool(kinds)
     exhaustive = policy=='exhaustive'
     start = perf_counter()
+    report("Reading the polynomial", 0)
     try:
         p = parse(request.get('polynomial'), variables, bounded=not exhaustive)
     except LimitError as error:
@@ -116,10 +116,11 @@ def _resolve(request, proofs):
     def attach(record):
         if record["status"] != "resolved":
             return
+        report("Verifying charts and exceptional intersections", recorded_blowups(record))
         intrinsic = record["mode"] == "intrinsic"
         certified = next((value for producer, value in verified if producer is record), None)
         if certified is None:
-            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_monodromy)
+            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_zetas)
         if certified is not None:
             record["atlas"], output = certified
             record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
@@ -132,10 +133,10 @@ def _resolve(request, proofs):
                 raise RuntimeError("The resolution engine did not supply its chart ownership data.")
             factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
             try:
-                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_monodromy,
+                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_zetas,
                                        factor_fibre=factor_fibre)
             except GiveUp:
-                if not intrinsic or not wants_monodromy:
+                if not intrinsic or not wants_zetas:
                     raise
                 # A smooth strict transform can need a further embedded resolution.
                 output = atlas.outputs(charts, len(variables), intrinsic=True, integrals=False,
@@ -155,28 +156,28 @@ def _resolve(request, proofs):
 
     proofs.append(('primary', result.get('certificate', {})))
     found = attach(result)
-    if wants_monodromy:
-        from .monodromy import monodromy_zeta
-        from .topological import topological_zeta
+    if wants_zetas:
         record = result
         companion = found is None and mode == "intrinsic" and result["status"] == "resolved"
         if companion:
+            report("Resolving an embedded companion for the zeta calculation")
             record = _resolve_polynomial(p, dict(request, mode="embedded"), start)
             proofs.append(('companion', record.get('certificate', {})))
             found = attach(record)
             if found is not None:
                 result["embedded_companion"] = {"atlas": record["atlas"]}
-        zeta = monodromy_zeta(record, polynomial=p, strata=found)
-        topological = topological_zeta(record, polynomial=p, monodromy=zeta, strata=found)
+        report("Computing the selected zeta functions", recorded_blowups(record))
+        zetas = zetas_from_strata(record, kinds, found)
         if companion:
-            zeta["source"] = topological["source"] = "companion embedded resolution"
-        result["monodromy_zeta"] = zeta
-        result["topological_zeta"] = topological
+            for zeta in zetas.values():
+                zeta["source"] = "companion embedded resolution"
+        result.update(zetas)
     result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
 
 
 def _resolve_polynomial(p, request, start, *, verified=None):
+    report("Checking the singularity at the origin", 0)
     variables = request['variables']
     mode = request.get('mode','embedded')
     compute = request.get('compute')
@@ -230,6 +231,7 @@ def _resolve_polynomial(p, request, start, *, verified=None):
                'dual_complex':{'status':'complete','convention':'Exceptional divisor of the identity.',
                                'vertices':[],'cells':[]}}
         elif native_range:
+            report("Testing ordinary and toric resolutions")
             if not (BUILD / ('libresolution.dylib' if sys.platform=='darwin' else 'libresolution.so')).is_file():
                 raise RuntimeError('Native engine is not built. Run make in the project directory.')
             terms = [(k, rational_text(c)) for k,c in p.items()]
@@ -243,18 +245,13 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         if r is None and len(p)==2 and 2 <= len(variables) <= 8 and 'plane_limit' not in diagnostic:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
-        if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
-            from .newton_backend import resolve_newton
-            # A quick request is given 55 seconds in all by the worker.
-            r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
-                               defer_outputs=True, verified=verified, integrals=request.get("monodromy", False))
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
     if r is None and parallel_search and mode == "embedded" and len(p) <= 3 and len(variables) <= 4:
         from .newton_trials import bounded_first_trial
         from .native_library import Unavailable
         try:
-            r = bounded_first_trial(p, variables, verified=verified, integrals=request.get("monodromy", False))
+            r = bounded_first_trial(p, variables, verified=verified, integrals=bool(selected_zetas(request)))
         except (LimitError, Unavailable, OSError):
             pass  # The isolated exhaustive workers still test all three methods.
     if (r is None and parallel_search and mode == "embedded" and len(variables) == 3
@@ -265,8 +262,22 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             r = bounded_coordinate_graph(p, variables)
         except (LimitError, Unavailable, OSError):
             pass
+    # The tiny monomial Newton proposals precede this general centre in
+    # both search policies. Keep their isolated retries on a packed decline.
+    if r is None and native_range and singular and len(variables) >= 3 and len(p)>3:
+        from .reduced_centre import smooth_reduced_graph
+        r = smooth_reduced_graph(p, variables, mode)
+    try:
+        if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
+            from .newton_backend import resolve_newton
+            # A quick request is given 55 seconds in all by the worker.
+            r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
+                               defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)))
+    except (LimitError,subprocess.TimeoutExpired) as error:
+        diagnostic['fast_path_limit']=str(error)
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
+        report("Searching for a verified resolution with independent methods")
         r = exhaustive_search(p, variables, mode, compute=compute)
     elif r is None and native_range and singular and len(variables) == 3:
         from .origin_backend import resolve_origin
@@ -278,6 +289,7 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True)
     if r is None:
         from .general_resolution import search
+        report("Searching for a blow-up centre")
         r = search(p,variables,mode,exhaustive=exhaustive)
     if r is None:
         return inconclusive(request,diagnostic,(perf_counter()-start)*1000,format_poly(p,variables))

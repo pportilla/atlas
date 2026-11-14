@@ -121,6 +121,7 @@ class FiniteCentre(unittest.TestCase):
         projected = geometric_chart_records(record)
         self.assertEqual(geometric_chart_records({**record, "charts": projected}), projected)
         linked = Resolution(record)
+        self.assertEqual(linked.record, record)
         self.assertEqual({v.id for v in linked.chart("C1").divisors}, {v["id"] for v in dual["vertices"]})
         left = linked.divisor("D.1").ideal_in(linked.chart("C1"))
         right = linked.divisor("D.2").ideal_in(linked.chart("C1"))

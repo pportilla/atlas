@@ -12,52 +12,47 @@
   font-weight: 400 700;
   font-display: swap;
 }
-@font-face {
-  font-family: "Instrument Sans";
-  src: url("/fonts/instrument-sans.woff2") format("woff2");
-  font-weight: 400 700;
-  font-display: swap;
-}
-
 :root {
   color-scheme: light dark;
-  --bg: #faf9f4;
+  --bg: #f8f6ef;
   --paper: var(--bg);
-  --text: #222b25;
+  --text: #272622;
   --ink: var(--text);
-  --muted: #556057;
-  --faint: #646f65;
-  --rule: #d5d8cb;
-  --rule-strong: #a9b1a3;
-  --field: #fffef9;
-  --wash: #eff1e8;
-  --masthead: #173e34;
-  --accent: #225d45;
-  --accent-wash: #e3ecdf;
-  --ok: #256043;
+  --muted: #58584f;
+  --faint: #67665c;
+  --rule: #d5d0c4;
+  --rule-strong: #aaa493;
+  --field: #fffdf7;
+  --wash: #f0eee6;
+  --heading: #6c2932;
+  --accent: #254d78;
+  --accent-wash: #e8edf2;
+  --ok: #3b604a;
   --warn: #80530c;
   --warn-wash: #fbf2d9;
   --warn-rule: #c3a466;
   --bad: #923b2c;
   --bad-wash: #fcf0e9;
   --bad-rule: #d5b1a4;
-  --ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --ui: Verdana, Geneva, "DejaVu Sans", sans-serif;
+  --serif: "Bitstream Charter", Charter, Georgia, "STIX Two Text", serif;
   --math: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
   --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171e1a;
-    --text: #eaeae1;
-    --muted: #b6c0b4;
-    --faint: #a1aea1;
-    --rule: #39463c;
-    --rule-strong: #647367;
-    --field: #1e2822;
-    --wash: #222e26;
-    --accent: #a8d5b0;
-    --accent-wash: #304837;
-    --ok: #a8d5b0;
+    --bg: #201f1d;
+    --heading: #e4aaa8;
+    --text: #eae5d9;
+    --muted: #c2bcaf;
+    --faint: #b1ab9d;
+    --rule: #48463f;
+    --rule-strong: #746e61;
+    --field: #252421;
+    --wash: #2c2a26;
+    --accent: #b4cbe3;
+    --accent-wash: #313c49;
+    --ok: #b4cbe3;
     --warn: #ecd094;
     --warn-wash: #352f21;
     --warn-rule: #6c5c3c;
@@ -90,27 +85,18 @@ code { font-size: .93em; overflow-wrap: anywhere; }
 .skip-link:focus { transform: none; }
 
 .page { width: min(1256px, 100% - clamp(40px, 9vw, 144px)); margin-inline: auto; }
-.masthead { background: var(--masthead); color: #f7f3e7; }
+.masthead { color: var(--text); }
 .masthead-inner { display: flex; min-height: 60px; align-items: stretch; justify-content: space-between; }
 .wordmark { display: inline-flex; gap: 10px; align-items: center; align-self: center; color: inherit; text-decoration: none; font: 500 31px/1 var(--math); letter-spacing: -.055em; }
 .wordmark img { display: block; }
-.view-nav { display: flex; gap: 30px; }
-.view-nav a { display: flex; position: relative; align-items: center; color: #cbd9d0; text-decoration: none; font-size: 14px; font-weight: 500; }
-.view-nav a[aria-current], .view-nav a:hover { color: #fff; }
-.view-nav a[aria-current]::after { content: ""; position: absolute; bottom: 0; inset-inline: 0; height: 3px; background: #d4dba6; }
-.masthead :focus-visible { outline-color: #d4dba6; outline-offset: 3px; }
-.view-nav a:focus-visible { outline-offset: -2px; }
 .workspace { padding-bottom: 64px; }
-.view-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 26px; padding: 30px 0 19px; }
-.view-title h1 { font: 400 clamp(42px, 4.8vw, 68px)/1.08 var(--math); letter-spacing: -.055em; }
-.view-title p { color: var(--muted); font-size: 15px; }
 .output-jump { display: none; }
 .workbench { display: grid; grid-template-columns: clamp(304px, 28%, 348px) minmax(0, 1fr); border-top: 1px solid var(--text); }
 .input-pane, .output-pane { min-width: 0; padding-top: 26px; }
 .input-pane { padding-right: 30px; }
 .output-pane { border-left: 1px solid var(--rule); padding-left: clamp(26px, 3.1vw, 45px); padding-bottom: 30px; scroll-margin-top: 16px; }
 .output-pane:focus, .workspace:focus { outline: none; }
-.pane-heading { font: 500 24px/1.22 var(--math); letter-spacing: -.025em; }
+.pane-heading { font: 500 24px/1.22 var(--serif); letter-spacing: -.025em; }
 
 .field { display: grid; gap: 6px; min-width: 0; }
 .field > span:first-child, legend { color: var(--text); font-size: 13px; font-weight: 600; }
@@ -135,7 +121,6 @@ summary::marker { color: var(--accent); font-size: .83em; }
 .helper { color: var(--muted); font-size: 13px; }
 .error, .notice { margin: 12px 0; padding: 10px 14px; overflow-wrap: anywhere; color: var(--bad); background: var(--bad-wash); border-inline-start: 3px solid var(--bad-rule); font-size: 14px; }
 .notice { color: var(--warn); background: var(--warn-wash); border-color: var(--warn-rule); }
-.stale-note { margin: 0 0 12px; color: var(--warn); font-size: 13.5px; }
 
 /* Mathematics is set in a text serif; everything around it in the system face. */
 .m { font-family: var(--math); font-size: 1.16em; line-height: 1.35; font-variant-numeric: lining-nums; }
@@ -151,7 +136,7 @@ summary::marker { color: var(--accent); font-size: .83em; }
 .section { padding: 24px 0 28px; border-top: 1px solid var(--rule); }
 .section:empty { display: none; }
 .section-head { margin-bottom: 4px; }
-.section-head h3, .fold > summary h3 { font: 500 24px/1.24 var(--math); letter-spacing: -.025em; }
+.section-head h3, .fold > summary h3 { font: 500 23px/1.24 var(--serif); letter-spacing: -.025em; }
 .section-head h3 { width: fit-content; }
 
 /* Sections that stay folded until their heading is clicked */
@@ -259,8 +244,6 @@ pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; backgrou
 @media (max-width: 820px) {
   .masthead-inner { min-height: 54px; }
   .page { width: min(680px, 100% - 40px); }
-  .view-title { display: grid; grid-template-columns: 1fr auto; align-items: end; padding: 22px 0 17px; gap: 2px 12px; }
-  .view-title p { grid-column: 1 / -1; grid-row: 2; font-size: 14px; }
   .output-jump { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 5px; min-height: 36px; font-size: 13px; text-decoration: none; }
   .output-jump:hover { text-decoration: underline; }
   .workbench { grid-template-columns: minmax(0, 1fr); }
@@ -279,7 +262,7 @@ pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; backgrou
 
 @media print {
   :root { color-scheme: light; --bg: #fff; --text: #111; --muted: #444; --accent: #222; --rule: #ccc; --field: #fff; --wash: #f7f7f7; }
-  .masthead, .output-jump, .input-pane, .search-job, .export, .algebra button, .tools, .list-more, .more-rows, details:not([open]), .section.folded:not(:has([open])) { display: none !important; }
+  .masthead, .output-jump, .input-pane, .export, .run-actions, .tools, .list-more, .more-rows, details:not([open]), .section.folded:not(:has([open])) { display: none !important; }
   .page { width: 100%; }
   .workbench { display: block; }
   .output-pane { padding-inline: 0; border: 0; }

@@ -1,10 +1,13 @@
 """Constructive point blowups beyond the quick plane solver's budgets."""
 from fractions import Fraction
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from engine.plane_backend import resolve_plane
 from engine.native_library import _MODE
@@ -20,6 +23,21 @@ def solve(polynomial, mode="embedded", search="exhaustive"):
 
 
 class ExhaustivePlane(unittest.TestCase):
+    def test_live_blowup_counts_match_completed_steps(self):
+        polynomial = parse("y^2-x^3", VARIABLES)
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot = Path(directory) / "progress.json"
+            with patch.dict(os.environ, ATLAS_PROGRESS_FILE=str(snapshot)):
+                for mode, steps in (("embedded", 3), ("intrinsic", 1)):
+                    with self.subTest(mode=mode):
+                        result = resolve_plane(polynomial, VARIABLES, mode)
+                        self.assertEqual(json.loads(snapshot.read_text()),
+                                         {"stage": "Recording exceptional components", "blowups": steps})
+                        self.assertEqual(len(result["steps"]), steps)
+            # A failed progress write must never discard a resolution.
+            with patch.dict(os.environ, ATLAS_PROGRESS_FILE=str(snapshot / "missing")):
+                self.assertEqual(resolve_plane(polynomial, VARIABLES, "embedded")["status"], "resolved")
+
     def check_pullbacks(self, result, expression):
         for chart in result["charts"]:
             source = expression.format(**{v:"("+word+")" for v,word in chart["map"].items()})

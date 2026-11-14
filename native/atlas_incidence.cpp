@@ -1,5 +1,7 @@
 // Incidences of exceptional intersections and compatible branch labels in saved atlases.
 #include "rational_sparse_json.hpp"
+#include "local_io.hpp"
+#include "polynomial_graph.hpp"
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -371,22 +373,64 @@ Value product_torus(const Value& request) {
 }
 
 // The standard opens have already been reconstructed as the saturated graph
-// of this ideal. Blowing up a coordinate subspace of codimension k has one
-// exceptional prime: the P^(k-1)-bundle over that subspace. Match its ideal
+// of this ideal. A polynomial graph through the origin is affine space in
+// its free coordinates. Its exceptional prime is the projectivized normal
+// bundle, including when the centre is a coordinate subspace. Match its ideal
 // and label on every open before using the geometric incidence of this bundle.
-Value coordinate_exceptional(const Value& request) {
+using Equations = std::set<atlas::local::Polynomial>;
+
+Equations up_to_scalar(atlas::local::Basis rows) {
+    Equations equations;
+    for (auto& f : rows) {
+        if (f.empty()) return {};
+        const mpq_class scalar = f.begin()->second;
+        for (auto& term : f) term.second /= scalar;
+        equations.insert(std::move(f));
+    }
+    return equations;
+}
+
+Value coordinate_exceptional(const Value& request, bool polynomial_rows) {
     const Names base = names(request["variables"]), centre = names(request["centre"]);
-    const std::set<std::string> variables(base.begin(), base.end()), axes(centre.begin(), centre.end());
+    const std::set<std::string> variables(base.begin(), base.end()), generators(centre.begin(), centre.end());
     const auto& charts = request["charts"];
-    if (axes.size() < 2 || axes.size() != centre.size() || charts.size() != axes.size() ||
-        !std::includes(variables.begin(), variables.end(), axes.begin(), axes.end())) return {};
+    if (generators.size() < 2 || generators.size() != centre.size() || charts.size() != centre.size() ||
+        generators.size() > variables.size()) return {};
+    Equations centre_equations;
+    if (polynomial_rows) {
+        // This optional certificate has a bounded sparse transport; larger
+        // archives still use the full graph incidence calculation.
+        if (base.size() > 16 || std::any_of(centre.begin(), centre.end(),
+            [](const std::string& row) { return row.size() > 8192; })) return {};
+        atlas::local::Basis basis;
+        const atlas::local::Powers origin(base.size(), 0);
+        for (const auto& row : centre) {
+            auto equation = atlas::local::decode_row(row, base.size());
+            if (equation.empty() || equation.count(origin)) return {};
+            basis.push_back(std::move(equation));
+        }
+        if (!atlas::local::polynomial_graph(basis, base.size())) return {};
+        centre_equations = up_to_scalar(std::move(basis));
+    } else if (!std::includes(variables.begin(), variables.end(), generators.begin(), generators.end())) {
+        return {};
+    }
     std::string label;
     for (const auto& chart : charts) {
         const auto& boundary = chart["exceptional"];
         if (boundary.size() != 1) return {};
         const auto& component = boundary[0];
         const Names equations = names(component["ideal"]);
-        if (std::set<std::string>(equations.begin(), equations.end()) != axes) return {};
+        if (std::set<std::string>(equations.begin(), equations.end()) != generators) {
+            // The exceptional prime may use monic grevlex generators while
+            // the original projective centre has monic lex generators.
+            if (!polynomial_rows || equations.size() != centre.size()) return {};
+            atlas::local::Basis basis;
+            for (const auto& row : equations) {
+                if (row.size() > 8192) return {};
+                basis.push_back(atlas::local::decode_row(row, base.size()));
+            }
+            if (up_to_scalar(std::move(basis)) != centre_equations) return {};
+        }
         const auto id = component["id"].asString();
         if (id.size() < 2 || id.front() != 'E' ||
             !std::all_of(id.begin()+1, id.end(), [](char c) { return c >= '0' && c <= '9'; }) ||
@@ -407,7 +451,8 @@ Value execute(const Value& r) {
     if (op=="binomial_layout") return binomial_layout(r);
     if (op=="product_axes") return product_axes(r["charts"],r["dimension"].asInt());
     if (op=="product_torus") return product_torus(r);
-    if (op=="coordinate_exceptional") return coordinate_exceptional(r);
+    if (op=="coordinate_exceptional") return coordinate_exceptional(r, false);
+    if (op=="polynomial_graph_exceptional") return coordinate_exceptional(r, true);
     if (op=="cells") return Intersections(r).cells();
     if (op=="boundary") return boundary(r,Intersections(r));
     if (op=="aliases") return aliases(r["old"],r["found"]);
@@ -417,3 +462,5 @@ Value execute(const Value& r) {
 extern "C" const char* atlas_incidence(const char* input) { return atlas::sparse_json::invoke(input,execute); }
 
 extern "C" int atlas_coordinate_exceptional_abi() noexcept { return 1; }
+
+extern "C" int atlas_polynomial_graph_exceptional_abi() noexcept { return 1; }

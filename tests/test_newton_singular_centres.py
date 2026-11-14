@@ -50,19 +50,24 @@ class NewtonSingularCentres(unittest.TestCase):
         self.assertIsNone(kernel_json("atlas_resolution_candidate", "transverse_pencil", width=3, terms=zero_terms))
 
     def test_pencil_decline_preserves_search_and_quick_route(self):
-        from engine import general_resolution
+        from engine import general_resolution, reduced_centre
         from engine.resolve import resolve
         if native_library._MODE != "native" or not hasattr(native_library._library(), "atlas_transverse_pencil_abi"):
             self.skipTest("Native transverse pencil operation unavailable.")
         request = dict(polynomial="(x+y)^2-(x-y)^2*z",variables=list("xyz"),compute="cpu")
         stop = RuntimeError("exhaustive worker started")
         with patch.object(general_resolution,"_isolated_graph_prefix",return_value=None), \
+                patch.object(reduced_centre,"smooth_reduced_graph",return_value=None), \
                 patch("engine.exhaustive_resolution.search",side_effect=stop):
             with self.assertRaisesRegex(RuntimeError,"exhaustive worker started"):
                 resolve(request)
         with patch.object(general_resolution,"_isolated_graph_prefix",side_effect=AssertionError):
             result = resolve(dict(request,search="quick"))
-        self.assertEqual(result["engine"], "canonical-blowups")
+        self.assertEqual(result["engine"], "verified-ideal-blowup")
+        self.assertEqual(result["certificate"]["center_source"], "smooth reduced singular locus")
+        with patch.object(reduced_centre,"smooth_reduced_graph",return_value=None):
+            fallback = resolve(dict(request,search="quick"))
+        self.assertEqual(fallback["engine"], "canonical-blowups")
 
     def test_nonconvenient_fan_preserves_the_smooth_locus(self):
         names = list("xyzt")

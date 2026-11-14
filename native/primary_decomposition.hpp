@@ -2,6 +2,7 @@
 
 #include "local_basis.hpp"
 #include <istream>
+#include <json/value.h>
 #include <optional>
 #include <string>
 
@@ -31,5 +32,7 @@ Polynomial substitute(const Polynomial& f, size_t axis, const Polynomial& image,
 std::optional<Components> split_comaximal(const Basis& rows, size_t width, bool lex);
 std::optional<Components> special_decomposition(const Basis& rows, size_t width, bool lex);
 Components decompose(const Basis& rows, size_t width, bool lex);
+Json::Value prepare_overlap(const Json::Value& input);
+int generic_overlap(const Json::Value& input);
 std::string operation(std::istream& input, const std::string& op);
 }

@@ -1,25 +1,13 @@
-"""Explicit exhaustiveness in the two local browser forms."""
+"""Exact exhaustive resolution downloads in the browser."""
 import json
 import os
 import subprocess
 
-from engine.app import MAX_REQUEST
-from tests.algebra_browser import AlgebraBrowserCase, expect
+from tests.browser_support import BrowserCase, expect
 from tests.cli_support import ROOT
 
 
-class ExhaustiveBrowserTests(AlgebraBrowserCase):
-    def test_large_algebra_request(self):
-        coefficient = "9" * (MAX_REQUEST + 1)
-        self.page.locator("#operation").select_option("ideal")
-        self.rows("#generators", "#add-generator", [coefficient + "*x"])
-        self.page.locator("#result-name").fill("I")
-        self.page.get_by_label("Exhaustive mode").check()
-        with self.page.expect_response(self.url + "/api/algebra/exhaustive") as api:
-            self.page.locator("#run").click()
-        self.assertEqual(api.value.status, 200)
-        expect(self.page.locator("#result-value")).to_contain_text(coefficient)
-
+class ExhaustiveBrowserTests(BrowserCase):
     def test_exhaustive_resolution_download_keeps_numeric_multiplicity(self):
         env = dict(os.environ, ATLAS_GROEBNER="native")
         env.pop("PYTHONINTMAXSTRDIGITS", None)

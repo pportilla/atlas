@@ -20,6 +20,7 @@ from fractions import Fraction
 from . import native_polynomial as np
 from .candidate_field import NativeField
 from .chart_expressions import chart_expressions, runtime_expressions
+from .resolution_progress import report
 from .reference import sp
 from .reference import QQ
 
@@ -28,6 +29,7 @@ from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_ba
                            radical_subset, resolution_charts, verify_snc)
 from .groebner import CHECK
 from .native_library import current_replay_scope, replay_scope
+from .reduced_centre import smooth_reduced_graph
 
 
 def expression(poly, variables):
@@ -232,21 +234,22 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
     return _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks)
 
 
-def _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks,*,coordinate_line=False):
+def _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks,*,coordinate_line=False,graph_bundle=False):
     domain, center, u = candidate.domain, candidate.center, candidate.projective
     used = {v.name for chart in charts for v in chart.variables} | {v.name for v in candidate.projective}
     generator = "field_generator"
     while generator in used:
         generator += "_"
-    if coordinate_line:
+    if coordinate_line or graph_bundle:
         from .incidence import incidence, stratum_dimension
         axes = [str(x) for x in center]
         divisors = []
         for (piece,) in pieces:
             ideal = [_text(g,domain,generator) for g in piece]
             divisors.append([dict(id="E1",equation=", ".join(ideal),ideal=ideal)])
-        ident = incidence("coordinate_exceptional", variables=[str(x) for x in variables], centre=axes,
-                          charts=[{"exceptional":components} for components in divisors])
+        ident = "E1" if graph_bundle else incidence("coordinate_exceptional",
+            variables=[str(x) for x in variables], centre=axes,
+            charts=[{"exceptional":components} for components in divisors])
         if ident is None:
             return "undecided", None
         dual = {"status":"complete", "convention":"Ambient exceptional divisor in the algebraic germ over Qbar. "
@@ -266,11 +269,12 @@ def _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks,*,
         ambient_divisors = ambient[1]
     atlas=[]
     for i,chart in enumerate(charts):
-        if empty_locus(chart.variables,(*chart.ambient,*variables),domain=domain):
+        if not graph_bundle and empty_locus(chart.variables,(*chart.ambient,*variables),domain=domain):
             continue
         # On a graph chart the ambient equations are part of the coordinate
         # ring. Present only additional strict equations when possible.
-        strict=[e for e in chart.strict if not ideal_subset(chart.variables,(e,),chart.ambient,domain=domain)]
+        strict=chart.strict if graph_bundle else [
+            e for e in chart.strict if not ideal_subset(chart.variables,(e,),chart.ambient,domain=domain)]
         atlas.append({'id':f'G{i+1}','coordinates':[str(x) for x in chart.variables],
             'ambient_ideal':[_text(e,domain,generator) for e in chart.ambient],
             'strict_transform':[_text(e,domain,generator) for e in strict],
@@ -428,6 +432,8 @@ def _decide(info):
     Most candidates are rejected, and over Q the kernel says so from the
     packed polynomials alone: no expression is built for them.
     """
+    if info.get("operation") == "reduced_graph_record":
+        return _reduced_graph_record(info["variables"], info["mode"], info["centre"], info["proof"])
     proof = None
     if info["field"] is None:
         try:
@@ -550,7 +556,7 @@ class _Workers:
                 except OSError:
                     pass
 
-    def take(self):
+    def take(self, *, spare=True):
         with self.lock:
             worker = self.idle.pop() if self.idle else None  # the one used last
         if worker is not None and not worker.alive():
@@ -558,7 +564,8 @@ class _Workers:
             worker = None
         if worker is None:
             worker = _Worker()
-        self.warm()
+        if spare:
+            self.warm()
         return worker
 
     def give(self, worker):
@@ -587,14 +594,38 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
     start = monotonic()
     try:
         info = _wire_candidate(variables,f,candidate,mode,effort)
-        replay = current_replay_scope()
-        if replay is not None:
-            info["replay"] = replay.settings()
-        payload = json.dumps(info)
     except Exception:
         return "undecided", None
+    return _run_attempt(info, seconds-(monotonic()-start))
+
+
+def _reduced_graph_record(names, mode, centre, proof, *, exceptional=None):
+    from .resolution_search import _candidate
+    variables = tuple(map(np.Symbol,names))
+    candidate = _candidate(variables, kernel.exprs(variables, centre), "smooth reduced singular locus")
+    charts, count = assemble_charts(variables, candidate.center, kernel.graph_proof_rows(proof))
+    if exceptional is None:
+        pieces = _pieces(candidate, charts)
+    else:
+        divisor = kernel.exprs(variables, exceptional)
+        pieces = [[divisor] for chart in charts]
+    state, record = _verified_record(variables, candidate, mode, 1, charts, pieces,
+                                    count, graph_bundle=exceptional is not None)
+    if state == "certified":
+        record["certificate"]["candidates_examined"] = 1
+    return state, record
+
+
+def _run_attempt(info, seconds, *, spare=True):
+    if seconds <= 0:
+        return "undecided", None
+    start = monotonic()
+    replay = current_replay_scope()
+    if replay is not None:
+        info["replay"] = replay.settings()
+    payload = json.dumps(info)
     try:
-        worker = _workers.take()
+        worker = _workers.take() if spare else _workers.take(spare=False)
     except OSError:
         return "undecided", None
     output = None
@@ -697,6 +728,7 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
         if priority_key is not None and priority_key in rejected_priority:
             continue
         attempts+=1
+        report(f"Checking blow-up candidate {attempts} at the proposed centre")
         if transverse_centre is None:
             state,result = _attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left)
         else:

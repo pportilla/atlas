@@ -16,14 +16,14 @@ def dual_complex(record):
         from .toric_graph import graph_complex
         return graph_complex(record)
 
-    from . import atlas
-    from .centres import GiveUp
     from .strata import rational_chart_outputs
     polynomial = parse(record.get("polynomial"), names, bounded=False)
     intrinsic = record["mode"] == "intrinsic"
     computed = rational_chart_outputs(record, polynomial, intrinsic=intrinsic, integrals=False)
     if computed is not None:
         return computed[1]["dual_complex"]
+    from . import atlas
+    from .centres import GiveUp
     charts = atlas.from_record(record, polynomial)
     if not charts:
         raise InputError("This record lacks the chart cover required for geometric incidence.")

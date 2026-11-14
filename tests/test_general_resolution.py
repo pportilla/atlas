@@ -13,6 +13,64 @@ def candidate(center, coords, boundary):
 
 
 class GeneralResolutionTests(unittest.TestCase):
+    def test_polynomial_graph_centre_uses_free_coordinates_in_any_order(self):
+        from unittest.mock import patch
+        from engine import general_resolution, native_library
+        if native_library._MODE != "native":
+            self.skipTest("The bounded polynomial graph uses the native solver.")
+        names = ["x", "y", "z"]
+        for source in ("(y-x^2)^2-x*z^2", "(2*x^2-3*y)^2-x*(7*x+5*z)^2"):
+            with self.subTest(source=source), patch.object(general_resolution, "_run_attempt", side_effect=AssertionError):
+                record = general_resolution.smooth_reduced_graph(parse(source, names), names, "embedded", seconds=2)
+                self.assertEqual(len(record["charts"]), 2)
+                self.assertEqual(record["dual_complex"]["vertices"], [{"id": "E1", "dimension": 2}])
+
+    def test_bounded_smooth_centre_declines_invalid_native_reply_and_wide_transport(self):
+        from subprocess import CompletedProcess, TimeoutExpired
+        from unittest.mock import patch
+        from fractions import Fraction
+        from engine import general_resolution
+        from engine.native_library import _MODE, _kernel
+        if _MODE != "native" or not hasattr(_kernel(), "atlas_smooth_reduced_centre_abi"):
+            self.skipTest("Native reduced centre unavailable.")
+        names = list("xyz")
+        poly = parse("(x+y+z)^2-z*(x-y)^2", names)
+        for reply in ("", "not a proof", "unknown 2\n", "centre 2\n1 1 0 0\n1 0 1 0\npass 1\n-1 0\n", "centre 2\n1 1 0 0\n1 0 1 0\npass 3\n1 1\n"):
+            with patch.object(general_resolution.subprocess,"run",return_value=CompletedProcess([],0,reply,"")):
+                self.assertIsNone(general_resolution.smooth_reduced_graph(poly,names,"embedded"))
+        for exc in (OSError("native binary unavailable"), TimeoutExpired("graph_verify",.1)):
+            with patch.object(general_resolution.subprocess,"run",side_effect=exc) as native:
+                self.assertIsNone(general_resolution.smooth_reduced_graph(poly,names,"embedded"))
+                self.assertLessEqual(native.call_args.kwargs["timeout"],.1)
+        with patch.object(general_resolution.subprocess,"run",side_effect=AssertionError):
+            for exponent,coefficient in [((2**100,0,0),Fraction(1)),((4,0,0),Fraction(1,2**300))]:
+                self.assertIsNone(general_resolution.smooth_reduced_graph(
+                    dict(poly)|{exponent:coefficient}, names, "embedded"))
+
+    def test_reduced_centre_decline_only_needs_parsed_sparse_terms(self):
+        import sys
+        from fractions import Fraction
+        from subprocess import CompletedProcess
+        from unittest.mock import patch
+        from engine import native_library, reduced_centre
+        from engine.polynomial import sparse_row
+
+        if native_library._MODE != "native" or not hasattr(native_library._kernel(), "atlas_smooth_reduced_centre_abi"):
+            self.skipTest("Native reduced centre unavailable.")
+        names = ["z", "a", "x"]
+        terms = {(1, 0, 2): Fraction(-2, 7), (0, 3, 1): Fraction(5, 9), (1, 2, 0): 0}
+        with patch.dict(sys.modules, {"engine.general_resolution": None, "engine.native_polynomial": None}), \
+                patch.object(reduced_centre.subprocess, "run", return_value=CompletedProcess([], 0, "none", "")) as run:
+            self.assertIsNone(reduced_centre.smooth_reduced_graph(terms, names, "intrinsic"))
+            header, equation = run.call_args.kwargs["input"].splitlines()
+            self.assertEqual(header, "smooth_reduced_graph 3 0")
+            self.assertEqual(sparse_row(equation), {e: c for e, c in terms.items() if c})
+            with self.assertRaisesRegex(ValueError, "distinct polynomial coordinates"):
+                reduced_centre.smooth_reduced_graph(terms, ["z", "z", "x"], "intrinsic")
+            with self.assertRaisesRegex(ValueError, "Invalid polynomial exponent vector"):
+                reduced_centre.smooth_reduced_graph({(1, 2): 1}, names, "embedded")
+            run.assert_called_once()
+
     def test_curved_center_in_both_modes(self):
         x,y,z=sp.symbols("x y z")
         u,v=sp.symbols("U V")

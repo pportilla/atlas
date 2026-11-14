@@ -295,10 +295,19 @@ def from_record(record, polynomial, *, native=None):
     return charts or None
 
 
+_INCOMPLETE_REPAIR = "The saved charts do not certify a complete cover of the deleted repair centres."
+
+
+def _checked_repair_maps(charts):
+    if not any(c.removed or c.repair_projection for c in charts):
+        return charts
+    from .repair_replay import restore_repair_maps
+    return restore_repair_maps(charts)
+
+
 def _restore_record_maps(charts):
     """Keep certified projections available for the next serialization."""
-    from .repair_replay import restore_repair_maps
-    result = restore_repair_maps(charts)
+    result = _checked_repair_maps(charts)
     return list(result) if result is not None else charts
 
 
@@ -399,6 +408,10 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
     from dataclasses import replace
     from itertools import combinations
     from .local_blowups import _is_strict, _present
+    if integrals:
+        charts = _checked_repair_maps(charts)
+        if charts is None:
+            raise GiveUp(_INCOMPLETE_REPAIR)
     known = {}
     for item in charts:
         # Only points on the owned region enter the certificate. Put its
@@ -517,22 +530,19 @@ def boundary_complex(charts, dimension, intrinsic=False):
     smooth strict component computes its boundary in intrinsic mode."""
     from dataclasses import replace
     from .local_blowups import _is_strict
-    if all(c.torus for c in charts):
+    verified = _checked_repair_maps(charts)
+    incomplete_repair = verified is None
+    if verified is not None:
+        charts = verified
+    if not incomplete_repair and all(c.torus for c in charts):
         from .atlas_torus import torus_complex
         toric = torus_complex(charts, dimension, intrinsic)
         if toric is not None:
             return toric
-    if intrinsic:
+    if intrinsic and not incomplete_repair:
         product = _intrinsic_product(charts, dimension)
         if product is not None:
             return product
-    incomplete_repair = False
-    if intrinsic:
-        from .repair_replay import restore_repair_maps
-        verified = restore_repair_maps(charts)
-        incomplete_repair = verified is None
-        if verified is not None:
-            charts = verified
     ambient_charts = charts
     if intrinsic:
         charts = [replace(c, ambient=(*c.ambient, *ideal),
@@ -558,7 +568,7 @@ def boundary_complex(charts, dimension, intrinsic=False):
                 reason = "The local branches of the restricted exceptional divisors need separate incidences."
                 break
     if incomplete_repair:
-        reason = "The saved charts do not certify a complete cover of the deleted repair centres."
+        reason = _INCOMPLETE_REPAIR
         edges = []
     elif reason:
         from .atlas_gluing import glued_complex

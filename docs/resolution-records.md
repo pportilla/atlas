@@ -2,7 +2,7 @@
 
 ```sh
 ./atlas resolve 'y^2-x^3' --vars x,y --mode embedded --monodromy --json > cusp.json
-./atlas dual-complex cusp.json
+./atlas recompute-dual-complex cusp.json
 ./atlas monodromy cusp.json --json
 ```
 
@@ -10,6 +10,12 @@ The first command saves the resolution and both zetas. The second reconstructs
 the labelled complex from the saved record. The third computes the monodromy
 zeta and prints its factors and A’Campo contributions. Both replay commands
 accept `-` for standard input. The complex command also reads `.json.gz` files.
+
+At the Atlas prompt, `R.dual_complex` reads the complex already stored by
+`R = resolve(f)`. Use `recompute_dual_complex(R)` to rebuild incidence from the
+charts. Its vertices carry the data recovered during that computation. The
+recorded vertices retain their original annotations, such as self-intersections
+and multiplicities. Use `R.dual_complex.record` for the full recorded complex.
 
 Use distinct variable names beginning with a letter, explicit multiplication,
 and nonnegative integer powers written with `^` or `**`. Coefficients may be

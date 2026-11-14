@@ -122,8 +122,6 @@ Use these expressions at the prompt or in a file passed to `./atlas run`. Ration
 ./atlas algebra quotient-ring --vars x,y --gen 'x^2' --action power --poly '1+x' --exponent -3 --json
 ```
 
-In the browser’s **Algebra** view, choose **Quotient ring arithmetic**. Select **Declare a quotient ring**, enter the defining relations, and name the ring to use it in later operations. A saved element can be used with its parent ring. Each calculation can also be exported as an Atlas script.
-
 Over HTTP, select operation `quotient-ring` and supply `operands.ideal`. The default action is `declare`. For `reduce`, `negate`, `unit`, and `inverse`, pass `polynomial`. For `add`, `subtract`, `multiply`, `divide`, and `equal`, also pass `other_polynomial`. For `power`, pass `polynomial` and a signed integral `exponent`. A decimal string preserves an exponent of any width. All result records contain the reduced defining `relations`. A `quotient-element` also has a `representative`, and a `boolean` has a `value`. In a session, `A.apply("equal", u*v, 1).json` returns the complete predicate record.
 
 ### Ordinary and symbolic powers over QQ
@@ -146,7 +144,7 @@ print(membership(x*y*z, S).value)  # True
 ./atlas algebra symbolic-power --vars x,y,z --gen 'x*y' --gen 'x*z' --gen 'y*z' --exponent 2
 ```
 
-In the browser's **Algebra** view, choose the power operation, enter the ideal and exponent, and give the result a name to use it in a membership test. The HTTP operations are `ideal-power` and `symbolic-power`, each with operands `ideal` and `exponent`.
+The HTTP operations are `ideal-power` and `symbolic-power`, each with operands `ideal` and `exponent`.
 
 ### Localization at a prime over QQ
 
@@ -171,7 +169,7 @@ print(A.fraction(y+1, y).unit)               # True
 
 Use `localization` or `localize` at the prompt and in scripts. The fields `.prime` and `.contraction` are ideals in the original coordinate space. Pass `numerator=` and `denominator=` in the original call to receive the same checks in `.element`. A numerator alone uses denominator one. A denominator alone tests its inverse. The denominator supplied must lie outside $P$, including when a common factor could be cancelled. The zero prime is valid and gives the rational function field.
 
-In the browser's **Algebra** view, choose **Localization at a prime**, enter the generators of the ideal and of the prime separately, and optionally enter a fraction. Use the HTTP operation `localization` with operands `ideal`, `prime`, `numerator`, and `denominator`. The JSON response stores the contraction in `generators`, the prime in `prime`, and the optional query in `element`. The `member` flag refers to $IR_P$ and the `unit` flag refers to the ambient local ring $R_P$.
+Use the HTTP operation `localization` with operands `ideal`, `prime`, `numerator`, and `denominator`. The JSON response stores the contraction in `generators`, the prime in `prime`, and the optional query in `element`. The `member` flag refers to $IR_P$ and the `unit` flag refers to the ambient local ring $R_P$.
 
 ### Normalization of affine algebras over QQ
 
@@ -192,7 +190,7 @@ print(C.fractions[0].numerator, C.fractions[0].denominator)  # y x
 
 For a reduced algebra with several minimal primes, the normalization is the product of the returned component algebras. Each `C.prime` is an ideal in the original coordinates. The normalized algebra is the polynomial ring on `C.coordinates` modulo `C.relations`. The tuple `C.images` follows the input coordinate order, and `C.fractions` follows the target coordinate order. A denominator is nonzero in the component's function field and may vanish at particular points. For input with nilpotents, Atlas normalizes the reduction and sets `N.input_reduced` to `False`. The unit ideal presents the zero algebra and returns no components.
 
-In the browser's **Algebra** view, choose **Normalization**, enter the ideal generators, and select **Compute**. Naming the result lets you reuse its component primes and defining relations in later calculations. The JSON response and downloaded session script preserve the component maps and their coordinate rings.
+A saved normalization lets you reuse its component primes and defining relations. The JSON record preserves the component maps and their coordinate rings.
 
 ### Primary decomposition over QQ
 
@@ -215,7 +213,7 @@ J = intersection(D.components[0].primary, D.components[1].primary)
 print(groebner(J).generators == groebner(I).generators)  # True
 ```
 
-In the browser’s **Algebra** view, select **Primary decomposition**, enter the generators and choose **Compute**. Name the result to use a component or its prime in another calculation. The shell’s `--json` output and the HTTP operation `primary-decomposition` return `components`, an array of objects with `primary` and `prime` generator lists. A zero ideal has one component with primary and prime ideals both zero. The unit ideal has an empty decomposition. Embedded primary ideals can have different valid generators or even different valid choices of ideal. Their associated primes and the intersection of the primary components are invariant.
+The shell’s `--json` output and the HTTP operation `primary-decomposition` return `components`, an array of objects with `primary` and `prime` generator lists. A zero ideal has one component with primary and prime ideals both zero. The unit ideal has an empty decomposition. Embedded primary ideals can have different valid generators or even different valid choices of ideal. Their associated primes and the intersection of the primary components are invariant.
 
 ### Radicals of polynomial ideals
 
@@ -235,7 +233,7 @@ print(membership(x, I).value)  # False
 print(membership(x, J).value)  # True
 ```
 
-In the browser’s **Algebra** view, choose **Ideal radical** and enter the generators or select a saved global ideal or basis. Give the result a name to reuse it for membership or another ideal operation. For HTTP, send `operation: "radical"` and `operands.ideal`. The result’s `generators` array contains the reduced Gröbner basis in the requested order.
+For HTTP, send `operation: "radical"` and `operands.ideal`. The result’s `generators` array contains the reduced Gröbner basis in the requested order.
 
 The operation also applies to positive-dimensional and mixed-dimensional ideals. For example, $\sqrt{(x^2,xy)}=(x)$ is the line $x=0$. Over $\mathbb Q$, $\sqrt{((x^2+1)^2)}=(x^2+1)$, even though the equation has no rational root. The zero and unit ideals return `[]` and `["1"]`, respectively.
 
@@ -260,9 +258,7 @@ for term in F.factors:
 print(product == f)
 ```
 
-In the browser’s Algebra view, choose **Polynomial factorization** and enter the polynomial. Give the result a name to select any individual factor as the input to a later calculation. The exported session preserves that reference.
-
-For HTTP, send the operation `factor` with a single `polynomial` operand. The shell’s `--json` output and browser download both include the `ring`, the exact rational `unit` as a string, and a `factors` array. Each entry carries its `polynomial` and positive integer `multiplicity`.
+For HTTP, send the operation `factor` with a single `polynomial` operand. The shell’s `--json` output and the HTTP response both include the `ring`, the exact rational `unit` as a string, and a `factors` array. Each entry carries its `polynomial` and positive integer `multiplicity`.
 
 Each factor has leading coefficient 1 in the selected monomial order. The unit carries the sign and scale needed to recover the input. A nonzero constant returns itself as the unit and an empty factor list. Zero has no irreducible factorization and returns an input error.
 
@@ -283,7 +279,7 @@ u, v = R.coordinates
 print(R.polynomial == v^2-u^3)
 ```
 
-In the browser’s Algebra view, choose **Polynomial resultant**, enter both polynomials in order, and select the variable to eliminate. Save the result to reuse it in its smaller ring. The equivalent HTTP request is shown below.
+The HTTP request specifies both polynomials in order and the variable to eliminate.
 
 ```json
 {
@@ -317,7 +313,7 @@ d = gcd((x+y)*(x+1), (x+y)*(y+1), order="lex")
 print(d.polynomial, d.order)
 ```
 
-A nonzero GCD has leading coefficient one in the recorded order. Thus `gcd(0,f)` is the monic associate of $f$, `gcd(0,0)` is zero, and coprime inputs or a nonzero constant operand give one. Use `variables=(x,y)` to place two constant operands in that ambient ring. In the browser Algebra view, choose **Polynomial GCD**, enter one polynomial in each field, and run the calculation.
+A nonzero GCD has leading coefficient one in the recorded order. Thus `gcd(0,f)` is the monic associate of $f$, `gcd(0,0)` is zero, and coprime inputs or a nonzero constant operand give one. Use `variables=(x,y)` to place two constant operands in that ambient ring.
 
 ### Quotient bases and local hypersurface invariants
 
@@ -360,7 +356,7 @@ f="$g^5+$h^5+$g^3*$h^3"
 ./atlas algebra tjurina-number --vars x,y --point 1,1 --poly "$f" --compute cpu
 ```
 
-In the browser, select the same operation and enter the equation, the variables `x,y` and the point `1,1`. A basis request lists every surviving monomial. A Milnor or Tjurina request returns an exact integer even when the length exceeds 64 bits. [CPU measurements and Singular checks](../benchmarks/point-quotient-invariants.md)
+A basis request lists every surviving monomial. A Milnor or Tjurina request returns an exact integer even when the length exceeds 64 bits. [CPU measurements and Singular checks](../benchmarks/point-quotient-invariants.md)
 
 ```python
 x, y = coordinates("x", "y", coeffs=QQ)
@@ -393,7 +389,7 @@ At the prompt or in an Atlas script, pass `point=` in the declared variable orde
 
 For HTTP requests, supply `operands.point` as an ordered array of exact integers or rational strings. An explicit point returns `scope: "point"` and the reduced coordinates as strings. An omitted point preserves the existing `scope: "origin"` response. The global `quotient-basis` command accepts the ideal alone.
 
-In the browser's **Algebra** view, select the operation, declare all variables, and enter the generators or equation. For a local calculation, enter the rational point in the displayed coordinate order or leave it blank for the origin. The result can be reproduced by the equivalent shell command or exported script. Select **GPU** or pass `--compute gpu` to request eligible device work. The execution record identifies the stages that ran and any CPU fallback.
+For a local calculation, supply the rational point in the declared coordinate order or omit it to use the origin. Pass `--compute gpu` to request eligible device work. The execution record identifies the stages that ran and any CPU fallback.
 
 ### Multiplicity of finite-colength quotients
 
@@ -412,8 +408,6 @@ M = multiplicity(I)
 print(M.finite, M.value)           # True 3
 print(multiplicity(groebner(I)))   # 3
 ```
-
-In the browser’s **Algebra** view, choose **Quotient multiplicity**, enter the generators or select a saved ideal or global basis, and choose **Compute**. The exported script and command reproduce the same value.
 
 The count includes points with extension residue fields. For instance, $\mathbb Q[x]/((x^2+1)^2)$ has dimension 4. The unit ideal gives multiplicity 0. A positive-dimensional quotient has infinite colength, returned as `finite: false` and `value: null`. The HTTP operation `multiplicity` takes `operands.ideal` and returns the same global result as the shell’s `--json` option.
 
@@ -437,8 +431,6 @@ print(H.numerator[1])              # {'degree': 2, 'coefficient': -1}
 print(H.denominator_power)         # 2
 ```
 
-In the browser’s **Algebra** view, choose **Hilbert series**, enter the variables and generators or select a saved ideal or global Gröbner basis, then choose **Compute**. The shell command and exported script reproduce the result.
-
 The HTTP operation `hilbert-series` takes `operands.ideal`. Both the response and the shell’s `--json` output give the nonzero signed numerator terms in ascending degree over the common denominator $(1-t)^n$, before cancellation. For the zero ideal the series is $1/(1-t)^n$. The unit ideal gives series zero, an empty numerator, dimension $-1$ and multiplicity 0.
 
 Homogeneity is a property of the ideal. For example, $(x+y^2,y^2)=(x,y^2)$ is accepted even with the first set of generators. The ideal $(x+y^2)$ alone gives a homogeneity error.
@@ -459,7 +451,7 @@ Let $A=(\mathbb Q[x_1,\ldots,x_r]/I)_{\mathfrak m_p}$ at the rational point $p$,
 | $(1/2,0)$ | 1, 3, 5, 11 | 1, 2, 2, 2 | 2 |
 | $(3/2,1)$ | 1, 2, 3, 6 | 1, 1, 1, 1 | 1 |
 
-In the browser's **Algebra** view, select **Hilbert–Samuel function** or **Hilbert–Samuel multiplicity**, enter the ideal generators and the point, and choose **Compute**. Leaving the point blank selects the origin. Function degrees default to 0 through 5. Enter comma-separated nonnegative integers to request specific degrees in any order. To reproduce the result, copy the shell command or download the script.
+Omit the point to use the origin. The default function degrees are 0 through 5. Pass `--degrees` with comma-separated nonnegative integers to request specific degrees in any order.
 
 ```python
 x, y = coordinates("x", "y", coeffs=QQ)
@@ -469,7 +461,7 @@ print(H.values, H.graded_values)  # [11, 1, 3] and [2, 1, 2]
 print(hilbert_samuel_multiplicity(I, point=(3/2,1)).value)  # 1
 ```
 
-Both functions also accept a saved local standard basis and use its recorded point. The HTTP operations take `operands.ideal` and optional `operands.point`. The function additionally accepts `operands.degrees`, an array of nonnegative integers or exact decimal strings. Its result contains `degrees`, `values`, `graded_values`, `dimension` and `multiplicity`. An explicit empty list returns the dimension and multiplicity with empty value lists. The multiplicity operation returns `dimension` and the integer `value`. Choose **GPU** or pass `--compute gpu` for eligible Gröbner steps. [Computation and Singular checks](../native/KERNEL.md#hilbert-samuel-computation)
+Both functions also accept a saved local standard basis and use its recorded point. The HTTP operations take `operands.ideal` and optional `operands.point`. The function additionally accepts `operands.degrees`, an array of nonnegative integers or exact decimal strings. Its result contains `degrees`, `values`, `graded_values`, `dimension` and `multiplicity`. An explicit empty list returns the dimension and multiplicity with empty value lists. The multiplicity operation returns `dimension` and the integer `value`. Pass `--compute gpu` for eligible Gröbner steps. [Computation and Singular checks](../native/KERNEL.md#hilbert-samuel-computation)
 
 ### Tangent cones and their Hilbert series
 
@@ -485,7 +477,7 @@ For an ideal $I$ and a rational point $p$, let $A$ be its local quotient ring an
 | $(1/2,2)$, cusp | $(\Delta y)^2=0$ | $(1-t^2)/(1-t)^2$ | 2 |
 | $(3/2,3)$, smooth point | $3\Delta x-2\Delta y=0$ | $(1-t)/(1-t)^2$ | 1 |
 
-In the **Algebra** view, choose **Tangent cone** or **Tangent cone Hilbert series**, enter the ideal generators and point, and choose **Compute**. A blank point selects the origin. Name a cone to use it as the input to a series calculation at its vertex. Enter these statements at the Atlas prompt, or save them as `cusp.atlas` and run `./atlas run cusp.atlas`.
+A tangent cone can be reused as the input to a series calculation at its vertex. Enter these statements at the Atlas prompt, or save them as `cusp.atlas` and run `./atlas run cusp.atlas`.
 
 ```atlas
 x, y = coordinates("x", "y", coeffs=QQ)
@@ -532,9 +524,9 @@ s = local_smoothness(I)
 print(d.value, s.value, s.local_dimension, s.embedding_dimension, s.jacobian_rank)
 ```
 
-In the browser's **Algebra** view, choose **Local dimension** or **Local smoothness**, enter the ideal and coordinates, and select **Compute**. Both accept a saved local standard basis at its recorded point or a saved tangent cone at its vertex. The HTTP operations take `operands.ideal` and optional `operands.point`. The two results expose the same fields in scripts and JSON.
+Local dimension and local smoothness accept a saved local standard basis at its recorded point or a saved tangent cone at its vertex. The HTTP operations take `operands.ideal` and optional `operands.point`. The two results expose the same fields in scripts and JSON.
 
-Select **GPU** or use `--compute gpu` to request acceleration of eligible modular standard-basis or Jacobian rank calculations. Atlas verifies these results over the rationals. The execution record identifies the stages that used the device. [Ordinary CPU timings against Singular](../benchmarks/local_dimension_cpu.py) · [Large coupled ideal timings](../benchmarks/large-coupled-local.md)
+Use `--compute gpu` to request acceleration of eligible modular standard-basis or Jacobian rank calculations. Atlas verifies these results over the rationals. The execution record identifies the stages that used the device. [Ordinary CPU timings against Singular](../benchmarks/local_dimension_cpu.py) · [Large coupled ideal timings](../benchmarks/large-coupled-local.md)
 
 ### Zariski tangent spaces and embedding dimensions
 
@@ -552,7 +544,7 @@ For $X=V(I)$ and a rational point $p$ on $X$, a tangent direction $v$ satisfies 
 
 At the cusp the tangent cone has equation $(\Delta y)^2=0$. Its quadratic term contributes no linear equation to the Zariski tangent space.
 
-In the **Algebra** view choose **Zariski tangent space** or **Embedding dimension**, enter the ideal and the point, and choose **Compute**. Omitting the point selects the origin. All the generators must vanish at the chosen point. The tangent-space calculation labels its direction coordinates and gives the basis vectors in that order. Select **GPU** or pass `--compute gpu` to request modular Jacobian row reduction with exact host verification.
+Omitting the point selects the origin. All the generators must vanish at the chosen point. The tangent-space calculation labels its direction coordinates and gives the basis vectors in that order. Pass `--compute gpu` to request modular Jacobian row reduction with exact host verification.
 
 ```atlas
 x, y = coordinates("x", "y", coeffs=QQ)
@@ -588,7 +580,7 @@ print(B.generators, H.remainder, H.unit)
 print(local_normal_form(x+y, I, point=[2, -2]).remainder)
 ```
 
-A saved basis remembers its point. In the browser **Algebra** view, choose a local standard basis or local normal form, set the point alongside the ordered variables, and enter the generators. A saved local standard basis can be selected for subsequent local reductions and reused in the exported session.
+A saved local standard basis retains its point for subsequent reductions.
 
 Large shifted powers can stay in the original coordinates. For example, let $N=2^{64}+7$ and $I=(x^Nz-y^2)$ at $(1,0,0)$. The factor $x^N$ is a unit there. Reducing $z$ gives remainder $y^2$ and unit $x^N$, so the returned certificate is exactly the defining equation. Both commands take the exponent as an integer.
 

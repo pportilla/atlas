@@ -11,7 +11,7 @@ from .session_expressions import Evaluator, SessionError
 from .session_monodromy import check_resolution, unavailable_check
 from .session_polynomial import QQ, Polynomial, coordinates
 from .session_quotient import QuotientElement, QuotientRing, quotient_ring
-from .session_values import Resolution
+from .session_values import Divisor, DualComplex, Resolution
 
 
 HELP = """Define coordinates and keep the results of calculations:
@@ -19,8 +19,11 @@ HELP = """Define coordinates and keep the results of calculations:
   x, y = coordinates("x", "y")       # optional: coeffs=QQ
   f = y^2 - x^3
   R = resolve(f)
-  D = dual_complex(R)                    # recompute the exceptional incidence from charts
-  D.vertices, D.cells
+  R.polynomial == f                      # True in the original coordinates
+  D = R.dual_complex                     # the recorded exceptional complex
+  D.vertices                             # [E1, E2, E3]
+  R.branches[0].meets                    # [E3]
+  G = recompute_dual_complex(R)          # independently rebuild incidence from the charts
   R.divisors
   E = R.divisor("E3")
   C = R.chart("B3.u")
@@ -126,6 +129,8 @@ Run the same expressions in a file with ./atlas run FILE.atlas."""
 
 
 def _json_value(value):
+    if isinstance(value, (DualComplex, Divisor)):
+        return _json_value(value._record)
     if isinstance(value, (QuotientElement, QuotientRing)):
         return value.result
     if isinstance(value, Polynomial):
@@ -154,7 +159,7 @@ def _resolution_input(polynomial, variables):
             raise ValueError("A polynomial already carries its coordinates.")
         if polynomial.coeffs is not QQ or polynomial._space.has_relations:
             raise ValueError("resolve expects an equation in affine polynomial coordinates over QQ.")
-        return str(polynomial), list(polynomial.variables), polynomial._space
+        return str(polynomial), list(polynomial.variables), polynomial
     if isinstance(polynomial, str):
         if not isinstance(variables, (list, tuple)):
             raise ValueError('For a polynomial string, supply variables=["x", "y"].')
@@ -166,14 +171,14 @@ def new_session(calculate):
     """Register session operations here so both entry points return the same values."""
     def resolve(polynomial, *, variables=None, mode="embedded", search="exhaustive",
                 compute=None, monodromy=False):
-        expression, names, source_space = _resolution_input(polynomial, variables)
+        expression, names, source_polynomial = _resolution_input(polynomial, variables)
         if type(monodromy) is not bool:
             raise ValueError("monodromy must be true or false.")
         options = {"monodromy": True} if monodromy else {}
         status, record = calculate(expression, names, mode=mode, search=search, compute=compute, **options)
         if status != 200:
             raise ValueError(record["error"])
-        return Resolution(record, source_space, _from_solver=True)
+        return Resolution(record, source_polynomial=source_polynomial, _from_solver=True)
 
     def monodromy_check(polynomial, *, variables=None, search="quick", compute=None, check_isolation=False):
         if type(check_isolation) is not bool:
@@ -183,24 +188,28 @@ def new_session(calculate):
                 raise ValueError("A resolution already carries its coordinates.")
             resolution = polynomial
         else:
-            expression, names, source_space = _resolution_input(polynomial, variables)
+            expression, names, source_polynomial = _resolution_input(polynomial, variables)
             status, record = calculate(expression, names, mode="embedded", search=search,
                                        compute=compute, monodromy=True)
             if status == 400:
                 raise ValueError(record["error"])
             if status != 200:
                 return unavailable_check(record["error"])
-            resolution = Resolution(record, source_space, _from_solver=True)
+            resolution = Resolution(record, source_polynomial=source_polynomial, _from_solver=True)
         return check_resolution(resolution, check_isolation=check_isolation, compute=compute)
 
     def dual_complex(resolution):
+        # Older scripts use this function's raw replay dictionary.
         from .resolution_complex import dual_complex as replay
         if not isinstance(resolution, Resolution):
-            raise ValueError("dual_complex expects an Atlas resolution.")
+            raise ValueError("Pass an Atlas resolution to recompute its dual complex.")
         return replay(resolution._record)
 
+    def recompute_dual_complex(resolution):
+        return DualComplex(resolution, dual_complex(resolution))
+
     return Evaluator({"QQ": QQ, "coordinates": coordinates, "resolve": resolve,
-                      "dual_complex": dual_complex,
+                      "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                       "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
                       "quotient_ring": quotient_ring, **algebra_bindings()}, reserved=("help", "quit", "exit"))
 

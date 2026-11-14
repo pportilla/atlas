@@ -1,0 +1,55 @@
+#runs { display: grid; border-top: 1px solid var(--rule-strong); }
+#runs:empty { display: none; }
+.resolution-run {
+  min-width: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  overflow-wrap: anywhere;
+}
+.run-heading { margin: 0; }
+.run-toggle {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 49px; padding: 10px 12px;
+  color: var(--text); text-align: left;
+  background: transparent;
+}
+.run-toggle[aria-expanded="true"] { background: var(--wash); }
+.run-toggle:hover { background: var(--wash); }
+.run-toggle:focus-visible { outline-offset: -3px; }
+.run-chevron {
+  flex: 0 0 7px; height: 7px;
+  border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent);
+  transform: rotate(-45deg);
+}
+.run-toggle[aria-expanded="true"] .run-chevron { transform: rotate(45deg) translateY(-2px); }
+.run-equation {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 22px/1.5 var(--math);
+}
+.run-equation .m { font-size: 1em; }
+.run-mode, .run-status {
+  flex: 0 0 auto; font: 550 12px/1.35 var(--ui);
+}
+.run-mode { color: var(--muted); text-transform: capitalize; }
+.run-status {
+  padding: 2px 0; color: var(--ok); font-family: var(--mono);
+}
+.resolution-run[data-state="queued"] .run-status,
+.resolution-run[data-state="running"] .run-status,
+.resolution-run[data-state="submitting"] .run-status { color: var(--warn); }
+.resolution-run[data-state="failed"] .run-status { color: var(--bad); }
+.run-body { border-top: 1px solid var(--rule); padding: 12px 10px 18px; }
+.run-message { color: var(--muted); font-size: 14px; }
+.run-progress { margin: 8px 0; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.run-stage { margin-bottom: 5px; color: var(--text); }
+.run-blowups:not([hidden]) + .run-elapsed::before { content: "·"; padding: 0 7px; }
+.run-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.run-actions .button { min-height: 29px; padding: 2px 0; border: none; background: transparent; color: var(--accent); font-size: 13px; font-weight: 400; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.run-actions { column-gap: 18px; }
+.run-actions .button:hover { color: var(--heading); }
+.run-body #result .result-head { padding: 4px 0 12px; }
+@media (max-width: 580px) {
+  .run-toggle { gap: 8px; padding: 10px; }
+  .run-equation { font-size: 18px; }
+  .run-mode, .run-status { font-size: 11px; }
+  .run-body { padding: 10px; }
+}

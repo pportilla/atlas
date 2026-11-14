@@ -154,18 +154,64 @@ class Branch(_Component):
         return [resolution.divisor(name) for name in self._record["ambient_components"]]
 
 
-class Resolution(_RecordView):
-    _members = ("coordinates", "divisors", "charts", "branches", "divisor", "chart")
+class DualComplex(_RecordView):
+    """Incidence as recorded, with each vertex linked to its divisor on this resolution."""
+    _members = ("vertices", "cells", "status", "record")
 
-    def __init__(self, record, source_space=None, *, _from_solver=False):
+    def __init__(self, resolution, record):
+        super().__init__(record)
+        self._mode = resolution._record.get("mode")
+        self._vertices = {v["id"]: Divisor(resolution, v) for v in record["vertices"]}
+
+    @property
+    def vertices(self):
+        return list(self._vertices.values())
+
+    @property
+    def cells(self):
+        return deepcopy(self._record["cells"])
+
+    @property
+    def status(self):
+        return self._record["status"]
+
+    @property
+    def record(self):
+        return deepcopy(self._record)
+
+    def __repr__(self):
+        cells = self._record["cells"]
+        nv, nc = len(self._vertices), len(cells)
+        scope = f"{self._mode}, " if self._mode else ""
+        edges_only = bool(cells) and all(c.get("dimension", 1) == 1 and len(c["vertices"]) == 2 for c in cells)
+        kind = "edge" if edges_only else "higher cell"
+        summary = (f"Dual complex ({scope}{self.status}): "
+                   f"{nv} {'vertex' if nv == 1 else 'vertices'}, {nc} {kind}{'' if nc == 1 else 's'}")
+        if self.status != "complete" and self._record.get("reason"):
+            return summary + "\n  " + self._record["reason"]
+        # A short edge list is readable at the prompt. Keep all cell IDs,
+        # faces and higher incidences available in .cells on every complex.
+        if edges_only and nc <= 6:
+            return summary + "\n  " + ", ".join(" — ".join(c["vertices"]) for c in cells)
+        return summary
+
+
+class Resolution(_RecordView):
+    _members = ("polynomial", "coordinates", "divisors", "charts", "branches", "divisor", "chart", "dual_complex", "record")
+
+    def __init__(self, record, source_space=None, *, source_polynomial=None, _from_solver=False):
+        super().__init__(record)
+        if source_polynomial is not None:
+            self.polynomial = source_polynomial
+            source_space = source_polynomial._space
+        self._source_space = source_space or _CoordinateSpace.named(record["variables"])
+        charts = record["charts"]
         if "chart_sections" in record.get("dual_complex", {}).get("finite_sheet_certificate", {}):
             from .atlas_finite import geometric_chart_records
-            record = {**record, "charts": geometric_chart_records(record)}
-        super().__init__(record)
-        self._source_space = source_space or _CoordinateSpace.named(record["variables"])
-        self._charts = {c["id"]: Chart(self, c) for c in record["charts"]}
-        vertices = record["dual_complex"]["vertices"]
-        self._divisors = {v["id"]: Divisor(self, v) for v in vertices}
+            charts = geometric_chart_records(record)
+        self._charts = {c["id"]: Chart(self, c) for c in charts}
+        self.dual_complex = DualComplex(self, record["dual_complex"])
+        self._divisors = self.dual_complex._vertices
         self._branches = [Branch(self, b) for b in record.get("branches", ())]
         if _from_solver and "topological_zeta" in record and "monodromy_zeta" in record:
             # Freshly computed by our solver from a single certified atlas.
@@ -196,6 +242,16 @@ class Resolution(_RecordView):
     @property
     def coordinates(self):
         return self._source_space.coordinates
+
+    @cached_property
+    def polynomial(self):
+        """Read the archived equation in this resolution's original coordinates."""
+        from .session_algebra import polynomial
+        return polynomial(self._record["polynomial"], variables=self.coordinates)
+
+    @property
+    def record(self):
+        return deepcopy(self._record)
 
     @property
     def charts(self):

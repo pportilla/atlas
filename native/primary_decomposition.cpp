@@ -4,6 +4,7 @@
 #include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "local_dimension.hpp"
+#include "quotient_ring.hpp"
 #include "polynomial_factors.hpp"
 #include "sparse_flint.hpp"
 #include "field_root_coordinates.hpp"
@@ -584,6 +585,170 @@ Basis intersection_lex(const Basis& a, const Basis& b, size_t width) { return in
 Basis saturate_lex(const Basis& rows, const Polynomial& h, size_t width) { return saturate(rows,h,width); }
 int dimension_lex(const Basis& rows, size_t width) { return dimension(rows,width); }
 Polynomial multiply(const Polynomial& a, const Polynomial& b) { return product(a,b); }
+
+namespace {
+Basis overlap_rows(const Json::Value& rows, size_t width) {
+    Basis result;
+    for (const auto& row : rows) result.push_back(local::decode_row(row.asString(),width));
+    return result;
+}
+
+// Compute the full ideal of denominators of each target coordinate on the
+// source chart. In block lex order, elimination gives I(graph) ∩ QQ[X,t].
+// Division of a relation d(X)t-n(X) only uses basis rows of t-degree ≤ 1.
+// Thus the linear rows generate every possible denominator modulo I(X).
+// Keeping the whole list matters on affine charts that are not factorial.
+Json::Value regular_coordinates(const Basis& graph, const Axes& from, const Axes& to) {
+    Json::Value result, coordinates(Json::arrayValue), equations(Json::arrayValue);
+    const auto width = from.size()+to.size();
+    // A row t-n(X) already supplies a global regular coordinate. Only
+    // the first projection still needs elimination for the domain ideal.
+    for (auto axis : to) {
+        Axes order;
+        for (auto j : to) if (j != axis) order.push_back(j);
+        const size_t t = order.size();
+        order.push_back(axis);
+        order.insert(order.end(),from.begin(),from.end());
+        auto reordered=remap(graph,order);
+        if (axis!=to.front()) {
+            Powers head(width);
+            head[t]=1;
+            auto explicit_row=std::find_if(reordered.begin(),reordered.end(),[&](const auto& row) {
+                return !row.empty() && row.rbegin()->first==head;
+            });
+            if (explicit_row!=reordered.end()) {
+                Polynomial n;
+                const auto& lc=explicit_row->rbegin()->second;
+                for (const auto& [e,c] : *explicit_row)
+                    if (e[t]==0) n.emplace(Powers(e.begin()+t+1,e.end()),-c/lc);
+                Json::Value choices(Json::arrayValue), pair(Json::arrayValue);
+                pair.append(local::encode_row(n));
+                pair.append(local::encode_row(one(from.size())));
+                choices.append(std::move(pair));
+                coordinates.append(std::move(choices));
+                continue;
+            }
+        }
+        auto relations = basis(reordered,width,1);
+        Json::Value choices(Json::arrayValue);
+        for (const auto& f : relations) {
+            const auto& head = f.rbegin()->first;
+            if (std::any_of(head.begin(),head.begin()+t,[](const auto& e){return e!=0;}) || head[t]>1)
+                continue;
+            Polynomial d,n;
+            for (const auto& [e,c] : f) {
+                Powers x(e.begin()+t+1,e.end());
+                if (e[t]==1) d.emplace(std::move(x),c);
+                else n.emplace(std::move(x),-c);
+            }
+            if (d.empty()) {
+                if (axis==to.front()) equations.append(local::encode_row(n));
+            } else {
+                Json::Value pair(Json::arrayValue);
+                pair.append(local::encode_row(n));
+                pair.append(local::encode_row(d));
+                choices.append(std::move(pair));
+            }
+        }
+        coordinates.append(std::move(choices));
+    }
+    result["coordinates"]=std::move(coordinates);
+    result["domain"]=std::move(equations);
+    return result;
+}
+
+using FractionMap = std::vector<std::pair<Polynomial,Polynomial>>;
+
+std::optional<FractionMap> regular_at(const Json::Value& maps, const Basis& prime, size_t from, size_t to) {
+    if (maps["coordinates"].size()!=to) throw std::invalid_argument("Wrong number of overlap coordinates.");
+    if (!contained(overlap_rows(maps["domain"],from),prime)) return std::nullopt;
+    FractionMap result;
+    for (const auto& choices : maps["coordinates"]) {
+        bool found=false;
+        for (const auto& pair : choices) {
+            auto d=local::decode_row(pair[1].asString(),from);
+            if (!member(d,prime)) {
+                result.emplace_back(local::decode_row(pair[0].asString(),from),std::move(d));
+                found=true;
+                break;
+            }
+        }
+        if (!found) return std::nullopt;
+    }
+    return result;
+}
+
+// Clear one shared denominator and reduce the result in the coordinate
+// ring of the source prime. All chosen denominators are nonzero there.
+bool vanishes_under(const Polynomial& f, const FractionMap& images,
+                    const quotient_ring::Ring& source, size_t width) {
+    Powers degrees(images.size());
+    for (const auto& [e,c] : f)
+        for (size_t i=0;i<e.size();++i) degrees[i]=std::max(degrees[i],e[i]);
+    Polynomial sum;
+    for (const auto& [e,c] : f) {
+        Polynomial term={{Powers(width),c}};
+        for (size_t i=0;i<e.size() && !term.empty();++i) {
+            const auto& [n,d]=images[i];
+            for (const auto& [base,exponent] : {std::pair{&n,e[i]},std::pair{&d,mpz_class(degrees[i]-e[i])}}) {
+                if (exponent==0 || *base==one(width)) continue;
+                auto factor=std::get<Polynomial>(source.evaluate("power",{*base},exponent));
+                term=std::get<Polynomial>(source.evaluate("multiply",{term,factor}));
+            }
+        }
+        for (const auto& [p,a] : term) add(sum,p,a);
+    }
+    return sum.empty();
+}
+Json::Value chart_map(const Basis& graph, size_t a, size_t b, bool reverse) {
+    if (!a || !b) throw std::invalid_argument("A chart overlap requires two nonempty coordinate blocks.");
+    auto left=sequence(a), right=sequence(a+b);
+    right.erase(right.begin(),right.begin()+a);
+    return reverse ? regular_coordinates(graph,right,left) : regular_coordinates(graph,left,right);
+}
+}
+
+Json::Value prepare_overlap(const Json::Value& q) {
+    const size_t a=q["left_width"].asUInt(), b=q["right_width"].asUInt();
+    const auto graph=overlap_rows(q["graph"],a+b);
+    Json::Value maps(Json::arrayValue);
+    maps.append(chart_map(graph,a,b,false));
+    maps.append(chart_map(graph,a,b,true));
+    return maps;
+}
+
+int generic_overlap(const Json::Value& q) {
+    const size_t a=q["left_width"].asUInt(), b=q["right_width"].asUInt();
+    const auto p=overlap_rows(q["left_prime"],a), r=overlap_rows(q["right_prime"],b);
+    const bool prepared=q.isMember("maps");
+    const auto graph=prepared ? Basis{} : overlap_rows(q["graph"],a+b);
+    auto regular_map=[&](Json::ArrayIndex dir, const Basis& prime, size_t from, size_t to) {
+        if (prepared) return regular_at(q["maps"][dir],prime,from,to);
+        return regular_at(chart_map(graph,a,b,dir!=0),prime,from,to);
+    };
+    quotient_ring::Ring left(p,a,true);
+    auto forward=regular_map(0,left.basis(),a,b);
+    if (!forward) return 0;
+    quotient_ring::Ring right(r,b,true);
+    auto backward=regular_map(1,right.basis(),b,a);
+    if (!backward) return 0;
+    // Both maps exist on ambient neighbourhoods of the respective generic
+    // points. Mutual ideal containment identifies those points, excluding
+    // proper subvarieties in either projection and contracted graph fibres.
+    for (const auto& f : r) if (!vanishes_under(f,*forward,left,a)) return -1;
+    for (const auto& f : p) if (!vanishes_under(f,*backward,right,b)) return -1;
+    if (!q["removed"].empty()) {
+        FractionMap joint;
+        for (auto i : sequence(a)) joint.emplace_back(variable(i,a),one(a));
+        joint.insert(joint.end(),forward->begin(),forward->end());
+        for (const auto& removed : q["removed"]) {
+            const auto hole=overlap_rows(removed,a+b);
+            if (std::all_of(hole.begin(),hole.end(),[&](const auto& f){return vanishes_under(f,joint,left,a);}))
+                return 0;
+        }
+    }
+    return 1;
+}
 
 Polynomial substitute(const Polynomial& f, size_t axis, const Polynomial& image,
                       size_t width, std::map<mpz_class, Polynomial>& powers) {

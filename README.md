@@ -50,8 +50,10 @@ make -j4
 
 Run `./atlas` from the checkout to open the console. `./atlas run FILE`
 executes an Atlas script, and `./atlas algebra --help` lists the algebra
-commands. For the browser interface and HTTP API, start `./atlas serve` and
-connect to `http://127.0.0.1:8765`.
+commands. For the Resolution web interface and HTTP API, start `./atlas serve`
+and open `http://127.0.0.1:8765`. Submit a polynomial, then expand its row to
+follow the search. You can submit another polynomial while the first runs.
+Finished rows offer the recorded complex, charts, and follow-up zeta calculations.
 
 ## Documentation
 

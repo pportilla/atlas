@@ -44,6 +44,14 @@ class PromptHelpTests(unittest.TestCase):
         self.assertIn("coordinates(", script)
         self.assertIn("./atlas run", script)
 
+    def test_recorded_complex_help_explains_its_convention(self):
+        for request in ("help curve.dual_complex", "curve.dual_complex -h"):
+            with self.subTest(request=request):
+                card, error = self.ask('x, y = coordinates("x", "y")\ncurve = resolve(y^2-x^3)\n' + request)
+                self.assertEqual(error, "")
+                self.assertIn("algebraic closure", card)
+                self.assertIn("R.branches[0].meets", card)
+
     def test_error_suggestions_help_the_user_recover(self):
         for command, expected in (
             ('coordintes("x")', "coordinates"),
