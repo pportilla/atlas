@@ -11,7 +11,7 @@ from math import lcm
 import re
 
 from . import native_library
-from .polynomial import InputError, checked_native, format_poly, parse_expression, sparse_row
+from .polynomial import InputError, checked_native, format_poly, integer_from_decimal, integer_text, parse_expression, sparse_row
 from .strata import InvalidChart
 
 
@@ -27,7 +27,7 @@ def independent(parts, dimension):
         inputs = ["lattice_dimension", str(dimension), " ".join(["0"] * dimension)]
         for row in rows:
             scalar = lcm(*(c.denominator for c in row))
-            inputs.append(" ".join(str(int(c * scalar)) for c in row))
+            inputs.append(" ".join(integer_text(c * scalar) for c in row))
         answer, = native_library.affine_request(inputs)
         return int(answer)
 
@@ -45,7 +45,7 @@ def rational_factors(poly, names):
 
     def native():
         rows = native_library.affine_request(["factor", " ".join(names), format_poly(poly, names)])
-        return ordered((sparse_row(row), int(m)) for m, row in zip(rows[1::2], rows[2::2]))
+        return ordered((sparse_row(row), integer_from_decimal(m)) for m, row in zip(rows[1::2], rows[2::2]))
 
     def reference():
         from sympy import Poly, QQ, Symbol

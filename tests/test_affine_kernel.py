@@ -11,6 +11,37 @@ from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, f
 
 
 class AffineMaps(unittest.TestCase):
+    def test_native_factor_multiplicities_are_exact_decimal_integers(self):
+        from engine.native_library import affine_request
+
+        # Distinct wide powers prevent a truncated order from passing because
+        # the total degree or another factor's multiplicity happens to agree.
+        x_power = "1" + "0" * 4500
+        y_power = str(2**63 + 17)
+        for operation in ("factor", "geometric_factors"):
+            with self.subTest(operation=operation):
+                rows = affine_request([operation, "x y", f"x^{x_power}*y^{y_power}"])
+                parts = {row: info.split()[0] for info, row in zip(rows[1::2], rows[2::2])}
+                self.assertEqual(parts, {"1 1 0": x_power, "1 0 1": y_power})
+
+        # Direct Python callers keep their interpreter's input digit policy.
+        # These integers came from the verified native result.
+        from engine import identity_atlas, native_library, weighted_record
+        from engine import native_polynomial as np
+        from engine.polynomial import format_poly
+        n, m = 10**4500, 2**63+17
+        names = ("x", "y")
+        variables = np.symbols("x y")
+        terms = {(n, m): 1}
+        with patch.object(affine_kernel.gb, "_MODE", "native"), patch.object(affine_kernel.gb, "CHECK", False), \
+                patch.object(native_library, "_MODE", "native"), patch.object(native_library, "CHECK", False):
+            _, rows = affine_kernel.rational_factor_rows(variables, np.from_terms(variables, terms))
+            self.assertEqual({row: k for row, k, _ in rows}, {"1 1 0": n, "1 0 1": m})
+            factors = identity_atlas.rational_factors(terms, names)
+            self.assertEqual({format_poly(f, names): k for f, k in factors}, {"x": n, "y": m})
+            factors, unit = weighted_record._factor(format_poly(terms, names), names)
+            self.assertEqual((dict(factors), unit), ({"x": n, "y": m}, "1"))
+
     def test_native_input_rows_reuse_encodings_in_chart_order(self):
         from engine import native_polynomial as np
         a, b = np.Dummy("v"), np.Dummy("v")

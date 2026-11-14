@@ -3,11 +3,11 @@ import re
 from functools import cmp_to_key, lru_cache
 
 from . import native_library
-from .polynomial import format_poly, parse_expression, sparse_row, InputError
+from .polynomial import format_poly, integer_from_decimal, integer_text, parse_expression, rational_text, sparse_row, InputError
 
 
 def _product(parts):
-    return "*".join(f"({g})^{m}" if m != 1 else f"({g})" for g,m in parts) or "1"
+    return "*".join(f"({g})^{integer_text(m)}" if m != 1 else f"({g})" for g,m in parts) or "1"
 
 
 @lru_cache(maxsize=256)
@@ -16,13 +16,13 @@ def _factor(source, names):
     rows = native_library.affine_request(["factor", " ".join(names), source])
     zero = (0,)*len(names)
     scalar = sparse_row(rows[0])[zero]
-    parts = [(sparse_row(row),int(m)) for m,row in zip(rows[1::2],rows[2::2])]
+    parts = [(sparse_row(row),integer_from_decimal(m)) for m,row in zip(rows[1::2],rows[2::2])]
     order = cmp_to_key(lambda a,b: _factor_order(a,b,len(names)))
     parts.sort(key=lambda p:(max(e[0] for e in p[0]), p[1], order(p[0])))
     factors = [(format_poly(poly,names), m) for poly,m in parts if zero not in poly]
     units = [(format_poly(poly,names), m) for poly,m in parts if zero in poly]
     if scalar != 1:
-        units.insert(0,(str(scalar),1))
+        units.insert(0,(rational_text(scalar),1))
     unit = _product(units)
     return tuple(factors), unit
 
@@ -75,7 +75,7 @@ def _write_free(record, chart, weighted, unit, base, uniform):
     for (f,m), row in zip(weighted,pulled[1:]):
         result = native_library.affine_request(["chart", *args, f, " ".join(map(str,axis))])
         for c,n in zip(boundary,result[:-1]):
-            local[c["id"]] += m*int(n.split()[0])
+            local[c["id"]] += m*integer_from_decimal(n.split()[0])
         strict.append((format_poly(sparse_row(result[-1]),coords),m))
         total.append((format_poly(sparse_row(row),coords),m))
     original = chart["strict_transform"]
@@ -113,7 +113,7 @@ def _write_local(saved, chart, factors, unit, base):
     weights = {c["id"]:0 for c in exceptional}
     components = []
     for i,(_,m) in enumerate(factors,1):
-        *orders,size = map(int,next(parts).split())
+        *orders,size = map(integer_from_decimal,next(parts).split())
         ideal = [format_poly(sparse_row(next(parts)),coords) for _ in range(size)]
         for c,n in zip(exceptional,orders):
             weights[c["id"]] += m*n

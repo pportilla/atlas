@@ -12,7 +12,7 @@ from operator import index
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
-from .polynomial import integer_text, rational_text
+from .polynomial import integer_from_decimal, integer_text, rational_text
 from .reference import sp
 
 from . import groebner as gb
@@ -239,7 +239,7 @@ def chart_data(variables, mapping, divisors, equation, base, modulus=None):
 
     def native():
         rows = _ask("chart", variables, mapping, base, (equation,), modulus=modulus or 0, indices=indices)
-        return tuple(tuple(map(int, r.split())) for r in rows[:-1]), _sparse_expression(variables, rows[-1])
+        return tuple(tuple(map(integer_from_decimal, r.split())) for r in rows[:-1]), _sparse_expression(variables, rows[-1])
 
     def reference():
         strict = _ref_image(equation, variables, mapping, base, modulus)
@@ -550,7 +550,7 @@ def rational_factor_rows(variables, expression):
         scalar = dict(_sparse_terms(lines[0])).get((0,)*len(variables), Fraction(0))
         parts = []
         for info, row in zip(lines[1::2], lines[2::2]):
-            fields = tuple(map(int, info.split()))
+            fields = tuple(map(integer_from_decimal, info.split()))
             primitive = bool(fields[1]) if supports else _primitive_support(tuple(e for e, _ in _sparse_terms(row)))
             parts.append((row, fields[0], primitive))
         if len(parts) > 1:

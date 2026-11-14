@@ -232,7 +232,7 @@ def session_decimals(unlimited):
         sys.set_int_max_str_digits(previous)
 
 
-def run_command(parser, argv, *, unlimited_decimals=False):
+def run_command(parser, argv):
     if argv and argv[0]=='resolve' and '--' not in argv:
         # Protect a leading unary minus even when flags precede the polynomial.
         options={'--vars','--mode','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
@@ -246,8 +246,7 @@ def run_command(parser, argv, *, unlimited_decimals=False):
         return run(args)
     if args.command=='run':
         from .session import run_script
-        with session_decimals(unlimited_decimals):
-            return run_script(args.file, calculate_resolution)
+        return run_script(args.file, calculate_resolution)
     if args.command=='monodromy':
         from .monodromy import monodromy_zeta
         try:
@@ -306,7 +305,7 @@ def read_expression(line):
     return line
 
 
-def run_session(parser, *, unlimited_decimals=False):
+def run_session(parser):
     from .session import HELP, SessionError, new_session
     from .session_transcript import SessionTranscript
     session = new_session(calculate_resolution)
@@ -328,20 +327,19 @@ def run_session(parser, *, unlimited_decimals=False):
             tail = words[1] if len(words) == 2 else ""
             is_variable = words[0] in session.variables
             if words[0] not in shell_names or is_variable or tail.startswith(("(", "=", ".")):
-                with session_decimals(unlimited_decimals):
-                    line = read_expression(line)
-                    try:
-                        for display, value in session.run(line, transcript=transcript):
-                            if display:
-                                print(value)
-                    except SessionError as error:
-                        source = line.splitlines()
-                        statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
-                        print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
-                    except ValueError as error:
-                        # Rendering a numeric preview can exceed an explicitly
-                        # configured interpreter digit limit.
-                        print(str(error), file=sys.stderr)
+                line = read_expression(line)
+                try:
+                    for display, value in session.run(line, transcript=transcript):
+                        if display:
+                            print(value)
+                except SessionError as error:
+                    source = line.splitlines()
+                    statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
+                    print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
+                except ValueError as error:
+                    # Rendering a numeric preview can exceed an explicitly
+                    # configured interpreter digit limit.
+                    print(str(error), file=sys.stderr)
                 continue
             try:
                 argv = shlex.split(line)
@@ -380,7 +378,7 @@ def run_session(parser, *, unlimited_decimals=False):
                     continue
                 argv = [argv[1], '--help']
             try:
-                run_command(parser, argv, unlimited_decimals=unlimited_decimals)
+                run_command(parser, argv)
             except SystemExit:
                 # argparse has already printed the requested help or usage error.
                 pass
@@ -398,12 +396,12 @@ def main(*, unlimited_decimals=False):
         # The standalone parent also decodes and prints exact integer fields
         # returned by the worker, including resolution multiplicities.
         with session_decimals(unlimited_decimals):
-            return run_command(parser, argv, unlimited_decimals=unlimited_decimals)
+            return run_command(parser, argv)
 
     from .welcome import print_welcome
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
     print_welcome(interactive=interactive)
     if interactive:
         with session_decimals(unlimited_decimals):
-            return run_session(parser, unlimited_decimals=unlimited_decimals)
+            return run_session(parser)
     return 0
