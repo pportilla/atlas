@@ -1,11 +1,12 @@
 """Read marked algebraic scalars from resolution records without symbolic expressions."""
 import ast
+from decimal import Decimal
 from fractions import Fraction
 from functools import lru_cache
 import re
 
 from . import native_library
-from .polynomial import InputError, format_poly, integer_from_decimal, integer_text, parse_expression, rational_text
+from .polynomial import InputError, format_poly, integer_from_decimal, integer_text, kernel_fraction, parse_expression, rational_text
 from .rational_point import coordinate_fraction
 
 
@@ -31,8 +32,7 @@ def _rational_value(node, api):
         if isinstance(node.op, ast.Add): return a + b
         if isinstance(node.op, ast.Sub): return a - b
         if isinstance(node.op, ast.Pow) and b.is_Integer:
-            n = int(b)
-            return a**n if n >= 0 else 1/(a**(-n))
+            return api.coerce(api.scalar_arithmetic("^", a.scalar, b.scalar))
     raise InputError("Expected a rational algebraic exponent or angle.")
 
 
@@ -138,10 +138,17 @@ def _coefficient(value):
     if type(value) is int:
         return Fraction(value)
     word = str(value).strip()
-    # Read large rational strings without the interpreter's decimal-digit cap.
-    if re.fullmatch(r"[+-]?[0-9]+(?:/[+-]?[0-9]+)?", word):
-        return coordinate_fraction(word)
-    return Fraction(word)
+    digits = r"\d(?:_?\d)*"
+    fraction = re.fullmatch(rf"([+-]?{digits})(?:\s*/\s*([+-]?{digits}))?", word)
+    if fraction:
+        parts = [part.replace("_", "") for part in fraction.groups() if part is not None]
+        return coordinate_fraction("/".join(str(Decimal(part)) if not part.isascii() else part for part in parts))
+    if not re.fullmatch(rf"[+-]?(?:{digits}(?:\.(?:{digits})?)?|\.{digits})(?:[eE][+-]?{digits})?", word):
+        raise InputError("Invalid rational coefficient in the marked field.")
+    sign, mantissa, exponent = Decimal(word).as_tuple()
+    coefficient = ("-" if sign else "") + "".join(map(str, mantissa))
+    row, = native_library.affine_request(["scalar_arithmetic", "decimal_coefficient", coefficient, integer_text(exponent)])
+    return kernel_fraction(row)
 
 
 def record_field(field, named, texts, parameter):
@@ -197,7 +204,7 @@ def display(mark):
         if len(coeff) == 2:
             return row
         shift, n, d, value, _ = row.split()
-        scalar = Fraction(integer_from_decimal(n), integer_from_decimal(d))
+        scalar = kernel_fraction(n + "/" + d)
         offset = coordinate_fraction(shift)
         rad = integer_from_decimal(value)
         root = (f"sqrt({abs(rad)})" if abs(rad) != 1 else "") + ("*I" if rad < 0 else "")

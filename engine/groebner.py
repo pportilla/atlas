@@ -2,9 +2,7 @@
 
 The native kernel computes canonical bases over Q and simple number fields,
 including sparse block-order calculations outside the packed monomial range.
-SymPy supplies the explicit comparison and reference modes.
-Set ATLAS_GROEBNER=sympy to use SymPy only, or =check to compute with both
-and compare every basis and every remainder. When the exact strategies
+Independent basis and remainder comparisons live in the tests. When the exact strategies
 swell, the kernel switches to modular images and certifies the lifted basis;
 with ATLAS_GROEBNER_GPU=1 the replays for further primes run on an OpenCL
 device (make gpu).
@@ -345,7 +343,7 @@ def groebner(ideal, gens, *, order="grevlex", domain=QQ, known=0):
         return native
     if _MODE == "native" or np.native_ring(gens):
         raise Unavailable("Native Groebner computation unavailable for the specified ring or order. "
-                          "Build the current kernel with make groebner, or select ATLAS_GROEBNER=sympy.")
+                          "Build the current kernel with make groebner.")
     reference = sp.groebner(ideal, *gens, order=_reference_order(order), domain=domain)
     return reference if native is None else _Checked(native, reference)
 

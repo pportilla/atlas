@@ -7,6 +7,29 @@ from engine.groebner import groebner, colon
 from engine.local_blowups import Chart, _generators
 
 
+def present_outside(variables, ideal, removed):
+    from itertools import product
+    if empty_locus(variables, ideal):
+        return False
+    basis = groebner(ideal, variables) if removed else None
+    relevant = []
+    for hole in removed:
+        # On the closed locus, use normal forms before forming products of
+        # generators. The complement of V(J) is the union of their D(g).
+        residues = tuple(dict.fromkeys(basis.reduce(f)[1] for f in hole))
+        if any(f != 0 and not getattr(f, "free_symbols", ()) for f in residues):
+            continue
+        choices = tuple(f for f in residues if f != 0)
+        if not choices:
+            return False
+        if not empty_locus(variables, (*ideal, *choices)) and choices not in relevant:
+            relevant.append(choices)
+    if not relevant:
+        return True
+    from .affine_kernel import frame_locus
+    return any(not frame_locus(variables, tuple(ideal), units) for units in product(*relevant))
+
+
 def _dimension_reference(variables, ideal):
     # Variables absent from the generators give an affine factor. This
     # also keeps the independent reference small on wide sparse charts.

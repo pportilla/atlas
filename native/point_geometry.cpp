@@ -743,6 +743,7 @@ Json::Value compute(const Json::Value& r) {
         }
         if (op == "centered") return centered_plan(p, ideal);
         if (op == "independent") {
+            if (p.moving.empty()) return atlas::local::independent_at_origin(ideal, width);
             if (ideal.empty() || ideal.size() > width) return false;
             Pivots pivots;
             for (const auto& f : ideal) insert(pivots, materialize(p.bases, differential_weights(p, f)));
@@ -766,6 +767,14 @@ Json::Value compute(const Json::Value& r) {
     auto f = read_terms(r["terms"], width);
     if (op == "nonzero") return at_point(p, f);
     if (op == "order") return order_at_point(p, f).get_str();
+    if (op == "principal_series_head") {
+        // A principal homogeneous initial ideal has Hilbert series determined
+        // by this single degree, independently of its leading direction.
+        if (!width) throw std::invalid_argument("A principal head needs a variable.");
+        Powers head(width);
+        head.front() = order_at_point(p, f);
+        return strings(head);
+    }
     if (op == "initial") return term_list(initial_form(p, f));
     if (op == "jet") return strings(materialize(p.bases, differential_weights(p, f)));
     if (op == "smooth") {
@@ -801,6 +810,23 @@ Json::Value compute(const Json::Value& r) {
 }  // namespace
 
 namespace atlas::local {
+bool independent_at_origin(const Basis& equations, size_t width) {
+    if (equations.empty() || equations.size() > width) return false;
+    Pivots pivots;
+    Powers linear(width);
+    for (const auto& f : equations) {
+        Row differential(width);
+        for (size_t axis = 0; axis < width; ++axis) {
+            linear[axis] = 1;
+            const auto term = f.find(linear);
+            if (term != f.end()) differential[axis] = term->second;
+            linear[axis] = 0;
+        }
+        insert(pivots, std::move(differential));
+    }
+    return pivots.size() == equations.size();
+}
+
 std::optional<Polynomial> bounded_initial_at_point(const Polynomial& f, const PointRow& point) {
     try { return initial_form(Point(point), f, true); }
     catch (const WidePointRow&) { return std::nullopt; }

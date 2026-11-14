@@ -5,6 +5,8 @@
 #include <map>
 #include <set>
 
+namespace atlas { Json::Value fan_surface_complex(const Json::Value&); }
+
 namespace {
 using Value = Json::Value;
 using Face = std::vector<unsigned>;
@@ -44,7 +46,14 @@ struct Section {
 };
 using Sections = std::map<Face, Section, FaceOrder>;
 
-Value cells(const Sections& sections, const Value& labels, unsigned n, bool intrinsic) {
+// A squarefree segment splits by primitive character; a smooth higher-rank
+// torus hypersurface is connected by toric Lefschetz.
+Z section_count(unsigned rank, const Value& degree) {
+    return rank == 1 ? Z(degree.asString(), 10) : Z(rank != 0);
+}
+
+Value cells(const Sections& sections, const Value& labels, unsigned n, bool intrinsic,
+            const Value* newton_families = nullptr) {
     Value result;
     result["vertices"] = array();
     result["cells"] = array();
@@ -58,15 +67,20 @@ Value cells(const Sections& sections, const Value& labels, unsigned n, bool intr
         std::string base = vertex ? "" : "C";
         for (size_t j = 0; j < face.size(); ++j) {
             if (j) base += "-";
-            base += labels[face[j]].asString();
+            if (newton_families)
+                base += vertex ? "E" + std::to_string(face[j] - n + 1) : std::to_string(face[j]);
+            else base += labels[face[j]].asString();
         }
         for (Z root = 1; root <= section.count; ++root) {
             Value item;
             auto name = base;
             if (!vertex || section.count > 1) name += "." + root.get_str();
             item["id"] = name;
+            if (newton_families && section.character)
+                item["root"] = (*newton_families)[section.character].asString() + "_" + root.get_str();
             if (vertex) {
-                item["dimension"] = n - 1 - unsigned(intrinsic);
+                if (newton_families) item["ray_index"] = face.front();
+                else item["dimension"] = n - 1 - unsigned(intrinsic);
                 result["vertices"].append(std::move(item));
             } else {
                 // There is a unique restriction to a connected section. On a
@@ -98,6 +112,33 @@ Value cells(const Sections& sections, const Value& labels, unsigned n, bool intr
             ids[face].push_back(std::move(name));
         }
     }
+    return result;
+}
+
+// The producer already has the certified Newton face at every orbit. Use the
+// same restrictions as saved-chart replay, retaining the historical ray IDs.
+Value newton_cells(const Value& request) {
+    const auto n = request["dimension"].asUInt();
+    const bool intrinsic = request["intrinsic"].asBool();
+    const auto& proofs = request["proofs"];
+    Value families = array();
+    families.append("");
+    for (const auto& proof : proofs) families.append(proof[2]);
+    Sections sections;
+    for (const auto& orbit : request["orbits"]) {
+        Face face = indices(orbit[0]);
+        if (face.empty() || !std::is_sorted(face.begin(),face.end()))
+            throw std::invalid_argument("Invalid Newton cone face.");
+        if (face.front() < n) continue;
+        const auto id = orbit[1].asUInt();
+        if (id >= proofs.size()) throw std::invalid_argument("Missing Newton face certificate.");
+        const auto& proof = proofs[id];
+        const auto rank = proof[0].asUInt();
+        sections.emplace(std::move(face), Section{intrinsic ? section_count(rank,proof[1]) : Z(1),
+                                                  intrinsic && rank == 1 ? id+1 : 0});
+    }
+    auto result = cells(sections, {}, n, intrinsic, &families);
+    if (result.isNull()) throw std::invalid_argument("Incompatible nested Newton edge labels.");
     return result;
 }
 
@@ -247,8 +288,63 @@ Value glue(const Value& request) {
     return cells(sections, incidence["labels"], incidence["dimension"].asUInt(), true);
 }
 
+// All primitive character roots on a terminal binomial are geometrically
+// disjoint. Each cell restricts to the same root on each boundary face.
+Value binomial_sheets(const Value& request) {
+    const Z degree(request["degree"].asString(),10);
+    Value result;
+    auto& items=result["layout"]=array();
+    for (const auto& base : request["layout"]) {
+        Value sheet=array();
+        for (Z root=1;root<=degree;++root) {
+            const auto index=root.get_str();
+            Value item;
+            item["id"]=base["id"].asString()+"."+index;
+            item["root"]="alpha1_"+index;
+            item["root_index"]=index;
+            for (const auto* field : {"vertices","faces"}) if (base.isMember(field)) {
+                item[field]=array();
+                for (const auto& name : base[field]) item[field].append(name.asString()+"."+index);
+            }
+            sheet.append(std::move(item));
+        }
+        items.append(std::move(sheet));
+    }
+    return result;
+}
+
+// A row of the base coordinate map is a linear combination of the cone
+// characters. Both the rays and the input coefficients may be unbounded.
+bool projection_matches(const Value& input) {
+    using namespace atlas::sparse_json;
+    const auto& rays = input["rays"];
+    const auto& linear = input["linear"];
+    const auto& images = input["images"];
+    const size_t n = rays.size();
+    if (linear.size() != n || images.size() != n) return false;
+    std::vector<Powers> columns(n, Powers(n));
+    for (Json::ArrayIndex i = 0; i < n; ++i) {
+        const auto row = read_exponents(rays[i], n);
+        for (size_t j = 0; j < n; ++j) columns[j][i] = row[j];
+    }
+    for (Json::ArrayIndex i = 0; i < n; ++i) {
+        const auto coefficients = read_row(linear[i]);
+        if (coefficients.size() != n) return false;
+        Terms expected;
+        for (size_t j = 0; j < n; ++j) {
+            if (coefficients[j] != 0) expected[columns[j]] += coefficients[j];
+        }
+        if (expected != read_terms(images[i], n)) return false;
+    }
+    return true;
+}
+
 Value compute(const Value& request) {
     const auto op = request["operation"].asString();
+    if (op == "projection") return projection_matches(request);
+    if (op == "binomial_sheets") return binomial_sheets(request);
+    if (op == "surface") return atlas::fan_surface_complex(request);
+    if (op == "newton") return newton_cells(request);
     if (op == "plan") return plan(request);
     if (op == "glue") return glue(request);
     if (op == "section") {
@@ -257,7 +353,7 @@ Value compute(const Value& request) {
         // A monomial has no torus zero. A smooth section of Newton rank at
         // least two is connected by toric Lefschetz. A squarefree segment
         // has one component per nonzero root in its primitive character.
-        return rank == 1 ? request["degree"] : Value(rank ? "1" : "0");
+        return section_count(rank, request["degree"]).get_str();
     }
     throw std::invalid_argument("Unknown torus section operation.");
 }

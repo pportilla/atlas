@@ -1,6 +1,8 @@
 """Public polynomial grammar over Q, with optional intermediate expansion budgets."""
 from decimal import Decimal
 from fractions import Fraction
+from numbers import Rational
+from collections import namedtuple
 import re
 import sys
 
@@ -146,14 +148,29 @@ def encode_sparse_row(terms):
     return ";".join(rational_text(c) + " " + " ".join(map(integer_text, e)) for e, c in terms.items() if c)
 
 
+# Fraction accepts any Rational's already canonical numerator and denominator.
+_KernelRatio = namedtuple("_KernelRatio", ("numerator", "denominator"))
+Rational.register(_KernelRatio)
+
+
+def kernel_fraction(text):
+    """Transport a canonical native coefficient into Python's immutable rational type."""
+    n, _, d = text.partition("/")
+    n = integer_from_decimal(n)
+    if not d:
+        return Fraction(n)
+    d = integer_from_decimal(d)
+    if d <= 0:
+        raise ValueError("Invalid denominator in a native coefficient.")
+    return Fraction(_KernelRatio(n, d))
+
+
 def sparse_row(row):
     """Read FLINT's rational coefficient and exponent tuples without a dense representation."""
     terms = {}
     for term in row.split(";") if row else ():
         coefficient, *powers = term.split()
-        numerator, _, denominator = coefficient.partition("/")
-        terms[tuple(map(integer_from_decimal, powers))] = Fraction(
-            integer_from_decimal(numerator), integer_from_decimal(denominator or "1"))
+        terms[tuple(map(integer_from_decimal, powers))] = kernel_fraction(coefficient)
     return terms
 
 

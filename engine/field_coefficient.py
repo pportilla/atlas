@@ -4,8 +4,6 @@ from functools import lru_cache
 import sympy as sp
 from sympy.polys.polyerrors import CoercionFailed
 
-from . import groebner as gb
-from .field_polynomial import _oracle
 from .native_library import Unavailable, field_request
 from .polynomial import integer_from_decimal
 from .rational_point import coordinate_fraction
@@ -18,12 +16,12 @@ class UnsupportedExpression(CoercionFailed):
         super().__init__(
             f"Unsupported native algebraic literal {type(value).__name__}. Supply an indexed "
             "CRootOf of its rational minimal polynomial, or a polynomial in the marked field "
-            "generator with rational coefficients. Set ATLAS_GROEBNER=sympy for symbolic coercion.")
+            "generator with rational coefficients.")
 
 
 def _call(name, lines):
     row = field_request(name, lines)
-    if row is None and gb._MODE == "native":
+    if row is None:
         raise Unavailable(f"The native field kernel lacks {name}. Rebuild it with make groebner.")
     return row
 
@@ -64,15 +62,9 @@ def program(value):
         return answer
     if isinstance(value, sp.CRootOf):
         coeffs = tuple(reversed(value.poly.all_coeffs()))
-        if gb._MODE != "sympy":
-            display = marked_root_display(coeffs)
-            if display is not None:
-                flint_index = display[2].index(value.index)
-                return ("flintroot", str(value.poly.degree()), *map(str, coeffs), str(flint_index))
-        # Portable reader for a kernel predating native indexed-root selection.
-        bounds = value._get_interval()
-        box = (bounds.a, bounds.b, 0, 0) if value.is_real else (bounds.ax, bounds.bx, bounds.ay, bounds.by)
-        return ("root", str(value.poly.degree()), *map(str,reversed(value.poly.all_coeffs())), *map(str,box))
+        display = marked_root_display(coeffs)
+        flint_index = display[2].index(value.index)
+        return ("flintroot", str(value.poly.degree()), *map(str, coeffs), str(flint_index))
     if value.func in (sp.exp, sp.sin, sp.cos, sp.tan, sp.cot, sp.sec, sp.csc):
         from .marked_field import program as marked_program
         from .polynomial import InputError
@@ -89,11 +81,7 @@ def rational_sqrt(value, scale=1, offset=0):
     q = sp.Rational(value)
     scale, offset = sp.Rational(scale), sp.Rational(offset)
 
-    if gb._MODE == "sympy":
-        return _oracle("rational_sqrt", q, scale, offset)
     row = _call("atlas_field_scaled_radical", [f"{q} {scale} {offset}"])
-    if row is None:
-        return _oracle("rational_sqrt", q, scale, offset)
     num, den, raw_d, same_spelling, rational_sum = row.split()
     num, den, d = map(integer_from_decimal, (num, den, raw_d))
     scalar = sp.Rational(num, den)
@@ -109,22 +97,13 @@ def rational_sqrt(value, scale=1, offset=0):
             factors.append(sp.Pow(sp.Integer(abs(d)), sp.S.Half, evaluate=False))
         radical = sp.Mul(*factors, evaluate=False)
         result = sp.Add(offset, radical, evaluate=False) if offset else radical
-    if gb.CHECK:
-        _oracle("compare_radical", result, q, scale, offset, same_spelling == "1")
     return result
 
 
 def coefficients(value, domain):
-    """Ascending power-basis coordinates. Diagnostics can defer unknown literals to SymPy."""
-    try:
-        alpha, expr = program(domain.ext), program(value)
-    except UnsupportedExpression:
-        if gb._MODE == "native":
-            raise
-        return None
+    """Ascending power-basis coordinates in the marked field."""
+    alpha, expr = program(domain.ext), program(value)
     row = _call("atlas_field_coefficient", (" ".join(alpha), " ".join(expr)))
-    if row is None:
-        return None
     if row == "outside":
         raise CoercionFailed(f"{value} does not lie in {domain}.")
     return tuple(map(coordinate_fraction, row.split()))
@@ -141,12 +120,8 @@ def marked_root_display(coeffs):
     """
     n = len(coeffs) - 1
     row = _call("atlas_field_normalize", [" ".join(map(str, (n, *coeffs)))])
-    if row is None:
-        return None
     scale, *normalized = map(int, row.split())
     positions = _call("atlas_field_display_order", [" ".join(map(str, (n, *reversed(normalized))))])
-    if positions is None:
-        return None
     return scale, tuple(normalized), tuple(map(int, positions.split()))
 
 
@@ -157,27 +132,19 @@ def indexed_field(coeffs, variable, index):
     if not 0 <= index < poly.degree():
         raise IndexError("Root index exceeds the defining polynomial's degree.")
 
-    if gb._MODE == "sympy":
-        return _oracle("indexed_field", poly, index)
     # Retain CRootOf's historical spelling, including positive rational
     # rescaling. Irreducibility makes refactorization and index adjustment
     # unnecessary. A positive scale preserves all real and conjugate indices
     # in the normalized polynomial, just as in CRootOf's public constructor.
     if poly.degree() == 1:
         row = _call("atlas_field_low_degree_root", [f"1 0 {poly.LC()} {poly.TC()}"])
-        if row is None:
-            return _oracle("indexed_field", poly, index)
         root = sp.Rational(coordinate_fraction(row))
     else:
         row = _call("atlas_field_normalize", [" ".join(map(str, (poly.degree(), *reversed(coeffs))))])
-        if row is None:
-            return _oracle("indexed_field", poly, index)
         scale, *normalized_coeffs = map(int, row.split())
         normalized = sp.PurePoly.from_list(normalized_coeffs, variable, domain=sp.ZZ)
         root = scale * sp.CRootOf._new(normalized, index)
     result = sp.QQ.algebraic_field((poly, root)), root
-    if gb.CHECK and result != _oracle("indexed_field", poly, index):
-        raise AssertionError("The reconstructed primitive field differs from its reference.")
     return result
 
 
@@ -189,34 +156,8 @@ def root_position(poly, primitive):
     if isinstance(primitive, sp.CRootOf):
         return primitive.index
 
-    if gb._MODE == "sympy":
-        return _oracle("root_position", poly, primitive)
-    try:
-        generator = " ".join(program(primitive))
-    except UnsupportedExpression:
-        if gb._MODE == "native":
-            raise
-        return _oracle("root_position", poly, primitive)
+    generator = " ".join(program(primitive))
     coeffs = tuple(reversed(poly.all_coeffs()))
     lines = [generator, " ".join(map(str, (poly.degree(), *coeffs)))]
-    display = (marked_root_display(coeffs) if gb._MODE == "native"
-               or hasattr(gb._kernel(), "atlas_field_flint_index") else None)
-    if display is not None:
-        row = str(display[2][int(_call("atlas_field_flint_index", lines))])
-    else:
-        row = _call("atlas_field_position", lines)
-    if row is None:
-        return _oracle("root_position", poly, primitive)
-    if row.startswith("boxes "):
-        # With several conjugate pairs, SymPy sorts by the lower corners
-        # of its isolating rectangles. Compare those marked roots exactly.
-        for i in range(int(row.split()[1]), poly.degree()):
-            root = sp.CRootOf(poly.as_expr(), i)
-            lines.append(f"{i} " + " ".join(program(root)))
-        row = _call("atlas_field_position", lines)
-        if row.startswith("boxes "):
-            raise ArithmeticError("The marked root has no matching complex isolator.")
-    index = int(row)
-    if gb.CHECK and index != _oracle("root_position", poly, primitive):
-        raise AssertionError("The marked field root index differs from its reference.")
-    return index
+    display = marked_root_display(coeffs)
+    return display[2][int(_call("atlas_field_flint_index", lines))]

@@ -171,3 +171,22 @@ def _implicit_step(frame, functions, working, deadline=None):
         if here(nodes):
             return (1, 0, 0, (label,)), "points", nodes
     return None
+
+
+def compare_chart_steps(names, left, work, native, mine):
+    from engine.blowup_ideal import radical_subset
+    # Compared after closure, where generators are canonical.
+    best = max((item[0] for item in native), default=None)
+    same = best == max((item[0] for item in mine), default=None)
+    if same and best is not None:
+        # The loci, over the points considered (elsewhere they may differ by
+        # parts that play no role): the same zero sets.
+        ours = [gens for key, _, gens in native if key == best]
+        theirs = [gens for key, _, gens in mine if key == best]
+        for w in work:
+            same = same and all(
+                radical_subset(names, (*left, *first, *w), (*left, *second, *w)) and
+                radical_subset(names, (*left, *second, *w), (*left, *first, *w))
+                for first in ours[:1] for second in theirs[:1])
+    if not same:
+        raise AssertionError("The native step of the surface procedure differs from this file's.")

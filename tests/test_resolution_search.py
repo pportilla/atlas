@@ -86,6 +86,23 @@ class SearchTests(unittest.TestCase):
         self.assertEqual([c.center for c in candidates],
                          [(x**3, x*h, h**2) for h in (y+x/2, y-x)])
 
+    def test_native_candidates_with_wide_coordinates_coefficients_and_exponents(self):
+        from engine import native_polynomial as np
+        from engine.resolution_search import _jacobian_support, _two_blowup_candidates
+        axes = np.symbols("v0:35")
+        x,y,z = axes[:3]
+        exponent = 2**65+13
+        coefficient = 2**191+3
+        self.assertEqual(_jacobian_support(axes, coefficient*x**exponent), (x,))
+        self.assertEqual(_jacobian_support(axes, (y-x*x)**2-z**3), (x*x-y, x**3-x*y, z))
+        self.assertEqual(_jacobian_support(axes, np.coerce(7)), (np.coerce(1),))
+        self.assertEqual(_jacobian_support(axes, np.coerce(0)), ())
+        h = y-coefficient*x
+        candidate = next(_two_blowup_candidates(axes, h**2+x**4*z**exponent))
+        self.assertEqual(candidate.center, (x**3,x*h,h**2))
+        u, _, w = candidate.projective
+        self.assertEqual(candidate.boundary, ((x,h,u),(x,h,w)))
+
     def test_domain_and_homogeneous_components_in_unbounded_code(self):
         x,y = s.symbols("x y")
         # K=Q(alpha), alpha^2-2=0, root index 1.

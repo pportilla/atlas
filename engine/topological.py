@@ -13,16 +13,13 @@ other. The strict transform is one of the components, with N = nu = 1.
 import ctypes
 
 from . import native_library as gb
-from .monodromy import acampo_factors, cyclotomic_exponent
+from .monodromy import acampo_strata, cyclotomic_exponent
 from .polynomial import InputError, integer_from_decimal
 
 
 def _acampo(data, strata):
     """The exponents {N: -chi} of A'Campo's formula, from the strata on one component."""
-    orders = {row["component"]: row["multiplicity"] for row in data}
-    rows = ({"multiplicity": orders[row["components"][0]], "euler_characteristic": row["euler_characteristic"]}
-            for row in strata if len(row["components"]) == 1)
-    factors, _ = acampo_factors(rows)
+    _, factors, _ = acampo_strata(data, strata)
     return {row["multiplicity"]: row["exponent"] for row in factors}
 
 
@@ -77,9 +74,6 @@ def _fraction_display(nc, nf, dc, df):
 
 
 def _reduce(numbers, strata):
-    if gb._MODE == "sympy":
-        from tests.topological_oracle import reduce
-        return reduce(numbers, strata)
     library = gb._kernel()
     if library is None or not hasattr(library, "atlas_topological"):
         raise ArithmeticError("Build the native topological zeta kernel.")

@@ -222,7 +222,8 @@ std::string operations(std::istream& in, const std::string& op) {
     const bool homogeneous = op == "local_homogeneous_normal_form" || op == "local_homogeneous_normal_form_gpu";
     const bool point_basis = op == "local_point_basis" || op == "local_point_basis_gpu";
     const bool point_nf = op == "local_point_normal_form" || op == "local_point_normal_form_gpu";
-    const auto point = (op == "local_project" || op == "local_translate" || op == "local_query_jet" || homogeneous || dimension || smoothness ||
+    const bool inspect = op == "local_inspect_basis" || op == "local_inspect_normal_form";
+    auto point = (inspect || op == "local_project" || op == "local_translate" || op == "local_untranslate" || op == "local_query_jet" || homogeneous || dimension || smoothness ||
                         point_basis || point_nf || !quotient.empty()) ?
         read_point(in, width) : std::vector<mpq_class>();
     int rank = -1;
@@ -247,7 +248,27 @@ std::string operations(std::istream& in, const std::string& op) {
     }
     if (!quotient.empty())
         return quotient_rows(quotient_at_point(quotient,rows,names,point,lex,gpu));
-    if (op == "local_translate") return basis_rows(translate_unbounded(rows, point));
+    if (inspect) {
+        const bool normal = op == "local_inspect_normal_form";
+        if (normal) {
+            if (rows.empty()) throw std::invalid_argument("Missing local query.");
+            auto query = std::move(rows.back());
+            rows.pop_back();
+            if (rows.empty() || query.empty())
+                return "normal\nstandard\n" + encode_row({{Powers(width), 1}}) + "\n" + encode_row(query) + "\n";
+        }
+        if (has_point_unit(rows, point)) {
+            const std::string one = encode_row({{Powers(width), 1}});
+            return normal ? "normal\nstandard\n" + one + "\n\n" : "basis\n" + one + "\n";
+        }
+        const bool shifted = std::any_of(point.begin(), point.end(), [](const auto& q) { return q != 0; });
+        if (shifted && !rows.empty() && std::all_of(rows.begin(), rows.end(),
+                [](const auto& f) { return f.size() == 1; }))
+            return "projected\n" + basis_rows(project_monomials(rows, point));
+        return "continue\n";
+    }
+    if (op == "local_untranslate") for (auto& coordinate : point) coordinate = -coordinate;
+    if (op == "local_translate" || op == "local_untranslate") return basis_rows(translate_unbounded(rows, point));
     if (point_basis) {
         if (!use_sparse_point_basis(rows, point)) return "";
         return basis_rows(standard_basis_at_point(rows, names, point, lex, op == "local_point_basis_gpu"));

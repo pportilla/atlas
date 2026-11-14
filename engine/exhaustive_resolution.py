@@ -132,11 +132,11 @@ def search(poly, variables, mode, *, compute=None):
 
 
 def _run(method, payload):
-    from fractions import Fraction
+    from .polynomial import kernel_fraction
     from .native_library import replay_scope
     from .newton_faces import face_search
 
-    terms = {tuple(e): Fraction(c) for e, c in payload["terms"]}
+    terms = {tuple(e): kernel_fraction(c) for e, c in payload["terms"]}
     with replay_scope(**payload["replay"]) as replay, face_search(True):
         try:
             if method == "newton":

@@ -9,6 +9,5 @@ def chart_expressions(variables):
 
 
 def runtime_expressions():
-    """Select the independent symbolic representation only in diagnostic modes."""
-    from .native_library import _MODE
-    return sp if _MODE in ("sympy", "check") else native_polynomial
+    """Runtime chart coordinates always use the native polynomial kernel."""
+    return native_polynomial

@@ -1,0 +1,1216 @@
+{
+  "cpu": 13,
+  "trials": 5,
+  "native_sha256": {
+    "before": "153230a967c4aad6a848b174dde5c750368cdbe6285a32bf255563a8d32b2e2f",
+    "after": "51ba976c31c5b3647b47fc466ba7524145e4e77ac1329b5ac57f6b041d66cd88"
+  },
+  "conditions": "Alternating fresh processes with one discarded warmup; every result compared within each order. Singular returns the reduced basis. Atlas returns a complete JSON record.",
+  "cases": {
+    "eliminate-lex": {
+      "operands": [
+        "--gen",
+        "x^2-y",
+        "--gen",
+        "y^2-z",
+        "--gen",
+        "x*z-1",
+        "--eliminate",
+        "x"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 2.676329287001863,
+          "cpu_s": 0.201942
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.334148586000083,
+          "cpu_s": 0.209615
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.022577822004677728,
+          "cpu_s": 0.020982999999999974
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.025529745005769655,
+          "cpu_s": 0.023917000000000077
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.20734127098694444,
+          "cpu_s": 0.20579899999999995
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.18246892900788225,
+          "cpu_s": 0.179686
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.22009340900694951,
+          "cpu_s": 0.2169589999999999
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.1901381250063423,
+          "cpu_s": 0.18861800000000017
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.019811520003713667,
+          "cpu_s": 0.018311999999999884
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.020424248999916017,
+          "cpu_s": 0.018850000000000033
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.17162381700472906,
+          "cpu_s": 0.17014799999999997
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.18102532901684754,
+          "cpu_s": 0.1750830000000001
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.23642240301705897,
+          "cpu_s": 0.2319899999999997
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.2432645540102385,
+          "cpu_s": 0.2417830000000003
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.026617541996529326,
+          "cpu_s": 0.025017000000000067
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.22009340900694951,
+          "cpu_s": 0.201942
+        },
+        "after": {
+          "wall_s": 0.20734127098694444,
+          "cpu_s": 0.20579899999999995
+        },
+        "singular": {
+          "wall_s": 0.022577822004677728,
+          "cpu_s": 0.020982999999999974
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "y",
+            "z"
+          ],
+          "order": "lex"
+        },
+        "generators": [
+          "-z^3+y",
+          "z^5-1"
+        ]
+      },
+      "singular": "BASIS z^5-1,y-z^3",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),lp;option(redSB);short=0;ideal I=std(eliminate(ideal(x^2-y,y^2-z,x*z-1),x));ideal J=std(ideal(-z^3+y,z^5-1));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "eliminate-grevlex": {
+      "operands": [
+        "--gen",
+        "x^2-y",
+        "--gen",
+        "y^2-z",
+        "--gen",
+        "x*z-1",
+        "--eliminate",
+        "x"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.16850564000196755,
+          "cpu_s": 0.16709299999999994
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.199890048999805,
+          "cpu_s": 0.194496
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.025864879018627107,
+          "cpu_s": 0.024322999999999873
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.0228388260002248,
+          "cpu_s": 0.021256000000000164
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.2195625150052365,
+          "cpu_s": 0.21670699999999998
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.2039713280100841,
+          "cpu_s": 0.2023349999999997
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.18668806899222545,
+          "cpu_s": 0.18519500000000022
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.2042204790050164,
+          "cpu_s": 0.20273999999999992
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.02182957698823884,
+          "cpu_s": 0.020214000000000176
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.036492289014859125,
+          "cpu_s": 0.019594999999999807
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.18900567301898263,
+          "cpu_s": 0.1834030000000002
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.16561885000555776,
+          "cpu_s": 0.16413399999999978
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.17617910300032236,
+          "cpu_s": 0.17474599999999985
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.17485772399231791,
+          "cpu_s": 0.17345200000000016
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.0202805669978261,
+          "cpu_s": 0.018792999999999616
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.17617910300032236,
+          "cpu_s": 0.17474599999999985
+        },
+        "after": {
+          "wall_s": 0.199890048999805,
+          "cpu_s": 0.194496
+        },
+        "singular": {
+          "wall_s": 0.0228388260002248,
+          "cpu_s": 0.020214000000000176
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "y",
+            "z"
+          ],
+          "order": "grevlex"
+        },
+        "generators": [
+          "y*z^2-1",
+          "z^3-y",
+          "y^2-z"
+        ]
+      },
+      "singular": "BASIS y^2-z,z^3-y,y*z^2-1",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),dp;option(redSB);short=0;ideal I=std(eliminate(ideal(x^2-y,y^2-z,x*z-1),x));ideal J=std(ideal(y*z^2-1,z^3-y,y^2-z));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "intersection-lex": {
+      "operands": [
+        "--gen",
+        "x^2-y",
+        "--gen",
+        "z",
+        "--other-gen",
+        "x*y",
+        "--other-gen",
+        "z^2"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.178995058988221,
+          "cpu_s": 0.1775789999999997
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.1809625199821312,
+          "cpu_s": 0.17951600000000045
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.022807415982242674,
+          "cpu_s": 0.019119999999999138
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.020276279014069587,
+          "cpu_s": 0.018780000000000463
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.17964038898935542,
+          "cpu_s": 0.17823100000000114
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.1789685389958322,
+          "cpu_s": 0.17753599999999903
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.2059794059896376,
+          "cpu_s": 0.20446800000000032
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.1826238519861363,
+          "cpu_s": 0.18112399999999962
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.01986820698948577,
+          "cpu_s": 0.018359000000000236
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.026927980012260377,
+          "cpu_s": 0.019102000000000174
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.1705957530066371,
+          "cpu_s": 0.16917500000000008
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.1736463629931677,
+          "cpu_s": 0.17222399999999904
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.16956847999244928,
+          "cpu_s": 0.16815400000000036
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.23788988901651464,
+          "cpu_s": 0.23642800000000008
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.022206350025953725,
+          "cpu_s": 0.02061700000000055
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.1789685389958322,
+          "cpu_s": 0.17753599999999903
+        },
+        "after": {
+          "wall_s": 0.1809625199821312,
+          "cpu_s": 0.17951600000000045
+        },
+        "singular": {
+          "wall_s": 0.022206350025953725,
+          "cpu_s": 0.019102000000000174
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "lex"
+        },
+        "generators": [
+          "x^3*y-x*y^2",
+          "x*y*z",
+          "z^2"
+        ]
+      },
+      "singular": "BASIS z^2,x*y*z,x^3*y-x*y^2",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),lp;option(redSB);short=0;ideal I=std(intersect(ideal(x^2-y,z),ideal(x*y,z^2)));ideal J=std(ideal(x^3*y-x*y^2,x*y*z,z^2));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "intersection-grevlex": {
+      "operands": [
+        "--gen",
+        "x^2-y",
+        "--gen",
+        "z",
+        "--other-gen",
+        "x*y",
+        "--other-gen",
+        "z^2"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.174488074000692,
+          "cpu_s": 0.17305000000000081
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.16899535598349757,
+          "cpu_s": 0.16755599999999937
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.019541690009646118,
+          "cpu_s": 0.018034999999999357
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.019631219998700544,
+          "cpu_s": 0.01811600000000091
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.17642634100047871,
+          "cpu_s": 0.1750159999999994
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.1832432939845603,
+          "cpu_s": 0.1818350000000013
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.17043248401023448,
+          "cpu_s": 0.16743299999999905
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.17871375699178316,
+          "cpu_s": 0.17727799999999938
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.019296446000225842,
+          "cpu_s": 0.017793000000001058
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.019152363995090127,
+          "cpu_s": 0.017680999999999614
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.17252199599170126,
+          "cpu_s": 0.17055000000000042
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.1720263680035714,
+          "cpu_s": 0.17061700000000002
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.194632945000194,
+          "cpu_s": 0.18410699999999913
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.1949500250048004,
+          "cpu_s": 0.18246700000000082
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.02490316002513282,
+          "cpu_s": 0.0233749999999997
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.174488074000692,
+          "cpu_s": 0.17305000000000081
+        },
+        "after": {
+          "wall_s": 0.17642634100047871,
+          "cpu_s": 0.1750159999999994
+        },
+        "singular": {
+          "wall_s": 0.019541690009646118,
+          "cpu_s": 0.018034999999999357
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "grevlex"
+        },
+        "generators": [
+          "x^3*y-x*y^2",
+          "x*y*z",
+          "z^2"
+        ]
+      },
+      "singular": "BASIS z^2,x*y*z,x^3*y-x*y^2",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),dp;option(redSB);short=0;ideal I=std(intersect(ideal(x^2-y,z),ideal(x*y,z^2)));ideal J=std(ideal(x^3*y-x*y^2,x*y*z,z^2));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "quotient-lex": {
+      "operands": [
+        "--gen",
+        "x^2*y",
+        "--gen",
+        "x*z",
+        "--other-gen",
+        "x",
+        "--other-gen",
+        "y"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.1880149290082045,
+          "cpu_s": 0.18653099999999867
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.20946794300107285,
+          "cpu_s": 0.20793600000000012
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.02156001701951027,
+          "cpu_s": 0.0199890000000007
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.020217999001033604,
+          "cpu_s": 0.01871799999999979
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.17272802599472925,
+          "cpu_s": 0.17129000000000083
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.1808260919933673,
+          "cpu_s": 0.17935199999999973
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.17776460200548172,
+          "cpu_s": 0.1763009999999987
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.17799958598334342,
+          "cpu_s": 0.17653299999999916
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.019750605017179623,
+          "cpu_s": 0.018224000000001794
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.019590723008150235,
+          "cpu_s": 0.01809100000000008
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.18460440801572986,
+          "cpu_s": 0.18317599999999956
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.1787302790035028,
+          "cpu_s": 0.17601799999999912
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.18153391097439453,
+          "cpu_s": 0.1800290000000011
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.18201445901650004,
+          "cpu_s": 0.18054899999999918
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.019710419001057744,
+          "cpu_s": 0.018216000000000676
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.1808260919933673,
+          "cpu_s": 0.17935199999999973
+        },
+        "after": {
+          "wall_s": 0.18201445901650004,
+          "cpu_s": 0.18054899999999918
+        },
+        "singular": {
+          "wall_s": 0.019750605017179623,
+          "cpu_s": 0.018224000000001794
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "lex"
+        },
+        "generators": [
+          "x^2*y",
+          "x*z"
+        ]
+      },
+      "singular": "BASIS x*z,x^2*y",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),lp;option(redSB);short=0;ideal I=std(quotient(ideal(x^2*y,x*z),ideal(x,y)));ideal J=std(ideal(x^2*y,x*z));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "quotient-grevlex": {
+      "operands": [
+        "--gen",
+        "x^2*y",
+        "--gen",
+        "x*z",
+        "--other-gen",
+        "x",
+        "--other-gen",
+        "y"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.22946740899351425,
+          "cpu_s": 0.22802700000000087
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.19464580999920145,
+          "cpu_s": 0.19315000000000104
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.02076672698603943,
+          "cpu_s": 0.018217999999997403
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.019776264001848176,
+          "cpu_s": 0.01828000000000074
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.18221793399425223,
+          "cpu_s": 0.1707800000000006
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.17769802501425147,
+          "cpu_s": 0.17622300000000024
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.2445300679828506,
+          "cpu_s": 0.21327099999999888
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.18013230999349616,
+          "cpu_s": 0.1786670000000008
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.030529991985531524,
+          "cpu_s": 0.018534999999999968
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.020051844010595232,
+          "cpu_s": 0.01854299999999931
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.1711762409831863,
+          "cpu_s": 0.1697159999999993
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.17835250400821678,
+          "cpu_s": 0.17694200000000038
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.17018630797974765,
+          "cpu_s": 0.16875399999999985
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.16579906101105735,
+          "cpu_s": 0.16437900000000027
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.020070599974133074,
+          "cpu_s": 0.01859400000000022
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.17835250400821678,
+          "cpu_s": 0.17694200000000038
+        },
+        "after": {
+          "wall_s": 0.18013230999349616,
+          "cpu_s": 0.1707800000000006
+        },
+        "singular": {
+          "wall_s": 0.020070599974133074,
+          "cpu_s": 0.018534999999999968
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "grevlex"
+        },
+        "generators": [
+          "x^2*y",
+          "x*z"
+        ]
+      },
+      "singular": "BASIS x*z,x^2*y",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),dp;option(redSB);short=0;ideal I=std(quotient(ideal(x^2*y,x*z),ideal(x,y)));ideal J=std(ideal(x^2*y,x*z));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "saturation-lex": {
+      "operands": [
+        "--gen",
+        "x^2*y",
+        "--gen",
+        "x*z",
+        "--poly",
+        "x"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.15987981599755585,
+          "cpu_s": 0.1584330000000005
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.25707531499210745,
+          "cpu_s": 0.2018639999999987
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.03913465701043606,
+          "cpu_s": 0.019075000000002618
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.03938002101494931,
+          "cpu_s": 0.018745999999998375
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.38894971398985945,
+          "cpu_s": 0.19327499999999986
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.39260494700283743,
+          "cpu_s": 0.19566200000000045
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.38112237901077606,
+          "cpu_s": 0.18927700000000058
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.3894686949788593,
+          "cpu_s": 0.19560699999999898
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.03546155901858583,
+          "cpu_s": 0.01854099999999903
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.0376972779922653,
+          "cpu_s": 0.01862300000000161
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.38534927400178276,
+          "cpu_s": 0.19306599999999996
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.37749870601692237,
+          "cpu_s": 0.18695499999999932
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.3906442380102817,
+          "cpu_s": 0.19373900000000077
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.43801492199418135,
+          "cpu_s": 0.21999699999999933
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.047153262014035136,
+          "cpu_s": 0.023536
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.38112237901077606,
+          "cpu_s": 0.18927700000000058
+        },
+        "after": {
+          "wall_s": 0.38894971398985945,
+          "cpu_s": 0.19560699999999898
+        },
+        "singular": {
+          "wall_s": 0.03913465701043606,
+          "cpu_s": 0.018745999999998375
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "lex"
+        },
+        "generators": [
+          "y",
+          "z"
+        ]
+      },
+      "singular": "BASIS z,y",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),lp;option(redSB);short=0;ideal I=std(sat(ideal(x^2*y,x*z),ideal(x)));ideal J=std(ideal(y,z));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    },
+    "saturation-grevlex": {
+      "operands": [
+        "--gen",
+        "x^2*y",
+        "--gen",
+        "x*z",
+        "--poly",
+        "x"
+      ],
+      "runs": [
+        {
+          "solver": "before",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.3744122780044563,
+          "cpu_s": 0.18675099999999745
+        },
+        {
+          "solver": "after",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.36251817300217226,
+          "cpu_s": 0.1821780000000004
+        },
+        {
+          "solver": "singular",
+          "trial": 1,
+          "status": "complete",
+          "wall_s": 0.037278735981089994,
+          "cpu_s": 0.018688000000000926
+        },
+        {
+          "solver": "singular",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.036891994997859,
+          "cpu_s": 0.01830100000000101
+        },
+        {
+          "solver": "after",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.36774872499518096,
+          "cpu_s": 0.1822149999999958
+        },
+        {
+          "solver": "before",
+          "trial": 2,
+          "status": "complete",
+          "wall_s": 0.362026752991369,
+          "cpu_s": 0.18166800000000194
+        },
+        {
+          "solver": "before",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.3465200439968612,
+          "cpu_s": 0.1719229999999996
+        },
+        {
+          "solver": "after",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.3535103549947962,
+          "cpu_s": 0.1763009999999987
+        },
+        {
+          "solver": "singular",
+          "trial": 3,
+          "status": "complete",
+          "wall_s": 0.03710725298151374,
+          "cpu_s": 0.018534999999999968
+        },
+        {
+          "solver": "singular",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.03688905999297276,
+          "cpu_s": 0.018337999999999965
+        },
+        {
+          "solver": "after",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.3631360710132867,
+          "cpu_s": 0.18277600000000405
+        },
+        {
+          "solver": "before",
+          "trial": 4,
+          "status": "complete",
+          "wall_s": 0.36810997800785117,
+          "cpu_s": 0.18432999999999922
+        },
+        {
+          "solver": "before",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.3574746529920958,
+          "cpu_s": 0.17997899999999944
+        },
+        {
+          "solver": "after",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.3621437340043485,
+          "cpu_s": 0.18103299999999933
+        },
+        {
+          "solver": "singular",
+          "trial": 5,
+          "status": "complete",
+          "wall_s": 0.03719223299412988,
+          "cpu_s": 0.018664000000001124
+        }
+      ],
+      "median": {
+        "before": {
+          "wall_s": 0.362026752991369,
+          "cpu_s": 0.18166800000000194
+        },
+        "after": {
+          "wall_s": 0.36251817300217226,
+          "cpu_s": 0.1821780000000004
+        },
+        "singular": {
+          "wall_s": 0.03710725298151374,
+          "cpu_s": 0.018534999999999968
+        }
+      },
+      "atlas": {
+        "type": "ideal",
+        "ring": {
+          "field": "QQ",
+          "variables": [
+            "x",
+            "y",
+            "z"
+          ],
+          "order": "grevlex"
+        },
+        "generators": [
+          "y",
+          "z"
+        ]
+      },
+      "singular": "BASIS z,y",
+      "mutual_ideal_check": "LIB \"elim.lib\";ring R=0,(x,y,z),dp;option(redSB);short=0;ideal I=std(sat(ideal(x^2*y,x*z),ideal(x)));ideal J=std(ideal(y,z));print(\"PARITY \"+string(size(reduce(I,J))==0 && size(reduce(J,I))==0));quit;"
+    }
+  }
+}

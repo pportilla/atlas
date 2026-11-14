@@ -1,0 +1,204 @@
+{
+  "cpu_affinity": [
+    13
+  ],
+  "library_sha256": "bef4c300e7f2bf564b09ae37f1586bdd10a214f4fe01992dd1a44488a24d2c82",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "QQ on identical sparse input. Atlas includes native request, decoding and result transfer. Singular uses a fresh process for each trial. It records both computation alone and elapsed time from the initial polynomial declarations. The procedures discover scalar graph pivots independently and test the residual gcd. Small cases also verify the result against ordinary full saturation outside the timer. Atlas and Singular run in alternating order; centre selection and process startup are excluded.",
+  "comparisons": [
+    {
+      "case": "triangular_coprime",
+      "regular": true,
+      "checked_by_full_saturation": true,
+      "terms": [
+        3,
+        3,
+        12,
+        3
+      ],
+      "atlas_ms": [
+        0.339272,
+        0.35444,
+        0.21685,
+        0.335445,
+        0.217802,
+        0.34424,
+        0.230095,
+        0.343189,
+        0.224394
+      ],
+      "singular_ms": [
+        0.477,
+        0.501,
+        0.457,
+        0.466,
+        0.494,
+        0.486,
+        0.503,
+        0.511,
+        0.503
+      ],
+      "singular_with_input_ms": [
+        0.546,
+        0.571,
+        0.524,
+        0.534,
+        0.567,
+        0.557,
+        0.591,
+        0.58,
+        0.576
+      ],
+      "median_ms": {
+        "Atlas": 0.335445,
+        "Singular": 0.494,
+        "Singular_with_input": 0.567
+      }
+    },
+    {
+      "case": "triangular_zero_divisor",
+      "regular": false,
+      "checked_by_full_saturation": true,
+      "terms": [
+        3,
+        3,
+        12,
+        2
+      ],
+      "atlas_ms": [
+        0.342357,
+        0.355291,
+        0.482342,
+        0.318432,
+        0.207542,
+        0.318011,
+        0.393203,
+        0.304726,
+        0.199127
+      ],
+      "singular_ms": [
+        0.381,
+        0.4,
+        0.38,
+        0.38,
+        0.384,
+        0.364,
+        0.365,
+        0.38,
+        0.359
+      ],
+      "singular_with_input_ms": [
+        0.451,
+        0.472,
+        0.45,
+        0.453,
+        0.456,
+        0.432,
+        0.433,
+        0.448,
+        0.431
+      ],
+      "median_ms": {
+        "Atlas": 0.318432,
+        "Singular": 0.38,
+        "Singular_with_input": 0.45
+      }
+    },
+    {
+      "case": "reducible_hypersurface",
+      "regular": true,
+      "checked_by_full_saturation": true,
+      "terms": [
+        1,
+        2
+      ],
+      "atlas_ms": [
+        0.036468,
+        0.069191,
+        0.011251,
+        0.071074,
+        0.013085,
+        0.064502,
+        0.011231,
+        0.066556,
+        0.012383
+      ],
+      "singular_ms": [
+        0.105,
+        0.111,
+        0.104,
+        0.105,
+        0.114,
+        0.11,
+        0.106,
+        0.107,
+        0.129
+      ],
+      "singular_with_input_ms": [
+        0.137,
+        0.143,
+        0.136,
+        0.137,
+        0.146,
+        0.141,
+        0.139,
+        0.141,
+        0.169
+      ],
+      "median_ms": {
+        "Atlas": 0.036468,
+        "Singular": 0.107,
+        "Singular_with_input": 0.141
+      }
+    },
+    {
+      "case": "B9_first_frame",
+      "regular": true,
+      "checked_by_full_saturation": false,
+      "terms": [
+        7,
+        4,
+        4,
+        5974
+      ],
+      "atlas_ms": [
+        55.857672,
+        54.079621,
+        70.498345,
+        53.455681,
+        52.250383,
+        53.090632,
+        52.962369,
+        53.642745,
+        53.448759
+      ],
+      "singular_ms": [
+        19.043,
+        18.9,
+        17.989,
+        18.359,
+        18.649,
+        18.52,
+        18.348,
+        21.755,
+        18.982
+      ],
+      "singular_with_input_ms": [
+        57.832,
+        57.085,
+        55.755,
+        55.994,
+        56.361,
+        57.103,
+        56.259,
+        59.626,
+        56.857
+      ],
+      "median_ms": {
+        "Atlas": 53.455681,
+        "Singular": 18.649,
+        "Singular_with_input": 56.857
+      }
+    }
+  ]
+}

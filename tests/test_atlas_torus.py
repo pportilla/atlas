@@ -16,6 +16,30 @@ from engine.resolve import resolve
 from engine.toric_backend import resolve_toric
 
 
+class SurfaceSectionFallback(unittest.TestCase):
+    def test_owned_curves_and_their_attachments_survive_chart_reordering(self):
+        from engine.fan_surface import surface_complex
+        from engine.polynomial import parse_expression
+
+        rays = ((1, 1, 1), (0, 1, 0), (0, 0, 1))
+        # The normalized Laurent equation on the middle ray splits into the
+        # two rational lines y=±1. Each meets the sole curve on the z divisor.
+        terms = tuple(sorted(parse_expression("x+y^2-1", list("xyz")).items()))
+        owned = ("1 1 0 0",)
+        chart = (rays, {0: "A", 2: "B"}, terms, owned)
+        other = (tuple(reversed(rays)), {2: "A", 0: "B"},
+                 tuple((tuple(reversed(e)), c) for e, c in terms), ("1 0 0 0",))
+        output = surface_complex([chart, other])
+        self.assertEqual([v["id"] for v in output["vertices"]], ["A.1", "A.2", "B"])
+        self.assertEqual([(c["id"], c["faces"]) for c in output["cells"]],
+                         [("CA-B.1", ["A.1", "B"]), ("CA-B.2", ["A.2", "B"])])
+        self.assertEqual(output, surface_complex([chart]))
+        # An orbit curve lying in both exceptional divisors cannot carry
+        # two independent labels. Leave this case to the general gluer.
+        shared = tuple(sorted(parse_expression("x+y*z", list("xyz")).items()))
+        self.assertIsNone(surface_complex([(rays, {0: "A", 1: "B"}, shared, owned)]))
+
+
 class TorusChartCertification(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

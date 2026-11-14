@@ -19,7 +19,7 @@ the engines that read a resolution off the polyhedron give no answer.
 import json
 import subprocess
 import sys
-from fractions import Fraction
+from .polynomial import kernel_fraction
 from pathlib import Path
 from time import monotonic
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     if hasattr(sys, "set_int_max_str_digits"):
         sys.set_int_max_str_digits(0)
     asked = json.load(sys.stdin)
-    answer = _resolve({tuple(exponents): Fraction(c) for exponents, c in asked["terms"]}, asked["variables"],
+    answer = _resolve({tuple(exponents): kernel_fraction(c) for exponents, c in asked["terms"]}, asked["variables"],
                       asked["mode"], asked["seconds"], defer_outputs=asked.get("defer_outputs", False),
                       tangent_only=asked.get("tangent_only", False))
     print(json.dumps(answer))

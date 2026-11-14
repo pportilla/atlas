@@ -11,6 +11,21 @@ def factor_rows(factors):
     return [[integer_text(row["multiplicity"]), integer_text(row["exponent"])] for row in factors]
 
 
+def stratum_rows(strata):
+    return [[row["components"], integer_text(row["euler_characteristic"])] for row in strata]
+
+
+def acampo_strata(data, strata):
+    result = _request("acampo_strata", data=[[r["component"], integer_text(r["multiplicity"])] for r in data],
+                      strata=stratum_rows(strata))
+    contributions = [{"component": r["component"], "multiplicity": integer_from_decimal(r["multiplicity"]),
+                      "euler_characteristic": integer_from_decimal(r["euler_characteristic"])}
+                     for r in result["contributions"]]
+    factors = [{"multiplicity": integer_from_decimal(n), "exponent": integer_from_decimal(e)}
+               for n, e in result["factors"]]
+    return contributions, factors, integer_from_decimal(result["chi"])
+
+
 def acampo_factors(rows):
     inputs = []
     for row in rows:
@@ -65,11 +80,7 @@ def monodromy_zeta(record, *, polynomial=None, strata=None):
     if found is None:
         return {"status": "unavailable", "reason": "The atlas does not certify the embedded strata at the origin."}
     data, strata, method = found
-    orders = {r["component"]: r["multiplicity"] for r in data}
-    rows = [{"component": row["components"][0], "multiplicity": orders[row["components"][0]],
-             "euler_characteristic": row["euler_characteristic"]}
-            for row in strata if len(row["components"]) == 1]
-    factors, chi = acampo_factors(rows)
+    rows, factors, chi = acampo_strata(data, strata)
     return {"status":"computed", "variable":"T", "convention":"prod_q det(I - T*h^* | H^q(F_0; Q))^((-1)^(q+1))",
             "formula":"prod_i (1-T^N_i)^(-chi_c(E_i^open intersect pi^(-1)(0)))",
             "method":method, "resolution_engine":record.get("engine"),

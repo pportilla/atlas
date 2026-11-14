@@ -1,6 +1,8 @@
 // Check the factorization of a divisor on the germ of an identity chart.
 #include "rational_sparse_json.hpp"
 #include "branch_order.hpp"
+#include "projection_coefficients.hpp"
+#include "local_point_basis.hpp"
 #include "sparse_flint.hpp"
 #include "polynomial_factors.hpp"
 #include <flint/fmpq.h>
@@ -110,11 +112,82 @@ Json::Value weighted_orders(const Json::Value& request, size_t width) {
     }
     return strings(totals);
 }
+// Preserve the ordered display of generators for a product of ideal powers.
+// Repeated indices enumerate unordered selections within a single factor.
+Json::Value strict_product_generators(const Json::Value& request) {
+    std::vector<std::string> products{request["unit"].asString() == "1" ? "" :
+                                      "(" + request["unit"].asString() + ")"};
+    for (const auto& component : request["components"]) {
+        const auto& generators = component["ideal"];
+        Z multiplicity(component["multiplicity"].asString(), 10);
+        if (multiplicity <= 0 || !multiplicity.fits_ulong_p()) throw std::invalid_argument("Invalid ideal power.");
+        if (generators.empty()) return Json::Value(Json::arrayValue);
+        std::vector<Json::ArrayIndex> choice(multiplicity.get_ui());
+        std::vector<std::string> powers;
+        for (;;) {
+            std::string product;
+            for (auto i : choice) {
+                if (!product.empty()) product += '*';
+                product += "(" + generators[i].asString() + ")";
+            }
+            powers.push_back(std::move(product));
+            size_t k = choice.size();
+            while (k && choice[k-1] == generators.size()-1) --k;
+            if (!k) break;
+            const auto next = choice[k-1] + 1;
+            std::fill(choice.begin()+k-1, choice.end(), next);
+        }
+        std::vector<std::string> expanded;
+        for (const auto& left : products) for (const auto& right : powers)
+            expanded.push_back(left.empty() ? right : left + "*" + right);
+        products = std::move(expanded);
+    }
+    Json::Value result(Json::arrayValue);
+    for (const auto& product : products) result.append(product.empty() ? "1" : product);
+    return result;
+}
 Json::Value verify(const Json::Value& request) {
     size_t width = request["width"].asUInt64();
     const auto op = request["operation"].asString();
+    if (op == "strict_product_generators") return strict_product_generators(request);
+    if (op == "weight_profile") {
+        std::set<Z> distinct;
+        for (const auto& item : request["weights"]) distinct.emplace(item.asString(), 10);
+        Json::Value out;
+        out["repeated"] = !distinct.empty() && *distinct.rbegin() > 1;
+        out["uniform"] = distinct.size() == 1;
+        return out;
+    }
+    if (op == "projection_coefficients") return atlas::projection_coefficients(request);
     if (op == "branch_order") return branch_order(request["parts"], width);
     if (op == "weighted_orders") return weighted_orders(request, width);
+    if (op == "origin_indices") {
+        Json::Value indices(Json::arrayValue);
+        const Powers origin(width);
+        const auto& equations = request["equations"];
+        for (Json::ArrayIndex i = 0; i < equations.size(); ++i) {
+            const auto terms = read_terms(equations[i], width);
+            const auto value = terms.find(origin);
+            if (value == terms.end() || value->second == 0) indices.append(i);
+        }
+        return indices;
+    }
+    if (op == "transverse_germ_factors") {
+        atlas::local::SparseLexRing ring(width);
+        const auto active = active_factors(read_terms(request["terms"], width), ring);
+        atlas::local::Basis equations;
+        for (const auto& factor : active) equations.push_back(factor.first);
+        if (!atlas::local::independent_at_origin(equations, width)) return {};
+        std::vector<std::pair<Terms, Z>> factors(active.begin(), active.end());
+        Json::Value result(Json::arrayValue);
+        for (auto i : atlas::archived_branch_order(factors, width)) {
+            Json::Value row(Json::arrayValue);
+            row.append(term_list(factors[i].first));
+            row.append(factors[i].second.get_str());
+            result.append(row);
+        }
+        return result;
+    }
     if (op != "certify") throw std::invalid_argument("Unknown divisor operation.");
     Terms f = read_terms(request["terms"], width);
     if (f.empty()) return false;

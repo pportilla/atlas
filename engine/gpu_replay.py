@@ -73,11 +73,6 @@ def instructions(code):
             raise ValueError("Unknown instruction in a replay program.")
 
 
-def replay_reference(code, pool_size, work_size, primes, pools, status):
-    from tests.gpu_replay_oracle import replay_reference as reference
-    return reference(code, pool_size, work_size, primes, pools, status)
-
-
 def triton_kernels():
     """The parts as Triton kernels, compiled on first use: a dict of name -> kernel.
 
@@ -184,16 +179,7 @@ def _arrays(args):
 
 def run_batch(args, device):
     """Dispatch an actual native batch, preserving its input on failed transfers."""
-    arrays = _arrays(args)
-    if device is not None:
-        return replay_triton(*arrays, device=device["torch_device"])
-    # NumPy operates in place. Commit only after successful interpretation
-    # so the C++ fallback still sees its initial coefficients after a failure.
-    code, pool_size, work_size, primes, pools, status = arrays
-    output = pools.copy()
-    replay_reference(code, pool_size, work_size, primes, output, status)
-    pools[:] = output
-    return 0
+    return replay_triton(*_arrays(args), device=device["torch_device"])
 
 
 def hook(backend):
@@ -219,7 +205,11 @@ def use(library, backend="triton"):
             return False
         chosen = partial(replay_triton, device=device["torch_device"])
     elif backend == "reference":
-        chosen = replay_reference
+        host = getattr(library, "atlas_groebner_replay_host", None)
+        if host is None:
+            return False
+        library.atlas_groebner_use_batch(ctypes.cast(host, ctypes.c_void_p))
+        return True
     else:
         raise ValueError("Unknown replay backend.")
     library.atlas_groebner_use_batch.argtypes = [ctypes.c_void_p]

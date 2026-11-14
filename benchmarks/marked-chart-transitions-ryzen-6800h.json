@@ -1,0 +1,54 @@
+{
+  "cpu": 4,
+  "trials": 5,
+  "batch": 15,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "library_sha256": "5669db7bde4e6aae58acca689df43941a98de775e35dca6cecdd29ec2d4a71b5",
+  "conditions": "Fixed embedding of Q(sqrt(2)). Prepared inputs, alternating warm in-process operation batches. Atlas includes row/FFI and exact result validation. Singular uses its native coefficient field; startup and final verification excluded.",
+  "cases": {
+    "cofactors": {
+      "median_us": {
+        "Atlas": 189.89093333333332,
+        "Singular": 224.4
+      },
+      "samples_us": {
+        "Atlas": [
+          172.4692,
+          189.89093333333332,
+          188.26979999999998,
+          240.92620000000002,
+          223.99486666666667
+        ],
+        "Singular": [
+          223.0,
+          244.33333333333334,
+          241.26666666666668,
+          224.4,
+          221.0
+        ]
+      }
+    },
+    "two_marked_points": {
+      "median_us": {
+        "Atlas": 431.4296,
+        "Singular": 414.26666666666665
+      },
+      "samples_us": {
+        "Atlas": [
+          250.62993333333333,
+          431.4296,
+          434.0626,
+          478.0459333333333,
+          258.66046666666665
+        ],
+        "Singular": [
+          424.4,
+          553.6,
+          414.26666666666665,
+          402.0,
+          409.46666666666664
+        ]
+      }
+    }
+  }
+}

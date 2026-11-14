@@ -24,8 +24,24 @@ def _oracle(name, *args):
     return getattr(field_polynomial_oracle, name)(*args)
 
 
+def _display_sum(terms):
+    """Reconstruct an already computed symbolic sum without symbolic arithmetic."""
+    from .field_display import _held
+    return _held(sp.Add, [leaf for term in terms if term != 0 for leaf in sp.Add.make_args(term)])
+
+
+def _display_term(coefficient, variables, powers):
+    from .field_display import _held, _pow
+    if coefficient == 0:
+        return sp.S.Zero
+    factors = list(sp.Mul.make_args(coefficient)) if coefficient != 1 else []
+    factors.extend(_pow(v, k) for v, k in zip(variables, powers) if k)
+    return _held(sp.Mul, factors)
+
+
 def _in_theta(coefficients, theta):
-    return sp.Add(*(sp.Rational(c) * theta**i for i,c in enumerate(reversed(coefficients)) if c))
+    return _display_sum(_display_term(sp.Rational(c), (theta,), (j,))
+                        for j, c in enumerate(reversed(coefficients)) if c)
 
 
 @lru_cache(maxsize=128)
@@ -39,15 +55,11 @@ def modulus(domain, theta):
 @lru_cache(maxsize=8192)
 def _coefficient(value, domain, theta):
     from .field_coefficient import generator_expression
-    generator = domain.ext.as_expr() if gb._MODE == "sympy" else generator_expression(domain.ext)
+    generator = generator_expression(domain.ext)
     if value == generator or value == domain.ext:
         return theta
-    if gb._MODE == "sympy":
-        return _in_theta(_oracle("coefficient", value, domain), theta)
     from .field_coefficient import coefficients
     result = coefficients(value, domain)
-    if result is None:
-        return _in_theta(_oracle("coefficient", value, domain), theta)
     converted = _in_theta(tuple(reversed(result)), theta)
     if gb.CHECK and converted != _in_theta(_oracle("coefficient", value, domain), theta):
         raise AssertionError("The marked algebraic coefficient differs from its reference.")
@@ -60,10 +72,14 @@ def _lift(expr, gens, domain, theta):
         return expr
     if not expr.free_symbols:
         return _coefficient(expr, domain, theta)
-    if expr.is_Add or expr.is_Mul:
-        return expr.func(*(_lift(a, gens, domain, theta) for a in expr.args))
-    if expr.is_Pow and expr.exp.is_Integer and expr.exp >= 0:
-        return _lift(expr.base, gens, domain, theta)**expr.exp
+    if expr.is_Add:
+        return _display_sum(_lift(a, gens, domain, theta) for a in expr.args)
+    if expr.is_Mul:
+        from .field_display import _held
+        return _held(sp.Mul, [factor for a in expr.args
+                              for factor in sp.Mul.make_args(_lift(a, gens, domain, theta))])
+    if expr.is_Pow and expr.exp.is_Integer and int(expr.exp) >= 0:
+        return sp.Pow(_lift(expr.base, gens, domain, theta), expr.exp, evaluate=False)
     raise sp.PolynomialError("Expected a polynomial over the supplied number field.")
 
 
@@ -73,12 +89,17 @@ def lift(expr, variables, domain, theta):
         raise TypeError("Supply a parsed polynomial expression.")
     if isinstance(domain, NativeField):
         return np.coerce(expr).xreplace({domain.parameter: theta})
-    if gb._MODE != "sympy" and isinstance(expr, sp.Poly) and expr.domain == domain:
-        # A Poly over this exact field already contains its power-basis
-        # coordinates. Printing it would invoke the external field converter.
-        return sp.Add(*(_in_theta(c.to_list(), theta)*sp.Mul(*(v**k for v,k in zip(expr.gens,e) if k))
-                        for e,c in expr.rep.to_dict().items()))
-    expr = expr.as_expr() if isinstance(expr, sp.Poly) else sp.sympify(expr)
+    if isinstance(expr, sp.Poly):
+        if expr.domain == domain:
+            terms = ((powers, _in_theta(c.to_list(), theta)) for powers, c in expr.rep.to_dict().items())
+        elif expr.domain.is_AlgebraicField:
+            terms = ((powers, _lift(_scalar_expression(c, expr.domain), tuple(variables), domain, theta))
+                     for powers, c in expr.rep.to_dict().items())
+        else:
+            # Each entry is a stored coefficient; keep the outer polynomial held.
+            terms = ((powers, _lift(c, tuple(variables), domain, theta)) for powers, c in expr.as_dict().items())
+        return _display_sum(_display_term(c, expr.gens, powers) for powers, c in terms)
+    expr = sp.sympify(expr)
     return _lift(expr, tuple(variables), domain, theta)
 
 
@@ -111,12 +132,8 @@ def polynomial(expression, variables, domain):
     solve a new field isomorphism for each coefficient. Reduce the lift
     once modulo the marked relation and supply the field elements directly.
     """
-    if gb._MODE == "sympy":
-        return _oracle("polynomial", expression, variables, domain)
     if not hasattr(gb._kernel(),"atlas_coefficient_block_abi"):
-        if gb._MODE == "native":
-            raise ArithmeticError("Rebuild the native number-field kernel with make groebner.")
-        return _oracle("polynomial", expression, variables, domain)
+        raise ArithmeticError("Rebuild the native number-field kernel with make groebner.")
     from .affine_kernel import pullbacks
     variables = tuple(variables)
     theta = _parameter(domain)
@@ -133,8 +150,6 @@ def _scalar_expression(value, domain):
     if len(coefficients) <= 1:
         return sp.Rational(coefficients[0]) if coefficients else sp.S.Zero
     from .field_coefficient import generator_expression
-    if gb._MODE == "sympy":
-        return _oracle("scalar", value, domain)
     from .field_display import scalar
     result = scalar(tuple(coefficients), generator_expression(domain.ext))
     if gb.CHECK and result != _oracle("scalar", value, domain):
@@ -149,8 +164,8 @@ def _scalar_expression(value, domain):
 def _line_expression(row, variables, domain):
     if isinstance(domain, NativeField):
         return np.from_row((*variables, domain.parameter), row)
-    return sp.Add(*(_scalar_expression(c, domain) * sp.Mul(*(v**k for v,k in zip(variables,m) if k))
-                    for m,c in _field_terms(row, domain)))
+    return _display_sum(_display_term(_scalar_expression(c, domain), variables, m)
+                        for m, c in _field_terms(row, domain))
 
 
 def lower(expr, variables, domain, theta):
@@ -216,9 +231,7 @@ class FieldBasis:
                     qs, r = wide.reduce(expr)
                     return [*qs, r]
                 return [wide.remainder(expr)]
-            if isinstance(self.domain, NativeField) or gb._MODE == "native":
-                raise ArithmeticError("Rebuild the wide native coefficient-field kernel with make groebner.")
-            return _oracle("division", self, expr, quotients)
+            raise ArithmeticError("Rebuild the wide native coefficient-field kernel with make groebner.")
         try:
             rows = ctypes.string_at(answer).decode("ascii").splitlines()
         finally:

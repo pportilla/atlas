@@ -37,19 +37,32 @@ from dataclasses import replace
 from .chart_expressions import chart_expressions
 from .native_polynomial import native_ring
 from .binomial_kernel import _integer, _newton, minimum_faces, separating_forms
+from .centre_weights import centre_rows
 from .chart_batch import strict_valuations
 from .chart_kernel import strata_totals
-from .polynomial import parse_expression
+from .polynomial import integer_text, parse_expression
+from .kernel_json import kernel_json
 
 from . import kernel
-from .affine_kernel import _polynomial, frame_derivative, frame_linear
-from .blowup_ideal import saturate
+from .affine_kernel import _polynomial
 from .groebner import CHECK, groebner
-from .local_blowups import GiveUp, _dimension, _point_components, _radical_points, acampo_over
+from .local_blowups import GiveUp, _point_components, _radical_points, acampo_over
 from .monodromy_toric import _volume
 from .newton_backend import _valuations
 from .newton_faces import certify_face
 from .strata import records
+
+
+def repair_operation(operation, **fields):
+    return kernel_json("atlas_newton_repair", operation, **fields)
+
+
+def supported_rows(variables, generators, columns, *, exact=False):
+    """Rows in the indicated polynomial subring, retaining the basis order."""
+    generators = tuple(generators)
+    indices = repair_operation("supported_rows", width=len(variables), rows=centre_rows(variables, generators),
+                               columns=columns, exact=exact)
+    return tuple(generators[i] for i in indices)
 
 
 def _text(expr):
@@ -91,17 +104,9 @@ def _rational(coords, free, points, count):
     # Beyond the sum of their root counts at least one form separates.
     for form in separating_forms(free, count, first=0):
         basis = groebner((*points, theta - form), ring, order="lex").exprs
-        minimal = [g for g in basis if g.free_symbols <= {theta}]
-        solved = []
-        for v in free:
-            for g in basis:
-                if v in g.free_symbols and g.free_symbols <= {v, theta}:
-                    linear = frame_linear(ring, g, v)
-                    if linear is not None and linear[0] == 1:
-                        solved.append(g)  # the reduced lex basis is monic
-                        break
-        if len(minimal) == 1 and len(solved) == len(free):
-            return (*coords, theta), (minimal[0], *solved)
+        selected = repair_operation("rur_graph", axes=len(free), rows=centre_rows(ring, basis))
+        if selected is not None:
+            return (*coords, theta), tuple(basis[i] for i in selected)
     raise GiveUp("No separating linear form was found for the finite reduced Newton centre.")
 
 
@@ -137,20 +142,17 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
             self.exponents = sorted(terms)
             self.values = _valuations(rays, self.exponents)
             self.orders, masks = minimum_faces(self.values)
-            self.least = list(map(frozenset, masks))
+            self.least = masks
             self.strict_values = strict_valuations(self.exponents, rays, self.orders, self.values)
 
-        def face(self, orbit):
-            return frozenset.intersection(*(self.least[r] for r in orbit))
-
         def strict(self, cone, face=None):
-            chosen = range(len(self.exponents)) if face is None else sorted(face)
+            chosen = range(len(self.exponents)) if face is None else face
             terms = {tuple(self.strict_values[r][j] for r in cone): self.terms[self.exponents[j]] for j in chosen}
             return _polynomial(terms, coords)
 
     support = Part("strict", 1, poly)
     orders, exponents = support.orders, support.exponents
-    if any(orders[:n]) or min(orders[n:]) < 1:
+    if not repair_operation("orders_supported", width=n, orders=list(map(integer_text, orders))):
         return None
     parts = [support] if parts is None else [Part(*part) for part in parts]
     rows = _newton("repair_orders", n, (len(rays), len(parts)), orders,
@@ -186,14 +188,16 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
         rows = _newton("repair_orbits", n, (len(rays), len(cones)), *rays, *cones)
         if rows == ["none"]:
             return None
-        orbits = []
+        orbit_rows = []
         for row in rows:
-            ci, dimension, orientation, *orbit = map(int, row.split())
-            orbits.append((ci, dimension, orientation, orbit, support.face(orbit)))
-        # When every orbit has a term of least value on all its rays, the fan
-        # refines the dual fan of the Newton polyhedron: the faces of the
-        # polytope of a face polynomial are then faces of other orbits.
-        refines = all(item[-1] for item in orbits)
+            ci, _, _, *rays_here = map(int, row.split())
+            orbit_rows.append({"chart": ci, "rays": rays_here})
+        classified = repair_operation("orbit_faces", width=n, minima=[support.least, *(p.least for p in parts)],
+                                     cones=cones, orbits=orbit_rows)
+        # A common minimizing term on every orbit certifies that this fan
+        # refines the dual fan. Otherwise the compact subfaces can be checked
+        # separately against the fan of the original polynomial.
+        refines = classified["refines"]
         if certify_subfaces and not refines:
             from .newton_fan import build_fan
             from .newton_faces import exhaustive_faces
@@ -213,66 +217,67 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
             masks = set()
             for row in faces[len(values):]:
                 size, *entries = map(int, row.split())
-                masks.add(frozenset(entries[size:]))
+                masks.add(tuple(entries[size:]))
             if not all(nondegenerate(mask) for mask in masks):
                 return None
-        degenerate = [face for face in {item[-1] for item in orbits} if face and not nondegenerate(face)]
-        for ci, d, orientation, orbit, face in orbits:
+        all_faces = [tuple(face) for face in classified["faces"]]
+        degenerate = [i for i, face in enumerate(all_faces) if face and not nondegenerate(face)]
+        plans = repair_operation("orbit_plan", orbits=classified["orbits"], faces=all_faces, degenerate=degenerate,
+                                 count_strata=count_strata, all_subfaces=refines or certify_subfaces)
+        for source, orbit, plan in zip(orbit_rows, classified["orbits"], plans):
+            ci = source["chart"]
             cone, index = cones[ci], ci+1
-            if not count_strata and face not in degenerate:
-                continue  # the orbit cut is smooth; only the singular points need local runs
-            exceptional = [i for i in orbit if i >= n]
-            off = frozenset(map(label, exceptional))
-            faces = [part.face(orbit) for part in parts]
-            if not face:
-                # No term has least value on all the rays: the equation of
-                # the strict transform vanishes on the orbit, which lies in it.
-                inside = [part for part, own in zip(parts, faces) if not own]
-                if len(inside) != 1 or (d and any(len(own) > 1 for own in faces)):
-                    raise GiveUp("Two components of the strict transform meet over the origin.")
-                add(off | {inside[0].label}, 1 if d == 0 else 0)
+            face = all_faces[orbit["face_id"]]
+            faces = list(map(tuple, orbit["faces"]))
+            off = frozenset(map(label, orbit["exceptional"]))
+            action = plan["action"]
+            if action == "skip":
                 continue
-            if d == 0:
-                add(off, 1)  # a point, off the strict transform
+            if action == "inadmissible":
+                raise GiveUp("Two components of the strict transform meet over the origin.")
+            if action == "contained":
+                add(off | {parts[plan["part"]].label}, plan["chi"])
                 continue
-            if count_strata and (refines or certify_subfaces or len(face) <= 2) and not any(other <= face for other in degenerate):
-                # The cuts of the parts are disjoint: their union is smooth.
-                for k, (part, own) in enumerate(zip(parts, faces)):
-                    if len(own) <= d:
-                        continue
+            if action == "point":
+                add(off, 1)
+                continue
+            free_axes = orbit["free"]
+            if action == "volume":
+                d = len(free_axes)
+                for k in plan["volume_parts"]:
+                    part, own = parts[k], faces[k]
                     key = (k, own, d)
                     if key not in volumes:
-                        remaining = [r for r in cone if r not in orbit]
-                        volumes[key] = _volume([tuple(part.values[r][j] for r in remaining) for j in sorted(own)], d)
-                    add(off | {part.label}, volumes[key], orientation)
-                    add(off, volumes[key], -orientation)
+                        volumes[key] = _volume([tuple(part.values[cone[i]][j] for i in free_axes) for j in own], d)
+                    add(off | {part.label}, volumes[key], plan["strict_sign"])
+                    add(off, volumes[key], plan["off_sign"])
                 continue
-            free = tuple(u for u, r in zip(coords, cone) if r not in orbit)
+            free = tuple(coords[i] for i in free_axes)
             torus = [(u,) for u in free]
             on_orbit = support.strict(cone, face)
-            partials = (frame_derivative(free, on_orbit, {u: 1}) for u in free)
-            invert = _polynomial({(1,)*len(free): 1}, free)
-            singular = saturate(free, (on_orbit, *partials), invert)
-            if singular != (1,) and _dimension(free, singular) != 0:
+            result = repair_operation("singular_orbit", width=len(free), equation=centre_rows(free, (on_orbit,))[0])
+            if result["kind"] == "positive_dimension":
                 raise GiveUp("The strict transform fails normal crossings along a curve of an orbit.")
+            singular = kernel.exprs(free, result["ideal"])
+            isolated = result["kind"] == "points"
             if count_strata:
                 cut = _euler(free, (on_orbit,), torus)
-                add(off, cut, -1)
+                branches, deleted = [], []
                 for part, face_terms in zip(parts, faces):
                     own = part.strict(cone, face_terms)
-                    chi = cut if len(parts) == 1 else _euler(free, (own,), torus)
-                    if singular != (1,):
-                        add(off | {part.label}, _euler(free, (*singular, own)), -1)
-                    add(off | {part.label}, chi)
-            if singular == (1,):
+                    branches.append(integer_text(cut if len(parts)==1 else _euler(free, (own,), torus)))
+                    deleted.append(integer_text(_euler(free, (*singular, own))) if isolated else None)
+                signed = repair_operation("branch_euler", cut=integer_text(cut), branches=branches, deleted=deleted)
+                for k, chi, sign in signed:
+                    add(off if k<0 else off | {parts[k].label}, _integer(chi), sign)
+            if not isolated:
                 continue
-            components = [(label(r), data[label(r)][0], data[label(r)][1], (u,))
-                          for u, r in zip(coords, cone) if r >= n]
+            components = [(label(cone[i]), *data[label(cone[i])], (coords[i],)) for i in orbit["exceptional_axes"]]
             components.extend((part.label, part.weight, 1, (part.strict(cone),)) for part in parts)
             # Each component over Q of the set of singular points is a problem of
             # its own: the blowups made over one do not touch the others.
             for points in _point_components(free, _radical_points(free, singular)):
-                orbit_ideal = tuple(u for u, r in zip(coords, cone) if r in orbit)
+                orbit_ideal = tuple(coords[i] for i in orbit["fixed"])
                 parent_ideal = (*orbit_ideal, *points)
                 count = _point_count(free, points)
                 space, relation = _rational(coords, free, points, count)
@@ -293,7 +298,7 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
                 for key, chi in local_strata.items():
                     add(frozenset(map(rename, key)), chi)
                 repairs.append({
-                    "id": name, "chart": f"N{index}", "orbit_rays": [rays[r] for r in orbit],
+                    "id": name, "chart": f"N{index}", "orbit_rays": [rays[r] for r in source["rays"]],
                     "points": count,
                     "ideal": [_text(e) for e in parent_ideal],
                     "blowups": [{**centre, "id": rename(centre["id"]),

@@ -32,9 +32,16 @@ mpq_class power(mpq_class base, mpz_class exponent) {
 } // namespace
 
 std::string scalar_arithmetic(const std::string& op, const std::string& left, const std::string& right) {
+    if (op == "empty_product") return "1";
+    if (op == "empty_sum") return "0";
     auto a = rational(left);
+    if (op == "canonical") return a.get_str() + "\n";
     const auto b = rational(right);
-    if (op == "+") a += b;
+    if (op == "decimal_coefficient") {
+        if (a.get_den() != 1 || b.get_den() != 1)
+            throw std::invalid_argument("Expected decimal digits and an integral exponent.");
+        if (a != 0) a *= power(10, b.get_num());
+    } else if (op == "+") a += b;
     else if (op == "-") a -= b;
     else if (op == "*") a *= b;
     else if (op == "/") {

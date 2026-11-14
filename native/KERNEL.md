@@ -1,6 +1,6 @@
 # The exact kernel: algorithms and proofs
 
-`groebner.cpp`, `hilbert.cpp`, `modular.cpp`, `ideal.cpp` and `euler.cpp` compute with ideals of a polynomial ring over the rationals. This note states, for every routine, the algorithm it follows and the theorem that makes its answer correct. Where the code departs from a textbook algorithm the proof is given here. Testing (the side-by-side mode `ATLAS_GROEBNER=check` and the fuzzers) only guards against programming mistakes; it is not what the correctness rests on.
+`groebner.cpp`, `hilbert.cpp`, `modular.cpp`, `ideal.cpp` and `euler.cpp` compute with ideals of a polynomial ring over the rationals. This note states, for every routine, the algorithm it follows and the theorem that makes its answer correct. Where the code departs from a textbook algorithm the proof is given here. The test suite checks these results against independent implementations and fuzz inputs.
 
 Notation: $R=\mathbf Q[x_1,\dots,x_n]$ with a monomial order, $\operatorname{lm}$ the leading monomial, $L(I)$ the ideal of leading monomials of $I$. Geometric statements are over $\overline{\mathbf Q}$.
 
@@ -569,7 +569,7 @@ The Hilbert series used is exact, because $G_0$ is a certified basis. A Hilbert 
 
 ## 9. Operations for the blowups
 
-These are the polynomial computations of `engine/local_blowups.py` and `engine/surface.py`. Each has a Python version that answers when the kernel cannot and that `ATLAS_GROEBNER=check` compares with it. `ATLAS_TRACE=1` prints the time of each phase that takes more than 0.05 s, `ATLAS_TRACE=2` every phase.
+These are the polynomial computations of `engine/local_blowups.py` and `engine/surface.py`. The CLI uses the native kernels for centre selection and chart arithmetic, including wide sparse inputs. Independent comparisons belong to the test suite. Older launch settings `ATLAS_GROEBNER=sympy` and `ATLAS_GROEBNER=check` both use the production native kernels. `ATLAS_TRACE=1` prints the time of each phase that takes more than 0.05 s, `ATLAS_TRACE=2` every phase.
 
 ### 9.1 Normal crossings (`crossings`)
 

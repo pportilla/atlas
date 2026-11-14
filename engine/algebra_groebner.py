@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from . import groebner as gb
 from . import native_polynomial as np
+from .ordered_ideal_kernel import scalar_ideal
 from .polynomial import format_poly
 from .quotient_monomials import degree_bounds
 
@@ -31,7 +32,7 @@ class ReducedBasis:
     def remainder(self, polynomial):
         polynomial = _operand(polynomial, self.gens)
         if not self.gens:  # The only ideals in QQ are (0) and (1).
-            return np.S.Zero if self.exprs else polynomial
+            return np.from_row((), scalar_ideal("remainder", self.exprs, polynomial))
         return self._basis.remainder(polynomial)
 
     def reduce(self, polynomial):
@@ -40,7 +41,7 @@ class ReducedBasis:
     def contains(self, polynomial):
         polynomial = _operand(polynomial, self.gens)
         if not self.gens:
-            return bool(self.exprs) or not polynomial
+            return scalar_ideal("membership", self.exprs, polynomial)
         return self._basis.contains(polynomial)
 
 
@@ -76,7 +77,8 @@ def _make_basis(generators, variables, order, *, trusted):
         raise ValueError("Unsupported monomial order.")
     generators = tuple(_operand(f, variables) for f in generators)
     if not variables:
-        return ReducedBasis((), order, (np.S.One,) if any(generators) else (), None)
+        rows = scalar_ideal("basis", generators)
+        return ReducedBasis((), order, tuple(np.from_row((), row) for row in rows), None)
     if gb._MODE in ("sympy", "check"):
         from tests.groebner_oracle import _SymbolicBasis
     if gb._MODE == "sympy":

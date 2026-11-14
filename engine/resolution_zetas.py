@@ -35,10 +35,10 @@ def zetas_from_strata(record, kinds, strata, *, companion=False):
         for zeta in results.values():
             zeta["source"] = "companion embedded resolution"
     if len(results) == len(KINDS) and all(zeta["status"] == "computed" for zeta in results.values()):
-        from .session import json_value
+        from .exact_json import sorted_record
         from .session_monodromy import check_zetas
         check = check_zetas(record, results["topological_zeta"], results["monodromy_zeta"])
-        results["monodromy_check"] = json_value(check)
+        results["monodromy_check"] = sorted_record(check)
     return results
 
 

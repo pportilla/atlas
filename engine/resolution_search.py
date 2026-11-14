@@ -15,14 +15,12 @@ from . import native_polynomial as np
 from .chart_expressions import chart_expressions
 from .reference import sp
 from .reference import QQ
-from .rational_point import coordinate_fraction
 from .kernel_json import kernel_json
 from .polynomial import integer_from_decimal, sparse_row
 
-from .affine_kernel import (_checked, _polynomial, _request, _ring, _sparse_expression, frame_derivative,
+from .affine_kernel import (_checked, _polynomial, _request, _ring, _sparse_expression,
                             rational_factor_rows)
 from .blowup_ideal import ideal_basis
-from .groebner import groebner
 
 
 def _oracle(name, *args):
@@ -89,73 +87,52 @@ def _singular_coordinate_subspaces(variables, f):
             yield tuple(variables[i] for i in subset_batch[j])
 
 
-def _squarefree_generators(exprs, variables):
+def _candidate_row(variables, value):
+    if np.native_ring(variables):
+        return np.row(variables, value)
     ring = _ring(variables)
-    sqfree = set()
-    for expr in exprs:
-        if not expr:
-            continue
-        def native():
-            row, = _request(["squarefree_part", ring.header, ring.text(expr)])
-            return _sparse_expression(variables, row)
-
-        value = _checked(native, lambda: _oracle("squarefree", expr, variables),
-                         variables)
-        sqfree.add(value)
-    return tuple(sorted(sqfree, key=chart_expressions(variables).default_sort_key))
+    row, = _request(["function", ring.header, ring.text(value)])
+    return row
 
 
 def _jacobian_support(variables, f):
-    # Taking the square-free part of each individual equation preserves its
-    # geometric vanishing set. Reducing modulo the known linear equations
-    # can reveal further linear equations, e.g. x^2-y^2*z gives (x,y).
-    api = chart_expressions(variables)
-    derivatives = (frame_derivative(variables, f, {v: api.S.One}) for v in variables)
-    equations = _squarefree_generators((f, *derivatives), variables)
-    for _ in variables:
-        linear = tuple(e for e in equations if _support_profile(variables, e)[0] <= 1)
-        if not linear:
-            break
-        if any(not e.free_symbols for e in linear):
-            return (api.S.One,)
-        gb = groebner(linear, variables)
-        reduced = [gb.reduce(e)[1] for e in equations]
-        new = _squarefree_generators((*gb.exprs, *reduced), variables)
-        if new == equations:
-            break
-        equations = new
-    return equations
+    """Serialize the generators of the geometric Jacobian locus in caller order."""
+    def native():
+        rows = kernel_json("atlas_resolution_candidate", "jacobian_support", width=len(variables),
+                           row=_candidate_row(variables, f))
+        values = [_sparse_expression(variables, row) for row in rows]
+        return tuple(sorted(values, key=chart_expressions(variables).default_sort_key))
+
+    return _checked(native, lambda: _oracle("jacobian_support", variables, f), variables)
 
 
 def _two_blowup_candidates(variables, f):
-    """Find constant rational sections of the repeated relative tangent cone."""
-    api = chart_expressions(variables)
+    """Read the native composite centres and their two projective boundary ideals."""
     expr = f.as_expr() if hasattr(f, "as_expr") else f
-    ring = _ring(variables)
     projective = _projective(variables, 3)
+    row = None
     for i, j in combinations(range(len(variables)), 2):
-        x, y = variables[i], variables[j]
-
         def native():
-            rows = _request(["repeated_directions", ring.header, str(i), str(j), ring.text(expr)])
-            return ("vertical" in rows, tuple(coordinate_fraction(s) for s in rows if s != "vertical"))
+            nonlocal row
+            if row is None:
+                row = _candidate_row(variables, expr)
+            proposals = kernel_json("atlas_resolution_candidate", "two_blowups", width=len(variables),
+                                    row=row, first=i, second=j)
+            results = []
+            for data in proposals:
+                parameters = tuple(_sparse_expression(variables, r) for r in data["parameters"])
+                if np.native_ring(variables):
+                    centre = tuple(_sparse_expression(variables, r) for r in data["centre"])
+                else:
+                    # Preserve the original factored display on external symbolic objects.
+                    centre = tuple(sp.Mul(*(parameters[k] for k in factors)) for factors in data["factors"])
+                symbols = (*parameters, *projective)
+                boundary = tuple(tuple(symbols[k] for k in ideal) for ideal in data["boundary"])
+                results.append(ResolutionCandidate(centre, projective, boundary, QQ, None,
+                                                   "two blowups along a repeated rational tangent"))
+            return tuple(results)
 
-
-        vertical, slopes = _checked(native, lambda: _oracle("repeated_directions", variables, expr, i, j), variables)
-        directions = [(y, x)] if vertical else []
-        directions.extend((x, y - api.Rational(slope.numerator, slope.denominator)*x) for slope in slopes)
-
-        # For parameters a,b with tangent b=0, first blow up (a,b).
-        # In the chart b=a*v the second center is (a,v), while on the
-        # other chart it is absent. The product (a,b)*(a²,b) presents
-        # their composite: the second factor there is a*(a,v). Removing
-        # the redundant a²*b gives the three projective graph coordinates.
-        # The reduced exceptional fiber has the two lines U1*U3=0.
-        for a, b in directions:
-            center = (a**3, a*b, b**2)
-            boundary = ((a, b, projective[0]), (a, b, projective[2]))
-            yield ResolutionCandidate(center, projective, boundary, QQ, None,
-                                      "two blowups along a repeated rational tangent")
+        yield from _checked(native, lambda: _oracle("two_blowups", variables, expr, i, j), variables)
 
 
 def priority_candidates(variables, polynomial):

@@ -14,6 +14,10 @@ def crossings_rows(n, dimension, ambient, divisors, fibre, region, *, bounded=Fa
     header = (f"{operation} {n} {dimension} {len(ambient)} {len(divisors)}{sizes} "
               f"{len(fibre)} {len(region)}")
     rows = ideal_request(header, [*ambient, *(g for ideal in divisors for g in ideal), *fibre, *region])
+    return crossing_loci(rows)
+
+
+def crossing_loci(rows):
     if rows == ["unknown"]:
         return None
     found, at = [], 0

@@ -181,9 +181,9 @@ class GroebnerKernelTests(unittest.TestCase):
         with patch.object(gb,"_MODE","native"), patch.object(sp,"groebner",side_effect=AssertionError):
             # The unpacked FLINT ring accepts exponents above the packed limit.
             self.assertNotIsInstance(groebner((x**40000-y,), (x,y)), GroebnerBasis)
-            with self.assertRaisesRegex(ArithmeticError,"ATLAS_GROEBNER=sympy"):
+            with self.assertRaisesRegex(ArithmeticError,"specified ring or order"):
                 groebner((x+y,), (x,y), domain=sp.GF(3))
-            with self.assertRaisesRegex(ArithmeticError,"ATLAS_GROEBNER=sympy"):
+            with self.assertRaisesRegex(ArithmeticError,"specified ring or order"):
                 groebner((x+y,), (x,y), order=sp.polys.orderings.lex)
             with patch.object(gb,"_kernel",return_value=None):
                 with self.assertRaisesRegex(ArithmeticError,"make groebner"):

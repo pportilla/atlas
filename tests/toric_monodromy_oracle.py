@@ -15,6 +15,8 @@ def _volume_reference(points, dimension):
     points = tuple(dict.fromkeys(points))
     if len(points) <= dimension:
         return 0
+    if dimension == 0:
+        return 1
     if dimension == 1:
         return max(p[0] for p in points) - min(p[0] for p in points)
     origin = points[0]

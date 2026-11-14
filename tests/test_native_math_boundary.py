@@ -1,5 +1,9 @@
 """Architecture regressions for the C++ computation boundary defined in AGENTS.md."""
 import ast
+import json
+import os
+import subprocess
+import tempfile
 from fractions import Fraction
 from pathlib import Path
 import unittest
@@ -77,6 +81,44 @@ class NativeMathBoundaryTests(unittest.TestCase):
                     if package in MATH_PACKAGES or module == "triton.language":
                         violations.append(f"{path.name}:{node.lineno} imports {module}")
         self.assertEqual(violations, [], "Implement new mathematics in native/.")
+
+    def test_cli_fallbacks_and_replay_do_not_load_python_math(self):
+        from engine.native_library import _kernel
+        if _kernel() is None:
+            self.skipTest("Build the native solver to exercise production routes")
+        cases = (("check", "(x+y+z)^2-z*(x-y)^2", "embedded", "verified-ideal-blowup", 2),
+                 ("sympy", "(x+y)^2+z^3+x^3", "embedded", "canonical-blowups", 15),
+                 ("native", "x*y*z+x^4+y^4+z^4", "intrinsic", "newton-polyhedron", 9))
+        guard = """import os, sys
+from pathlib import Path
+class ReferenceGuard:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in ("sympy", "tests"):
+            Path(os.environ["ATLAS_IMPORT_SENTINEL"]).write_text(name)
+            raise AssertionError("Unexpected Python mathematical reference: " + name)
+sys.meta_path.insert(0, ReferenceGuard())
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / "sitecustomize.py").write_text(guard)
+            sentinel = path / "failed"
+            cli = ENGINE.parent / "atlas"
+            for setting, equation, mode, expected_engine, count in cases:
+                with self.subTest(case=expected_engine):
+                    env = dict(os.environ, ATLAS_GROEBNER=setting, ATLAS_IMPORT_SENTINEL=str(sentinel),
+                               PYTHONPATH=os.pathsep.join([directory, str(ENGINE.parent)]))
+                    flags = ["--vars", "x,y,z", "--mode", mode, "--compute", "cpu", "--monodromy", "--json"]
+                    record = json.loads(subprocess.check_output([cli, "resolve", equation, *flags],
+                                                                env=env, cwd=ENGINE.parent, timeout=90))
+                    self.assertEqual((record["status"], record["engine"], len(record["charts"])),
+                                     ("resolved", expected_engine, count))
+                    monodromy = record.pop("monodromy_zeta")
+                    for key in ("topological_zeta", "monodromy_check", "dual_complex"):
+                        record.pop(key, None)
+                    answer = subprocess.check_output([cli, "monodromy", "-", "--json"], input=json.dumps(record),
+                                                     text=True, env=env, cwd=ENGINE.parent, timeout=90)
+                    self.assertEqual(json.loads(answer), monodromy)
+                    self.assertFalse(sentinel.exists(), sentinel.read_text() if sentinel.exists() else None)
 
     def test_hilbert_and_point_adapters_contain_only_transport(self):
         for name in sorted(ARITHMETIC_FREE):

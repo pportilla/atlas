@@ -1,6 +1,7 @@
 """Recognize rational coordinate and smooth transverse factors through the origin."""
 from .monodromy import _request
-from .point_geometry import encode_terms, support_profile
+from .kernel_json import kernel_json
+from .point_geometry import decode_terms, encode_terms, support_profile
 from .polynomial import format_poly, integer_from_decimal
 
 
@@ -18,11 +19,8 @@ def _factor_snc(p, names):
     # branch there. Independent differentials give normal crossings.
     if len(p) > 192 or len(names) > 8 or support_profile(p)[1] > 24:
         return None
-    from .identity_atlas import independent, rational_factors
-    zero = (0,) * len(names)
-    active = [(f, m) for f, m in rational_factors(p, names) if zero not in f]
-    if independent([f for f, _ in active], len(names)):
-        from .affine_kernel import archived_factor_order
-        active = [active[i] for i in archived_factor_order(active, len(names))]
-        return [(format_poly(f, names), m) for f, m in active]
-    return None
+    parts = kernel_json("atlas_identity_divisor", "transverse_germ_factors",
+                        width=len(names), terms=encode_terms(p))
+    if parts is None:
+        return None
+    return [(format_poly(decode_terms(row), names), integer_from_decimal(m)) for row, m in parts]

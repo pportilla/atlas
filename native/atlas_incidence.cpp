@@ -339,6 +339,25 @@ Value product_axes(const Value& charts, int dimension) {
     return array(Names(free.begin(),free.end()));
 }
 
+Value product_projection(const Value& request) {
+    std::set<int> directions;
+    for (const auto& axis : request["axes"]) directions.insert(axis.asInt());
+    Value kept(Json::arrayValue);
+    const auto& images = request["images"];
+    for (Json::ArrayIndex i = 0; i < images.size(); ++i) {
+        const auto& image = images[i];
+        const auto& expected = image["expected"];
+        if (!expected.isNull()) {
+            if (image["coordinate"] != expected) return {};
+        } else {
+            for (const auto& axis : image["depends"])
+                if (directions.count(axis.asInt())) return {};
+            kept.append(i);
+        }
+    }
+    return kept;
+}
+
 Value product_torus(const Value& request) {
     const auto& local=request["local"];
     const auto& base=request["base"];
@@ -450,6 +469,7 @@ Value execute(const Value& r) {
     }
     if (op=="binomial_layout") return binomial_layout(r);
     if (op=="product_axes") return product_axes(r["charts"],r["dimension"].asInt());
+    if (op=="product_projection") return product_projection(r);
     if (op=="product_torus") return product_torus(r);
     if (op=="coordinate_exceptional") return coordinate_exceptional(r, false);
     if (op=="polynomial_graph_exceptional") return coordinate_exceptional(r, true);

@@ -1,0 +1,114 @@
+{
+  "conditions": "QQ[x,y], torus x*y != 0. Both systems compute the saturated Jacobian ideal; both compare it to the indicated ideal outside the timer. Atlas also returns its dimension class. Atlas times native calls including transport; Singular times in-process std(sat(J,xy)) after input parsing. Timers exclude process startup. Alternating batches per trial.",
+  "trials": 5,
+  "loops_per_trial": 30,
+  "cpu_affinity": [
+    6
+  ],
+  "library_sha256": "5669db7bde4e6aae58acca689df43941a98de775e35dca6cecdd29ec2d4a71b5",
+  "singular_version": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "cases": {
+    "isolated": {
+      "equation": "(x-2)^2+(y+3)^2",
+      "singular_ideal": [
+        "x-2",
+        "y+3"
+      ],
+      "kind": "points",
+      "atlas_us": [
+        183.0957,
+        96.9242,
+        85.99083333333333,
+        77.9596,
+        168.112
+      ],
+      "singular_us": [
+        991.6666666666666,
+        780.7666666666667,
+        450.96666666666664,
+        1027.8333333333333,
+        1140.6666666666667
+      ],
+      "median_us": {
+        "atlas": 96.9242,
+        "singular": 991.6666666666666
+      }
+    },
+    "curve": {
+      "equation": "x^17*y^4*(y-2)^3",
+      "singular_ideal": [
+        "(y-2)^2"
+      ],
+      "kind": "positive_dimension",
+      "atlas_us": [
+        65.79693333333333,
+        190.8747666666667,
+        217.01226666666668,
+        71.24656666666667,
+        59.3831
+      ],
+      "singular_us": [
+        1941.0,
+        1743.6333333333334,
+        1228.6666666666667,
+        1368.5,
+        600.0333333333333
+      ],
+      "median_us": {
+        "atlas": 71.24656666666667,
+        "singular": 1368.5
+      }
+    },
+    "empty": {
+      "equation": "x^17*y^4*(x+y)",
+      "singular_ideal": [
+        "1"
+      ],
+      "kind": "empty",
+      "atlas_us": [
+        37.267900000000004,
+        37.67636666666667,
+        28.999233333333333,
+        39.602999999999994,
+        29.904633333333333
+      ],
+      "singular_us": [
+        1041.5,
+        1143.0,
+        821.2333333333333,
+        1155.8,
+        1148.4666666666667
+      ],
+      "median_us": {
+        "atlas": 37.267900000000004,
+        "singular": 1143.0
+      }
+    },
+    "two_points": {
+      "equation": "(x^2+1)^2+(y-2)^2",
+      "singular_ideal": [
+        "x^2+1",
+        "y-2"
+      ],
+      "kind": "points",
+      "atlas_us": [
+        78.53739999999999,
+        77.2957,
+        64.8244,
+        76.47113333333333,
+        190.49603333333334
+      ],
+      "singular_us": [
+        499.6333333333333,
+        508.73333333333335,
+        521.2333333333333,
+        1165.7,
+        1027.5333333333333
+      ],
+      "median_us": {
+        "atlas": 77.2957,
+        "singular": 521.2333333333333
+      }
+    }
+  }
+}

@@ -3,66 +3,33 @@ import re
 
 from . import native_library
 from .marked_field import record_field
-from .polynomial import format_poly, parse_expression, sparse_row
+from .polynomial import (InputError as PolynomialInputError, format_poly, integer_from_decimal,
+                         native_expression_source, parse_expression)
 from .strata import InvalidChart as InputError
 from .monomial_atlas import _row
 
 
-_PACKED_LIMITS = {"Unsupported number of variables.", "Degree out of range.", "Exponent out of range."}
-
-
-def _coordinates(names):
-    from .chart_expressions import runtime_expressions
-    return tuple(map(runtime_expressions().Symbol, names))
-
-
-def _saturate(coords, equations, pivot):
+def _graph_request(operation, coords, **inputs):
+    from .kernel_json import kernel_json
     try:
-        rows = native_library.ideal_request(f"saturate {len(coords)} {len(equations)}", [*equations, pivot])
-    except native_library.Unavailable as exc:
-        if str(exc) not in _PACKED_LIMITS:
-            raise
-        from .affine_kernel import _sparse_expression
-        from .blowup_ideal import saturate
-        from .groebner import _line
-        ring = _coordinates(coords)
-        result = saturate(ring, tuple(_sparse_expression(ring,q) for q in equations), _sparse_expression(ring,pivot))
-        rows = [_line(ring, g) for g in result]
-    expressions = [format_poly(sparse_row(row), coords) for row in rows if row and row != "none"]
-    reduced = native_library.affine_request(["wide_basis", " ".join(coords), "lex", *expressions])
-    # A reduced lex basis is a canonical set. Packed and FLINT basis
-    # extraction can enumerate its rows in a different order.
-    return sorted(format_poly(sparse_row(row),coords) for row in reduced if row)
+        return kernel_json("atlas_graph_replay", operation, coords=coords, **inputs)
+    except PolynomialInputError as exc:
+        raise InputError(str(exc)) from exc
 
 
-def _orders(coords, base, ambient, prime, total):
-    try:
-        data, = native_library.ideal_request(f"graph_orders {len(coords)} {len(base)} {len(ambient)} {len(prime)}",
-                                             [*ambient,*prime,total])
-        return tuple(map(int, data.split()))
-    except native_library.Unavailable as exc:
-        if str(exc) not in _PACKED_LIMITS:
-            raise
-        from .affine_kernel import _sparse_expression
-        from .graph_atlas import _orders as chart_orders
-        ring = _coordinates(coords)
-        def convert(q):
-            return _sparse_expression(ring, q)
-        return chart_orders(ring, ring[:len(base)], tuple(map(convert,ambient)), tuple(map(convert,prime)), convert(total))
-
-
-def _same_locus(coords, left, right):
-    from .monomial_atlas import _same_locus as packed
-    try:
-        return packed(len(coords), left, right)
-    except native_library.Unavailable as exc:
-        if str(exc) not in _PACKED_LIMITS:
-            raise
-        from .affine_kernel import _sparse_expression
-        from .blowup_ideal import radical_subset
-        ring = _coordinates(coords)
-        left, right = [tuple(_sparse_expression(ring,q) for q in ideal) for ideal in (left,right)]
-        return radical_subset(ring,left,right) and radical_subset(ring,right,left)
+def _graph_ring(variables, domain):
+    """Present one marked coefficient as a rational coordinate for native graph operations."""
+    from .affine_kernel import _ring
+    from .reference import QQ
+    if domain == QQ:
+        ring = _ring(tuple(variables))
+        return ring.header.split(), ring.text, []
+    from .field_polynomial import _parameter, lift, modulus
+    theta = _parameter(domain)
+    ring = _ring((*variables, theta))
+    def text(g):
+        return ring.text(lift(g, variables, domain, theta))
+    return ring.header.split(), text, [ring.text(modulus(domain, theta))]
 
 
 def graph_record_charts(record, polynomial):
@@ -87,7 +54,7 @@ def graph_record_charts(record, polynomial):
     for chart in source:
         for values in (chart["ambient_ideal"], chart["map"].values(), chart["projective_coordinates"],
                        (chart["pivot_generator"],), chart.get("reduced_strict_transform", chart["strict_transform"])):
-            texts.extend(values)
+            texts.extend([values] if isinstance(values, str) else values)
         for divisor in chart.get("ambient_components", chart["exceptional"]):
             texts.extend(divisor["ideal"])
     try:
@@ -100,81 +67,75 @@ def graph_record_charts(record, polynomial):
         verify_factors(polynomial, base, factors)
     f = format_poly(polynomial, base)
     charts = []
+
+    def expression(g, aliases):
+        if aliases:
+            g = re.sub(r"[A-Za-z][A-Za-z0-9_]*",
+                       lambda m: "(" + aliases[m[0]] + ")" if m[0] in aliases else m[0], g)
+        return native_expression_source(g, base)
+
+    centre = [expression(g, constants) for g in generators]
+    relation = field["minimal_polynomial"] if field else None
     for src in source:
         names = tuple(src["coordinates"])
-        if len(set(names)) != len(names) or not set(base).issubset(names):
-            raise InputError("Invalid graph coordinates.")
+        if (len(set(names)) != len(names) or not set(base).issubset(names)
+                or set(src["map"]) != set(base)):
+            raise InputError("Invalid graph coordinates or projection.")
         coords = (*base, *(v for v in names if v not in base), *((theta,) if field else ()))
-        def equation(g):
-            return format_poly(parse_expression(re.sub(r"[A-Za-z][A-Za-z0-9_]*",
-                lambda m: "("+constants[m[0]]+")" if m[0] in constants else m[0], g), coords), coords)
-        if set(src["map"]) != set(base) or any(equation(src["map"][v]) != v for v in base):
-            raise InputError("The projective graph does not project to its base coordinates.")
-        ambient = list(map(equation, src["ambient_ideal"]))
-        if field: ambient.append(field["minimal_polynomial"])
-        amb_rows = [_row(g, coords) for g in ambient]
-        projective = list(map(equation, src["projective_coordinates"]))
-        if projective.count("1") != 1 or any(q not in coords for q in projective if q != "1"):
-            raise InputError("Expected one unit and coordinate ratios in the projective graph.")
-        position = projective.index("1")
-        ratios = [v for v in projective if v != "1"]
-        if (position in seen or len(projective) != len(generators) or len(set(ratios)) != len(ratios)
-                or set(ratios) != set(names)-set(base)):
-            raise InputError("The affine chart is not a standard open of the declared projective graph.")
+        exceptional = src.get("ambient_components", src["exceptional"])
+        aliases = dict(constants)
+        weight = src.get("weight_field")
+        if weight:
+            from .marked_field import description
+            if not field or description(weight["exact"]) != description(field["embedding"]):
+                raise InputError("The weighted strict transform changed its marked coefficient field.")
+            name = weight["generator"]
+            if name in names:
+                raise InputError("The weighted coefficient and chart coordinates share a variable.")
+            aliases[name] = theta
+
+        def equations(values, mapping=constants):
+            return [expression(g, mapping) for g in values]
+
+        strict = src["strict_transform"]
+        args = dict(base=len(base), centre=centre, relation=relation, equation=f,
+                    projection=equations(src["map"][v] for v in base),
+                    projective=equations(src["projective_coordinates"]),
+                    pivot=expression(src["pivot_generator"], constants), ambient=equations(src["ambient_ideal"]),
+                    exceptional=[equations(d["ideal"]) for d in exceptional],
+                    factors=[e["equation"] for e in factors],
+                    strict=equations([strict] if isinstance(strict, str) else strict, aliases))
+        if "reduced_strict_transform" in src:
+            reduced = src["reduced_strict_transform"]
+            args["reduced_strict"] = equations([reduced] if isinstance(reduced, str) else reduced)
+        verified = _graph_request("open", coords, **args)
+        position = verified["position"]
+        if position in seen:
+            raise InputError("The affine chart repeats a projective pivot.")
         seen.add(position)
-        centre = [equation(g) for g in generators]
-        pivot = centre[position]
-        if equation(src["pivot_generator"]) != pivot:
-            raise InputError("The pivot differs from its centre generator.")
-        graph = [_row(f"({g})-({pivot})*({r})",coords) for g,r in zip(centre,projective)]
-        if field:
-            graph.append(_row(field["minimal_polynomial"],coords))
-        if _saturate(coords,graph,_row(pivot,coords)) != _saturate(coords,amb_rows,_row("1",coords)):
-            raise InputError("The ambient ideal differs from the saturated projective graph.")
-        region = projective[:position]
         components = []
-        covered = []
-        for d in src.get("ambient_components", src["exceptional"]):
-            prime = list(map(equation, d["ideal"]))
-            n,nu = _orders(coords, base, amb_rows, [_row(g, coords) for g in prime], _row(f, coords))
-            covered.append(prime)
-            components.append(dict(id=d["id"], multiplicity=n, nu=nu, ideal=prime))
-        # On the origin fibre the exceptional locus is V(pivot). Test both
-        # inclusions against its listed prime ideals in the chart ring.
-        from itertools import product
-        by = _row(pivot, coords)
-        closed = [*amb_rows,*(_row(v,coords) for v in base)]
-        union = [_row("*".join(f"({g})" for g in selection) or "1",coords)
-                 for selection in product(*covered)]
-        if not _same_locus(coords,[*closed,by],[*closed,*union]):
-            raise InputError("The exceptional prime ideals do not cover the pivot over the origin.")
-        for index, factor in enumerate(factors or [dict(equation=f, multiplicity=1)], 1):
-            ideal = _saturate(coords, [*amb_rows, _row(factor["equation"], coords)], by)
-            if ideal != ["1"]:
-                label = "strict" if len(factors) <= 1 else f"S{index}"
-                components.append(dict(id=label, multiplicity=factor["multiplicity"], nu=1, ideal=ideal))
-        chart = dict(coordinates=list(coords), ambient_ideal=ambient, components=components, fibre=list(base),
-                     region=region, removed=[], map={v:v for v in base})
-        if field: chart["coefficient_field"] = field
+        for divisor, proof in zip(exceptional, verified["exceptional"]):
+            n, nu = map(integer_from_decimal, proof["orders"])
+            components.append(dict(id=divisor["id"], multiplicity=n, nu=nu, ideal=proof["ideal"]))
+        for i, ideal in enumerate(verified["strict"]):
+            if ideal is not None:
+                label = "strict" if len(factors) <= 1 else f"S{i+1}"
+                components.append(dict(id=label, multiplicity=factors[i]["multiplicity"] if factors else 1,
+                                       nu=1, ideal=ideal))
+        chart = dict(coordinates=list(coords), ambient_ideal=verified["ambient"], components=components,
+                     fibre=list(base), region=verified["region"], removed=[], map={v:v for v in base})
+        if field:
+            chart["coefficient_field"] = field
         charts.append(chart)
-    # Charts whose affine graph misses the origin fibre may have been omitted
-    # by the exporter. Check emptiness on each absent standard projective open.
-    for pos in set(range(len(generators)))-seen:
+    for pos in set(range(len(generators))) - seen:
         ratios = []
         for j in range(len(generators)):
-            r = f"graphRatio{j}"
-            while r in (*base,theta,*constants):
-                r += "_"
-            ratios.append("1" if pos == j else r)
-        coords = (*base, *(r for r in ratios if r != "1"), *((theta,) if field else ()))
-        centre = [equation(g) for g in generators]
-        pivot = centre[pos]
-        rows = [_row(f"({g})-({pivot})*({r})",coords) for g,r in zip(centre,ratios)]
-        if field:
-            rows.append(_row(field["minimal_polynomial"],coords))
-        graph = _saturate(coords,rows,_row(pivot,coords))
-        if _saturate(coords,[_row(g,coords) for g in (*graph,*base)],_row("1",coords)) != ["1"]:
-            raise InputError("The graph omits an affine open meeting the origin fibre.")
+            name = f"graphRatio{j}"
+            while name in (*base, theta, *constants):
+                name += "_"
+            ratios.append("1" if pos == j else name)
+        coords = (*base, *(v for v in ratios if v != "1"), *((theta,) if field else ()))
+        _graph_request("omitted", coords, base=len(base), centre=centre, relation=relation, projective=ratios)
     return charts
 
 
@@ -242,7 +203,7 @@ def _graph_bundle_outputs(record, charts, *, complex, intrinsic, integrals):
 
 
 def graph_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
-    if native_library._MODE == "sympy" or record.get("engine") != "verified-ideal-blowup":
+    if record.get("engine") != "verified-ideal-blowup":
         return None
     expected = graph_record_charts(record, polynomial)
     saved = record.get("atlas")
@@ -265,22 +226,21 @@ def graph_outputs(record, polynomial, *, complex=True, intrinsic=False, integral
                 raise InputError("The saved graph changed its affine presentation.")
             if any(_row(g,coords) != _row(new["map"][v],coords) for v,g in old["map"].items()):
                 raise InputError("The saved graph changed its projection.")
-            def basis(gens):
-                return _saturate(coords, [_row(g,coords) for g in gens], _row("1",coords))
-            if basis(old["ambient_ideal"]) != basis(new["ambient_ideal"]):
-                raise InputError("The saved graph changed its ambient ideal.")
             ambient = new["ambient_ideal"]
-            for slot in ("fibre","region"):
-                if basis([*ambient,*old[slot]]) != basis([*ambient,*new[slot]]):
-                    raise InputError("The saved graph changed its fibre or ownership.")
+            pairs = [[old["ambient_ideal"], ambient]]
+            for slot in ("fibre", "region"):
+                pairs.append([[*ambient, *old[slot]], [*ambient, *new[slot]]])
             actual = {v["id"]:v for v in old["components"]}
             if len(actual) != len(old["components"]) or set(actual) != {v["id"] for v in new["components"]}:
                 raise InputError("The saved graph changed its boundary labels.")
             for v in new["components"]:
                 given = actual[v["id"]]
-                if (any(type(given[k]) != int or given[k] != v[k] for k in ("multiplicity","nu"))
-                        or basis([*ambient,*given["ideal"]]) != basis([*ambient,*v["ideal"]])):
-                    raise InputError("The saved graph changed a divisor ideal or its orders.")
+                if any(type(given[k]) != int or given[k] != v[k] for k in ("multiplicity", "nu")):
+                    raise InputError("The saved graph changed a divisor order.")
+                pairs.append([[*ambient, *given["ideal"]], [*ambient, *v["ideal"]]])
+            validated = [[[native_expression_source(g, coords) for g in ideal] for ideal in pair] for pair in pairs]
+            if not _graph_request("equal_ideals", coords, pairs=validated):
+                raise InputError("The saved graph changed its ambient, fibre, ownership or divisor ideals.")
     try:
         bundle = _graph_bundle_outputs(record, expected, complex=complex, intrinsic=intrinsic, integrals=integrals)
     except native_library.Unavailable:
@@ -325,20 +285,18 @@ def lift_graph(record, src, factors, unit, base):
         ambient.append(field["minimal_polynomial"])
         exact = record.get("coefficient_field",{}).get("exact_root")
         src["weight_field"] = dict(generator=theta, exact=exact if exact and not record.get("algebraic_numbers") else display(field["embedding"]))
-    amb = [_row(g,coords) for g in ambient]
-    proj = [read(src["map"][v]) for v in base]
-    if tuple(proj) != tuple(base):
+    if tuple(read(src["map"][v]) for v in base) != tuple(base):
         raise InputError("A graph chart must retain its original coordinates.")
     total = _product(([(unit,1)] if unit != "1" else [])+list(factors))
-    row = _row(total,coords)
-    strict = _saturate(coords,[*amb,row],_row(read(src["pivot_generator"]),coords))
-    one = _row("1",coords)
-    original = _saturate(coords,amb,one)
+    pivot = read(src["pivot_generator"])
+    strict = _graph_request("basis", coords, ideal=[*ambient, total], pivot=pivot)
     src["reduced_strict_transform"] = src["strict_transform"]
-    src["strict_transform"] = [g for g in strict if _saturate(coords,[*amb,_row(g,coords)],one) != original]
+    src["strict_transform"] = [g for g in strict if not _graph_request(
+        "equal_ideals", coords, pairs=[[ambient, [*ambient, g]]])]
     src["ambient_total_transform"] = total
     weights = {}
-    for c in src["exceptional"]:
-        prime = [_row(read(g),coords) for g in c["ideal"]]
-        weights[c["id"]] = _orders(coords, base, amb, prime, row)[0]
+    for component in src["exceptional"]:
+        n, _ = _graph_request("orders", coords, base=len(base), ambient=ambient,
+                              prime=[read(g) for g in component["ideal"]], equation=total)
+        weights[component["id"]] = integer_from_decimal(n)
     return weights

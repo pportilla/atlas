@@ -6,6 +6,8 @@
 // Every routine follows engine/blowup_ideal.py step by step and returns the
 // same generators, so the two implementations can be compared exactly.
 #include "groebner.hpp"
+#include "graph_centre_incidence.hpp"
+#include "graph_regular.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
 #include "polynomial_graph.hpp"
@@ -931,6 +933,13 @@ struct Reader {
         if (value < 0) throw std::invalid_argument("Bad header.");
         return static_cast<size_t>(value);
     }
+    std::string_view row_text() {
+        if (at == end) throw std::invalid_argument("Missing polynomial.");
+        const char* stop = std::find(at, end, '\n');
+        const std::string_view row(at, stop - at);
+        at = stop == end ? stop : stop + 1;
+        return row;
+    }
     Gen gen(const Ring& R) {
         if (at >= end) throw std::invalid_argument("Missing polynomial.");
         Rational scale;
@@ -1107,22 +1116,18 @@ std::string op_dimension(Reader& in) {
 // If V(base) = V(J) x A^d, every irreducible component is a cylinder.
 // A unit coefficient in the free variables makes the residual nonzero
 // generically on every component. Otherwise decide by the full dimension.
-std::string op_residual_dimension_below(Reader& in) {
-    const Ring R = grevlex(in.number(0));
-    const int threshold = in.number(1);
-    Basis base(R, polys(in.ideal(R, in.count(2))));
-    const int dim = dimension_of_basis(R, base);
-    if (dim < threshold) return "1\n";
+bool cuts_below_dimension(const Ring& R, Basis& base, int dim, int threshold, const Ideal& residual) {
+    if (dim < threshold) return true;
     std::vector<bool> free(R.n, true);
     for (const auto& e : base.engine.G)
         for (size_t i = 0; i < e.p.size(); ++i)
             for (int v = 0; v < R.n; ++v)
                 if (Ring::field(e.p.m.data() + i*R.stride, R.position(v))) free[v] = false;
     std::vector<Poly> remaining;
-    for (const Gen& g : in.rest(R)) {
+    for (const Gen& g : residual) {
         Poly f = base.remainder(g.p);
         if (f.empty()) continue;
-        if (constant(f)) return "1\n";
+        if (constant(f)) return true;
         if (dim == threshold && std::find(free.begin(), free.end(), true) != free.end()) {
             // A group containing only a pure free-variable term has a
             // nonzero constant coefficient (the grevlex normal form is
@@ -1141,14 +1146,33 @@ std::string op_residual_dimension_below(Reader& in) {
                 if (!inserted.second) inserted.first->second = false;
             }
             for (const auto& entry : constant_coefficient)
-                if (entry.second) return "1\n";
+                if (entry.second) return true;
         }
         remaining.push_back(std::move(f));
     }
-    if (remaining.empty()) return "0\n";
+    if (remaining.empty()) return false;
     auto all = base.elements();
+    const size_t known = all.size();
     all.insert(all.end(), remaining.begin(), remaining.end());
-    return dimension_of_basis(R, Basis(R, all)) < threshold ? "1\n" : "0\n";
+    return dimension_of_basis(R, Basis(R, all, known)) < threshold;
+}
+
+std::string op_residual_dimension_below(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const int threshold = in.number(1);
+    Basis base(R, polys(in.ideal(R, in.count(2))));
+    const int dim = dimension_of_basis(R, base);
+    if (in.op == "residual_dimension_below")
+        return cuts_below_dimension(R, base, dim, threshold, in.rest(R)) ? "1\n" : "0\n";
+    // A nonempty exceptional divisor in a regular blowup chart is pure of
+    // the expected dimension. A quotient of a known pivot power has exact
+    // order on every component precisely when its zero locus cuts below it.
+    std::string result;
+    for (const Gen& q : in.rest(R)) {
+        bool certified = dim == threshold && cuts_below_dimension(R, base, dim, threshold, {q});
+        result += certified ? "1\n" : "0\n";
+    }
+    return result;
 }
 
 std::string op_verify(Reader& in, bool residual_only = false);
@@ -1229,13 +1253,35 @@ std::string op_smooth_reduced_centre(Reader& in) {
     return std::string(graph_bundle ? "graph " : "centre ") + std::to_string(k) + "\n" + out + proof;
 }
 
+// For standalone saturation, small multipliers are cheap to adjoin directly.
+// Centre selection queries graph_regular explicitly because a proof there
+// also avoids constructing and testing both sides of a split.
+bool saturation_regular(const Reader& in) {
+    constexpr size_t minimum_terms = 32;
+    constexpr size_t max_packet_bytes = 16 * 1024 * 1024;
+    if (!in.count(1) || size_t(in.end - in.at) > max_packet_bytes) return false;
+    std::string_view rows(in.at, in.end - in.at);
+    if (!rows.empty() && rows.back() == '\n') rows.remove_suffix(1);
+    const size_t split = rows.rfind('\n');
+    if (split == std::string_view::npos) return false;
+    const auto by = rows.substr(split + 1);
+    if (size_t(std::count(by.begin(), by.end(), ';')) + 1 < minimum_terms ||
+        rows.find('*') != std::string_view::npos) return false;
+    std::istringstream stream{std::string(rows)};
+    return graph_regular(stream, in.count(0), in.count(1));
+}
+
 // "saturate n s": s generators, then the element to saturate by.
 std::string op_saturate(Reader& in) {
     const Ring R = grevlex(in.number(0));
+    const bool unchanged = saturation_regular(in);
     const Ideal ideal = in.ideal(R, in.count(1));
     const Gen by = in.gen(R);
     std::string out;
-    put(R, out, saturate(R, ideal, by, true));
+    if (unchanged && !constant(by.p))
+        put(R, out, lexicographic(R, polys(expressions(ideal))));
+    else
+        put(R, out, saturate(R, ideal, by, true));
     return out;
 }
 
@@ -2596,6 +2642,60 @@ struct OwnedCrossings {
     }
 };
 
+// On one coordinate axis the common zeros of the rows are the roots of
+// their univariate GCD. A zero GCD means the entire line. The degree cap
+// bounds dense polynomial allocation for sparse, high-degree inputs.
+bool coordinate_axis_gcd(const Ring& R, int axis, const std::vector<Poly>& rows, fmpz_poly_t gcd) {
+    constexpr u64 max_dense_degree = 256;
+    const int position = R.position(axis);
+    CoordinatePolynomial restricted;
+    fmpz_poly_zero(gcd);
+    for (const Poly& row : rows) {
+        fmpz_poly_zero(restricted.p);
+        for (size_t i = 0; i < row.size(); ++i) {
+            const u64* m = row.m.data() + i * R.stride;
+            if (m[0] != Ring::field(m, position)) continue;
+            if (m[0] > max_dense_degree) return false;
+            fmpz_poly_set_coeff_fmpz(restricted.p, static_cast<slong>(m[0]), &row.c[i].v);
+        }
+        fmpz_poly_gcd(gcd, gcd, restricted.p);
+        if (fmpz_poly_degree(gcd) == 0) break;
+    }
+    return true;
+}
+
+bool has_coordinate_axis_point(const Ring& R, int axis, const std::vector<Poly>& equations,
+                               const std::vector<std::vector<Poly>>& removed) {
+    CoordinatePolynomial roots;
+    if (!coordinate_axis_gcd(R, axis, equations, roots.p) || fmpz_poly_degree(roots.p) == 0)
+        return false;
+    if (removed.empty()) return true;
+    CoordinatePolynomial hole, common, quotient;
+    if (fmpz_poly_degree(roots.p) > 1) {
+        // Removing a common root must remove every copy, regardless of the
+        // multiplicity with which it occurs in the equations or in a hole.
+        fmpz_poly_derivative(hole.p, roots.p);
+        fmpz_poly_gcd(common.p, roots.p, hole.p);
+        if (fmpz_poly_degree(common.p) > 0) {
+            fmpz_poly_divexact(quotient.p, roots.p, common.p);
+            fmpz_poly_swap(roots.p, quotient.p);
+        }
+    }
+    for (const auto& generators : removed) {
+        if (!coordinate_axis_gcd(R, axis, generators, hole.p) || fmpz_poly_is_zero(hole.p))
+            return false;
+        // A finite union of proper closed subsets cannot cover the entire
+        // line over Qbar. Otherwise retain only roots outside this hole.
+        if (fmpz_poly_is_zero(roots.p) || fmpz_poly_degree(hole.p) == 0) continue;
+        fmpz_poly_gcd(common.p, roots.p, hole.p);
+        if (fmpz_poly_degree(common.p) == 0) continue;
+        fmpz_poly_divexact(quotient.p, roots.p, common.p);
+        fmpz_poly_swap(roots.p, quotient.p);
+        if (fmpz_poly_degree(roots.p) == 0) return false;
+    }
+    return true;
+}
+
 std::string op_open_locus(Reader& in) {
     const size_t holes = in.count(2);
     // The general verifier eliminates redundant holes before expanding opens.
@@ -2608,10 +2708,21 @@ std::string op_open_locus(Reader& in) {
         combinations *= std::max<size_t>(1, count);
     }
     const Ring R = grevlex(in.number(0));
-    Basis closed(R, present(polys(in.ideal(R, in.count(1)))));
+    const auto equations = present(polys(in.ideal(R, in.count(1))));
     std::vector<std::vector<Poly>> removed;
     for (size_t i = 0; i < holes; ++i)
         removed.push_back(present(polys(in.ideal(R, in.count(3+i)))));
+    if (std::any_of(equations.begin(), equations.end(), constant)) return "no\n";
+    auto vanishes_at_origin = [&](const Poly& f) { return f.m[(f.size()-1) * R.stride] != 0; };
+    bool origin = std::all_of(equations.begin(), equations.end(), vanishes_at_origin);
+    for (const auto& hole : removed) {
+        if (hole.empty()) return "no\n";
+        if (origin && std::all_of(hole.begin(), hole.end(), vanishes_at_origin)) origin = false;
+    }
+    if (origin) return "yes\n";
+    for (int axis = 0; axis < R.n; ++axis)
+        if (has_coordinate_axis_point(R, axis, equations, removed)) return "yes\n";
+    Basis closed(R, equations);
     return outside_holes(R, closed, removed, one(R)) ? "yes\n" : "no\n";
 }
 
@@ -2766,6 +2877,64 @@ Poly substitute(const Ring& R, const Poly& f, int v, const Poly& image, const fm
     }
     if (scale && !plain) fmpz_mul(scale, scale, &power.v);
     return sum;
+}
+
+// A completed Buchberger pass with no unit certifies a geometric point.
+// At the work limit leave the decision to the usual chart computation.
+class IncidenceSliceBasis : public Engine {
+public:
+    bool has_point(std::vector<Poly>& equations) {
+        bit_limit_ = 2048;
+        work_limit_ = 150000;
+        try {
+            attempt(equations, 0);
+            return !unit;
+        } catch (const Swell&) {
+            return false;
+        }
+    }
+};
+
+// Over D(p) the projection from the p-chart is an isomorphism, and the
+// strict divisor there is its original divisor. Try coordinate hyperplanes
+// through one parent centre point before forming a basis in the graph ring.
+std::string op_graph_parent_slice(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    if (R.n > 6 || in.count(1) > 32) return "unknown\n";
+    const auto rows = polys(in.ideal(R, in.count(1)));
+    const Poly pivot = in.gen(R).p;
+    const Ideal point = in.ideal(R, R.n);
+    size_t terms = pivot.size();
+    for (const Poly& row : rows) {
+        terms += row.size();
+        if (!row.empty() && row.m[0] > 128) return "unknown\n";
+    }
+    if (pivot.empty() || pivot.m[0] > 128 || terms > 4096) return "unknown\n";
+    const Ring extended = grevlex(R.n + 1);
+    const auto places = shifted(R.n, 1);
+    for (int axis = 0; axis < R.n; ++axis) {
+        const Gen& value = point[axis];
+        if (!value.p.empty() && !constant(value.p))
+            throw std::invalid_argument("Expected a rational centre coordinate.");
+        if (fmpz_bits(&value.num.v) + fmpz_bits(&value.den.v) > 128) continue;
+        Poly coordinate = value.p;
+        if (!coordinate.empty()) fmpz_mul(&coordinate.c.front().v, &coordinate.c.front().v, &value.num.v);
+        Poly unit = substitute(R, pivot, axis, coordinate, &value.den.v, nullptr);
+        if (unit.empty()) continue;
+        std::vector<Poly> equations;
+        if (!constant(unit)) equations.push_back(inverse_relation(R, extended, unit));
+        bool empty = false;
+        for (const Poly& row : rows) {
+            Poly section = substitute(R, row, axis, coordinate, &value.den.v, nullptr);
+            if (constant(section)) { empty = true; break; }
+            if (!section.empty()) equations.push_back(convert(R, extended, section, places.data()));
+        }
+        if (empty) continue;
+        IncidenceSliceBasis basis;
+        basis.R = extended;
+        if (basis.has_point(equations)) return "yes\n";
+    }
+    return "unknown\n";
 }
 
 // den*x_v*(x_w or 1) + num*shift: the numerator of the image of x_v.
@@ -3059,6 +3228,15 @@ std::string op_plane_components(Reader& in) {
     return std::to_string(counts.first) + " " + std::to_string(counts.second) + "\n";
 }
 
+std::string op_graph_cover(Reader& in) {
+    const auto r = grevlex(in.number(0));
+    const auto ambient = in.ideal(r, in.count(1));
+    const auto pivot = in.gen(r);
+    std::vector<Ideal> pieces;
+    for (size_t i=0; i<in.count(2); ++i) pieces.push_back(in.ideal(r,in.count(3+i)));
+    return cover(r,ambient,pivot,pieces) ? "yes\n" : "no\n";
+}
+
 // Orders of the equation and of the relative Jacobian on a smooth graph
 // chart. The first d coordinates are the coordinates of the projection.
 std::string op_graph_orders(Reader& in) {
@@ -3156,6 +3334,38 @@ static std::string op_frame_locus(Reader& in) {
     const auto units = polys(in.ideal(R, in.count(2)));
     return frame_locus_grevlex(R, equations, units, in.op == "frame_basis");
 }
+
+// Sufficient membership tests on the open frame. The frame's own equations
+// vanish on every restriction. A nonzero rational scalar vanishes exactly
+// when the frame is empty; only a certified nonempty frame rules that out.
+static std::string op_frame_membership(Reader& in) {
+    const size_t width = in.count(0), count = in.count(1);
+    const long nonempty = in.number(2);
+    if (nonempty != 0 && nonempty != 1) throw std::invalid_argument("Invalid nonempty flag.");
+    std::vector<std::string_view> equations;
+    for (size_t i = 0; i < count; ++i) equations.push_back(in.row_text());
+    const std::string_view query = in.row_text();
+    if (in.at != in.end) throw std::invalid_argument("Extra frame membership rows.");
+
+    // Inputs are expanded sparse rational rows. Most queries have a distinct
+    // number of terms, so only decode possible matches, or a possible scalar.
+    // The unpacked reader preserves arbitrary exponents and coefficients.
+    const auto separators = std::count(query.begin(), query.end(), ';');
+    std::optional<local::Polynomial> polynomial;
+    for (const auto equation : equations) {
+        if (std::count(equation.begin(), equation.end(), ';') != separators) continue;
+        if (!polynomial) polynomial = local::decode_row(query, width);
+        if (query == equation || *polynomial == local::decode_row(equation, width))
+            return "yes\n";
+    }
+    if (separators != 0) return "unknown\n";
+    if (!polynomial) polynomial = local::decode_row(query, width);
+    if (polynomial->empty()) return "yes\n";
+    const auto& powers = polynomial->begin()->first;
+    if (std::all_of(powers.begin(), powers.end(), [](const auto& e) { return e == 0; }))
+        return nonempty ? "no\n" : "scalar\n";
+    return "unknown\n";
+}
 }  // namespace atlas
 
 using namespace atlas;
@@ -3176,11 +3386,14 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         Reader in(input, length);
         std::string out;
         if (in.op == "strict_parts" || in.op == "graph_strict_part") out = op_strict_parts(in);
-        else if (in.op == "residual_dimension_below") out = op_residual_dimension_below(in);
+        else if (in.op == "residual_dimension_below" || in.op == "certify_exceptional_orders")
+            out = op_residual_dimension_below(in);
         else if (in.op == "plane_components") out = op_plane_components(in);
+        else if (in.op == "graph_cover") out = op_graph_cover(in);
         else if (in.op == "graph_orders") out = op_graph_orders(in);
         else if (in.op == "dimension") out = op_dimension(in);
         else if (in.op == "saturate") out = op_saturate(in);
+        else if (in.op == "saturation_regular") out = saturation_regular(in) ? "yes\n" : "unknown\n";
         else if (in.op == "smooth_reduced_centre" || in.op == "smooth_reduced_graph") out = op_smooth_reduced_centre(in);
         else if (in.op == "affine_overlap") out = op_affine_overlap(in);
         else if (in.op == "finite_radical") out = op_finite_radical(in);
@@ -3194,7 +3407,18 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "strata_totals") out = op_strata_totals(in);
         else if (in.op == "crossings" || in.op == "bounded_crossings") out = op_crossings(in);
         else if (in.op == "frame_basis" || in.op == "frame_empty") out = op_frame_locus(in);
+        else if (in.op == "frame_membership") out = op_frame_membership(in);
+        else if (in.op == "graph_regular") {
+            std::istringstream rows(std::string(in.at, in.end));
+            out = graph_regular(rows, in.count(0), in.count(1)) ? "yes\n" : "unknown\n";
+        }
         else if (in.op == "open_locus") out = op_open_locus(in);
+        else if (in.op == "graph_centre_points" || in.op == "graph_centre_incidence") {
+            std::istringstream rows(std::string(in.at, in.end));
+            if (in.op == "graph_centre_points") out = graph_centre_points(rows, in.count(0));
+            else out = graph_centre_incidence(rows, in.count(0), in.count(1), in.count(2), in.count(3));
+        }
+        else if (in.op == "graph_parent_slice") out = op_graph_parent_slice(in);
         else if (in.op == "owned_crossings") out = op_owned_crossings(in);
         else if (in.op == "blowup") out = op_blowup(in);
         else throw std::invalid_argument("Unknown operation.");
@@ -3241,4 +3465,6 @@ char* atlas_groebner_colon(const char* input, size_t length) noexcept {
 }
 
 extern "C" int atlas_open_locus_abi() noexcept { return 1; }
+extern "C" int atlas_exceptional_orders_abi() noexcept { return 1; }
+extern "C" int atlas_graph_centre_incidence_abi() noexcept { return 1; }
 extern "C" int atlas_bounded_crossings_abi() noexcept { return 1; }

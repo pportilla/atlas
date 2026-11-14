@@ -42,6 +42,31 @@ Z cyclotomic(const Json::Value& factors, const Z& order) {
     for (const auto& row : factors) if (integer(row[0]) % order == 0) exponent += integer(row[1]);
     return exponent;
 }
+
+// Only open singleton strata contribute to A'Campo's formula.
+Json::Value acampo_strata(const Json::Value& request) {
+    std::map<std::string, std::string> orders;
+    for (const auto& row : request["data"])
+        orders[row[0].asString()] = row[1].asString();
+    Json::Value inputs(Json::arrayValue), contributions(Json::arrayValue);
+    for (const auto& stratum : request["strata"]) {
+        const auto& labels = stratum[0];
+        if (labels.size() != 1) continue;
+        const auto label = labels[0].asString();
+        Json::Value pair(Json::arrayValue);
+        pair.append(orders.at(label));
+        pair.append(stratum[1]);
+        inputs.append(pair);
+        Json::Value row;
+        row["component"] = label;
+        row["multiplicity"] = pair[0];
+        row["euler_characteristic"] = pair[1];
+        contributions.append(row);
+    }
+    auto result = acampo(inputs);
+    result["contributions"] = std::move(contributions);
+    return result;
+}
 using Axis = std::pair<size_t, Z>;
 Json::Value binomial(const Terms& terms, size_t width, const Json::Value& missing) {
     Json::Value out(Json::arrayValue);
@@ -150,6 +175,11 @@ Json::Value morse(const Terms& terms, size_t width) {
 Json::Value pole_data(const Json::Value& r) {
     std::map<Q, Json::Value> candidates;
     std::map<Q, Json::Value> pole_orders;
+    std::set<std::string> visible;
+    for (const auto& stratum : r["strata"]) {
+        if (integer(stratum[1]) == 0) continue;
+        for (const auto& name : stratum[0]) visible.insert(name.asString());
+    }
     for (const auto& row : r["data"]) {
         const Z n = integer(row["n"]);
         if (n <= 0) throw std::invalid_argument("Expected a positive divisor multiplicity.");
@@ -168,9 +198,18 @@ Json::Value pole_data(const Json::Value& r) {
         row["q"] = q.get_str();
         row["exponent"] = exponent.get_str();
         row["branch"] = Json::nullValue;
+        row["witness"] = exponent != 0 ? Json::Value("origin zeta") :
+                         q == 1 ? Json::Value("origin H^0") : Json::Value();
         if (!exponent && q != 1) for (Json::ArrayIndex i = 0; i < r["data"].size(); ++i) {
             const auto& b = r["data"][i];
-            if (b["branch"].asBool() && integer(b["n"]) % q == 0) { row["branch"] = i; break; }
+            const std::string label = b["component"].asString();
+            const bool strict = label == "strict" || (label.size() > 1 && label.front() == 'S' &&
+                label.find_first_not_of("0123456789", 1) == std::string::npos);
+            if (strict && visible.count(label) && integer(b["n"]) % q == 0) {
+                row["branch"] = i;
+                row["witness"] = "nearby smooth component";
+                break;
+            }
         }
         out["poles"].append(row);
     }
@@ -187,6 +226,7 @@ Json::Value pole_data(const Json::Value& r) {
 Json::Value compute(const Json::Value& r) {
     const std::string op = r["operation"].asString();
     if (op == "acampo") return acampo(r["rows"]);
+    if (op == "acampo_strata") return acampo_strata(r);
     if (op == "cyclotomic") return cyclotomic(r["factors"], integer(r["order"])).get_str();
     if (op == "poles") return pole_data(r);
     if (op == "isolated_euler") {

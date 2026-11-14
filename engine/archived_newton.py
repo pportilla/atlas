@@ -36,6 +36,7 @@ def _saved_signature(row, api, axes=None):
 
 
 def _replay_centre(parent_index, parent, centre, step, rows):
+    from .newton_repair import supported_rows
     if not rows or not step.get("centers"):
         return None
     api = chart_expressions(parent.variables)
@@ -56,11 +57,11 @@ def _replay_centre(parent_index, parent, centre, step, rows):
     count = step.get("points")
     if type(count) != int or count < 1 or bool(parameters) != (count > 1):
         return None
-    ambient = tuple(g for g in equations if parameters and g.free_symbols == set(parameters))
+    ambient = supported_rows(variables, equations, [dimension], exact=True) if parameters else ()
     if parameters and (len(ambient) != 1 or not _field_relation(parameters[0], ambient[0], count)):
         return None
     basis = groebner(equations, (*parameters, *parent.variables), order="lex")
-    closed = tuple(g for g in basis.exprs if not g.free_symbols.intersection(parameters))
+    closed = supported_rows((*parameters,*parent.variables), basis.exprs, tuple(range(len(parameters),len(variables))))
     if (_dimension(parent.variables, closed) != 0 or _dimension(variables, equations) != 0
             or euler_characteristic(parent.variables, closed) != count
             or euler_characteristic(variables, equations) != count

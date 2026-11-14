@@ -682,6 +682,22 @@ int atlas_groebner_trace_rows_cpu(uint32_t prime, uint32_t jobs, uint32_t width,
 // or null for the threads of the host.
 void atlas_groebner_use_batch(ReplayBatch hook) noexcept { default_batch.store(hook); }
 
+// Host implementation of the optional batch callback. The producer supplies
+// the same validated trace, buffer dimensions and primes as to a device.
+int atlas_groebner_replay_host(const uint32_t* code, size_t length, uint32_t pool_size,
+                               uint32_t work_size, const uint32_t* primes, uint32_t count,
+                               uint32_t* pools, uint32_t* status) noexcept {
+    try {
+        std::vector<uint64_t> work(work_size);
+        for (uint32_t i = 0; i < count; ++i)
+            status[i] = execute_replay_block(code, 0, length, primes[i],
+                                              pools + static_cast<size_t>(i) * pool_size, work.data());
+        return 0;
+    } catch (...) {
+        return 1;
+    }
+}
+
 // Install a thread-local override and return its previous state in place.
 // An active null hook selects the host, even if the process has a default.
 void atlas_groebner_swap_batch(ReplayBatch* hook, int* active) noexcept {

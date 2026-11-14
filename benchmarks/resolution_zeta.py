@@ -138,7 +138,7 @@ class Session:
         return (perf_counter_ns() - start) / 1e6, answer
 
 
-def check_answer(solver, case, answer):
+def check_expressions(solver, answer, expected_pair):
     import sympy as sp
     s = sp.Symbol("s")
 
@@ -157,9 +157,13 @@ def check_answer(solver, case, answer):
         # chi(s) = det(s I-h | H²); the Milnor fibre has only H⁰ and H².
         degree = sp.Poly(mon, s).degree()
         mon = 1 / ((1 - s) * s**degree * mon.subs(s, 1 / s))
-    for actual, expected in zip((top, mon), CASES[case][1:]):
+    for actual, expected in zip((top, mon), expected_pair):
         if sp.cancel(actual - expression(expected)) != 0:
-            raise ValueError(f"{solver.label}/{case}: got {answer!r}, expected {CASES[case][1:]}")
+            raise ValueError(f"{solver.label}: got {answer!r}, expected {expected_pair}")
+
+
+def check_answer(solver, case, answer):
+    check_expressions(solver, answer, CASES[case][1:])
 
 
 def atlas_fingerprint(root):

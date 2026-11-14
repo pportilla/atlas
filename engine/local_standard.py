@@ -5,8 +5,8 @@ from time import perf_counter_ns
 from . import native_polynomial as np
 from .algebra_execution import cpu_stage, current_execution, record_stage, stage_label
 from .local_kernel import local_polynomials, local_request
-from .point_germs import _nonzero_at_point, _translate
-from .polynomial import InputError, format_poly
+from .point_germs import _translate
+from .polynomial import InputError, format_poly, sparse_row
 from .rational_point import coordinate_fraction, normalize_point
 
 
@@ -20,7 +20,7 @@ def _standard_basis(variables, generators, order):
 def _restore_point(variables, shifts, rows, order):
     if not any(shifts):
         return rows
-    return local_polynomials("local_translate", variables, order, rows, point=tuple(-a for a in shifts))
+    return local_polynomials("local_untranslate", variables, order, rows, point=shifts)
 
 
 def _center_query(variables, shifts, query, basis, order):
@@ -115,20 +115,19 @@ def handle(operation, ring, operands, *, known_basis=False):
     query = np.coerce(operands["polynomial"]) if normal else None
     projected = None
     with cpu_stage("inspect_point_ideal", generators=len(generators)):
-        if normal and (not query or not generators):
-            result.update(reduction="standard", unit="1",
-                          remainder=format_poly(np.terms(variables, query), names))
+        action, *rows = local_request("local_inspect_normal_form" if normal else "local_inspect_basis",
+                                     variables, ring["order"], (*generators, query) if normal else generators,
+                                     point=shifts)
+        if action == "normal":
+            reduction, unit, remainder = rows
+            result.update(reduction=reduction, unit=format_poly(sparse_row(unit), names),
+                          remainder=format_poly(sparse_row(remainder), names))
             return result
-        if any(shifts) and generators and all(len(g._terms) == 1 for g in generators):
-            projected = local_polynomials("local_project", variables, ring["order"], generators, point=shifts)
-        if any(g.is_number for g in generators) or projected == (np.S.One,) or (
-                projected is None and any(shifts) and
-                any(_nonzero_at_point(variables, shifts, g) for g in generators)):
-            if normal:
-                result.update(reduction="standard", unit="1", remainder="0")
-            else:
-                result["generators"] = ["1"]
+        if action == "basis":
+            result["generators"] = [format_poly(sparse_row(row), names) for row in rows]
             return result
+        if action == "projected":
+            projected = tuple(np.from_row(variables, row) for row in rows)
     if projected is not None:
         if normal:
             with cpu_stage("local_normal_form", divisors=len(projected)):
@@ -160,9 +159,6 @@ def handle(operation, ring, operands, *, known_basis=False):
                 basis = centered
         else:
             basis = _standard_basis(variables, centered, ring["order"])
-        if basis == (np.S.One,):
-            result.update(reduction="standard", unit="1", remainder="0")
-            return result
         with cpu_stage("center_query_at_point", variables=len(names)):
             query = _center_query(variables, shifts, query, basis, ring["order"])
         with cpu_stage("local_normal_form", divisors=len(basis)):

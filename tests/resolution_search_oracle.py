@@ -42,6 +42,36 @@ def squarefree(expr, variables):
     return sp.Poly(expr, *variables, domain=QQ).sqf_part().monic().as_expr()
 
 
+def jacobian_support(variables, f):
+    """Reduce squarefree Jacobian generators modulo their exposed linear equations."""
+    def parts(polynomials):
+        return tuple(sorted({squarefree(p, variables) for p in polynomials if p}, key=sp.default_sort_key))
+
+    equations = parts((f, *(f.diff(v) for v in variables)))
+    for _ in variables:
+        linear = tuple(p for p in equations if sp.Poly(p, *variables).total_degree() <= 1)
+        if not linear:
+            break
+        if any(not p.free_symbols for p in linear):
+            return (sp.S.One,)
+        basis = sp.groebner(linear, *variables, order="grevlex", domain=sp.QQ)
+        new = parts((*basis, *(basis.reduce(p)[1] for p in equations)))
+        if new == equations:
+            break
+        equations = new
+    return equations
+
+
+def two_blowups(variables, f, i, j):
+    vertical, slopes = repeated_directions(variables, f, i, j)
+    x, y = variables[i], variables[j]
+    directions = [(y, x)] if vertical else []
+    directions.extend((x, y-sp.Rational(s)*x) for s in slopes)
+    u = _projective(variables, 3)
+    return tuple(ResolutionCandidate((a**3, a*b, b**2), u, ((a,b,u[0]),(a,b,u[2])), QQ, None,
+                                     "two blowups along a repeated rational tangent") for a,b in directions)
+
+
 class _InvalidCode(Exception):
     pass
 

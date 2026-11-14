@@ -6,7 +6,6 @@ in addition to the geometric algorithms. Every candidate is checked.
 """
 import atexit
 from functools import lru_cache
-from itertools import combinations, product
 import json
 import os
 from pathlib import Path
@@ -16,7 +15,6 @@ import sys
 import threading
 from time import monotonic, sleep
 
-from fractions import Fraction
 from . import native_polynomial as np
 from .candidate_field import NativeField
 from .chart_expressions import chart_expressions, runtime_expressions
@@ -27,8 +25,9 @@ from .reference import QQ
 from . import kernel
 from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_basis, ideal_subset,
                            radical_subset, resolution_charts, verify_snc)
-from .groebner import CHECK
 from .native_library import current_replay_scope, replay_scope
+from .rational_point import coordinate_fraction
+from .polynomial import integer_text
 from .reduced_centre import smooth_reduced_graph
 
 
@@ -61,104 +60,72 @@ def _text(value, domain, generator="field_generator"):
 
 
 def _cover(variables, ambient, pivot, pieces, domain):
-    """Equality of V(pivot) and union of the supplied closed divisor pieces."""
-    for piece in pieces:
-        if not radical_subset(variables,(pivot,),(*ambient,*piece),domain=domain):
-            return False
-    # Products generate the ideal defining the union set-theoretically.
-    api = chart_expressions(variables)
-    union = tuple(api.Mul(*fs) for fs in product(*pieces))
-    return radical_subset(variables,union,(*ambient,pivot),domain=domain)
+    from .graph_record import _graph_request, _graph_ring
+    names, text, relation = _graph_ring(variables, domain)
+    return _graph_request("cover", names, ambient=[*map(text, ambient), *relation], pivot=text(pivot),
+                          pieces=[list(map(text, piece)) for piece in pieces])
 
 
-def _on_overlap(source, target, ideal, domain):
-    """Substitute target ratios in the localized chart using inv*scale=1."""
-    from .field_factors import compose
-    inv = chart_expressions(source.variables).Dummy("inverse_overlap")
-    scale = source.ratios[target.pivot_index]
-    variables = (*source.variables, inv)
-    replacements = {v: source.ratios[i]*inv for i,v in enumerate(target.ratios) if i != target.pivot_index}
-    mapping = tuple(replacements.get(v,v) for v in target.variables)
-    return variables, (*compose(variables, mapping, target.variables, ideal, domain), 1-inv*scale)
-
-
-def _glue(charts, ideals, original, domain):
+def _glue(charts, ideals, domain):
     """Identify irreducible affine pieces using their nonempty intersections on overlaps."""
+    from .graph_record import _graph_request, _graph_ring
     from .incidence import component_classes
     keys = sorted(ideals)
 
     def compare(i, j):
         a, b = keys[j], keys[i]
-        variables, moved = _on_overlap(charts[a[0]], charts[b[0]], ideals[b], domain)
-        return int(not empty_locus(variables, (*ideals[a], *moved), domain=domain))
+        source, target = charts[a[0]], charts[b[0]]
+        variables = tuple(dict.fromkeys((*source.variables, *target.variables)))
+        names, text, relation = _graph_ring(variables, domain)
+        return int(_graph_request("component_overlap", names,
+                                  left_ratios=list(map(text, source.ratios)),
+                                  right_ratios=list(map(text, target.ratios)),
+                                  right_pivot=target.pivot_index,
+                                  pieces=[*map(text, ideals[a]), *map(text, ideals[b]), *relation]))
 
     classes = component_classes([(ci, None) for ci, _ in keys], compare)
     groups = {}
     for group, key in zip(classes, keys):
         groups.setdefault(group, []).append(key)
-    # Only strata whose closure meets the special fiber survive localization
-    # at the origin. Each irreducible localization is still irreducible.
-    return [{ci:ideals[(ci,i)] for ci,i in keys_in_group}
-            for keys_in_group in groups.values()
-            if any(not empty_locus(charts[ci].variables,(*ideals[(ci,i)],*original),domain=domain)
-                   for ci,i in keys_in_group)]
+    return [{ci: ideals[(ci, i)] for ci, i in keys_in_group} for keys_in_group in groups.values()]
 
 
 def _component_atlas(charts, original, pieces, mode, domain, effort, generator):
     from .geometric_components import geometric_components
-    from .incidence import stratum_dimension
-    n=len(original)
-    boundary_count=len(pieces[0])
-    strata={}
-    vertices=[]
-    cells=[]
-    chart_divisors=[[] for _ in charts]
-    carrier_dimension = stratum_dimension(n, int(mode == 'intrinsic'))
-    for k in range(1, min(boundary_count, carrier_dimension) + 1):
-        dimension = stratum_dimension(carrier_dimension, k)
-        cell_dimension = stratum_dimension(k, 1)
-        for subset in combinations(range(boundary_count),k):
-            locals_={}
-            for ci,chart in enumerate(charts):
-                equations=list(chart.strict if mode=='intrinsic' else chart.ambient)
-                for j in subset:
-                    equations.extend(pieces[ci][j])
-                if empty_locus(chart.variables,(*equations,*original),domain=domain):
-                    # A chart that misses the special fiber can still be an
-                    # overlap connecting two visible parts of one stratum.
-                    if empty_locus(chart.variables,equations,domain=domain):
-                        continue
-                components=geometric_components(chart.variables,tuple(equations),
-                          dimension,domain=domain,effort=effort)
-                if components is None:
-                    return None
-                locals_.update({(ci,index):ideal for index,ideal in enumerate(components)})
-            groups=_glue(charts,locals_,original,domain)
-            strata[subset]=[]
-            for group in groups:
-                if k==1:
-                    ident=f'E{len(vertices)+1}'
-                    vertices.append({'id':ident,'dimension':dimension})
-                    for ci,ideal in group.items():
-                        display=[_text(e,domain,generator) for e in ideal]
-                        chart_divisors[ci].append({'id':ident,'equation':', '.join(display),'ideal':display})
-                else:
-                    ci,child=next(iter(group.items()))
-                    def parent_id(parent_subset):
-                        matches=[ident for ident,g in strata[parent_subset] if ci in g and
-                                 ideal_subset(charts[ci].variables,g[ci],child,domain=domain)]
-                        if len(matches)!=1:
-                            raise ArithmeticError('Stratum incidence is ambiguous.')
-                        return matches[0]
-                    ident=f'C{len(cells)+1}'
-                    cells.append({'id':ident,'dimension':cell_dimension,
-                                  'vertices':[parent_id((j,)) for j in subset],
-                                  'faces':[parent_id(s) for s in combinations(subset,cell_dimension)]})
-                strata[subset].append((ident,group))
-    return {'status':'complete','convention':('Ambient exceptional divisor' if mode=='embedded'
-            else 'Reduced exceptional boundary on the smooth strict transform')+
-            ' in the algebraic germ over Qbar. Cells are geometric intersection components meeting the origin fiber.',
-            'vertices':vertices,'cells':cells},chart_divisors
+    from .graph_record import _graph_request, _graph_ring
+    coordinates = tuple(dict.fromkeys(v for chart in charts for v in chart.variables))
+    names, text, relation = _graph_ring(coordinates, domain)
+    encoded = [dict(ambient=list(map(text, c.ambient)), strict=list(map(text, c.strict)),
+                    pieces=[list(map(text, piece)) for piece in boundary]) for c, boundary in zip(charts, pieces)]
+    tasks = _graph_request("strata_tasks", names, charts=encoded, relation=relation, dimension=len(original),
+                           intrinsic=mode == "intrinsic", count=len(pieces[0]))
+    strata = []
+    for task in tasks:
+        subset = task["subset"]
+        local = {}
+        for ci in task["charts"]:
+            chart = charts[ci]
+            carrier = chart.strict if mode == "intrinsic" else chart.ambient
+            equations = (*carrier, *(g for j in subset for g in pieces[ci][j]))
+            components = geometric_components(chart.variables, equations, task["dimension"], domain=domain, effort=effort)
+            if components is None:
+                return None
+            local.update({(ci, i): ideal for i, ideal in enumerate(components)})
+        groups = []
+        for group in _glue(charts, local, domain):
+            groups.append([dict(chart=ci, ideal=list(map(text, ideal)),
+                                display=[_text(g, domain, generator) for g in ideal] if len(subset) == 1 else [])
+                           for ci, ideal in group.items()])
+        strata.append(dict(subset=subset, dimension=task["dimension"], groups=groups))
+    answer = _graph_request("stratum_faces", names, charts=len(charts), strata=strata, relation=relation,
+                            fibre=list(map(text, original)))
+    divisors = answer.pop("divisors")
+    for chart in divisors:
+        for component in chart:
+            component["equation"] = ", ".join(component["ideal"])
+    convention = "Ambient exceptional divisor" if mode == "embedded" else "Reduced exceptional boundary on the smooth strict transform"
+    return dict(status="complete", convention=convention+" in the algebraic germ over Qbar. Cells are geometric intersection components meeting the origin fiber.",
+                vertices=answer["vertices"], cells=answer["cells"]), divisors
 
 
 def _pieces(candidate, charts):
@@ -184,8 +151,7 @@ def _charts(variables,f,candidate):
                     return False
     # The blowup must preserve the smooth locus of the original hypersurface.
     from .affine_kernel import frame_derivative
-    gradient = (tuple(f.diff(x) for x in variables) if CHECK
-                else tuple(frame_derivative(variables, f, {x:1}) for x in variables))
+    gradient = tuple(frame_derivative(variables, f, {x:1}) for x in variables)
     if not radical_subset(variables,(f,*gradient),center,domain=QQ):
         return False
     charts=blowup_charts(variables,(),(f,),center,domain=domain)
@@ -215,19 +181,15 @@ def _verify(variables,f,candidate,mode,effort,proof=None):
     if (not center or all(v==0 for v in center) or len(u)!=len(center)
             or len(set(u))!=len(u) or set(u).intersection(variables)):
         return 'rejected', None
-    # Over Q the kernel decides these tests. With ATLAS_GROEBNER=check the
-    # SymPy route below is taken as well and the two must agree.
+    # Try the packed rational verifier, then the general marked or wide chart operations.
     proved = proof
     if proved is None and domain==QQ:
         proved = resolution_charts(variables,f,center,u,candidate.boundary)
     if proved:
         charts,snc_checks = proved
         proved = charts,_pieces(candidate,charts),snc_checks
-    if proved is None or CHECK:
-        reference = _charts(variables,f,candidate)
-        if proved is not None and proved != reference:
-            raise AssertionError("The native verification differs from SymPy's.")
-        proved = reference
+    if proved is None:
+        proved = _charts(variables,f,candidate)
     if not proved:
         return 'rejected', None
     charts,pieces,snc_checks = proved
@@ -308,25 +270,14 @@ def _pack_rational(expr):
     return [hex(int(expr.numerator)), hex(int(expr.denominator))]
 
 
-def _unpack_rational(q):
-    return sp.Rational(int(q[0],16), int(q[1],16))
-
-
 @lru_cache(maxsize=512)
 def _term_rows(expr, variables, domain):
     """Sparse monomials and their descending power-basis coefficients."""
-    from . import groebner as gb
     from .affine_kernel import pullbacks, sparse_terms
     if domain == QQ and np.native_ring(variables):
         return tuple(sorted((e, (c,)) for e,c in np.terms(variables, expr).items()))
     from .field_polynomial import _parameter, lift, modulus
 
-    def reference():
-        from tests.resolution_search_oracle import coefficient_rows
-        return coefficient_rows(expr,variables,domain)
-
-    if gb._MODE == "sympy":
-        return reference()
     theta = None
     if domain != QQ:
         theta = _parameter(domain)
@@ -343,8 +294,6 @@ def _term_rows(expr, variables, domain):
             groups.setdefault(powers[:-1], {})[powers[-1]] = coefficient
         rows = tuple((e, tuple(c.get(j, 0) for j in range(max(c), -1, -1)))
                      for e,c in sorted(groups.items()))
-    if CHECK and rows != reference():
-        raise AssertionError("Candidate coefficients differ from their power-basis reference.")
     return rows
 
 
@@ -354,21 +303,12 @@ def _pack_poly(poly, variables, domain=QQ):
 
 
 def _unpack_poly(terms, variables, primitive=None):
-    if np.native_ring(variables):
-        groups = {}
-        for exponents, coefficients in terms:
-            for j, q in enumerate(reversed(coefficients)):
-                powers = tuple(exponents) + ((j,) if primitive is not None else ())
-                groups[powers] = Fraction(int(q[0],16), int(q[1],16))
-        return np.from_terms((*variables, primitive) if primitive is not None else variables, groups)
-    result = []
+    groups = {}
     for exponents, coefficients in terms:
-        # Domain ANP coefficients are in descending powers of its primitive element.
-        scalar = sp.S.Zero
-        for q in coefficients:
-            scalar = (scalar*primitive if primitive is not None else 0) + _unpack_rational(q)
-        result.append(scalar * sp.Mul(*(v**e for v,e in zip(variables,exponents))))
-    return sp.Add(*result)
+        for j, q in enumerate(reversed(coefficients)):
+            powers = tuple(exponents) + ((j,) if primitive is not None else ())
+            groups[powers] = coordinate_fraction(integer_text(int(q[0],16)) + "/" + integer_text(int(q[1],16)))
+    return np.from_terms((*variables, primitive) if primitive is not None else variables, groups)
 
 
 def _wire_candidate(variables, f, candidate, mode, effort):
@@ -378,8 +318,7 @@ def _wire_candidate(variables, f, candidate, mode, effort):
     elif candidate.domain != QQ:
         poly = candidate.domain.ext.minpoly
         from .field_coefficient import generator_expression, root_position
-        from .groebner import _MODE
-        primitive = candidate.domain.ext.as_expr() if _MODE == "sympy" else generator_expression(candidate.domain.ext)
+        primitive = generator_expression(candidate.domain.ext)
         root_index = root_position(poly, primitive)
         field = [[_pack_rational(v) for v in poly.all_coeffs()], root_index]
     return {
@@ -392,11 +331,6 @@ def _wire_candidate(variables, f, candidate, mode, effort):
     }
 
 
-@lru_cache(maxsize=1)
-def _worker_field_variable():
-    return sp.Dummy("coefficient_root")
-
-
 def _read_candidate(info):
     from .resolution_search import ResolutionCandidate
     api = runtime_expressions()
@@ -407,13 +341,8 @@ def _read_candidate(info):
         coefficients, index = info["field"]
         # Private worker payloads carry the already-established minimal
         # polynomial and marked embedding of their originating domain.
-        if api is np:
-            from .candidate_field import indexed_field
-            domain, primitive = indexed_field(tuple(Fraction(int(q[0],16), int(q[1],16)) for q in coefficients), index)
-        else:
-            from .field_coefficient import indexed_field
-            domain, primitive = indexed_field(tuple(_unpack_rational(q) for q in coefficients),
-                                              _worker_field_variable(), index)
+        from .candidate_field import indexed_field
+        domain, primitive = indexed_field(tuple(coordinate_fraction(integer_text(int(q[0],16)) + "/" + integer_text(int(q[1],16))) for q in coefficients), index)
     center = tuple(_unpack_poly(g,variables) for g in info["center"])
     boundary = tuple(tuple(_unpack_poly(g,(*variables,*projective),primitive) for g in ideal)
                      for ideal in info["boundary"])
@@ -444,7 +373,7 @@ def _decide(info):
         if lines is not None:
             proof = kernel.verify_lines(len(info["variables"]),lines,len(info["center"]),
                                         [len(ideal) for ideal in info["boundary"]])
-        if proof is False and not CHECK:
+        if proof is False:
             return "rejected", None
     variables,f,candidate,mode,effort = _read_candidate(info)
     if proof:
@@ -691,10 +620,11 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
     # them in ordinary charts, or record the unit if this fallback removes it.
     scalar, factors = rational_factor_rows(variables, f)
     active_factors, unit_factors = [], [api.Rational(scalar)]
-    origin = (0,)*len(variables)
-    for row, power, _ in factors:
+    from .identity_atlas import origin_indices
+    active_indices = set(origin_indices((dict(_sparse_terms(row)) for row, _, _ in factors), len(variables)))
+    for i, (row, power, _) in enumerate(factors):
         factor = _sparse_expression(variables, row)
-        if any(e == origin for e,_ in _sparse_terms(row)):
+        if i not in active_indices:
             unit_factors.append(factor**power)
         elif power > 1:
             from .polynomial import NonReducedError
@@ -705,9 +635,6 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
     # All removed factors are nonzero at the origin. The factorization
     # gives f/active directly, including the original scalar and powers.
     unit = frame_function(variables, api.Mul(*unit_factors))
-    if CHECK:
-        from tests.resolution_search_oracle import check_removed_unit
-        check_removed_unit(unit, f, active)
     deadline=monotonic()+seconds
     schedule=(scheduled_candidates(variables,active) if exhaustive else
               ((c,1.25) for c in priority_candidates(variables,active)))

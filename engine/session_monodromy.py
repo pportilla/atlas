@@ -2,9 +2,8 @@
 
 from copy import deepcopy
 
-from .monodromy import _request, factor_rows
+from .monodromy import _request, factor_rows, stratum_rows
 from .polynomial import integer_from_decimal, integer_text
-from .session_algebra import milnor_number, polynomial
 
 
 def unavailable_check(reason, resolution=None, topological=None, monodromy=None):
@@ -15,30 +14,18 @@ def unavailable_check(reason, resolution=None, topological=None, monodromy=None)
 
 
 def _pole_witnesses(topological, monodromy):
-    from .local_blowups import _is_strict
-
-    # A strict branch on a nonempty stratum supplies every root of unity
-    # whose order divides its multiplicity at a generic smooth point.
-    present = {name for row in topological["strata"] if row["euler_characteristic"]
-               for name in row["components"]}
     numbers = topological["numerical_data"]
     data = [{"n": integer_text(row["multiplicity"]), "nu": integer_text(row["nu"]),
-             "component": row["component"], "branch": _is_strict(row["component"]) and row["component"] in present}
+             "component": row["component"]}
             for row in numbers]
-    evidence = _request("poles", data=data, poles=topological["poles"], factors=factor_rows(monodromy["factors"]))
+    evidence = _request("poles", data=data, poles=topological["poles"], factors=factor_rows(monodromy["factors"]),
+                        strata=stratum_rows(topological["strata"]))
     poles = []
     for pole, row in zip(topological["poles"], evidence["poles"]):
         q, exponent = integer_from_decimal(row["q"]), integer_from_decimal(row["exponent"])
         branch = numbers[row["branch"]] if row["branch"] is not None else {}
-        witness = None
-        if exponent:
-            witness = "origin zeta"
-        elif q == 1:
-            witness = "origin H^0"
-        elif branch:
-            witness = "nearby smooth component"
         poles.append({**pole, "eigenvalue_order": q, "cyclotomic_exponent": exponent,
-                      "witness": witness, "witness_component": branch.get("component"),
+                      "witness": row["witness"], "witness_component": branch.get("component"),
                       "witness_multiplicity": branch.get("multiplicity"), "transverse": None})
     return poles, evidence["candidates"]
 
@@ -83,6 +70,7 @@ def check_resolution(resolution, *, check_isolation, compute):
     result = check_zetas(record, topological, monodromy)
     result.update(resolution=resolution, topological_zeta=topological, monodromy_zeta=monodromy, milnor_number=None)
     if check_isolation and result["status"] == "unresolved":
+        from .session_algebra import milnor_number, polynomial
         try:
             f = polynomial(record["polynomial"], variables=resolution.coordinates)
             mu = milnor_number(f, compute=compute or "auto")

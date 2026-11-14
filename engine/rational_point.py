@@ -1,9 +1,10 @@
 """Exact rational point coordinates for public algebra requests."""
 
 from fractions import Fraction
+from functools import lru_cache
 import re
 
-from .polynomial import InputError, integer_from_decimal, rational_text
+from .polynomial import InputError, integer_from_decimal, integer_text, kernel_fraction, rational_text
 
 
 _COORDINATE = re.compile(r"([+-]?[0-9]+)(?:/([+-]?[0-9]+))?")
@@ -19,7 +20,16 @@ def coordinate_fraction(value):
     denominator = integer_from_decimal(match[2] or "1")
     if denominator == 0:
         raise InputError("A point coordinate cannot have a zero denominator.")
-    return Fraction(integer_from_decimal(match[1]), denominator)
+    numerator = integer_from_decimal(match[1])
+    return Fraction(numerator) if denominator == 1 else _canonical_coordinate(numerator, denominator)
+
+
+@lru_cache(maxsize=1024)
+def _canonical_coordinate(numerator, denominator):
+    from .native_library import affine_request
+    text = integer_text(numerator) + "/" + integer_text(denominator)
+    row, = affine_request(["scalar_arithmetic", "canonical", text, "0"])
+    return kernel_fraction(row)
 
 
 def normalize_point(point, dimension):

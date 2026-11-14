@@ -48,6 +48,36 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different base coordinates"):
             _ordinary_overlaps([replace(a, coordinates=(("bad",x),)),b], boundaries)(0,1)
 
+    def test_generic_product_diagonal_and_character_on_wide_sparse_charts(self):
+        from engine import native_polynomial as np
+        from engine.atlas_gluing import _ordinary_overlaps
+        from engine.chart_gluing_kernel import chart_input, values
+        from engine.kernel_json import kernel_json
+
+        x, y, a, b = np.symbols("x y a b")
+        degree = 2**64 + 17
+        scale = 2**180 + 31
+        shear = scale*x**degree
+        chart = Chart((y,x), (), (("D",1,1,(x,)),), (), (), (("Y",y+shear),("X",x)), ())
+        other = Chart((b,a), (), (("D",1,1,(a,)),), (), (), (("Y",b),("X",a)), (), removed=((b,),))
+        packed = _ordinary_overlaps((chart,other),({"D":(x,)},{"D":(a,)}))
+        self.assertIsNone(packed(0,1))
+        diagonal = kernel_json("atlas_chart_geometry","diagonal",a=chart_input(chart),b=chart_input(other),
+                               transition=None,descended=False)
+        product = (*chart.variables,*other.variables)
+        self.assertEqual(set(values(product,diagonal["graph"])), {y-b+scale*a**degree,x-a})
+        self.assertEqual([values(product,h) for h in diagonal["removed"]],[(b,)])
+
+        z = np.Symbol("z")
+        monomial = x*y**degree
+        carrier = Chart((x,y,z), (), (("D",1,1,(z,)),("strict",1,1,(monomial**2-2,))),
+                        (), (), (), ())
+        (marked,), ratio = _character_field([carrier])
+        theta, relation, _, _ = marked.coefficient_field
+        section = (relation,z,monomial**2-2*scale**2)
+        self.assertCountEqual(_geometric_primes(marked,section,1,ratio),
+                              [(z,monomial-scale*theta),(z,monomial+scale*theta)])
+
     def test_branch_aliases_preserve_parallel_edges_and_loops(self):
         from engine.strata import _vertex_aliases
 

@@ -483,16 +483,16 @@ def _product_charts(charts, dimension):
             if not 0 <= index < len(charts) or len(mapping) != len(charts[index].variables):
                 return None
             parent_axes = {v: name for name, v in charts[index].coordinates if name in factors}
-            retained = []
-            for variable, image in zip(charts[index].variables, mapping):
-                if variable in parent_axes:
-                    if image != dict(c.coordinates)[parent_axes[variable]]:
-                        return None
-                elif axes.intersection(getattr(image, "free_symbols", ())):
-                    return None
-                else:
-                    retained.append(image)
-            projection = index, tuple(retained)
+            local = {variable: i for i, variable in enumerate(c.variables)}
+            images = dict(c.coordinates)
+            entries = [{"expected": local[images[parent_axes[v]]] if v in parent_axes else None,
+                        "coordinate": local.get(image),
+                        "depends": [local[k] for k in getattr(image, "free_symbols", ()) if k in local]}
+                       for v, image in zip(charts[index].variables, mapping)]
+            kept = incidence("product_projection", axes=[local[k] for k in axes], images=entries)
+            if kept is None:
+                return None
+            projection = index, tuple(mapping[j] for j in kept)
         torus = ()
         if c.torus:
             rays, linear = c.torus

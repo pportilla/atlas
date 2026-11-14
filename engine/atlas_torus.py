@@ -92,14 +92,12 @@ def _chart_terms(chart, dimension, common_linear):
             type(entry) is not int for row in (*rays, *linear) for entry in row):
         return None
     axes = chart.variables
-    columns = tuple(zip(*rays))
     actual = tuple(g for _, g in chart.coordinates)
-    # A regular cone has independent and distinct columns. Its projections
-    # therefore have precisely the sparse coefficients of the common frame.
-    for row, image in zip(linear, actual):
-        expected = {power: c for power, c in zip(columns, row) if c}
-        if expected != dict(sparse_terms(axes, image)):
-            return None
+    from .point_geometry import encode_terms
+    if not kernel_json("atlas_torus_sections", "projection", rays=[list(map(integer_text, r)) for r in rays],
+                       linear=[list(map(integer_text, r)) for r in linear],
+                       images=[encode_terms(dict(sparse_terms(axes, image))) for image in actual]):
+        return None
     if set(chart.fibre) != set(actual) and not (
             radical_subset(axes, chart.fibre, actual) and radical_subset(axes, actual, chart.fibre)):
         return None

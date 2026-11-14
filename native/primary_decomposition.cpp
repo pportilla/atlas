@@ -30,6 +30,13 @@ namespace atlas::primary {
 namespace {
 using Axes = std::vector<size_t>;
 using Factors = std::vector<std::pair<Polynomial, mpz_class>>;
+thread_local size_t* certificate_work = nullptr;
+
+void spend(size_t work) {
+    if (work > *certificate_work)
+        throw std::runtime_error("Primary decomposition certificate work limit.");
+    *certificate_work -= work;
+}
 
 Polynomial one(size_t n) { return {{Powers(n), 1}}; }
 bool constant(const Polynomial& p) {
@@ -44,6 +51,11 @@ void add(Polynomial& f, Powers e, const mpq_class& c) {
 }
 
 Polynomial product(const Polynomial& a, const Polynomial& b) {
+    if (certificate_work && !b.empty()) {
+        if (a.size() > *certificate_work / b.size())
+            throw std::runtime_error("Primary decomposition certificate product limit.");
+        spend(a.size() * b.size());
+    }
     Polynomial result;
     for (const auto& [u,c] : a) for (const auto& [v,d] : b) {
         Powers e(u);
@@ -59,8 +71,47 @@ struct RestorePolicy {
     ~RestorePolicy() { prefer_modular = previous; }
 };
 
+// A single exact, limited Buchberger pass. Do not restart with escalating
+// limits when a basis is requested only to try to avoid a saturation.
+class CertificateBasis : private Engine {
+public:
+    Basis compute_rows(const Basis& rows, size_t n, int order) {
+        R.init(static_cast<int>(n), order);
+        std::vector<Poly> packed;
+        for (const auto& row : rows) {
+            if (constant(row)) return {one(n)};
+            if (row.empty()) continue;
+            spend(row.size());
+            const auto line = local::encode_row(row) + '\n';
+            const char* at = line.data();
+            packed.push_back(parse(R, at, at + line.size(), nullptr));
+        }
+        spend(1);
+        bit_limit_ = 2048;
+        work_limit_ = std::max<size_t>(1, *certificate_work);
+        try {
+            attempt(packed, 0);
+        } catch (const Swell&) {
+            throw std::runtime_error("Primary decomposition certificate basis limit.");
+        }
+        spend(static_cast<size_t>(work_));
+        Basis out;
+        Z one;
+        fmpz_one(&one.v);
+        for (const auto& e : G) {
+            spend(e.p.size());
+            std::string line;
+            write(R, line, e.p, &one.v, &e.p.c[0].v);
+            line.pop_back();
+            out.push_back(local::decode_row(line, n));
+        }
+        return out;
+    }
+};
+
 Basis basis(const Basis& rows, size_t n, int order) {
     if (!n) return std::any_of(rows.begin(), rows.end(), constant) ? Basis{one(n)} : Basis{};
+    if (certificate_work) return CertificateBasis().compute_rows(rows, n, order);
     std::ostringstream wire;
     wire << n << ' ' << order << " 0\n";
     for (const auto& row : rows) {
@@ -131,14 +182,25 @@ Polynomial variable(size_t index, size_t n) {
     return {{std::move(e),1}};
 }
 
-// All membership checks during the dimension induction use block lex.
-bool member(Polynomial f, const Basis& g) {
+// All membership checks during the dimension induction use block lex. A
+// speculative certificate can share a work allowance across several primes.
+std::optional<bool> divide_for_membership(Polynomial f, const Basis& g, size_t* remaining) {
     while (!f.empty()) {
+        if (remaining) {
+            const auto& c = f.rbegin()->second;
+            if (f.size() > 65536 || mpz_sizeinbase(c.get_num_mpz_t(), 2) > 16384
+                                 || mpz_sizeinbase(c.get_den_mpz_t(), 2) > 16384)
+                return std::nullopt;
+        }
         const auto [head, coeff] = *f.rbegin();
         auto divisor = std::find_if(g.begin(), g.end(), [&](const auto& p) {
             return local::monomial_divides(p.rbegin()->first, head);
         });
         if (divisor == g.end()) return false;
+        if (remaining) {
+            if (divisor->size() > *remaining) return std::nullopt;
+            *remaining -= divisor->size();
+        }
         const auto& [lead, lc] = *divisor->rbegin();
         Powers shift(head);
         for (size_t i = 0; i < head.size(); ++i) shift[i] -= lead[i];
@@ -150,6 +212,11 @@ bool member(Polynomial f, const Basis& g) {
         }
     }
     return true;
+}
+bool member(const Polynomial& f, const Basis& g) {
+    const auto result = divide_for_membership(f,g,certificate_work);
+    if (!result) throw std::runtime_error("Primary decomposition certificate membership limit.");
+    return *result;
 }
 bool contained(const Basis& generators, const Basis& lex_basis) {
     return std::all_of(generators.begin(), generators.end(), [&](const auto& f) { return member(f, lex_basis); });
@@ -578,8 +645,15 @@ Components decompose_lex(const Basis& g, size_t n, std::optional<int> unmixed_di
 }
 } // namespace
 
+CertificateBudget::CertificateBudget(size_t work) : remaining_(work), previous_(certificate_work) {
+    certificate_work = &remaining_;
+}
+CertificateBudget::~CertificateBudget() { certificate_work = previous_; }
 
 bool member_lex(const Polynomial& f, const Basis& lex_basis) { return member(f,lex_basis); }
+std::optional<bool> member_lex(const Polynomial& f, const Basis& lex_basis, size_t& remaining) {
+    return divide_for_membership(f,lex_basis,&remaining);
+}
 Basis radical_lex(const Basis& rows, size_t width) { return radical(rows,width,true); }
 Basis intersection_lex(const Basis& a, const Basis& b, size_t width) { return intersection(a,b,width); }
 Basis saturate_lex(const Basis& rows, const Polynomial& h, size_t width) { return saturate(rows,h,width); }
@@ -657,7 +731,6 @@ Json::Value regular_coordinates(const Basis& graph, const Axes& from, const Axes
     return result;
 }
 
-using FractionMap = std::vector<std::pair<Polynomial,Polynomial>>;
 
 std::optional<FractionMap> regular_at(const Json::Value& maps, const Basis& prime, size_t from, size_t to) {
     if (maps["coordinates"].size()!=to) throw std::invalid_argument("Wrong number of overlap coordinates.");
@@ -706,6 +779,11 @@ Json::Value chart_map(const Basis& graph, size_t a, size_t b, bool reverse) {
     right.erase(right.begin(),right.begin()+a);
     return reverse ? regular_coordinates(graph,right,left) : regular_coordinates(graph,left,right);
 }
+}
+
+bool vanishes_under_map(const Polynomial& f, const FractionMap& images,
+                        const quotient_ring::Ring& source, size_t width) {
+    return vanishes_under(f,images,source,width);
 }
 
 Json::Value prepare_overlap(const Json::Value& q) {
@@ -788,6 +866,13 @@ Polynomial power(Polynomial f, mpz_class exponent, size_t n) {
 }
 
 Factors factors(const Polynomial& f, size_t n) {
+    if (certificate_work) {
+        // Large eliminants can be expensive to factor even when the input
+        // equations were sparse. Decline these in the speculative path.
+        if (f.size() > 256 || local::max_total_degree(f) > 32)
+            throw std::runtime_error("Primary decomposition certificate factorization limit.");
+        spend(f.size());
+    }
     local::SparseLexRing ring(n);
     PolyValue poly(ring.ctx);
     ring.write(poly.p,f);

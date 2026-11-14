@@ -89,8 +89,9 @@ class ReplayParts(unittest.TestCase):
                 wanted.append(scalar_replay(code, pool_size, length, p, pool))
                 expected.append(pool)
             status = np.zeros(len(primes), dtype=np.uint32)
-            gpu_replay.replay_reference(np.array(code, dtype=np.uint32), pool_size, length,
-                                        np.array(primes, dtype=np.uint32), pools, status)
+            from tests.gpu_replay_oracle import replay_reference
+            replay_reference(np.array(code, dtype=np.uint32), pool_size, length,
+                             np.array(primes, dtype=np.uint32), pools, status)
             with self.subTest(trial=trial):
                 self.assertEqual(list(status), wanted)
                 for i in range(len(primes)):

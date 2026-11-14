@@ -73,8 +73,8 @@ proc matchPrimes(ideal G, ideal P, ideal Q, int leftWidth, int totalWidth) {
     poly v=regularDenominator(G,Q,1,leftWidth);
     if(v==0){return(0);}
     ideal H=u*v;
-    ideal L=std(sat(G+P,H)[1]);
-    ideal T=std(sat(G+Q,H)[1]);
+    ideal L=std(sat(G+P,H));
+    ideal T=std(sat(G+Q,H));
     if(reduce(1,L)!=0 && size(reduce(L,T))==0 && size(reduce(T,L))==0){return(1);}
     return(-1);
 }

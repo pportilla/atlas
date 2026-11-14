@@ -15,7 +15,6 @@ https://stacks.math.columbia.edu/tag/01V4.
 
 from dataclasses import dataclass
 from functools import lru_cache
-from itertools import combinations
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
@@ -23,7 +22,8 @@ from .reference import sp
 from .reference import QQ
 
 from . import kernel
-from .groebner import CHECK, _MODE, _canonical_qq, colon, groebner
+from .groebner import _MODE, _canonical_qq, groebner
+from .polynomial import integer_text, integer_from_decimal
 
 
 def _ring(variables, domain):
@@ -62,23 +62,20 @@ def _expressions(variables, ideal, domain):
     return tuple(dict.fromkeys(g for g in rows if g != 0))
 
 
-def _native(function, reference, domain, *arguments):
-    """The kernel's answer when it gives one, otherwise SymPy's.
-
-    The functions of engine/kernel.py return None for what they cannot take.
-    With ATLAS_GROEBNER=check both are computed and must agree.
-    """
+def _native(function, general, domain, *arguments):
+    """Try the packed operation, then the arbitrary-width sparse computation."""
     if domain == QQ:
         answer = function(*arguments)
     elif domain.is_AlgebraicField and function in (kernel.smooth_locus, kernel.verify_snc):
         answer = _field_smoothness(function, arguments, domain)
     else:
         answer = None
-    if answer is None:
-        return reference(*arguments, domain)
-    if CHECK and answer != reference(*arguments, domain):
-        raise AssertionError(f"The native {function.__name__} differs from SymPy's.")
-    return answer
+    return general(*arguments, domain) if answer is None else answer
+
+
+def _wide(operation, ring, **payload):
+    from .kernel_json import kernel_json
+    return kernel_json("atlas_graph_wide", operation, width=len(ring.variables), relation=ring.relation, **payload)
 
 
 def _field_smoothness(function, arguments, domain):
@@ -88,8 +85,6 @@ def _field_smoothness(function, arguments, domain):
     All dimensions and smoothness loci are therefore those of the K-chart.
     """
     from .field_polynomial import lift, lower, modulus
-    if _MODE == "sympy":
-        return None
     variables, equations, *rest = arguments
     theta = chart_expressions(variables).Dummy("smooth_field")
     extended = (*variables, theta)
@@ -161,12 +156,10 @@ def radical_subset(variables, smaller, larger, *, domain=QQ):
 
 
 def _radical_subset(variables, smaller, larger, domain):
-    small = _expressions(variables, smaller, domain)
-    large = _expressions(variables, larger, domain)
-    if ideal_subset(variables, small, large, domain=domain):
-        return True
-    t = chart_expressions(variables).Dummy("inverse")
-    return all(_basis((t, *variables), (*large, 1 - t*f), domain) == (1,) for f in small)
+    from .component_ring import ComponentRing
+    ring = ComponentRing(variables, domain)
+    return _wide("radical_subset", ring, smaller=list(map(ring.row, _expressions(variables, smaller, domain))),
+                 larger=list(map(ring.row, _expressions(variables, larger, domain))))
 
 
 def saturate(variables, ideal, by, *, domain=QQ):
@@ -176,17 +169,13 @@ def saturate(variables, ideal, by, *, domain=QQ):
 
 
 def _saturate(variables, ideal, by, domain):
-    generators = _expressions(variables, ideal, domain)
+    from .component_ring import ComponentRing
     if isinstance(by, str):
         raise TypeError("The saturating element must be a parsed expression.")
-    divisor = _canonical(variables, by, domain)
-    if divisor == 0:
-        return (chart_expressions(variables).S.One,)
-    if not divisor.free_symbols or not generators:
-        return _basis(variables, generators, domain)
-    t = chart_expressions(variables).Dummy("inverse")
-    basis = _gb((t, *variables), (*generators, 1 - t*divisor), domain, "lex")
-    return tuple(g for g in basis.exprs if t not in g.free_symbols)
+    ring = ComponentRing(variables, domain)
+    rows = _wide("saturate", ring, ideal=list(map(ring.row, _expressions(variables, ideal, domain))),
+                 by=ring.row(_canonical(variables, by, domain)))
+    return tuple(map(ring.expression, rows))
 
 
 @dataclass(frozen=True)
@@ -251,6 +240,7 @@ def _kernel_charts(variables, ambient, strict, center, exceptional):
 
 
 def _blowup_charts(variables, ambient, strict, center, exceptional, domain):
+    from .component_ring import ComponentRing
     ambient = _expressions(variables, ambient, domain)
     strict = None if strict is None else _expressions(variables, strict, domain)
     exceptional = tuple(_expressions(variables, ideal, domain) for ideal in exceptional)
@@ -260,19 +250,15 @@ def _blowup_charts(variables, ambient, strict, center, exceptional, domain):
     charts = []
     for i, pivot in enumerate(generators):
         ratios, coordinates = chart_coordinates(variables, len(generators), i)
-        graph = list(ambient)
-        graph.extend(f - pivot*ratios[j] for j, f in enumerate(generators) if j != i)
-        chart_ambient = saturate(coordinates, graph, pivot, domain=domain)
-
-        def transform(ideal):
-            return saturate(coordinates, (*chart_ambient, *ideal), pivot, domain=domain)
-
-        charts.append(BlowupChart(
-            variables=coordinates, ambient=chart_ambient,
-            strict=None if strict is None else transform(strict),
-            exceptional=tuple(transform(ideal) for ideal in exceptional) + ((pivot,),),
-            pivot=pivot, pivot_index=i, ratios=ratios, projection=variables,
-        ))
+        ring = ComponentRing(coordinates, domain)
+        data = _wide("standard_open", ring, ambient=list(map(ring.row, ambient)), pivot=i,
+                     centre=list(map(ring.row, generators)), ratios=list(map(ring.row, ratios)),
+                     strict=None if strict is None else list(map(ring.row, strict)),
+                     exceptional=[list(map(ring.row, p)) for p in exceptional])
+        charts.append(BlowupChart(variables=coordinates, ambient=tuple(map(ring.expression, data["ambient"])),
+                                  strict=None if strict is None else tuple(map(ring.expression, data["strict"])),
+                                  exceptional=tuple(tuple(map(ring.expression, p)) for p in data["exceptional"])+((pivot,),),
+                                  pivot=pivot, pivot_index=i, ratios=ratios, projection=variables))
     return tuple(charts)
 
 
@@ -305,25 +291,6 @@ def assemble_charts(variables, center, answer):
     return tuple(charts), strata
 
 
-def _colon(variables, selected, ideal, domain):
-    """(selected):ideal. Multipliers in this ideal make the two ideals locally equal."""
-    sub = _gb(variables, selected, domain)
-    others = [g for g in ideal if not sub.contains(g)]
-    if not others:
-        return (chart_expressions(variables).S.One,)
-    quotient = colon(selected, others, variables, domain=domain)
-    if quotient is not None and not CHECK:
-        return quotient
-    if np.native_ring(variables):
-        raise ArithmeticError("The native ideal quotient is unavailable for this ring.")
-    # SymPy's ideal quotient uses exact module syzygies in a polynomial ring.
-    ring = domain.old_poly_ring(*variables, order="grevlex")
-    reference = tuple(ring.to_sympy(f) for f in ring.ideal(*selected).quotient(ring.ideal(*others)).gens)
-    if quotient is not None and _basis(variables, quotient, domain) != _basis(variables, reference, domain):
-        raise AssertionError("The native ideal quotient differs from SymPy's.")
-    return reference if quotient is None else quotient
-
-
 def smooth_locus(variables, ideal, expected_dimension, *, domain=QQ):
     """Compute the closed complement of the smooth locus of a fixed dimension.
 
@@ -342,62 +309,17 @@ def smooth_locus(variables, ideal, expected_dimension, *, domain=QQ):
     return _native(kernel.smooth_locus, _smooth_locus, domain, variables, tuple(ideal), expected_dimension)
 
 
+def _witness(ring, data):
+    data["expected_dimension"] = integer_from_decimal(data["expected_dimension"])
+    data["bad_ideal"] = tuple(map(ring.expression, data["bad_ideal"]))
+    return data
+
+
 def _smooth_locus(variables, ideal, expected_dimension, domain):
-    raw = _expressions(variables, ideal, domain)
-    generators = _basis(variables, raw, domain)
-    n = len(variables)
-    codim = n - expected_dimension
-    bad = generators
-
-    def result():
-        return {"expected_dimension": expected_dimension, "empty": generators == (1,),
-                "smooth": bad == (1,), "bad_ideal": bad}
-
-    if bad == (1,) or codim < 0 or codim > n:
-        return result()
-    if codim == 0:
-        if not generators:  # affine space is irreducible; its only open n-dimensional closed subscheme is itself
-            bad = (chart_expressions(variables).S.One,)
-        return result()
-    # A shorter presentation can turn a smoothness check into one determinant.
-    equations = raw if len(raw) < len(generators) else generators
-    if len(equations) < codim:
-        return result()
-    from .affine_kernel import frame_minor
-    reference = sp.Matrix(equations).jacobian(variables) if _MODE == "sympy" else None
-    if domain == QQ or reference is not None:
-        lifted = equations
-        coordinates = variables
-    else:
-        from .field_polynomial import lift, lower
-        theta = chart_expressions(variables).Dummy("smooth_coefficient")
-        coordinates = (*variables, theta)
-        lifted = tuple(lift(f, variables, domain, theta) for f in equations)
-    for rows in combinations(range(len(equations)), codim):
-        selected = tuple(equations[r] for r in rows)
-        current = _gb(variables, bad, domain)
-        minors = []
-        active = set().union(*(g.free_symbols for g in selected))
-        for columns in combinations((j for j,v in enumerate(variables) if v in active), codim):
-            if reference is not None:
-                minor = reference.extract(rows, columns).det()
-            else:
-                minor = frame_minor(coordinates, tuple(lifted[r] for r in rows), tuple(variables[j] for j in columns))
-                if domain != QQ:
-                    minor = lower(minor, variables, domain, theta)
-            if minor != 0:
-                remainder = current.reduce(minor)[1]
-                if remainder != 0 and remainder not in minors:
-                    minors.append(remainder)
-        if not minors:
-            continue
-        # On V(I) a minor and its remainder modulo the current bad ideal
-        # coincide on all points not already covered by earlier open sets.
-        multipliers = _colon(variables, selected, equations, domain)
-        bad = _basis(variables, (*bad, *(q*m for q in multipliers for m in minors)), domain, known=len(bad))
-        if bad == (1,):
-            break
-    return result()
+    from .component_ring import ComponentRing
+    ring = ComponentRing(variables, domain)
+    rows = list(map(ring.row, _expressions(variables, ideal, domain)))
+    return _witness(ring, _wide("smooth", ring, ideal=rows, dimension=integer_text(expected_dimension)))
 
 
 def verify_snc(variables, ambient, strict, exceptional, ambient_dimension, *, domain=QQ):
@@ -415,27 +337,18 @@ def verify_snc(variables, ambient, strict, exceptional, ambient_dimension, *, do
 
 
 def _verify_snc(variables, ambient, strict, exceptional, ambient_dimension, domain):
-    ambient = _expressions(variables, ambient, domain)
-    labels, divisors = [], []
-    if strict is not None:
-        labels.append("strict")
-        divisors.append(_expressions(variables, strict, domain))
-    for index, ideal in enumerate(exceptional, 1):
-        labels.append(f"E{index}")
-        divisors.append(_expressions(variables, ideal, domain))
-    strata = []
+    from .component_ring import ComponentRing
+    ring = ComponentRing(variables, domain)
+    divisors = ([] if strict is None else [strict]) + list(exceptional)
+    labels = ([] if strict is None else ["strict"]) + [f"E{i+1}" for i in range(len(exceptional))]
 
-    def descend(indices, equations, start):
-        witness = smooth_locus(variables, equations, ambient_dimension - len(indices), domain=domain)
-        item = {"components": [labels[i] for i in indices], **witness}
-        strata.append(item)
-        # Descendants of an empty intersection are empty by inclusion and
-        # need no separate computation. This also handles unit divisors.
-        if witness["empty"]:
-            return
-        for j in range(start, len(divisors)):
-            descend((*indices, j), (*equations, *divisors[j]), j+1)
+    def rows(ideal):
+        return list(map(ring.row, _expressions(variables, ideal, domain)))
 
-    descend((), ambient, 0)
-    failures = [s for s in strata if not s["smooth"]]
+    report = _wide("snc", ring, dimension=integer_text(ambient_dimension), ideal=rows(ambient),
+                   divisors=list(map(rows, divisors)))
+    strata = [_witness(ring, data) for data in report["strata"]]
+    for item in strata:
+        item["components"] = [labels[i] for i in item["components"]]
+    failures = [strata[i] for i in report["bad"]]
     return {"ok": not failures, "strata": strata, "bad_strata": failures}

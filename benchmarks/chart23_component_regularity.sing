@@ -1,0 +1,82 @@
+// The benchmark supplies h0,...,h4 in QQ[x,y,u,z,a,b] and starts the timer.
+// Three generators of height three in this polynomial ring form a complete
+// intersection, so every associated prime is minimal. Its support splits
+// over a=0 and H=0. Certify nonvanishing on both sets of components.
+proc reconstruct(list components, ideal source)
+{
+    if (!size(components)) { return(reduce(1,std(source))==0); }
+    ideal common = components[1][1];
+    int i;
+    for (i=2; i<=size(components); i++) {
+        common = intersect(common,components[i][1]);
+    }
+    return(size(reduce(common,std(source)))==0 && size(reduce(source,std(common)))==0);
+}
+
+proc nonzero(ideal componentIdeal, poly f, poly g, poly h)
+{
+    ideal P = std(componentIdeal);
+    intvec axes = indepSet(P);
+    ideal slice;
+    int i,j;
+    for (i=1; i<=2; i++) {
+        slice=P;
+        for (j=1; j<=size(axes); j++) {
+            if (axes[j]) { slice=slice+ideal(var(j)-i); }
+        }
+        slice=std(slice);
+        if (reduce(f,slice)!=0 || reduce(g,slice)!=0 || reduce(h,slice)!=0) { return(1); }
+    }
+    return(reduce(f,P)!=0 || reduce(g,P)!=0 || reduce(h,P)!=0);
+}
+
+// Eliminate the graph equation. Check each coordinate independence used below.
+poly graph = b-h2;
+if (subst(graph,b,0)!=graph) { ERROR("invalid graph pivot"); }
+poly productRow = subst(h3,b,graph);
+poly multiplier = subst(h4,b,graph);
+if (subst(h0,b,0)!=h0 || subst(h1,b,0)!=h1) { ERROR("base depends on graph coordinate"); }
+ring T = 0,(x,y,u,z,a),dp;
+map lower = R,x,y,u,z,a,0;
+ideal I = lower(h0),lower(h1),lower(productRow);
+poly f = lower(multiplier);
+if (dim(std(I))!=2) { ERROR("not a complete intersection"); }
+poly left = I[1];
+poly right = I[2];
+poly H = I[3]/a;
+if (I[3]!=a*H || subst(H,a,0)!=H || subst(left,a,0)!=left || subst(right,a,0)!=right) {
+    ERROR("product row does not split over the base");
+}
+poly atZero = subst(f,a,0);
+poly atOne = subst(f,a,1);
+poly atTwo = subst(f,a,2);
+
+ring S = 0,(x,y,u,z),dp;
+map push = T,x,y,u,z,0;
+ideal J = push(left),push(right);
+poly h = push(H);
+poly f0 = push(atZero);
+poly f1 = push(atOne);
+poly f2 = push(atTwo);
+list C = primdecGTZ(J);
+if (!reconstruct(C,J)) { ERROR("base intersection differs"); }
+int i,j;
+int result=1;
+ideal P,cut;
+list D;
+for (i=1; i<=size(C) && result; i++) {
+    P=std(C[i][2]);
+    if (!nonzero(P,f0,0,0)) { result=0; }
+    cut=std(P+ideal(h));
+    if (dim(cut)>=0) {
+        D=primdecGTZ(cut);
+        if (!reconstruct(D,cut)) { ERROR("section intersection differs"); }
+        for (j=1; j<=size(D) && result; j++) {
+            if (!nonzero(D[j][2],f0,f1,f2)) { result=0; }
+        }
+    }
+}
+int finish=rtimer;
+print("US "+string(finish-start)+" "+string(finish-beforeInput));
+print("REGULAR "+string(result));
+quit;

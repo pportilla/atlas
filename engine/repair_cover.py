@@ -64,6 +64,7 @@ def _lifted_centre(parent, centre, children, count):
     image is closed once finite. Prove that its projection is precisely the
     deleted centre, with one lift per point and per parameter value.
     """
+    from .newton_repair import supported_rows
     from .atlas import _field_relation
     from .constructible_euler import euler_characteristic
     api = chart_expressions(parent.variables)
@@ -86,14 +87,16 @@ def _lifted_centre(parent, centre, children, count):
         for unit in _covers(c.variables, c.removed):
             inverse = api.Dummy("repair_open")
             basis = groebner((*graph, 1-inverse*unit), (inverse,*ring), order="lex")
-            image = tuple(g.xreplace(rename) for g in basis.exprs if g.free_symbols <= {*targets,t})
+            columns = tuple(range(len(ring)-len(targets), len(ring)+1))
+            image = tuple(g.xreplace(rename) for g in supported_rows((inverse,*ring), basis.exprs, columns))
             if image == (1,) or _dimension((*coords,parameter), image) != 0:
                 continue
             projected = groebner(image, (parameter,*coords), order="lex")
-            closed = tuple(g for g in projected.exprs if parameter not in g.free_symbols)
+            closed = supported_rows((parameter,*coords), projected.exprs, tuple(range(1,len(coords)+1)))
             if (radical_subset(coords, closed, centre) and radical_subset(coords, centre, closed)
                     and euler_characteristic((*coords,parameter), image) == count):
-                fibre = tuple(g for g in image if g.free_symbols != {parameter})
+                pure = supported_rows((*coords,parameter), image, [len(coords)], exact=True)
+                fibre = tuple(g for g in image if g not in pure)
                 return (*coords,parameter), (minimal.xreplace({t: parameter}),), fibre
     return None
 

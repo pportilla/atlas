@@ -1,0 +1,106 @@
+{
+  "cpu_affinity": [
+    15
+  ],
+  "library_sha256": "3a162e9f58d64699dba73050da52f25961108d59442ee4c20cbbfd069355e149",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "QQ, captured canonical B8. Input objects prepared before timing; Atlas includes native request and result transfer. Singular runs in fresh processes with timers after input parsing. Quotients: Atlas selects a centre power, Singular is given power 2, computes labelled ideal lift and transports the quotient to all three charts; independent normal-form checks are outside its timer. Incidence: Atlas discovers rational centre points; Singular verifies the supplied centre shape and the two stated rational solutions by ideal equality and substitution. This is a certificate check for Singular; the additional discovery comparison uses minAssGTZ and derives all QQ points without hints. Parent slice: both use the same supplied point, test hyperplanes in coordinate order and seek a nonempty complement of the pivot. Timings exclude chart construction.",
+  "comparisons": {
+    "all_three_quotients": {
+      "atlas_ms": [
+        30.710445,
+        31.922525,
+        32.387074,
+        32.622749,
+        32.209739,
+        32.172849,
+        31.299749
+      ],
+      "singular_ms": [
+        13.326,
+        13.46,
+        13.756,
+        13.386,
+        13.483,
+        13.407,
+        13.541
+      ],
+      "medians_ms": {
+        "Atlas": 32.172849,
+        "Singular": 13.46
+      }
+    },
+    "second_parent_given_witness": {
+      "atlas_ms": [
+        3.121609,
+        2.194807,
+        1.81507,
+        2.134013,
+        1.6298,
+        2.039514,
+        1.637324
+      ],
+      "singular_ms": [
+        0.705,
+        0.649,
+        0.675,
+        0.656,
+        0.661,
+        0.68,
+        0.696
+      ],
+      "medians_ms": {
+        "Atlas": 2.039514,
+        "Singular": 0.675
+      }
+    },
+    "second_parent_incidence": {
+      "atlas_ms": [
+        2.136698,
+        2.183977,
+        1.694152,
+        2.293364,
+        1.907976,
+        2.272224,
+        1.827524
+      ],
+      "singular_ms": [
+        9.895,
+        10.031,
+        10.054,
+        9.958,
+        10.082,
+        9.887,
+        10.121
+      ],
+      "medians_ms": {
+        "Atlas": 2.136698,
+        "Singular": 10.031
+      }
+    },
+    "third_pivot_parent_slice": {
+      "atlas_ms": [
+        1.82616,
+        1.104237,
+        0.73558,
+        1.137058,
+        0.724769,
+        1.014597,
+        0.725872
+      ],
+      "singular_ms": [
+        1.107,
+        1.166,
+        1.149,
+        1.094,
+        1.156,
+        1.087,
+        1.128
+      ],
+      "medians_ms": {
+        "Atlas": 1.014597,
+        "Singular": 1.128
+      }
+    }
+  }
+}

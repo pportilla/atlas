@@ -76,29 +76,21 @@ def _field(charts, base, raw, saved):
     return dict(generator=name, minimal_polynomial=relation, degree=degree, embedding=embedding), source
 
 
-def monomial_matrix(mapping, coords, monomials, field):
-    """Recover a coefficient polynomial in theta for each base entry and monomial."""
-    n = len(monomials)
-    indices = {monomial: j for j,monomial in enumerate(monomials)}
-    rows = []
-    for f in mapping:
-        groups = {}
-        for powers, c in parse_expression(f, coords).items():
-            groups.setdefault(powers[:n], {})[powers[n:]] = c
-        coefficients = [format_poly(g, coords[n:]) for g in groups.values()]
-        if field:
-            parameter = field["generator"]
-            reduced = native_library.affine_request(["pullbacks", parameter, parameter, parameter,
-                                                      field["minimal_polynomial"], *coefficients])
-            coefficients = [format_poly(sparse_row(r), (parameter,)) for r in reduced]
-        entries = ["0"] * n
-        for exp, coefficient in zip(groups, coefficients):
-            if exp in indices:
-                entries[indices[exp]] = coefficient
-            elif coefficient != "0":
-                return None
-        rows.append(tuple(entries))
-    return tuple(rows)
+def monomial_matrix(mapping, coords, monomials, field, *, pivot=None):
+    """Recover the verified coordinate coefficients on a point or split fan chart."""
+    from .kernel_json import kernel_json
+    from .point_geometry import encode_terms, decode_terms
+    from .polynomial import integer_text
+    parameter = (field["generator"],) if field else ()
+    options = ({"pivot": pivot} if pivot is not None else
+               {"monomials": [list(map(integer_text, row)) for row in monomials]})
+    rows = kernel_json("atlas_identity_divisor", "projection_coefficients", width=len(coords),
+                       mapping=[encode_terms(parse_expression(f, coords)) for f in mapping],
+                       modulus=encode_terms(parse_expression(field["minimal_polynomial"], parameter)) if field else None,
+                       **options)
+    if rows is None:
+        return None
+    return tuple(tuple(format_poly(decode_terms(c), parameter) for c in row) for row in rows)
 
 
 def _invertible(matrix, coords, field):
@@ -154,8 +146,7 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
             source_coords = (*coords[:n], source) if field and not saved else coords
             return format_poly(parse_expression(item["map"][v], source_coords), coords)
         mapping = [map_entry(v) for v in base]
-        monomials = tuple(tuple(int(k == i) + int(j != i and k == j) for k in range(n)) for j in range(n))
-        matrix = monomial_matrix(mapping, coords, monomials, field)
+        matrix = monomial_matrix(mapping, coords, (), field, pivot=i)
         if matrix is None:
             return None
         if common is None:

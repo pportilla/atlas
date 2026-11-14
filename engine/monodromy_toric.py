@@ -11,10 +11,6 @@ def _volume(points, dimension):
     points = tuple(dict.fromkeys(tuple(map(index, p)) for p in points))
     if any(len(p) != dimension for p in points):
         raise ValueError("Each lattice point must have the stated dimension.")
-    if len(points) <= dimension:
-        return 0
-    if dimension == 0:
-        return 1  # normalized volume of the unique point in the zero-dimensional lattice
     if _MODE == "sympy" or CHECK:
         from tests.toric_monodromy_oracle import _volume_reference
     if _MODE == "sympy":
@@ -25,7 +21,8 @@ def _volume(points, dimension):
     operation = library.atlas_lattice_volume
     operation.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
     operation.restype = ctypes.c_void_p
-    payload = ("\n".join([str(dimension), *(" ".join(map(integer_text, p)) for p in points)]) + "\n").encode()
+    rows = [str(len(points))] if dimension == 0 else [" ".join(map(integer_text, p)) for p in points]
+    payload = ("\n".join([str(dimension), *rows]) + "\n").encode()
     result = operation(payload, len(payload))
     if not result:
         raise ArithmeticError("The kernel could not compute the lattice volume.")

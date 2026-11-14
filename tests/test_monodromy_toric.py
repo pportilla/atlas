@@ -68,6 +68,8 @@ class ToricMonodromy(unittest.TestCase):
         self.assertEqual(sum(n*chi for n,chi in rows.items()),1-496)
 
     def test_normalized_orbit_lattice_volume(self):
+        self.assertEqual(_volume([], 0), 0)
+        self.assertEqual(_volume([(), ()], 0), 1)
         for d in (2,3,4):
             vertices = list(product((0,2),repeat=d))
             points = [(1,)*d,*vertices,*vertices]

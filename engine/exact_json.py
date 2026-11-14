@@ -1,7 +1,19 @@
 """Serialize exact algebra results without changing the host integer conversion policy."""
 import json
+from fractions import Fraction
 
-from .polynomial import integer_text
+from .polynomial import integer_text, rational_text
+
+
+def sorted_record(value):
+    """Encode an exact witness, including its rational entries, in canonical key order."""
+    if isinstance(value, dict):
+        return {key: sorted_record(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple)):
+        return [sorted_record(item) for item in value]
+    if isinstance(value, Fraction):
+        return rational_text(value)
+    return value
 
 
 def _result_json(value):

@@ -12,7 +12,7 @@ from dataclasses import replace
 from functools import lru_cache
 
 from .affine_kernel import decode, pullbacks
-from .atlas_finite import _extend_chart, _field_mark, _integer_polynomial
+from .atlas_finite import _extend_chart, _field_mark
 from .blowup_ideal import empty_locus, radical_subset
 from .chart_expressions import chart_expressions
 from .groebner import groebner
@@ -20,183 +20,102 @@ from .local_blowups import _covers, _dimension, _present
 from .marked_field import common_fields, flint_literal
 
 
+def _marked_operation(op, chart, **arguments):
+    from .chart_gluing_kernel import rows
+    from .kernel_json import kernel_json
+    field = chart.coefficient_field
+    axes = chart.variables
+    return kernel_json("atlas_marked_chart",op,width=len(axes),theta=axes.index(field[0]) if field else -1,
+                       relation=rows(axes,(field[1],))[0] if field else None,**arguments)
+
+
 @lru_cache(maxsize=256)
 def _birational_parameters(chart, mapping):
-    """Certify generic injectivity on an affine space over its chosen field.
-
-    The parameter is copied as a base coordinate before inversion. Specializing
-    an inverse from Q(theta) to the marked field can kill its denominators.
-    Pull every fraction back modulo the irreducible relation: a nonzero
-    denominator times each coordinate must equal the numerator identically.
-    Their common nonvanishing locus is then dense on this integral field sheet.
-    """
-    from .affine_kernel import inverse_map
-    variables = chart.variables
-    field = chart.coefficient_field
-    modulus = field[1] if field else None
-    if tuple(chart.ambient) != ((modulus,) if field else ()):
+    """Recover and verify the rational coordinate inverse on the marked sheet."""
+    from .chart_gluing_kernel import rows,values
+    axes = chart.variables
+    result = _marked_operation("faithful_inverse",chart,mapping=rows(axes,tuple(mapping)),ambient=rows(axes,chart.ambient))
+    if result is None:
         return None
-    mapping = tuple(mapping) + ((field[0],) if field else ())
-    if len(mapping) != len(variables) or field and field[0] != variables[-1]:
-        return None
-    api = chart_expressions(variables)
-    base = api.symbols(f"atlasGeneric0:{len(variables)}")
-    try:
-        inverse = inverse_map(variables, mapping, base)
-        fractions = pullbacks(variables, mapping, base, (g for pair in inverse for g in pair), modulus=modulus)
-    except ArithmeticError:
-        return None
-    for coordinate, numerator, denominator in zip(variables, fractions[::2], fractions[1::2]):
-        if not denominator:
-            return None
-        residual, = pullbacks(variables, variables, variables, (numerator-coordinate*denominator,), modulus=modulus)
-        if residual != 0:
-            return None
-    return base, inverse
+    base = chart_expressions(axes).symbols(f"atlasGeneric0:{len(axes)}")
+    return base, tuple(values(base,pair) for pair in result)
 
 
 @lru_cache(maxsize=4096)
 def _reduced_fraction(chart, a, b):
-    """Cancel in the field polynomial ring. Its UFD then gives the regular locus."""
-    from .affine_kernel import _ring, _request, _sparse_expression
-    from .atlas_finite import _power_domain
-    from .field_factors import factors
-    from .field_polynomial import lift, polynomial
-    from .native_polynomial import native_ring
-    from .groebner import _MODE
-    from .reference import sp
-    if not b:
-        raise ArithmeticError("A transition denominator vanished on the marked sheet.")
-    if not a:
-        return a, chart_expressions(chart.variables).S.One
-    field = chart.coefficient_field
-    t = field[0] if field else None
-    coords = tuple(v for v in chart.variables if v != t)
-    if not b.free_symbols.intersection(coords):
-        return a,b
-    if field:
-        domain, generator = _power_domain(*field[:3])
-        def into(f):
-            return f if native_ring(chart.variables) else f.xreplace({t: generator})
-        def out(f):
-            return f if native_ring(chart.variables) else lift(f,coords,domain,t)
-        a,b = into(a),into(b)
-        for factor, multiplicity in factors(polynomial(b,coords,domain)):
-            basis = groebner((factor.as_expr(),),coords,order="lex",domain=domain)
-            for _ in range(multiplicity):
-                qa, ra = basis.reduce(a)
-                if ra != 0:
-                    break
-                qb, rb = basis.reduce(b)
-                if rb != 0:
-                    raise ArithmeticError("A denominator factor did not divide in its marked field.")
-                a,b = qa[0],qb[0]
-        return out(a),out(b)
-    if _MODE == "sympy":
-        return sp.cancel(a/b).as_numer_denom()
-    ring = _ring(coords)
-    header = [ring.header, "lex"]
-    rows = _request(["primitive_gcd_cofactors", *header, ring.text(a), ring.text(b)])
-    reduced = tuple(_sparse_expression(coords, row) for row in rows)
-    if _MODE == "check":
-        from tests.transition_cofactor_oracle import check
-        check(coords, a, b, reduced)
-    return reduced
+    """Cancel the geometric gcd on the marked sheet."""
+    from .chart_gluing_kernel import rows,values
+    from .polynomial import InputError
+    try:
+        result = _marked_operation("cofactors",chart,pair=rows(chart.variables,(a,b)))
+    except InputError as exc:
+        raise ArithmeticError(str(exc)) from exc
+    return values(chart.variables,result)
 
 
 def _transition_substitution(source, coordinates, fractions, coefficient=None):
-    """Evaluate on a regular open, clearing powers of its nonzero denominators."""
-    from .affine_kernel import frame_restrict
-    variables = source.variables
-    modulus = source.coefficient_field[1] if source.coefficient_field else None
-    api = chart_expressions(variables)
-    aliases = {v:api.Dummy("transition_axis") for v in coordinates}
+    """Expose exact polynomial transport and the chart fractions used by native gluing."""
+    from .chart_gluing_kernel import rows,values
+    axes=source.variables
+    mapping=dict(zip(coordinates,fractions))
     if coefficient is not None:
-        aliases[coefficient] = source.coefficient_field[0]
-    substitutions = [(aliases[v], a, b) for v,(a,b) in zip(coordinates,fractions)]
+        mapping[coefficient]=(source.coefficient_field[0],chart_expressions(axes).S.One)
+    source_map=[rows(axes,pair) for pair in mapping.values()]
+    target_axes=tuple(mapping)
+
     @lru_cache(maxsize=1024)
     def transport(g, basis=None):
-        f = g.xreplace(aliases)
-        ring = (*variables, *(v for v,_,_ in substitutions))
-        for v,a,b in substitutions:
-            if v in f.free_symbols:
-                if basis is not None:
-                    a,b = basis.reduce(a)[1],basis.reduce(b)[1]
-                f = frame_restrict(ring, f, v, b, -a)
-            ring = tuple(x for x in ring if x != v)
-        if basis is not None:
-            return basis.reduce(f)[1]
-        if modulus is not None:
-            f, = pullbacks(variables,variables,variables,(f,),modulus=modulus)
-        return f
+        equation, = rows(target_axes,(g,))
+        prime = rows(axes,tuple(basis.exprs)) if basis is not None else None
+        result = _marked_operation("transfer",source,map=source_map,equation=equation,prime=prime)
+        return values(axes,result)[0]
+
+    transport.coordinate_fractions=mapping
     return transport
 
 
 def transition_on_field_sheet(source, target, source_map, target_map, *, target_parent=None):
-    """Give the regular overlap and transport target equations to the source.
-
-    In affine space over the common marked field, a coprime coordinate
-    fraction is regular precisely off its denominator. The transition and
-    its rational inverse agree with the parent maps at the generic point.
-    The overlap also requires the inverse transition to be regular. On that
-    mutual locus their compositions give the identity by separatedness.
-    """
-    target_inverse = _birational_parameters(target,target_map)
-    if not target_inverse or _birational_parameters(source,source_map) is None:
+    """Specialize two certified ambient inverses and transport their regular open."""
+    from .chart_gluing_kernel import rows,values
+    target_inverse=_birational_parameters(target,target_map)
+    if target_inverse is None or _birational_parameters(source,source_map) is None:
         return None
-    base,inverse = target_inverse
-    field = source.coefficient_field
-    if field != target.coefficient_field:
+    if source.coefficient_field != target.coefficient_field:
         return None
-    modulus = field[1] if field else None
-    theta = field[0] if field else None
-    if target_parent is None:
-        mapping = tuple(source_map) + ((theta,) if field else ())
-        specialized = pullbacks(source.variables,mapping,base,(g for pair in inverse for g in pair),modulus=modulus)
-    else:
-        # Source and target enter the same original base through different
-        # affine parents. Compose the *two low-degree inverses* before pulling
-        # back, without eliminating the high-degree original map of the child.
-        parent_images = tuple(g for _,g in target_parent.coordinates)
-        parent_inverse = _birational_parameters(target_parent,parent_images)
+    base,inverse=target_inverse
+    mapping=tuple(source_map)
+    parent=None
+    if target_parent is not None:
+        parent_map=dict(target_parent.coordinates)
+        source_coordinates=dict(source.coordinates)
+        if source_coordinates.keys()!=parent_map.keys():
+            return None
+        parent_inverse=_birational_parameters(target_parent,tuple(parent_map.values()))
         if parent_inverse is None:
             return None
-        outer, back = parent_inverse
-        source_images = dict(source.coordinates)
-        if source_images.keys() != dict(target_parent.coordinates).keys():
-            return None
-        maps = tuple(source_images[name] for name,_ in target_parent.coordinates) + ((theta,) if field else ())
-        mid = pullbacks(source.variables,maps,outer,(g for pair in back for g in pair),modulus=modulus)
-        if any(not d for d in mid[1::2]):
-            return None
-        mid = tuple(_reduced_fraction(source,n,d) for n,d in zip(mid[::2],mid[1::2]))
-        # After substitution an inverse fraction is a fraction of fractions.
-        # Clear exactly the SAME powers on its numerator and denominator.
-        from .affine_kernel import _polynomial, sparse_terms
-        from .kernel_json import kernel_json
-        from .point_geometry import decode_terms, encode_terms
-        api = chart_expressions(source.variables)
-        homogenizers = tuple(api.Dummy("transition_den") for _ in base)
-        all_coords = (*base, *homogenizers)
-        images = tuple(n for n, _ in mid) + tuple(d for _, d in mid)
-        def lift_pair(a,b):
-            rows = kernel_json("atlas_component_geometry", "homogenize_fraction", width=len(base),
-                               pair=[encode_terms(dict(sparse_terms(base, g))) for g in (a, b)])
-            homogenized = [_polynomial(decode_terms(row), all_coords) for row in rows]
-            return pullbacks(source.variables, images, all_coords, homogenized, modulus=modulus)
-        specialized = tuple(g for a,b in inverse for g in lift_pair(a,b))
-    if any(not b for b in specialized[1::2]):
+        outer,back=parent_inverse
+        parent=[rows(outer,pair) for pair in back]
+        mapping=tuple(source_coordinates[name] for name in parent_map)
+    axes=source.variables
+    result=_marked_operation("transition",source,inverse=[rows(base,pair) for pair in inverse],parent=parent,
+                             mapping=rows(axes,mapping))
+    if result is None:
         return None
-    fractions = tuple(_reduced_fraction(source,a,b) for a,b in zip(specialized[::2],specialized[1::2]))
+    theta = source.coefficient_field[0] if source.coefficient_field else None
     coordinates = tuple(v for v in target.variables if v != theta)
-    transfer = _transition_substitution(source,coordinates,fractions,theta)
-    source_axes = set(source.variables) - {theta}
-    holes = tuple(dict.fromkeys((d,) for _,d in fractions if d.free_symbols & source_axes))
-    return transfer,(*source.removed,*holes)
+    transfer=_transition_substitution(source,coordinates,[values(axes,pair) for pair in result["fractions"]],theta)
+    return transfer,(*source.removed,*((f,) for f in values(axes,result["holes"])))
+
+
+def _repair_geometry(name, **arguments):
+    from .kernel_json import kernel_json
+    return kernel_json("atlas_repair_geometry", name, **arguments)
 
 
 def _point_images(chart, parent, mapping):
     from .constructible_euler import euler_characteristic
+    from .newton_repair import supported_rows
+    from .polynomial import integer_text
     theta = chart.coefficient_field[0]
     api = chart_expressions(chart.variables)
     variables = tuple(v for v in chart.variables if v != theta)
@@ -210,10 +129,13 @@ def _point_images(chart, parent, mapping):
         basis = groebner((*graph, 1-inverse*unit), (inverse,*coords), order="lex")
         if basis.exprs == [1]:
             continue
-        ideal = tuple(g.xreplace(parent_axes) for g in basis.exprs if g.free_symbols <= {*targets,theta})
+        ring = (inverse, *coords)
+        columns = [ring.index(x) for x in (*targets, theta)]
+        ideal = tuple(g.xreplace(parent_axes) for g in supported_rows(ring, basis.exprs, columns))
         # A constructible set whose closure is zero-dimensional is closed.
-        if (_dimension(parent.variables, ideal) != 0
-                or parent.one_sheet(euler_characteristic(parent.variables, ideal)) != 1):
+        dimension = _dimension(parent.variables, ideal)
+        count = parent.one_sheet(euler_characteristic(parent.variables, ideal)) if dimension == 0 else 0
+        if not _repair_geometry("point", dimension=dimension, count=integer_text(count)):
             return None
         if ideal not in images:
             images.append(ideal)
@@ -226,26 +148,21 @@ def repair_charts(charts):
         return charts
     covers = {}
     marks = []
-    for i,(j,mapping) in links:
-        child = charts[i]
-        if (not 0 <= j < len(charts) or charts[j].repair_projection or charts[j].coefficient_field
-                or charts[j].ambient or not charts[j].removed or child.coefficient_field
-                or len(mapping) != len(charts[j].variables)):
-            return None
-        choices = [(v, f, coeff) for f in child.ambient if len(f.free_symbols) == 1
-                   for v in f.free_symbols for coeff in _integer_polynomial(v,f)
-                   if len(coeff) > 2]
-        if not choices:
-            continue
-        if len(choices) != 1:
-            return None
-        v,f,coeff = choices[0]
-        from .atlas import _field_relation
-        if not _field_relation(v,f,len(coeff)-1):
-            return None
+    from .centre_weights import centre_rows
+    from .polynomial import integer_from_decimal
+    relation_rows = _repair_geometry("relations", charts=[
+        dict(parent=c.repair_projection[0] if c.repair_projection else None, marked=bool(c.coefficient_field),
+             width=len(c.variables), mapping=len(c.repair_projection[1]) if c.repair_projection else None,
+             ambient=centre_rows(c.variables,c.ambient), removed=bool(c.removed)) for c in charts])
+    if relation_rows is None:
+        return None
+    for item in relation_rows:
+        i = item["sheet"]
+        c = charts[i]
+        coeff = tuple(map(integer_from_decimal,item["coefficients"]))
         roots = tuple(flint_literal(coeff,k) for k in range(1,len(coeff)))
         marks.extend(roots)
-        covers[i] = v,f,roots
+        covers[i] = c.variables[item["axis"]],c.ambient[item["relation"]],roots
     if not covers:
         return [replace(c,repair_projection=()) for c in charts]
     existing = {c.coefficient_field:_field_mark(c.coefficient_field) for c in charts if c.coefficient_field}
@@ -267,7 +184,6 @@ def repair_charts(charts):
         v,relation,roots = covers.get(i,(None,None,(None,)))
         child = charts[i]
         parent = ordinary[j]
-        conjugates = []
         for root in roots:
             cover = replace(child, coefficient_field=(v,relation,len(roots),root) if root else (),
                             repair_projection=())
@@ -288,68 +204,69 @@ def repair_charts(charts):
             if centres is None or len(centres) != 1:
                 return None
             centre, = centres
-            if any(not empty_locus(parent.variables,(*centre,*other)) for other in conjugates):
-                return None  # two copies of the same centre would double-count its owned fibre
-            conjugates.append(centre)
-            sheets.append((replace(sheet,repair_projection=(j,parent_map)),j,parent_map,centre))
+            sheets.append((replace(sheet,repair_projection=(j,parent_map)), j, parent_map, centre, i))
 
-    # All images of a parent are finite. Two owned pieces over the same
-    # centre may report its ideal more than once, in different generators.
-    by_parent = {j:[] for _,(j,_) in links}
-    for _,j,_,ideal in sheets:
-        parent = ordinary[j]
-        found = by_parent[j]
-        if _present(parent.variables,ideal,parent.removed):
-            return None
-        for other in found:
-            if empty_locus(parent.variables,(*ideal,*other)):
-                continue
-            if not (radical_subset(parent.variables,ideal,other) and radical_subset(parent.variables,other,ideal)):
-                return None
-            break
-        else:
-            found.append(ideal)
-    for j,centres in by_parent.items():
-        parent = ordinary[j]
-        if any(_present(parent.variables,(*parent.ambient,*hole),centres) for hole in parent.removed):
-            return None
-    # A fan records a centre in its first owning chart. Blowup modifies
-    # every open containing that point, including all the other parent
-    # opens in the star. Pull the verified finite sets to those opens.
     ordinary = {i:replace(c,repair_projection=(i,c.variables[:-1])) for i,c in ordinary.items()}
     transitions = parent_transitions(ordinary.values())
     from .blowup_ideal import ideal_basis, saturate
-    additions = {}
-    for i, target in ordinary.items():
-        additions[i] = []
-        for j,centres in by_parent.items():
-            if i == j:
-                continue
-            source = ordinary[j]
-            pairs = _parent_pullback(target, source, transitions)
+    from .chart_gluing_kernel import operation
+    transport = {}
+    closed = []
+
+    def query(task):
+        action = task["query"]
+        if action in ("disjoint", "same", "outside", "covers"):
+            parent = ordinary[task["parent"]]
+            axes = parent.variables
+            if action == "covers":
+                centres = [sheets[k][3] for k in task["centres"]]
+                return all(not _present(axes, (*parent.ambient,*hole), centres) for hole in parent.removed)
+            ideal = sheets[task["sheet"]][3]
+            if action == "outside":
+                return _present(axes, ideal, parent.removed)
+            other = sheets[task["other"]][3]
+            if action == "disjoint":
+                return empty_locus(axes, (*ideal,*other))
+            return radical_subset(axes,ideal,other) and radical_subset(axes,other,ideal)
+
+        i, j = task["target"], task["source"]
+        target, source = ordinary[i], ordinary[j]
+        if action == "transition":
+            forward = _parent_pullback(target, source, transitions)
             inverse = _parent_pullback(source, target, transitions)
-            if pairs is None or inverse is None:
+            if forward is None or inverse is None:
+                return False
+            move, poles = forward
+            transport[i,j] = move, api.Mul(*poles), inverse[1]
+            return True
+        move, unit, poles = transport[i,j]
+        if action == "regular":
+            ideal = sheets[task["sheet"]][3]
+            return all(empty_locus(source.variables, (*ideal,d)) for d in poles)
+        if action == "close":
+            ideal = sheets[task["sheet"]][3]
+            equations = (*target.ambient, *(move(g) for g in ideal))
+            image = (saturate(target.variables,equations,unit) if unit != 1
+                     else ideal_basis(target.variables,equations))
+            if image == (1,):
                 return None
-            move, poles = pairs
-            _, inverse_poles = inverse
-            units = api.Mul(*poles)
-            for ideal in centres:
-                if any(not empty_locus(source.variables, (*ideal, d)) for d in inverse_poles):
-                    continue
-                equations = (*target.ambient, *(move(g) for g in ideal))
-                closed = (saturate(target.variables,equations,units) if units != 1
-                          else ideal_basis(target.variables,equations))
-                if closed != (1,):
-                    # Distinct source repairs must own disjoint parent centres.
-                    if _dimension(target.variables,closed) != 0 or any(
-                            not empty_locus(target.variables,(*closed,*old))
-                            for old in (*target.removed,*additions[i])):
-                        return None
-                    additions[i].append(closed)
+            closed.append(image)
+            return len(closed)-1
+        image = closed[task["closed"]]
+        if action == "point":
+            return _dimension(target.variables,image) == 0
+        return all(empty_locus(target.variables,(*image,*old))
+                   for old in (*target.removed, *(closed[k] for k in task["previous"])))
+
+    plan = operation(dict(parents=list(ordinary), sheets=[dict(parent=j,child=i) for _,j,_,_,i in sheets]),
+                     query, symbol="atlas_repair_ownership")
+    if plan is None:
+        return None
+    additions = {i: [closed[k] for k in indices] for i,indices in zip(ordinary, plan["additions"])}
     result = []
-    for sheet,j,mapping,centre in sheets:
+    for (sheet,j,mapping,_,_), indices in zip(sheets,plan["holes"]):
         parent = ordinary[j]
-        other = [f for f in by_parent[j] if empty_locus(parent.variables,(*f,*centre))] + additions[j]
+        other = [sheets[k][3] for k in indices] + additions[j]
         holes = tuple(pullbacks(sheet.variables,(*mapping,theta),parent.variables,ideal,modulus=field[1])
                       for ideal in other)
         result.append(replace(sheet,removed=(*sheet.removed,*holes)))
@@ -397,59 +314,35 @@ def parent_transitions(charts):
     its exceptional divisors and restriction to both retained opens.
     """
     from functools import cache
-    from .affine_kernel import _polynomial, sparse_terms
-    from .binomial_kernel import signed_powers
-    from .fan_geometry import _determinant, lattice_characters
+    from .centre_weights import centre_rows
+    from .kernel import exprs
+    from .polynomial import rational_text
     parents = {c.repair_projection[0]:c for c in charts if c.repair_projection and c.torus
                and c.repair_projection[1] == c.variables[:-1]}
+
     @cache
     def certified(index):
         c = parents.get(index)
-        if c is None:
-            return False
+        if c is None or not c.coefficient_field:
+            return None
         rays, linear = c.torus
-        variables = c.variables[:-1]
-        if (len(rays) != len(variables) or len(linear) != len(c.coordinates)
-                or len(linear) != len(rays) or any(len(row) != len(rays) for row in (*rays,*linear))
-                or any(k < 0 for row in rays for k in row) or not _determinant(linear)):
-            return False
-        try:
-            lattice_characters(rays,tuple(tuple(int(i==j) for i in range(len(rays))) for j in range(len(rays))))
-        except (ArithmeticError, ValueError):
-            return False
-        # On this field sheet, reduce the supplied maps modulo its modulus.
-        # In a unimodular chart each matrix column names a distinct monomial;
-        # the appended zero is its exponent in the field parameter.
-        columns = tuple((*column, 0) for column in zip(*rays))
-        actual = pullbacks(c.variables, c.variables, c.variables, (g for _, g in c.coordinates),
-                           modulus=c.coefficient_field[1])
-        for row, image in zip(linear, actual):
-            expected = {power: coefficient for power, coefficient in zip(columns, row) if coefficient}
-            if expected != dict(sparse_terms(c.variables, image)):
-                return False
-        return True
+        return _repair_geometry("parent", width=len(c.variables), rays=[list(map(rational_text,row)) for row in rays],
+                                linear=[list(map(rational_text,row)) for row in linear],
+                                modulus=centre_rows(c.variables,[c.coefficient_field[1]])[0],
+                                names=[name for name,_ in c.coordinates],
+                                images=centre_rows(c.variables,[p for _,p in c.coordinates]))
 
     @cache
     def powers(i,j):
-        if (not certified(i) or not certified(j) or parents[i].torus[1] != parents[j].torus[1]
-                or tuple(dict(parents[i].coordinates)) != tuple(dict(parents[j].coordinates))):
-            return None
-        # A common character a has local exponents R*a. For target v_j
-        # solve R_target*a=e_j, then apply the source matrix.
-        left, right = parents[i].torus[0], parents[j].torus[0]
-        unit = tuple(tuple(int(a==b) for a in range(len(right))) for b in range(len(right)))
-        characters = lattice_characters(right,unit)
-        from .newton_backend import _valuations
-        return tuple(zip(*_valuations(left, characters)))
+        return _repair_geometry("transition", source=certified(i), target=certified(j))
 
     def equations(a,b):
         i, source = a.repair_projection
         j, target = b.repair_projection
-        exponents = powers(i,j)
-        if exponents is None:
+        rows = powers(i,j)
+        if rows is None:
             return None
         base = parents[i].variables[:-1]
-        monomials = (_polynomial({powers: 1}, base) for e in exponents for powers in signed_powers(e))
-        factors = iter(pullbacks(a.variables, source, base, monomials))
+        factors = iter(pullbacks(a.variables, source, base, exprs(base,rows)))
         return [(next(factors), t, next(factors)) for t in target]
     return equations

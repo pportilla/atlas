@@ -1139,7 +1139,7 @@ int component_cover_height(Supports& supports, int n) {
 // bad set of a k-fold intersection is cut out by the equations and the
 // (codim W + k)-row minors of their Jacobian. Invert a chosen generator
 // of every removed ideal to test emptiness on each open piece.
-std::string wide_owned_crossings(std::istream& in) {
+std::string wide_owned_crossings(std::istream& in, bool return_loci) {
     Variables ring(line(in), ORD_DEGREVLEX);
     const slong dimension = std::stol(line(in));
     if (dimension < 0 || dimension > ring.n) throw std::invalid_argument("Invalid chart dimension.");
@@ -1154,7 +1154,9 @@ std::string wide_owned_crossings(std::istream& in) {
     const auto count = std::stol(line(in));
     std::vector<std::vector<Polynomial>> parts, holes;
     for (slong i = 0; i < count; ++i) parts.push_back(read_list());
-    const auto removed = std::stol(line(in));
+    std::vector<Polynomial> region;
+    const auto removed = return_loci ? 0 : std::stol(line(in));
+    if (return_loci) region = read_list();
     for (slong i = 0; i < removed; ++i) holes.push_back(read_list());
     if (count < 0 || removed < 0) throw std::invalid_argument("Invalid chart component count.");
     Variables extended(ring.n+1, ORD_DEGREVLEX);
@@ -1190,6 +1192,8 @@ std::string wide_owned_crossings(std::istream& in) {
     };
     std::vector<fmpq_mpoly_struct*> selected;
     for (auto& g : ambient) selected.push_back(g.p);
+    std::vector<size_t> subset;
+    std::vector<std::pair<std::vector<size_t>,std::string>> loci;
     auto visit = [&](auto&& self, size_t first, slong rank) -> bool {
         for (size_t i = first; i < parts.size(); ++i) {
             const auto previous = selected.size();
@@ -1217,18 +1221,176 @@ std::string wide_owned_crossings(std::istream& in) {
             };
             Polynomial one(ring);
             fmpq_mpoly_one(one.p, ring.ctx);
-            if (!across(across, 0, one) || !self(self, i+1, rank+1)) return false;
+            subset.push_back(i);
+            if (!across(across, 0, one)) {
+                if (!return_loci) return false;
+                // Record the reduced grevlex generators of the full
+                // rank-defect scheme. Its intersection with the owned
+                // region determines the flag, never the returned ideal.
+                std::string wire = "basis " + std::to_string(ring.n) + " 0 0\n";
+                Polynomial row(ring);
+                for (auto* g : equations) {
+                    if (fmpq_mpoly_is_zero(g,ring.ctx)) continue;
+                    fmpq_mpoly_set(row.p,g,ring.ctx);
+                    emit(wire,row);
+                }
+                std::unique_ptr<char, decltype(&atlas_groebner_release)> reply(
+                    atlas_wide_block(wire.data(),wire.size()), atlas_groebner_release);
+                if (!reply) throw std::runtime_error(atlas_groebner_error());
+                const std::string basis(reply.get());
+                for (auto& g : region) equations.push_back(g.p);
+                const bool owned = region.empty() || !empty(equations,one);
+                std::string block = "bad " + std::to_string(subset.size());
+                for (auto j : subset) block += " " + std::to_string(j);
+                block += owned ? " 1 " : " 0 ";
+                block += std::to_string(std::count(basis.begin(),basis.end(),'\n')) + "\n" + basis;
+                loci.emplace_back(subset,std::move(block));
+            }
+            if (!self(self, i+1, rank+1)) return false;
+            subset.pop_back();
             selected.resize(previous);
         }
         return true;
     };
-    return visit(visit, 0, ring.n-dimension+1) ? "yes\n" : "no\n";
+    const bool smooth = visit(visit, 0, ring.n-dimension+1);
+    if (!return_loci) return smooth ? "yes\n" : "no\n";
+    std::sort(loci.begin(),loci.end(),[](const auto& a,const auto& b) {
+        return a.first.size()==b.first.size() ? a.first<b.first : a.first.size()<b.first.size();
+    });
+    std::string result;
+    for (const auto& entry : loci) result += entry.second;
+    return loci.empty() ? "none\n" : result;
+}
+
+// A product of centre generators, retaining its factors so its quotient by
+// the pivot power can be read off on every standard graph chart.
+struct CentreProduct {
+    Polynomial value;
+    std::vector<size_t> factors;
+    CentreProduct(Variables& ring, std::vector<size_t> indices)
+        : value(ring), factors(std::move(indices)) {}
+};
+
+std::string centre_power_transforms(std::istream& in) {
+    Variables ring(line(in), ORD_DEGREVLEX);
+    const size_t ambient_count = std::stoul(line(in)), count = std::stoul(line(in));
+    // This is a sufficient membership test. Bound the optional division work
+    // and let ordinary chart division handle high degrees and large powers.
+    constexpr size_t max_products = 64, max_terms = 16384, max_order = 8;
+    if (count < 2 || count > 8 || ambient_count > max_products) return "none\n";
+    auto eligible = [&](const Polynomial& f) {
+        return fmpq_mpoly_length(f.p, ring.ctx) <= static_cast<slong>(max_terms)
+            && fmpq_mpoly_total_degree_fits_si(f.p, ring.ctx)
+            && fmpq_mpoly_total_degree_si(f.p, ring.ctx) <= 256;
+    };
+    std::vector<Polynomial> ambient, centre;
+    for (size_t i = 0; i < ambient_count; ++i) {
+        auto row = read(in, ring);
+        if (!eligible(row)) return "none\n";
+        if (!fmpq_mpoly_is_zero(row.p, ring.ctx)) ambient.push_back(std::move(row));
+    }
+    std::vector<fmpq_mpoly_struct*> ambient_rows, discarded;
+    std::vector<Polynomial> multiples;
+    multiples.reserve(ambient.size());
+    for (auto& row : ambient) {
+        ambient_rows.push_back(row.p);
+        discarded.push_back(multiples.emplace_back(ring).p);
+    }
+    for (size_t i = 0; i < count; ++i) {
+        centre.push_back(read(in, ring));
+        auto& generator = centre.back();
+        if (!eligible(generator)) return "none\n";
+        // A chart equation may express a centre generator using another
+        // variable. Its remainder has the same image in the parent ring.
+        if (!ambient.empty()) {
+            Polynomial reduced(ring);
+            fmpq_mpoly_divrem_ideal(discarded.data(), reduced.p, generator.p, ambient_rows.data(),
+                                    ambient_rows.size(), ring.ctx);
+            fmpq_mpoly_swap(generator.p, reduced.p, ring.ctx);
+        }
+        if (!eligible(generator) || fmpq_mpoly_is_fmpq(generator.p, ring.ctx))
+            return "none\n";
+    }
+    const auto f = read(in, ring);
+    if (!eligible(f) || fmpq_mpoly_is_fmpq(f.p, ring.ctx)) return "none\n";
+
+    std::vector<CentreProduct> products;
+    products.emplace_back(ring, std::vector<size_t>{});
+    fmpq_mpoly_one(products.front().value.p, ring.ctx);
+    std::vector<Polynomial> coefficients;
+    for (size_t order = 1; order <= max_order; ++order) {
+        std::vector<CentreProduct> next;
+        size_t cost = 0;
+        bool exceeded = false;
+        for (const auto& previous : products) {
+            const size_t first = previous.factors.empty() ? 0 : previous.factors.back();
+            for (size_t j = first; j < count; ++j) {
+                cost += fmpq_mpoly_length(previous.value.p, ring.ctx) * fmpq_mpoly_length(centre[j].p, ring.ctx);
+                if (next.size() == max_products || cost > max_terms) { exceeded = true; break; }
+                auto indices = previous.factors;
+                indices.push_back(j);
+                auto& product = next.emplace_back(ring, std::move(indices));
+                fmpq_mpoly_mul(product.value.p, previous.value.p, centre[j].p, ring.ctx);
+            }
+            if (exceeded) break;
+        }
+        if (exceeded) break;
+        std::vector<fmpq_mpoly_struct*> divisors, quotient_rows;
+        for (auto& product : next) divisors.push_back(product.value.p);
+        for (auto& row : ambient) divisors.push_back(row.p);
+        std::vector<Polynomial> candidate;
+        candidate.reserve(divisors.size());
+        for (size_t i = 0; i < divisors.size(); ++i)
+            quotient_rows.push_back(candidate.emplace_back(ring).p);
+        Polynomial remainder(ring);
+        fmpq_mpoly_divrem_ideal(quotient_rows.data(), remainder.p, f.p, divisors.data(), divisors.size(), ring.ctx);
+        // Zero proves f = sum(c_a * g^a) modulo the parent equations even
+        // when the supplied divisors do not form a Groebner basis.
+        if (!fmpq_mpoly_is_zero(remainder.p, ring.ctx)) break;
+        products = std::move(next);
+        coefficients = std::move(candidate);
+    }
+    if (coefficients.empty()) return "none\n";
+    // On pivot j, g_i = g_j * ratio_i and ratio_j = 1. The same parent
+    // identity therefore gives f = g_j^order * q_j on every graph chart.
+    Variables chart(ring.n + count - 1, ORD_DEGREVLEX);
+    Exponents powers(chart.n);
+    fmpq_t coefficient;
+    fmpq_init(coefficient);
+    const std::unique_ptr<fmpq, decltype(&fmpq_clear)> cleanup(coefficient, fmpq_clear);
+    std::string result = std::to_string(products.front().factors.size()) + "\n";
+    for (size_t pivot = 0; pivot < count; ++pivot) {
+        Polynomial q(chart);
+        for (size_t a = 0; a < products.size(); ++a) {
+            for (int v = ring.n; v < chart.n; ++v) fmpz_zero(powers.entries[v]);
+            for (size_t j : products[a].factors) {
+                if (j == pivot) continue;
+                auto e = powers.entries[ring.n + j - (j > pivot)];
+                fmpz_add_ui(e, e, 1);
+            }
+            const auto c = coefficients[a].p;
+            for (slong t = 0; t < fmpq_mpoly_length(c, ring.ctx); ++t) {
+                powers.read(c, t, ring.ctx);
+                fmpq_mpoly_get_term_coeff_fmpq(coefficient, c, t, ring.ctx);
+                fmpq_mpoly_push_term_fmpq_fmpz(q.p, coefficient, powers.entries.data(), chart.ctx);
+            }
+        }
+        fmpq_mpoly_sort_terms(q.p, chart.ctx);
+        fmpq_mpoly_combine_like_terms(q.p, chart.ctx);
+        emit(result, q);
+    }
+    return result;
 }
 
 std::string ordered_polynomials(std::istream& in, const std::string& operation) {
     const auto names = line(in), order = line(in);
     if (order != "lex" && order != "grevlex") throw std::invalid_argument("Unknown monomial order.");
     Variables ring(names, order == "lex" ? ORD_LEX : ORD_DEGREVLEX);
+    const bool below = operation == "wide_dimension_below";
+    const int threshold = below ? std::stoi(line(in)) : 0;
+    auto report_dimension = [&](int d) {
+        return std::to_string(below ? int(d < threshold) : d) + "\n";
+    };
     if (operation == "reduced_minors") {
         const auto rank = std::stol(line(in)), nrows = std::stol(line(in));
         if (nrows < 0) throw std::invalid_argument("Invalid Jacobian row count.");
@@ -1307,8 +1469,8 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
             if (!fmpq_mpoly_is_zero(f.p, ring.ctx))
                 fmpz_mpoly_vec_append(input.v, f.p->zpoly, ring.ctx->zctx);
         }
-        const bool dimension = operation == "wide_dimension" || operation == "basis_dimension";
-        if (!input.v->length) return dimension ? std::to_string(ring.n) + "\n" : out;
+        const bool dimension = below || operation == "wide_dimension" || operation == "basis_dimension";
+        if (!input.v->length) return dimension ? report_dimension(ring.n) : out;
         // basis_dimension receives a Gröbner basis for the specified order.
         // Its leading supports determine dimension without computing a second basis.
         auto rows = input.v;
@@ -1329,7 +1491,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
                 fmpz_mpoly_get_term_exp_fmpz(entries.data(), p, 0, ring.ctx->zctx);
                 std::vector<int> row;
                 for (int j = 0; j < ring.n; ++j) if (!fmpz_is_zero(entries[j])) row.push_back(j);
-                if (row.empty()) return "-1\n";
+                if (row.empty()) return report_dimension(-1);
                 supports.push_back(std::move(row));
                 continue;
             }
@@ -1339,7 +1501,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
             emit(out, f);
         }
         if (dimension) {
-            return std::to_string(ring.n - component_cover_height(supports, ring.n)) + "\n";
+            return report_dimension(ring.n - component_cover_height(supports, ring.n));
         }
     }
     return out;
@@ -1347,6 +1509,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
 
 std::string affine(std::istream& in) {
     const auto operation = line(in);
+    if (operation == "centre_power_transforms") return centre_power_transforms(in);
     if (operation == "implicit_jet" || operation == "implicit_coordinates")
         return implicit_frame_operation(in,operation == "implicit_jet");
     if (operation == "field_factorization") return field_factorization(in);
@@ -1369,12 +1532,13 @@ std::string affine(std::istream& in) {
     if (operation == "fan_cover") return fan_cover(in);
     if (operation == "fan_charts" || operation == "fan_charts_with_projection" || operation == "fan_charts_with_boundary")
         return fan_charts(in, operation != "fan_charts", operation == "fan_charts_with_boundary");
-    if (operation == "wide_owned_crossings") return wide_owned_crossings(in);
+    if (operation == "wide_owned_crossings" || operation == "wide_crossing_loci")
+        return wide_owned_crossings(in, operation == "wide_crossing_loci");
     if (operation == "ordered_factorization" || operation == "reduced_minors")
         return ordered_polynomials(in, operation);
     if (operation == "primitive_gcd_cofactors" || operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
         operation == "wide_basis" || operation == "wide_division" ||
-        operation == "wide_dimension" || operation == "basis_dimension")
+        operation == "wide_dimension" || operation == "wide_dimension_below" || operation == "basis_dimension")
         return ordered_polynomials(in, operation);
     if (operation == "lattice_valuations" || operation == "lattice_characters" || operation == "lattice_support" ||
         operation == "lattice_dimension" || operation == "lattice_pivots")
@@ -1661,6 +1825,7 @@ extern "C" int atlas_fan_charts_abi() noexcept { return 1; }
 extern "C" int atlas_fan_projection_abi() noexcept { return 1; }
 extern "C" int atlas_fan_boundary_terms_abi() noexcept { return 1; }
 extern "C" int atlas_residual_abi() noexcept { return 1; }
+extern "C" int atlas_centre_power_transforms_abi() noexcept { return 1; }
 
 extern "C" char* atlas_affine(const char* input, size_t length) noexcept {
     try {

@@ -12,8 +12,7 @@ from functools import cached_property, lru_cache
 from itertools import count
 
 from .native_library import affine_request
-from .rational_point import coordinate_fraction
-from .polynomial import format_poly, integer_text, rational_text, sparse_row
+from .polynomial import format_poly, integer_text, kernel_fraction, rational_text, sparse_row
 
 
 @dataclass(frozen=True, order=True)
@@ -106,10 +105,6 @@ class Expr:
     def __pow__(self, n):
         if int(n) != n or n < 0:
             raise ValueError("Expected a nonnegative integral exponent.")
-        if n == 0:
-            return coerce(1)
-        if n == 1:
-            return self
         return _binary('^', self, coerce(n))
 
     def __str__(self):
@@ -237,23 +232,6 @@ def _decode(keys, line):
 
 @lru_cache(maxsize=16384)
 def _binary(op, left, right):
-    if op == '+':
-        if not left:
-            return right
-        if not right:
-            return left
-    if op == '-':
-        if not right:
-            return left
-        if left == right:
-            return coerce(0)
-    if op == '*':
-        if not left or not right:
-            return coerce(0)
-        if left == 1:
-            return right
-        if right == 1:
-            return left
     if op == '/' and not right:
         raise ZeroDivisionError
     keys = tuple(sorted(set(left._coords).union(right._coords)))
@@ -281,10 +259,9 @@ def default_sort_key(value):
 
 
 def _combine(values, operation):
-    neutral = coerce(1 if operation == "*" else 0)
-    values = tuple(v for value in values if (v := coerce(value)) != neutral)
+    values = tuple(map(coerce, values))
     if not values:
-        return neutral
+        return coerce(scalar_arithmetic("empty_product" if operation == "*" else "empty_sum", 0, 0))
     if len(values) == 1:
         return values[0]
     if len(values) == 2:
@@ -301,7 +278,7 @@ def product(values):
 
 def scalar_arithmetic(op, left, right):
     row, = affine_request(["scalar_arithmetic", op, rational_text(left), rational_text(right)])
-    return coordinate_fraction(row)
+    return kernel_fraction(row)
 
 
 def Rational(a, b=None):

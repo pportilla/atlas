@@ -38,6 +38,22 @@ class ArchivedParentOverlaps(unittest.TestCase):
         self.assertEqual(holes, ())
         self.assertEqual(sparse_terms(coords, move(y)-y-x), ())
 
+    def test_marked_cofactors_and_fraction_transfer_with_a_wide_power(self):
+        from fractions import Fraction
+        from engine import native_polynomial as np
+        from engine.repair_gluing import _reduced_fraction, transition_on_field_sheet
+        x, y, t = axes = np.symbols("x y theta")
+        relation = t*t-2
+        chart = Chart(axes,(relation,),(),(),(),(),(),coefficient_field=(t,relation,2,"root 1 (FLINT order)"))
+        degree, coefficient = 2**64+7, Fraction(2**180+13,17)
+        # A common marked linear factor times a huge monomial is cancelled in K[x,y].
+        common = (x+t)*y**degree
+        a,b = coefficient*(y+1), y-1
+        self.assertEqual(_reduced_fraction(chart,a*common,b*common),(a,b))
+        transport,holes = transition_on_field_sheet(chart,chart,(x,x*(y+t)),(x,x*y))
+        self.assertEqual(holes,())
+        self.assertEqual(transport(x**degree+y),x**degree+y+t)
+
     def test_projective_pivots_have_complete_disjoint_ownership(self):
         from engine.repair_cover import verify_repair_cover
         api = runtime_expressions()

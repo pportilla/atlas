@@ -1,8 +1,7 @@
 """Transport sparse point-local operations to the exact kernel."""
 
 from .kernel_json import kernel_json
-from .polynomial import integer_from_decimal, integer_text, rational_text
-from .rational_point import coordinate_fraction
+from .polynomial import integer_from_decimal, integer_text, kernel_fraction, rational_text
 
 
 def request(operation, **operands):
@@ -14,7 +13,7 @@ def encode_terms(terms):
 
 
 def decode_terms(data):
-    return {tuple(map(integer_from_decimal, powers)): coordinate_fraction(c) for c, powers in data}
+    return {tuple(map(integer_from_decimal, powers)): kernel_fraction(c) for c, powers in data}
 
 
 def point_operation(operation, point, terms, **options):

@@ -47,6 +47,11 @@ def _certify_divisor(f, parts, names):
                        parts=[[encode_terms(g), integer_text(m)] for g, m in parts])
 
 
+def origin_indices(equations, width):
+    return kernel_json("atlas_identity_divisor", "origin_indices", width=width,
+                       equations=list(map(encode_terms, equations)))
+
+
 def _serialized(record, polynomial):
     if "atlas" in record:
         return record["atlas"]
@@ -99,7 +104,7 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
         if set(chart["fibre"]).issubset(coords):
             raise InvalidChart("The claimed identity fibre omits a coordinate.")
         fibre = [parse_expression(g, coords) for g in chart["fibre"]]
-        if any((0,) * len(coords) in g for g in fibre):
+        if len(origin_indices(fibre, len(coords))) != len(fibre):
             raise InvalidChart("The projection fibre misses the origin.")
         def native():
             rows = ["frame_empty", " ".join(coords), str(len(fibre)), *(format_poly(f, coords) for f in fibre)]
@@ -111,8 +116,7 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
 
         if not checked_native(native, reference):
             raise InvalidChart("The claimed identity fibre contains points outside the origin.")
-    data, parts, present = {}, [], set()
-    zero = (0,) * len(coords)
+    data, equations = {}, []
     for row in chart["components"]:
         label, power = row["id"], row["multiplicity"]
         if not isinstance(label, str) or not re.fullmatch(r"strict|S[0-9]+", label):
@@ -126,9 +130,11 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
         if not equation:
             raise InvalidChart("The zero equation does not define a divisor.")
         data[label] = (power, 1)
-        if zero not in equation:
-            present.add(label)
-            parts.append((equation, power))
+        equations.append(equation)
+    labels = list(data)
+    active = origin_indices(equations, len(coords))
+    present = {labels[i] for i in active}
+    parts = [(equations[i], data[labels[i]][0]) for i in active]
     if (not independent([g for g, _ in parts], len(coords)) or
             not _certify_divisor(polynomial, parts, coords) or intrinsic and len(parts) != 1):
         raise InvalidChart("The listed equations do not give transverse branches of the input at the origin.")

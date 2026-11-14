@@ -214,6 +214,24 @@ std::vector<std::pair<local::Polynomial, mpz_class>> marked_factors(
     return FieldRing(width,modulus).factor(f);
 }
 
+local::Polynomial marked_gcd(const local::Basis& rows, const local::Polynomial& modulus, size_t width) {
+    FieldRing ring(width,modulus);
+    Polynomial common;
+    for (const auto& f : rows) {
+        if (f.empty()) continue;
+        common=ring.gcd(common,ring.monic(f));
+        if (common==ring.one) break;
+    }
+    return common;
+}
+
+local::Basis marked_cofactors(const local::Polynomial& a,const local::Polynomial& b,
+                              const local::Polynomial& modulus,size_t width) {
+    FieldRing ring(width,modulus);
+    auto common=ring.gcd(ring.monic(a),ring.monic(b));
+    return common==ring.one ? local::Basis{a,b} : local::Basis{ring.quotient(a,common),ring.quotient(b,common)};
+}
+
 std::string field_factorization(std::istream& input) {
     std::string size, equation, minimal;
     if (!std::getline(input,size) || !std::getline(input,minimal) || !std::getline(input,equation))

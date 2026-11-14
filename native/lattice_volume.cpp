@@ -115,7 +115,12 @@ extern "C" char* atlas_lattice_volume(const char* input, size_t size) noexcept {
     try {
         std::istringstream in(std::string(input, size));
         long n;
-        if (!(in >> n) || n < 1) throw std::invalid_argument("Expected a positive lattice dimension.");
+        if (!(in >> n) || n < 0) throw std::invalid_argument("Expected a nonnegative lattice dimension.");
+        if (n == 0) {
+            size_t count;
+            if (!(in >> count)) throw std::invalid_argument("Expected the number of zero-dimensional points.");
+            return atlas::copy_text(count ? "1" : "0");
+        }
         std::vector<Row> points;
         std::string value;
         while (in >> value) {

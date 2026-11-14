@@ -1,10 +1,20 @@
 // Sparse geometric factor certificates and the ordered projection schedule.
 #include "rational_sparse_json.hpp"
+#include "component_projection.hpp"
 #include "primary_decomposition.hpp"
+#include "component_partition.hpp"
+#include "local_io.hpp"
+#include "local_point_quotient.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <numeric>
 #include <set>
+
+extern "C" char* atlas_affine(const char*, size_t) noexcept;
+extern "C" char* atlas_ideal(const char*, size_t) noexcept;
+extern "C" const char* atlas_groebner_error() noexcept;
+extern "C" void atlas_groebner_release(char*) noexcept;
 
 namespace atlas::components {
 using namespace sparse_json;
@@ -222,8 +232,200 @@ Json::Value homogenize_fraction(const Json::Value& q) {
     return result;
 }
 
+// A projectively smooth hypersurface of dimension at least one is
+// geometrically irreducible. For a quadric, the exact test is rank > 2
+// over the marked coefficient field. Include its minimal polynomial in
+// every ideal while differentiating only in the geometric coordinates.
+Json::Value projective_factor(const Json::Value& q) {
+    const size_t variables = q["width"].asUInt();
+    const bool marked = !q["relation"].isNull();
+    const size_t width = variables + marked;
+    const auto f = local::decode_row(q["polynomial"].asString(),width);
+    const Z d(q["degree"].asString(),10), effort(q["effort"].asString(),10);
+    if (f.empty() || !variables) return {};
+    const bool homogenize = !q["homogeneous"].asBool();
+    const size_t geometric = variables + homogenize, n = width + homogenize;
+    if (d>2 && (d>3+effort || Z(geometric)>3+effort)) return {};
+    auto lift = [&](const local::Polynomial& g, bool equation) {
+        local::Polynomial result;
+        for (const auto& [e,c] : g) {
+            auto powers = e;
+            if (homogenize) {
+                const Z offset = equation ? d-std::accumulate(e.begin(),e.begin()+variables,Z(0)) : Z(0);
+                if (offset<0) throw std::invalid_argument("Incorrect projective degree.");
+                powers.insert(powers.begin()+variables,offset);
+            }
+            result.emplace(std::move(powers),c);
+        }
+        return result;
+    };
+    const auto h = lift(f,true);
+    auto rows = local::partial_derivatives(h,n);
+    rows.resize(geometric);
+    if (marked) rows.push_back(lift(local::decode_row(q["relation"].asString(),width),false));
+    const auto gb = primary::reduced(rows,n,true);
+    const int dimension = primary::dimension_lex(gb,n);
+    if (d==2) return static_cast<int>(geometric)-dimension>2;
+    if (geometric<3 || dimension!=0) return {};
+    // A nonzero point on this homogeneous affine cone supplies a line
+    // through the origin, contradicting its computed zero dimension.
+    return true;
+}
+
+// A coefficient-comparison system has a factor over the algebraic closure
+// exactly when its ideal, with the field relation, is proper.
+Json::Value coefficient_test(const Terms& f, const Support& support, const Terms& modulus, const Z& effort) {
+    const size_t n=support.bounds.size();
+    const bool marked=!modulus.empty();
+    const auto layouts=factor_supports(support,effort);
+    Json::Value source;
+    source["polynomial"]=term_list(f);
+    source["width"]=Json::UInt64(n);
+    source["marked"]=marked;
+    for (const auto& sides : layouts["layouts"]) {
+        source["sides"]=sides;
+        const size_t width=sides[0].size()+sides[1].size()-2+marked;
+        const auto conditions=factor_conditions(source);
+        if (!width) {
+            if (conditions.empty()) return false;
+            continue;
+        }
+        local::Basis equations;
+        for (const auto& row : conditions) equations.push_back(read_terms(row,width));
+        if (marked) {
+            Terms relation;
+            for (const auto& [e,c] : modulus) {
+                Powers powers(width);
+                powers.back()=e.back();
+                relation.emplace(std::move(powers),c);
+            }
+            equations.push_back(std::move(relation));
+        }
+        if (primary::reduced(equations,width,true)!=local::Basis{Terms{{Powers(width),1}}}) return false;
+    }
+    return layouts["complete"].asBool() ? Json::Value(true) : Json::Value();
+}
+
+Json::Value support_certificate(const Support& p) {
+    if (p.degree==1) return true;
+    if (std::count_if(p.bounds.begin(),p.bounds.end(),[](const Z& x){return x!=0;})==1) return false;
+    if (std::find(p.bounds.begin(),p.bounds.end(),1)!=p.bounds.end()) return true;
+    return {};
+}
+
+Json::Value absolute_factor(const Json::Value& q) {
+    const size_t n=q["width"].asUInt();
+    const bool marked=!q["relation"].isNull();
+    const auto input=local::decode_row(q["polynomial"].asString(),n+marked);
+    if (input.empty()) return {};
+    const auto relation=marked ? local::decode_row(q["relation"].asString(),n+1) : Terms{};
+    if (marked && relation.empty()) throw std::invalid_argument("Missing marked-field relation.");
+    const Z effort(q["effort"].asString(),10);
+    const bool coefficients_only=q["operation"].asString()=="coefficient_test";
+    std::vector<size_t> axes;
+    for (size_t j=0; j<n; ++j) {
+        if (coefficients_only || std::any_of(input.begin(),input.end(),[j](const auto& term){return term.first[j]!=0;}))
+            axes.push_back(j);
+    }
+    if (axes.empty()) return {};
+    Terms f, geometric;
+    for (const auto& [e,c] : input) {
+        Powers k;
+        for (size_t j : axes) k.push_back(e[j]);
+        geometric[k]=1;
+        if (marked) k.push_back(e.back());
+        f.emplace(std::move(k),c);
+    }
+    Json::Value points(Json::arrayValue);
+    for (const auto& [e,c] : geometric) points.append(strings(e));
+    const Support support(points);
+    if (coefficients_only) return coefficient_test(f,support,relation,effort);
+    if (q["primitive"].asBool()) return true;
+    const auto quick=support_certificate(support);
+    if (!quick.isNull()) return quick;
+    std::vector<std::string> names;
+    std::string header;
+    for (size_t j=0; j<axes.size(); ++j) {
+        names.push_back("x"+std::to_string(j));
+        header+=names.back()+" ";
+    }
+    if (!q["support_checked"].asBool()) {
+        const auto primitive_input="primitive_support\n"+header+"\n"+local::format_polynomial(geometric,names)+"\n";
+        std::unique_ptr<char,decltype(&atlas_groebner_release)> primitive(
+            atlas_affine(primitive_input.data(),primitive_input.size()),atlas_groebner_release);
+        if (!primitive) throw std::runtime_error(atlas_groebner_error());
+        if (std::string(primitive.get())=="1\n") return true;
+    }
+    if (axes.size()==2 && !marked) {
+        const auto input="plane_components 2 1 0\n"+local::encode_row(f)+"\n";
+        std::unique_ptr<char,decltype(&atlas_groebner_release)> reply(atlas_ideal(input.data(),input.size()),atlas_groebner_release);
+        if (reply) {
+            std::istringstream counts(reply.get());
+            long absolute, rational;
+            if (counts>>absolute>>rational) return absolute==1;
+        }
+    } else {
+        auto request=q;
+        request["width"]=Json::UInt64(axes.size());
+        request["polynomial"]=local::encode_row(f);
+        request["degree"]=support.degree.get_str();
+        request["homogeneous"]=std::all_of(support.rows.begin(),support.rows.end(),
+                [&](const auto& e){return degree(e)==support.degree;});
+        if (marked) {
+            Terms compact;
+            for (const auto& [e,c] : relation) {
+                Powers k(axes.size()+1);
+                k.back()=e.back();
+                compact.emplace(std::move(k),c);
+            }
+            request["relation"]=local::encode_row(compact);
+        }
+        const auto answer=projective_factor(request);
+        if (!answer.isNull()) return answer;
+    }
+    return coefficient_test(f,support,relation,effort);
+}
+
 Json::Value run(const Json::Value& q) {
     const auto op = q["operation"].asString();
+    if (op == "absolute_factor" || op == "coefficient_test") return absolute_factor(q);
+    if (op == "projection_count") {
+        const size_t width=q["width"].asUInt();
+        const Z effort(q["effort"].asString(),10);
+        return Z(width<=1 ? Z(1) : Z(width)+1+effort).get_str();
+    }
+    if (op=="linear_images" || op=="projection_rows") {
+        const size_t n=q["width"].asUInt();
+        Json::Value pairs(Json::arrayValue);
+        if (op=="projection_rows") pairs=projection(n,Z(q["index"].asString(),10));
+        else pairs.append(q["matrix"]);
+        Json::Value out(Json::arrayValue);
+        for (const auto& matrix : pairs) {
+            if (matrix.size()!=n) throw std::invalid_argument("Incorrect projection matrix dimensions.");
+            Json::Value rows(Json::arrayValue);
+            for (const auto& row : matrix) {
+                Terms f;
+                for (const auto& entry : row) {
+                    const size_t j=entry[0].asUInt();
+                    if (j>=n) throw std::invalid_argument("Invalid projection axis.");
+                    Q c(entry[1].asString(),10);
+                    if (c.get_den()==0) throw std::invalid_argument("Invalid projection coefficient.");
+                    c.canonicalize();
+                    if (c==0) continue;
+                    Powers e(n);
+                    e[j]=1;
+                    f[std::move(e)]+=c;
+                }
+                rows.append(local::encode_row(f));
+            }
+            out.append(std::move(rows));
+        }
+        return out;
+    }
+    if (op == "decomposition_step") return decomposition_step(q);
+    if (op == "projection_shape") return projection_shape(q);
+    if (op == "eligible_factors") return eligible_factors(q);
+    if (op == "projective_factor") return projective_factor(q);
     if (op == "prepare_overlap") return primary::prepare_overlap(q);
     if (op == "generic_overlap") return primary::generic_overlap(q);
     if (op == "homogenize_fraction") return homogenize_fraction(q);
@@ -253,6 +455,7 @@ Json::Value run(const Json::Value& q) {
         if (q["require_eliminant"].asBool() && eliminant < 0) return Json::Value();
         return Json::Value(eliminant);
     }
+    if (op == "absolute_factor_support") return support_certificate(p);
     if (op == "profile") {
         Json::Value r;
         r["degrees"] = strings(p.bounds);
@@ -282,29 +485,8 @@ extern "C" const char* atlas_component_geometry(const char* input) noexcept {
 extern "C" int atlas_partition_components(size_t count, const size_t* charts, const size_t* strata,
                                           int (*compare)(size_t, size_t), size_t* classes) noexcept {
     try {
-        std::iota(classes, classes + count, size_t(0));
-        auto root = [&](size_t i) {
-            while (classes[i] != i) {
-                classes[i] = classes[classes[i]];
-                i = classes[i];
-            }
-            return i;
-        };
-        for (size_t i = 0; i < count; ++i) {
-            std::set<size_t> distinct;
-            for (size_t j = 0; j < i; ++j) {
-                if (charts[i] == charts[j] || strata[i] != strata[j]) continue;
-                const auto first = root(i), second = root(j);
-                if (first == second || distinct.count(second)) continue;
-                switch (compare(i, j)) {
-                    case 1:  classes[first] = second; break;
-                    case -1: distinct.insert(second); break;
-                    case 0:  break;
-                    default: return -1;
-                }
-            }
-        }
-        for (size_t i = 0; i < count; ++i) classes[i] = root(i);
+        if (count) atlas::components::partition(count, [&](size_t i){return charts[i];},
+                                                [&](size_t i){return strata[i];}, compare, classes);
         return 0;
     } catch (...) {
         return -1;

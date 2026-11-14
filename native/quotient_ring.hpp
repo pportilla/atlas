@@ -14,6 +14,10 @@ using Value = std::variant<Polynomial, bool, std::monostate>;
 
 struct InvalidInput : std::invalid_argument { using std::invalid_argument::invalid_argument; };
 
+// Every row solves an independent coordinate appearing nowhere else. The
+// quotient over its coefficient field is a polynomial ring in all free axes.
+bool independent_graph(const Basis& rows, size_t geometric_width);
+
 class PackedReducer;
 
 class Ring {

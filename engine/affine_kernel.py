@@ -131,8 +131,9 @@ def _sparse_terms(row):
 def _polynomial(terms, variables):
     if np.native_ring(variables):
         return np.from_terms(variables, terms)
-    return sp.Add(*(sp.Rational(c.numerator, c.denominator) * sp.Mul(*(v**k for v, k in zip(variables, powers) if k))
-                    for powers, c in terms.items()))
+    from .field_polynomial import _display_sum, _display_term
+    return _display_sum(_display_term(sp.Rational(c.numerator, c.denominator), variables, powers)
+                        for powers, c in terms.items())
 
 
 @lru_cache(maxsize=64)
@@ -372,8 +373,7 @@ def rational_factors(poly):
         if gb._MODE in ("sympy", "check"):
             from tests.field_polynomial_oracle import factors
             return factors(poly)
-        raise ValueError("Native factorization accepts QQ, ZZ, or a marked number field. "
-                         "Set ATLAS_GROEBNER=sympy for another symbolic coefficient domain.")
+        raise ValueError("Native factorization accepts QQ, ZZ, or a marked number field.")
 
     scalar, rows = rational_factor_rows(poly.gens, poly.as_expr())
     return sp.Rational(scalar), [(sp.Poly.from_dict(dict(_sparse_terms(row)), *poly.gens, domain=poly.domain), m)

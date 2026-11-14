@@ -1,8 +1,13 @@
 // Exact, prefix-skipping decoding of the exhaustive resolution certificate syntax.
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
+#include "polynomial_factors.hpp"
+#include "quotient_ring.hpp"
 #include "rational_sparse_json.hpp"
+#include "resolution_tangents.hpp"
+#include "sparse_flint.hpp"
 #include <numeric>
+#include <set>
 
 namespace {
 using namespace atlas::sparse_json;
@@ -228,9 +233,103 @@ bool repeated_tangent_obstruction(const Json::Value& rows, unsigned n) {
     return true;
 }
 
+Json::Value jacobian_support(const Terms& f, size_t n) {
+    atlas::local::SparseLexRing ring(n);
+    atlas::PolyValue source(ring.ctx), derivative(ring.ctx), squarefree(ring.ctx);
+    ring.write(source.p,f);
+    using Generators=std::set<Terms>;
+    auto insert_part=[&](Generators& rows, const fmpq_mpoly_t p) {
+        if (!fmpq_mpoly_is_zero(p,ring.ctx)) {
+            atlas::rational_squarefree_part(squarefree.p,p,ring.ctx);
+            rows.insert(ring.read(squarefree.p));
+        }
+    };
+    Generators equations;
+    insert_part(equations,source.p);
+    for (size_t i=0;i<n;++i) {
+        fmpq_mpoly_derivative(derivative.p,source.p,i,ring.ctx);
+        insert_part(equations,derivative.p);
+    }
+    // Reduce by newly exposed linear equations, then strip repeated factors
+    // again. Each step preserves the common geometric zero set.
+    const Terms one{{Powers(n),1}};
+    for (size_t step=0;step<n;++step) {
+        if (equations.count(one)) { equations={one}; break; }
+        atlas::local::Basis linear;
+        for (const auto& equation:equations)
+            if (std::all_of(equation.begin(),equation.end(),[](const auto& term) {
+                return std::accumulate(term.first.begin(),term.first.end(),Z(0))<=1;
+            })) linear.push_back(equation);
+        if (linear.empty()) break;
+        atlas::quotient_ring::Ring quotient(linear,n,false);
+        Generators next(quotient.basis().begin(),quotient.basis().end());
+        if (next.count(one)) { equations={one}; break; }
+        for (const auto& row:equations) {
+            const auto remainder=std::get<Terms>(quotient.evaluate("reduce",{row}));
+            ring.write(source.p,remainder);
+            insert_part(next,source.p);
+        }
+        if (next==equations) break;
+        equations=std::move(next);
+    }
+    Json::Value rows(Json::arrayValue);
+    for (const auto& equation:equations) rows.append(atlas::local::encode_row(equation));
+    return rows;
+}
+
+Json::Value two_blowups(const Terms& f,size_t n,size_t x,size_t y) {
+    atlas::local::SparseLexRing ring(n);
+    atlas::PolyValue source(ring.ctx);
+    ring.write(source.p,f);
+    std::istringstream slopes(atlas::repeated_directions(source.p,x,y,ring.ctx));
+    Powers ex(n),ey(n);
+    ex.at(x)=1;
+    ey.at(y)=1;
+    const Terms first{{ex,1}}, second{{ey,1}};
+    Json::Value result(Json::arrayValue);
+    for (std::string slope;std::getline(slopes,slope);) {
+        Terms a=first,b=second;
+        if (slope=="vertical") std::swap(a,b);
+        else {
+            const Q q(slope);
+            if (q!=0) b.emplace(ex,-q);
+        }
+        // For tangent b=0 the composite centre is (a^3,ab,b^2).
+        // The two reduced exceptional lines are cut out by U1 and U3
+        // over a=b=0. Keep the factors for symbolic callers' display.
+        Json::Value item;
+        item["parameters"].append(atlas::local::encode_row(a));
+        item["parameters"].append(atlas::local::encode_row(b));
+        const Terms* parameters[]={&a,&b};
+        for (const std::vector<int>& product:std::vector<std::vector<int>>{{0,0,0},{0,1},{1,1}}) {
+            Json::Value factors(Json::arrayValue);
+            Terms generator{{Powers(n),1}};
+            for (int i:product) {
+                generator=atlas::primary::multiply(generator,*parameters[i]);
+                factors.append(i);
+            }
+            item["centre"].append(atlas::local::encode_row(generator));
+            item["factors"].append(std::move(factors));
+        }
+        for (int projective:{2,4}) {
+            Json::Value ideal(Json::arrayValue);
+            for (int i:{0,1,projective}) ideal.append(i);
+            item["boundary"].append(std::move(ideal));
+        }
+        result.append(std::move(item));
+    }
+    return result;
+}
+
 Json::Value decode(const Json::Value& request) {
     const auto n = request["width"].asUInt64();
     const auto op = request["operation"].asString();
+    if (op=="jacobian_support" || op=="two_blowups") {
+        if (!n) throw std::invalid_argument("Expected a positive number of coordinates.");
+        const auto f=atlas::local::decode_row(request["row"].asString(),n);
+        if (op=="jacobian_support") return jacobian_support(f,n);
+        return two_blowups(f,n,request["first"].asUInt64(),request["second"].asUInt64());
+    }
     if (op == "repeated_tangent_obstruction") return n==3 && repeated_tangent_obstruction(request["terms"],3);
     if (op == "transverse_pencil") return n==3 ? transverse_pencil(request["terms"]) : Json::Value();
     if (op == "first") {

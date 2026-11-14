@@ -15,14 +15,17 @@ def _product(parts):
 @lru_cache(maxsize=256)
 def _factor(source, names):
     from .affine_kernel import archived_factor_order
+    from .identity_atlas import origin_indices
     rows = native_library.affine_request(["factor", " ".join(names), source])
     zero = (0,)*len(names)
     scalar = sparse_row(rows[0])[zero]
     parts = [(sparse_row(row),integer_from_decimal(m)) for m,row in zip(rows[1::2],rows[2::2])]
     if len(parts) > 1:
         parts = [parts[i] for i in archived_factor_order(parts, len(names))]
-    factors = [(format_poly(poly,names), m) for poly,m in parts if zero not in poly]
-    units = [(format_poly(poly,names), m) for poly,m in parts if zero in poly]
+    active = set(origin_indices((poly for poly, _ in parts), len(names)))
+    factors, units = [], []
+    for i, (poly, m) in enumerate(parts):
+        (factors if i in active else units).append((format_poly(poly, names), m))
     if scalar != 1:
         units.insert(0,(rational_text(scalar),1))
     unit = _product(units)
@@ -107,7 +110,6 @@ def _write_free(record, chart, weighted, unit, base, uniform):
 
 def _write_local(saved, chart, factors, unit, base):
     """Remove each exceptional Cartier ideal from the original factor pullbacks."""
-    from itertools import combinations_with_replacement, product
     from .monomial_atlas import _row
     coords = tuple(saved["coordinates"])
     ambient = [_row(g,coords) for g in saved["ambient_ideal"]]
@@ -132,9 +134,9 @@ def _write_local(saved, chart, factors, unit, base):
     prefix = [(scalar,1)] if scalar != "1" else []
     chart["ambient_total_transform"] = _product(prefix+terms)
     chart["reduced_strict_transform"] = chart["strict_transform"]
-    powers = [combinations_with_replacement(c["ideal"],c["multiplicity"]) for c in components]
-    chart["strict_transform"] = [_product(prefix+[(g,1) for part in choice for g in part])
-                                 for choice in product(*powers)]
+    chart["strict_transform"] = kernel_json("atlas_identity_divisor", "strict_product_generators", unit=scalar,
+                                          components=[{"ideal": c["ideal"], "multiplicity": integer_text(c["multiplicity"])}
+                                                      for c in components])
     return weights
 
 
@@ -144,7 +146,8 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
         return reference(poly,names,mode,resolve_support)
     names = tuple(names)
     factors,unit = _factor(format_poly(poly,names),names)
-    if not any(m > 1 for _,m in factors):
+    weights = kernel_json("atlas_identity_divisor", "weight_profile", weights=[integer_text(m) for _, m in factors])
+    if not weights["repeated"]:
         return None
     if mode == "intrinsic":
         raise InputError("The germ has a repeated component through the origin. An intrinsic resolution requires the underlying reduced hypersurface.")
@@ -159,7 +162,7 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
     saved = record.get("atlas",[]) if record.get("engine") == "canonical-blowups" else []
     if not saved:
         record.pop("atlas",None)
-    uniform = len({m for _,m in factors}) == 1
+    uniform = weights["uniform"]
     weights = {}
     if record.get("engine") == "verified-ideal-blowup":
         from .graph_record import lift_graph

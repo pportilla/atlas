@@ -18,12 +18,72 @@ def level_weights(operation, weights, **fields):
     return kernel_json("atlas_centre_level", operation, weights=list(map(rational_text, weights)), **fields)
 
 
+def centre_search(operation_name, query, **fields):
+    from .chart_gluing_kernel import operation
+    return operation(dict(operation=operation_name, **fields), query, symbol="atlas_centre_search")
+
+
+def jet_order(initial, live):
+    from .centres import GiveUp
+    order = centre_search("jet_order", lambda task: live(task["i"]), initial=initial)
+    if order is None:
+        raise GiveUp("An order is beyond the limit.")
+    return order
+
+
+def divisor_subsets(labels, present, *, largest=False):
+    def query(task):
+        return present(tuple(labels[j] for j in task["indices"]))
+    selected = centre_search("divisor_subsets", query, count=len(labels), largest=largest)
+    return [tuple(labels[j] for j in row) for row in selected]
+
+
 def invariant_row(values):
     return ["inf" if x == float("inf") else rational_text(x) for x in values]
 
 
-def maximum_indices(values):
-    return level_weights("maximum", (), values=[[invariant_row(value),invariant_row(key)] for value,key in values])
+def maximum_indices(values, birth_width=0):
+    rows = [None if item is None else [invariant_row(item[0]), invariant_row(item[1])] for item in values]
+    return level_weights("maximum", (), values=rows, birth_width=birth_width)
+
+
+def surface_maxima(steps):
+    rows = [None if step is None else [invariant_row(step[0][:3]), step[0][3]] for step in steps]
+    return level_weights("surface_maximum", (), values=rows)
+
+
+def centre_rows(variables, generators):
+    from .affine_kernel import frame_function
+    from .kernel import _lines
+    return _lines(variables, (frame_function(variables, g) for g in generators))
+
+
+def cover_products(variables, holes):
+    from .kernel import exprs
+    rows = level_weights("cover_products", (), width=len(variables), holes=[centre_rows(variables, z) for z in holes])
+    return list(exprs(variables, rows))
+
+
+def order_fields(variables, parts):
+    """Align chart coordinate identities with the order of expression presentation."""
+    from .chart_expressions import chart_expressions
+    from .native_polynomial import native_ring
+    if native_ring(variables):
+        keys = [v._coords[0] for v in variables]
+        width = len(str(len(keys)))
+        positions = {v: str(i).zfill(width) for i, v in enumerate(sorted(keys))}
+        return {"coordinate_keys": [positions[v] for v in keys]}
+    # Callers also accept SymPy objects with their own display convention.
+    # Only their presentation order is passed to the arithmetic kernel.
+    indices = sorted(range(len(parts)), key=lambda i: chart_expressions(variables).default_sort_key(parts[i]))
+    rank = dict(zip(indices,range(len(indices))))
+    return {"coordinate_keys": [v.name for v in variables], "display_rank": [rank[i] for i in range(len(parts))]}
+
+
+def ordered_parts(variables, parts, degrees=()):
+    fields = order_fields(variables, parts)
+    return level_weights("ordered_parts", (), **fields, parts=[centre_rows(variables, part) for part in parts],
+                         degrees=[rational_text(d) for d in degrees])
 
 
 class Presentation:

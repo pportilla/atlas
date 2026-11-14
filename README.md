@@ -62,3 +62,4 @@ Finished rows offer the recorded complex, charts, and follow-up zeta calculation
 - [Resolution algorithms](docs/resolution-pipeline.md) and [resolution records](docs/resolution-records.md)
 - [HTTP API and optional GPU support](docs/http-and-compute.md)
 - [Kernel algorithms and proofs](native/KERNEL.md) and [benchmarks](benchmarks/README.md)
+- [Lean verification roadmap](docs/lean-verification-roadmap.md)

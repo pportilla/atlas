@@ -19,6 +19,7 @@ class TracePolicyTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "profile.json"
         for mock in (patch.dict(os.environ, ATLAS_TRACE_PROFILE=str(self.path)),
+                     patch.object(trace_policy, "_host", return_value={"kernels": "test-kernel-fingerprint"}),
                      patch.object(native, "_warm_trace", set())):
             mock.start()
             self.addCleanup(mock.stop)

@@ -19,6 +19,27 @@ class NumberFieldPolynomials(unittest.TestCase):
             with self.assertRaisesRegex(ArithmeticError, "make groebner"):
                 field_factors.factors(p)
 
+    def test_external_polynomial_rows_are_rendered_without_symbolic_arithmetic(self):
+        from engine.field_polynomial import _line_expression
+        from engine.affine_kernel import _polynomial
+        from fractions import Fraction
+        x, theta = sp.symbols("held_x held_theta")
+        root = sp.sqrt(7)
+        field = sp.QQ.algebraic_field(root)
+        n = 2**64+7
+        expression = (root*x+1)**n
+        polynomial = sp.Poly((3+root)*x**3+root,x,domain=field)
+        expected = ((theta*x+1)**n, (3+theta)*x**3+theta, 2*x**n-3, 2*x**n-3)
+        with ExitStack() as guard:
+            for name in ("__add__","__radd__","__mul__","__rmul__","__pow__","__rpow__"):
+                guard.enter_context(patch.object(sp.Expr,name,side_effect=AssertionError(name)))
+            for cls in (sp.Add,sp.Mul):
+                guard.enter_context(patch.object(cls,"flatten",side_effect=AssertionError(cls.__name__)))
+            found = (lift(expression,(x,),field,theta),lift(polynomial,(x,),field,theta),
+                     _line_expression(f"2 {n} 0;-3 0 0",(x,),field),
+                     _polynomial({(n,):Fraction(2),(0,):Fraction(-3)},(x,)))
+        self.assertEqual(found,expected)
+
     def test_third_party_scalar_requires_explicit_symbolic_coercion(self):
         from engine.field_coefficient import root_position, UnsupportedExpression
         from engine.native_library import Unavailable
@@ -37,7 +58,7 @@ class NumberFieldPolynomials(unittest.TestCase):
         with patch.object(field,"convert",side_effect=AssertionError("symbolic coercion")), \
              patch.object(field,"to_sympy",side_effect=AssertionError("symbolic expansion")), \
              patch.object(sp.PurePoly,"same_root",side_effect=AssertionError("symbolic isolation")):
-            with self.assertRaisesRegex(UnsupportedExpression,"CRootOf.*ATLAS_GROEBNER=sympy"):
+            with self.assertRaisesRegex(UnsupportedExpression,"CRootOf.*marked field"):
                 lift(value,(),field,theta)
             with self.assertRaisesRegex(UnsupportedExpression,"CRootOf"):
                 root_position(poly,value)

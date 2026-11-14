@@ -1,0 +1,475 @@
+{
+  "cpu_affinity": [
+    15
+  ],
+  "library_sha256": "20ac57b70acd3294dab0a8d7361fbd75dfcd183654cd4dd25fadb12cfa9bba66",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "Identical rational inputs. Atlas includes the native request and sparse decoding of pre-encoded rows. Singular eliminates scalar graph pivots, computes a primary decomposition and checks its intersection against the original ideal. For chart 23 Singular verifies the complete intersection's height and decomposes its two factor branches. It tests every associated prime, including embedded ones, by exact fibre or normal form. Both timings exclude process startup. Singular reports computation alone and time including polynomial input. Small examples separately compare ordinary saturation plus ideal equality under a separate timer. Alternating trial order, one fixed CPU for the recorded run.",
+  "comparisons": [
+    {
+      "case": "embedded_prime_hit",
+      "regular": false,
+      "full_saturation_compared": true,
+      "terms": [
+        1,
+        1,
+        1
+      ],
+      "trials_ms": {
+        "Atlas": [
+          0.310558,
+          0.264159,
+          0.096152,
+          0.239172,
+          0.088057,
+          0.241056,
+          0.09501,
+          0.260162,
+          0.096803
+        ],
+        "Singular": [
+          13.007,
+          13.032,
+          13.038,
+          13.239,
+          12.871,
+          12.889,
+          12.759,
+          12.648,
+          12.629
+        ],
+        "Singular_with_input": [
+          13.055,
+          13.08,
+          13.116,
+          13.285,
+          12.92,
+          12.934,
+          12.805,
+          12.697,
+          12.681
+        ],
+        "Singular_full_saturation_and_equality": [
+          0.179,
+          0.208,
+          0.165,
+          0.179,
+          0.18,
+          0.179,
+          0.177,
+          0.179,
+          0.202
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.239172,
+        "Singular": 12.889,
+        "Singular_with_input": 12.934,
+        "Singular_full_saturation_and_equality": 0.179
+      }
+    },
+    {
+      "case": "embedded_prime_avoided",
+      "regular": true,
+      "full_saturation_compared": true,
+      "terms": [
+        1,
+        1,
+        2
+      ],
+      "trials_ms": {
+        "Atlas": [
+          0.241387,
+          0.236547,
+          0.101803,
+          0.247217,
+          0.114847,
+          0.249752,
+          0.10055,
+          0.250584,
+          0.114546
+        ],
+        "Singular": [
+          13.075,
+          12.572,
+          12.685,
+          12.589,
+          12.643,
+          12.581,
+          13.145,
+          12.531,
+          12.697
+        ],
+        "Singular_with_input": [
+          13.133,
+          12.623,
+          12.742,
+          12.642,
+          12.698,
+          12.631,
+          13.197,
+          12.582,
+          12.747
+        ],
+        "Singular_full_saturation_and_equality": [
+          0.172,
+          0.17,
+          0.181,
+          0.183,
+          0.177,
+          0.179,
+          0.221,
+          0.179,
+          0.177
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.236547,
+        "Singular": 12.643,
+        "Singular_with_input": 12.698,
+        "Singular_full_saturation_and_equality": 0.179
+      }
+    },
+    {
+      "case": "two_thick_components",
+      "regular": true,
+      "full_saturation_compared": true,
+      "terms": [
+        1,
+        1,
+        2
+      ],
+      "trials_ms": {
+        "Atlas": [
+          0.249772,
+          0.265853,
+          0.108054,
+          0.283256,
+          0.116139,
+          0.255734,
+          0.104548,
+          0.193335,
+          0.053071
+        ],
+        "Singular": [
+          10.606,
+          10.497,
+          10.45,
+          10.761,
+          10.255,
+          10.597,
+          11.871,
+          11.899,
+          7.808
+        ],
+        "Singular_with_input": [
+          10.664,
+          10.55,
+          10.502,
+          10.812,
+          10.306,
+          10.651,
+          11.959,
+          11.955,
+          7.851
+        ],
+        "Singular_full_saturation_and_equality": [
+          0.199,
+          0.188,
+          0.204,
+          0.215,
+          0.176,
+          0.192,
+          0.22,
+          0.164,
+          0.168
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.193335,
+        "Singular": 10.597,
+        "Singular_with_input": 10.651,
+        "Singular_full_saturation_and_equality": 0.192
+      }
+    },
+    {
+      "case": "one_thick_component_hit",
+      "regular": false,
+      "full_saturation_compared": true,
+      "terms": [
+        1,
+        1,
+        1
+      ],
+      "trials_ms": {
+        "Atlas": [
+          0.22748,
+          0.228392,
+          0.067017,
+          0.242158,
+          0.070363,
+          0.245294,
+          0.066756,
+          0.234523,
+          0.06899
+        ],
+        "Singular": [
+          9.845,
+          9.929,
+          10.059,
+          10.278,
+          9.984,
+          9.962,
+          9.983,
+          10.08,
+          9.917
+        ],
+        "Singular_with_input": [
+          9.888,
+          9.974,
+          10.107,
+          10.324,
+          10.029,
+          10.006,
+          10.029,
+          10.129,
+          9.964
+        ],
+        "Singular_full_saturation_and_equality": [
+          0.156,
+          0.162,
+          0.164,
+          0.168,
+          0.157,
+          0.164,
+          0.163,
+          0.162,
+          0.164
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.22748,
+        "Singular": 9.983,
+        "Singular_with_input": 10.029,
+        "Singular_full_saturation_and_equality": 0.163
+      }
+    },
+    {
+      "case": "components_without_rational_points",
+      "regular": true,
+      "full_saturation_compared": true,
+      "terms": [
+        2,
+        1,
+        2
+      ],
+      "trials_ms": {
+        "Atlas": [
+          0.689073,
+          0.621185,
+          0.314385,
+          0.577682,
+          0.329243,
+          0.584446,
+          0.331497,
+          0.591709,
+          0.34907
+        ],
+        "Singular": [
+          12.854,
+          12.915,
+          13.006,
+          13.055,
+          12.765,
+          12.841,
+          13.103,
+          13.096,
+          12.785
+        ],
+        "Singular_with_input": [
+          12.909,
+          12.97,
+          13.059,
+          13.11,
+          12.82,
+          12.903,
+          13.16,
+          13.153,
+          12.841
+        ],
+        "Singular_full_saturation_and_equality": [
+          0.176,
+          0.161,
+          0.175,
+          0.172,
+          0.163,
+          0.175,
+          0.178,
+          0.176,
+          0.189
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.577682,
+        "Singular": 12.915,
+        "Singular_with_input": 12.97,
+        "Singular_full_saturation_and_equality": 0.175
+      }
+    },
+    {
+      "case": "B9_chart_1",
+      "regular": true,
+      "full_saturation_compared": false,
+      "terms": [
+        6,
+        4,
+        2,
+        2872
+      ],
+      "trials_ms": {
+        "Atlas": [
+          23.620405,
+          22.460211,
+          22.484747,
+          22.834118,
+          22.848235,
+          22.182236,
+          21.919008,
+          22.781829,
+          22.457025
+        ],
+        "Singular": [
+          28.492,
+          28.1,
+          28.103,
+          28.374,
+          28.233,
+          28.233,
+          28.09,
+          28.397,
+          28.17
+        ],
+        "Singular_with_input": [
+          46.808,
+          46.026,
+          46.103,
+          46.455,
+          46.367,
+          46.394,
+          46.359,
+          46.193,
+          46.132
+        ]
+      },
+      "median_ms": {
+        "Atlas": 22.484747,
+        "Singular": 28.233,
+        "Singular_with_input": 46.359
+      }
+    },
+    {
+      "case": "B9_chart_22",
+      "regular": true,
+      "full_saturation_compared": false,
+      "terms": [
+        11,
+        10,
+        3,
+        3,
+        1170
+      ],
+      "trials_ms": {
+        "Atlas": [
+          35.226241,
+          35.814243,
+          35.929751,
+          37.819124,
+          37.319739,
+          35.942124,
+          37.14495,
+          36.254656,
+          35.771372
+        ],
+        "Singular": [
+          111.146,
+          110.553,
+          112.853,
+          113.889,
+          115.453,
+          112.417,
+          113.858,
+          112.666,
+          113.157
+        ],
+        "Singular_with_input": [
+          118.218,
+          117.933,
+          120.217,
+          121.287,
+          122.994,
+          119.838,
+          121.396,
+          119.977,
+          120.522
+        ]
+      },
+      "median_ms": {
+        "Atlas": 35.942124,
+        "Singular": 112.853,
+        "Singular_with_input": 120.217
+      }
+    },
+    {
+      "case": "B9_chart_23",
+      "regular": true,
+      "full_saturation_compared": false,
+      "terms": [
+        8,
+        12,
+        4,
+        13,
+        435
+      ],
+      "trials_ms": {
+        "Atlas": [
+          35.822529,
+          36.301263,
+          40.306338,
+          42.654167,
+          42.674305,
+          25.658348,
+          24.577445,
+          23.668406,
+          23.62312
+        ],
+        "Singular": [
+          336.176,
+          334.597,
+          378.345,
+          379.902,
+          383.063,
+          282.824,
+          243.998,
+          241.406,
+          245.234
+        ],
+        "Singular_with_input": [
+          338.105,
+          336.497,
+          380.428,
+          381.923,
+          385.074,
+          284.725,
+          245.473,
+          242.931,
+          246.655
+        ]
+      },
+      "median_ms": {
+        "Atlas": 35.822529,
+        "Singular": 334.597,
+        "Singular_with_input": 336.497
+      }
+    }
+  ]
+}

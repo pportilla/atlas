@@ -9,6 +9,7 @@ chart cover. All claims are over the algebraic closure of Q.
 from fractions import Fraction
 
 from .incidence import incidence
+from .kernel_json import kernel_json
 from .polynomial import LimitError, rational_text
 from .binomial_kernel import _encode, pairings, primitive_character, run, signed_powers
 
@@ -89,25 +90,25 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
     if mode=="embedded":
         return dual,chart_divisors
 
-    def lift(record,j):
-        r={**record,"id":f"{record['id']}.{j}","root":f"alpha1_{j}","root_index":j}
-        for field in ("vertices","faces"):
-            if field in r:
-                r[field]=[f"{key}.{j}" for key in r[field]]
-        return r
-
+    sources = [*dual["vertices"], *dual["cells"]]
+    layout = [{k: item[k] for k in ("id", "vertices", "faces") if k in item} for item in sources]
+    sheets = kernel_json("atlas_torus_sections", "binomial_sheets", degree=degree_text, layout=layout)["layout"]
+    lifted = {}
+    for item, copies in zip(sources, sheets, strict=True):
+        for copy in copies:
+            copy["root_index"] = int(copy["root_index"])
+        lifted[item["id"]] = copies
     for field in ("vertices","cells"):
-        dual[field]=[lift(item,j) for item in dual[field] for j in range(1,degree+1)]
+        dual[field]=[{**item, **copy} for item in dual[field] for copy in lifted[item["id"]]]
     for ci,divisors in enumerate(chart_divisors):
         if not divisors:
             continue
         branches=binomial_branch_equations(rays,cones[ci],delta,coefficient,values=tuple(signs[r] for r in cones[ci]))
         expanded=[]
         for component in divisors:
-            for branch in branches:
-                j=branch["root_index"]
+            for copy, branch in zip(lifted[component["id"]], branches, strict=True):
                 ideal=[*component["ideal"],branch["equation"]]
-                expanded.append({**lift(component,j),"root_equation":branch["equation"],
+                expanded.append({**component, **copy, "root_equation":branch["equation"],
                                  "ideal":ideal,"ambient_ideal":list(ideal),"equation":", ".join(ideal)})
         chart_divisors[ci]=expanded
     return dual,chart_divisors

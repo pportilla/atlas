@@ -87,6 +87,44 @@ def present_outside(variables, ideal, removed):
 
 
 @_optional
+def graph_parent_slice(variables, ambient, divisor, pivot, points):
+    """Certify a point of the original divisor away from this blowup pivot's zero set."""
+    if not points:
+        return None
+    _require(len(variables) + 1)
+    rows = _lines(variables, (*ambient, *divisor, pivot))
+    zero_powers = " 0" * len(variables)
+    coordinates = [str(value) + zero_powers for value in points[0]]
+    answer = _ask(f"graph_parent_slice {len(variables)} {len(ambient) + len(divisor)}",
+                  (*rows, *coordinates))
+    return True if answer == ["yes"] else None
+
+
+@_optional
+def graph_centre_points(variables, equations):
+    """Rational points certified on the centre, to use as incidence witnesses."""
+    _require(len(variables))
+    if not hasattr(_kernel(), "atlas_graph_centre_incidence_abi"):
+        return None
+    rows = _ask(f"graph_centre_points {len(variables)}", _lines(variables, equations))
+    return tuple(tuple(row.split()) for row in rows)
+
+
+@_optional
+def graph_centre_incidence(variables, equations, parent_points):
+    """Whether a parent point with all new ratios zero certifies this closed locus."""
+    if not parent_points:
+        return False
+    _require(len(variables))
+    if not hasattr(_kernel(), "atlas_graph_centre_incidence_abi"):
+        return None
+    sizes = (len(variables), len(equations), len(parent_points[0]), len(parent_points))
+    header = "graph_centre_incidence " + " ".join(map(str, sizes))
+    rows = _lines(variables, equations) + [" ".join(map(str, point)) for point in parent_points]
+    return _ask(header, rows) == ["yes"]
+
+
+@_optional
 def dimension(variables, ideal):
     """Krull dimension, with -1 for the empty scheme."""
     try:
@@ -130,11 +168,47 @@ def graph_strict_part(variables, ambient, pivot, function):
 
 
 @_optional
+def centre_power_transforms(variables, ambient, centre, function, charts):
+    """One parent identity gives a candidate order and quotient on every graph chart."""
+    if _MODE == "sympy" or not hasattr(_kernel(), "atlas_centre_power_transforms_abi"):
+        return None
+    from .affine_kernel import _request, _ring, _sparse_expression
+    ring = _ring(tuple(variables))
+    rows = _request(["centre_power_transforms", ring.header, str(len(ambient)), str(len(centre)),
+                     *map(ring.text, ambient), *map(ring.text, centre), ring.text(function)])
+    if rows == ["none"]:
+        return None
+    if len(rows) != 1 + len(centre) or len(charts) != len(centre):
+        raise ArithmeticError("Expected one centre-power quotient per graph chart.")
+    return int(rows[0]), tuple(_sparse_expression(chart.variables, rows[chart.pivot_index + 1])
+                               for chart in charts)
+
+
+@_optional
+def certify_exceptional_orders(variables, base, quotients, threshold):
+    """Certify the given pivot quotients on every exceptional component using one basis."""
+    _require(len(variables))
+    if not hasattr(_kernel(), "atlas_exceptional_orders_abi"):
+        return None
+    rows = _ask(f"certify_exceptional_orders {len(variables)} {threshold} {len(base)}",
+                _lines(variables, (*base, *quotients)))
+    if len(rows) != len(quotients):
+        raise ArithmeticError("Expected one exceptional-order certificate per quotient.")
+    return tuple(bool(int(row)) for row in rows)
+
+
+@_optional
 def residual_dimension_below(variables, base, residual, threshold):
     """Whether the dimension after adding the residual ideal is below the threshold."""
-    _require(len(variables))
-    rows = _ask(f"residual_dimension_below {len(variables)} {threshold} {len(base)}",
-                _lines(variables, (*base, *residual)))
+    try:
+        _require(len(variables))
+        rows = _ask(f"residual_dimension_below {len(variables)} {threshold} {len(base)}",
+                    _lines(variables, (*base, *residual)))
+    except _Unsuitable:
+        from .affine_kernel import _request, _ring
+        ring = _ring(tuple(variables))
+        rows = _request(["wide_dimension_below", ring.header, "grevlex", str(threshold),
+                         *map(ring.text, (*base, *residual))])
     return bool(int(rows[0]))
 
 
@@ -317,6 +391,19 @@ def surface_step(variables, equations, functions, working, units=(), threefold=0
         at += 1 + count
     return found
 
+
+
+def wide_crossings(variables, dimension, ambient, divisors, fibre, region):
+    from .chart_kernel import crossing_loci
+    from .affine_kernel import _request, _ring
+    ring = _ring(tuple(variables))
+    def ideal(gens):
+        return [str(len(gens)), *(ring.text(g) for g in gens)]
+    request = ["wide_crossing_loci", ring.header, str(dimension), *ideal(ambient), *ideal(fibre), str(len(divisors))]
+    for part in divisors:
+        request.extend(ideal(part))
+    found = crossing_loci(_request([*request, *ideal(region)]))
+    return [(indices, inside, _exprs(variables, rows)) for indices, inside, rows in found]
 
 
 @_optional

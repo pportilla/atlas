@@ -76,6 +76,7 @@ Hessian of some generator of its ideal is not degenerate there.
 from time import monotonic
 
 from .chart_expressions import chart_expressions
+from .centre_weights import centre_search, cover_products, level_weights, ordered_parts, surface_maxima
 
 from .affine_kernel import frame_derivative, frame_function, frame_linear, frame_locus, frame_minor, frame_restrict
 from .blowup_ideal import empty_locus, ideal_basis, radical_subset, saturate
@@ -115,43 +116,57 @@ def _models(variables, equations, functions, working, threefold=0):
                 raise NoModel("A chart does not reduce to a plane.")
             yield names, units, fns, work, (), 0
             continue
-        for e, _ in sorted(tagged, key=lambda item: chart_expressions(variables).count_ops(item[0])):
-            done = False
-            for y in names:
-                linear = frame_linear(names, e, y)
-                if linear is None:
-                    continue
-                a, b = linear
-                # The substitution y=-b/a is defined precisely on this open.
-                hit = [w for w in work if not _empty(names, (*units, a), (*eqs, *w))]
-                if not hit:
-                    continue
-                rest = tuple(v for v in names if v != y)
+        selected = {}
+        def linear_open(task):
+            e, y = tagged[task["i"]][0], names[task["axis"]]
+            linear = frame_linear(names, e, y)
+            if linear is None:
+                return None
+            a, b = linear
+            hit = [j for j,w in enumerate(work) if not _empty(names, (*units, a), (*eqs, *w))]
+            if not hit:
+                return None
+            selected["linear"] = linear
+            return hit
 
-                def move(f, y=y, a=a, b=b, names=names):
-                    return frame_restrict(names, f, y, a, b)
+        choice = centre_search("surface_model", linear_open, width=len(names),
+                               costs=[chart_expressions(variables).count_ops(e) for e,_ in tagged])
+        if choice is not None:
+            e, y = tagged[choice["i"]][0], names[choice["axis"]]
+            a, b = selected["linear"]
+            hit = [work[j] for j in choice["hit"]]
+            rest = tuple(v for v in names if v != y)
 
-                def ideal(gens, move=move):
-                    return tuple(g for g in map(move, gens) if g != 0)
+            def move(f, y=y, a=a, b=b, names=names):
+                return frame_restrict(names, f, y, a, b)
 
-                moved = [(move(other), flag) for other, flag in tagged if other is not e]
-                pending.append((rest, [(g, flag) for g, flag in moved if g != 0],
-                                {label: move(f) for label, f in fns.items()}, (*ideal(units), a),
-                                [ideal(w) for w in hit]))
-                left = [w for w in work if w not in hit] + ([] if a.is_number else [(*w, a) for w in hit])
-                left = [w for w in left if not _empty(names, units, (*eqs, *w))]
-                if left:
-                    pending.append((names, tagged, fns, units, left))
-                done = True
-                break
-            if done:
-                break
+            def ideal(gens, move=move):
+                return tuple(g for g in map(move, gens) if g != 0)
+
+            moved = [(move(other), flag) for other, flag in tagged if other is not e]
+            pending.append((rest, [(g, flag) for g, flag in moved if g != 0],
+                            {label: move(f) for label, f in fns.items()}, (*ideal(units), a),
+                            [ideal(w) for w in hit]))
+            left = [w for w in work if w not in hit] + ([] if a.is_number else [(*w, a) for w in hit])
+            left = [w for w in left if not _empty(names, units, (*eqs, *w))]
+            if left:
+                pending.append((names, tagged, fns, units, left))
         else:
             work = [w for w in work if not _empty(names, units, (*eqs, *w))]
             if work:
                 # The equations left are used as they are, those of the chart first.
                 first = [e for e, flag in tagged if flag]
                 yield names, units, fns, work, (*first, *(e for e, flag in tagged if not flag)), len(first)
+
+
+def _surface_search(variables, labels, query, *, implicit=False):
+    from .kernel import exprs
+    from .binomial_kernel import _integer
+    result = centre_search("surface_plan", query, labels=labels, implicit=implicit)
+    if result is None:
+        return None
+    key = (result["kind"], _integer(result["top"]), int(result["point"]), tuple(labels[i] for i in result["labels"]))
+    return key, result["type"], exprs(variables, result["ideal"])
 
 
 def _plane_step(names, units, functions, working):
@@ -184,31 +199,37 @@ def _plane_step(names, units, functions, working):
                 curves.setdefault(p, {})[label] = power
     if not curves:
         return None
-    whole = expand(chart_expressions(names).prod(curves))
-    first = [derivative(whole, v) for v in names]
-    hessian = frame_minor(names, first, names)
-    if here((whole, *first, hessian)):
-        return (3, 0, 0, ()), "points", (whole, *first, hessian)
-    from .binomial_kernel import _integer, run
-    columns = sorted(functions)
-    choice, *matches = run(f"surface_curve_matches {len(curves)} {len(columns)}",
-                  *(tuple(orders.get(label, 0) for label in columns) for orders in curves.values()))
-    if choice != "none":
-        top, *selected = map(_integer, choice.split())
-        labels = tuple(columns[j] for j in selected)
-        equations = tuple(curves)
-        chosen = [equations[j] for j in map(int,matches[0].split())]
-        together = expand(chart_expressions(names).prod(chosen))
-        singular = (together, derivative(together, s), derivative(together, t))
-        if here(singular, everywhere=True):
-            return (2, top, 1, labels), "points", singular
-        return (2, top, 0, labels), "curve", (together,)
-    for label in sorted(functions, reverse=True):
-        trace = expand(chart_expressions(names).prod((p for p, m in curves.items() if label in m)))
+    from .binomial_kernel import run
+    from .centre_weights import centre_rows
+    columns = level_weights("label_order", (), labels=list(functions))
+
+    def query(task):
+        operation = task["query"]
+        if operation == "nonordinary":
+            whole = expand(chart_expressions(names).prod(curves))
+            first = [derivative(whole, v) for v in names]
+            bad = (whole, *first, frame_minor(names, first, names))
+            return centre_rows(names,bad) if here(bad) else None
+        if operation == "curve_choice":
+            choice, *matches = run(f"surface_curve_matches {len(curves)} {len(columns)}",
+                                   *(tuple(o.get(label,0) for label in columns) for o in curves.values()))
+            if choice == "none":
+                return None
+            top, *indices = choice.split()
+            equations = tuple(curves)
+            together = expand(chart_expressions(names).prod(equations[j] for j in map(int,matches[0].split())))
+            return dict(top=top, labels=list(map(int,indices)), ideal=centre_rows(names,(together,)))
+        if operation == "curve_singular":
+            from .kernel import exprs
+            together, = exprs(names, task["ideal"])
+            singular = (together, derivative(together, s), derivative(together, t))
+            return centre_rows(names,singular) if here(singular,everywhere=True) else None
+        label = columns[task["i"]]
+        trace = expand(chart_expressions(names).prod(p for p,m in curves.items() if label in m))
         nodes = (trace, derivative(trace, s), derivative(trace, t))
-        if trace.free_symbols and here(nodes):
-            return (1, 0, 0, (label,)), "points", nodes
-    return None
+        return centre_rows(names,nodes) if trace.free_symbols and here(nodes) else None
+
+    return _surface_search(names, columns, query)
 
 
 def _implicit_step(frame, functions, working, deadline=None):
@@ -251,76 +272,77 @@ def _implicit_step(frame, functions, working, deadline=None):
     labels = [label for label, f in functions.items() if here((f,))]
     if not labels:
         return None
-    product = expanded(chart_expressions(ring).prod((functions[label] for label in labels)))
-    whole = radical((*base, product))
-    a, b = frame.coords
-    gradients = []
-    for g in whole:
-        if g not in base:
-            gradients.append((frame.derivative(g, a), frame.derivative(g, b)))
-    # The Hessian is only tested at singular points in the working set.
-    # Reducing its entries modulo each such slice before multiplication
-    # preserves the determinant there and keeps the checked equations small.
-    singular = (*whole, *(d for gradient in gradients for d in gradient if d != 0))
-    slices = [w for w in working if not frame.empty(*singular, *w)]
-    if slices:
-        # Differentiating a representative of the first derivative is valid:
-        # the frame fields are tangent to its equations.
-        da, db = frame.field(a), frame.field(b)
-        entries = [(frame_derivative(ring, ga, da), frame_derivative(ring, ga, db),
-                    frame_derivative(ring, gb, db)) for ga, gb in gradients if ga != 0 or gb != 0]
-        from .affine_kernel import _request, _ring, _sparse_expression
-        wire = _ring(ring)
+    from .centre_weights import centre_rows
+    from .kernel import exprs
+    def nonordinary():
+        product = expanded(chart_expressions(ring).prod((functions[label] for label in labels)))
+        whole = radical((*base, product))
+        a, b = frame.coords
+        gradients = []
+        for g in whole:
+            if g not in base:
+                gradients.append((frame.derivative(g, a), frame.derivative(g, b)))
+        # The Hessian is only tested at singular points in the working set.
+        # Reducing its entries modulo each such slice before multiplication
+        # preserves the determinant there and keeps the checked equations small.
+        singular = (*whole, *(d for gradient in gradients for d in gradient if d != 0))
+        slices = [w for w in working if not frame.empty(*singular, *w)]
+        if slices:
+            # Differentiating a representative of the first derivative is valid:
+            # the frame fields are tangent to its equations.
+            da, db = frame.field(a), frame.field(b)
+            entries = [(frame_derivative(ring, ga, da), frame_derivative(ring, ga, db),
+                        frame_derivative(ring, gb, db)) for ga, gb in gradients if ga != 0 or gb != 0]
+            from .affine_kernel import _request, _ring, _sparse_expression
+            wire = _ring(ring)
 
-        def determinants(rows):
-            lines = (wire.text(value) for triple in rows for value in triple)
-            result = _request(["symmetric_determinants", wire.header, *lines])
-            return tuple(_sparse_expression(ring, row) for row in result)
+            def determinants(rows):
+                lines = (wire.text(value) for triple in rows for value in triple)
+                result = _request(["symmetric_determinants", wire.header, *lines])
+                return tuple(_sparse_expression(ring, row) for row in result)
 
-        for w in slices:
-            slice_basis = groebner((*base, *singular, *w), ring)
-            hessians = determinants(tuple(slice_basis.reduce(g)[1] for g in row) for row in entries)
-            if not frame.empty(*singular, *w, *hessians):
-                # The centre itself must still use the whole singular locus;
-                # the working ideals only select which step has priority.
-                whole_hessians = determinants(entries)
-                return (3, 0, 0, ()), "points", (*singular, *whole_hessians)
-    # For each divisor, the unions of its curves of multiplicity at least 1, 2, ...
-    levels = {}
-    for label in labels:
-        current, found = (*base, functions[label]), []
-        while len(found) < 64:
-            reduced = radical(current)
+            for w in slices:
+                slice_basis = groebner((*base, *singular, *w), ring)
+                hessians = determinants(tuple(slice_basis.reduce(g)[1] for g in row) for row in entries)
+                if not frame.empty(*singular, *w, *hessians):
+                    # The centre itself must still use the whole singular locus;
+                    # the working ideals only select which step has priority.
+                    whole_hessians = determinants(entries)
+                    return centre_rows(ring, (*singular, *whole_hessians))
+        return None
+
+    labels = level_weights("label_order", (), labels=labels)
+    levels = {label: [] for label in labels}
+    current = {label: (*base, functions[label]) for label in labels}
+
+    def query(task):
+        action = task["query"]
+        if action == "nonordinary":
+            return nonordinary()
+        if action == "next_level":
+            label = labels[task["i"]]
+            reduced = radical(current[label])
             if not here(reduced):
-                break
-            found.append(reduced)
-            current = quotient(current, reduced)
-        levels[label] = found
-    from .centre_weights import maximum_indices
-    ordered = sorted(levels)
-    j = maximum_indices(((len(levels[label]),),(i,)) for i,label in enumerate(ordered))[0]
-    top = len(levels[ordered[j]])
-    chosen = None
-    if top >= 2:
-        key = (ordered[j],)
-        chosen = levels[key[0]][-1]
-    else:
-        for first, second in sorted(((a, b) for a in labels for b in labels if a < b), reverse=True):
-            outside = saturate(ring, levels[first][0], functions[second])
-            inside = levels[first][0] if tuple(outside) == (1,) else quotient(levels[first][0], outside)
-            if here(inside):
-                key, chosen = (first, second), tuple(inside)
-                break
-    if chosen is not None:
-        singular = (*chosen, *derived(chosen))
-        if here(singular, everywhere=True):
-            return (2, top, 1, key), "points", singular
-        return (2, top, 0, key), "curve", chosen
-    for label in sorted(labels, reverse=True):
-        nodes = (*levels[label][0], *derived(levels[label][0]))
-        if here(nodes):
-            return (1, 0, 0, (label,)), "points", nodes
-    return None
+                return False
+            levels[label].append(reduced)
+            current[label] = quotient(current[label], reduced)
+            return True
+        if action == "highest_curve":
+            return centre_rows(ring, levels[labels[task["i"]]][-1])
+        if action == "shared_curve":
+            first, second = labels[task["a"]], labels[task["b"]]
+            outside = saturate(ring,levels[first][0],functions[second])
+            inside = levels[first][0] if tuple(outside)==(1,) else quotient(levels[first][0],outside)
+            return centre_rows(ring,inside) if here(inside) else None
+        if action == "curve_singular":
+            chosen = exprs(ring,task["ideal"])
+            singular = (*chosen,*derived(chosen))
+            return centre_rows(ring,singular) if here(singular,everywhere=True) else None
+        trace = levels[labels[task["i"]]][0]
+        nodes = (*trace,*derived(trace))
+        return centre_rows(ring,nodes) if here(nodes) else None
+
+    return _surface_search(ring, labels, query, implicit=True)
 
 
 def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
@@ -350,9 +372,7 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
         # rest is covered by the open sets u != 0, u a product of one generator
         # of each Z. Such an open set is the chart t*u = 1 with one variable
         # more, which the models below eliminate again.
-        covers = [chart_expressions(variables).sympify(1)]
-        for ideal in away:
-            covers = [frame_function(variables, u*g) for u in covers for g in ideal]
+        covers = cover_products(variables, away)
         t = chart_expressions(variables).Dummy("off")
         found, left = [], working
         for unit in dict.fromkeys(covers):
@@ -376,14 +396,13 @@ def _best(variables, found):
     """Of the steps found on the open sets used, the one with the largest key; its locus is the union of theirs."""
     if not found:
         return None
-    from .centre_weights import maximum_indices
-    labels = sorted({label for item in found for label in item[0][3]})
-    positions = {label:i for i,label in enumerate(labels)}
-    indices = maximum_indices((key[:3],tuple(positions[label] for label in key[3])) for key,_,_ in found)
+    indices = surface_maxima(found)
     key, kind, _ = found[indices[0]]
-    centres = sorted({found[i][2] for i in indices}, key=chart_expressions(variables).default_sort_key)
-    centre = centres[0]
-    for other in centres[1:]:
+    centres = list(dict.fromkeys(found[i][2] for i in indices))
+    order = ordered_parts(variables, centres)
+    centre = centres[order[0]]
+    for i in order[1:]:
+        other = centres[i]
         centre = tuple(ideal_basis(variables, _intersection(variables, centre, other)))
     return key, kind, centre
 
@@ -393,7 +412,7 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
     from . import kernel
     from .centres import _frames
     from .groebner import CHECK, _MODE
-    labels = sorted(fns)
+    labels = level_weights("label_order", (), labels=list(fns))
     native = kernel.surface_step(names, left, [fns[label] for label in labels], work, units, threefold)
     if native == "nomodel":
         raise NoModel("No two variables are coordinates of the surface near some point.")
@@ -420,21 +439,8 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
         mine = [implicit(frame, fns, part, deadline) for frame, part in frames]
     mine = [item for item in mine if item is not None]
     if native is not None:
-        # Compared after closure, where generators are canonical.
-        best = max((item[0] for item in native), default=None)
-        same = best == max((item[0] for item in mine), default=None)
-        if same and best is not None:
-            # The loci, over the points considered (elsewhere they may differ by
-            # parts that play no role): the same zero sets.
-            ours = [gens for key, _, gens in native if key == best]
-            theirs = [gens for key, _, gens in mine if key == best]
-            for w in work:
-                same = same and all(
-                    radical_subset(names, (*left, *first, *w), (*left, *second, *w)) and
-                    radical_subset(names, (*left, *second, *w), (*left, *first, *w))
-                    for first in ours[:1] for second in theirs[:1])
-        if not same:
-            raise AssertionError("The native step of the surface procedure differs from this file's.")
+        from tests.surface_oracle import compare_chart_steps
+        compare_chart_steps(names, left, work, native, mine)
         return native
     return mine
 

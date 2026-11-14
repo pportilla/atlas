@@ -1,0 +1,84 @@
+{
+  "conditions": "Both systems verify the same two saved polynomial base maps on t\u00b2=2, the unimodular rays and nonsingular rational map, then change bases. Atlas times three native calls including marshaling and returns numerator/denominator rows. Singular times its in-process polynomial checks and matrix change. Parsing and startup excluded.",
+  "loops": 50,
+  "trials": 5,
+  "cpu_affinity": [
+    6
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "library_sha256": "5669db7bde4e6aae58acca689df43941a98de775e35dca6cecdd29ec2d4a71b5",
+  "cases": [
+    {
+      "exponent": 1,
+      "expected": "x, x^n*y",
+      "microseconds": {
+        "atlas": [
+          131.4459,
+          126.57969999999999,
+          119.91748,
+          251.9539,
+          243.86118
+        ],
+        "singular": [
+          307.14,
+          300.14,
+          341.8,
+          606.24,
+          302.2
+        ]
+      },
+      "median_us": {
+        "atlas": 131.4459,
+        "singular": 307.14
+      }
+    },
+    {
+      "exponent": 16,
+      "expected": "x, x^n*y",
+      "microseconds": {
+        "atlas": [
+          125.05940000000001,
+          124.17894,
+          124.12584000000001,
+          180.71158,
+          120.59855999999999
+        ],
+        "singular": [
+          296.86,
+          302.98,
+          297.32,
+          298.4,
+          301.9
+        ]
+      },
+      "median_us": {
+        "atlas": 124.17894,
+        "singular": 298.4
+      }
+    },
+    {
+      "exponent": 97,
+      "expected": "x, x^n*y",
+      "microseconds": {
+        "atlas": [
+          130.67866,
+          270.85468000000003,
+          244.11544,
+          126.77966,
+          120.37494000000001
+        ],
+        "singular": [
+          303.5,
+          301.16,
+          299.92,
+          297.64,
+          304.62
+        ]
+      },
+      "median_us": {
+        "atlas": 130.67866,
+        "singular": 301.16
+      }
+    }
+  ]
+}

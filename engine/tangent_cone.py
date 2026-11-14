@@ -3,7 +3,7 @@
 from . import native_polynomial as np
 from .algebra_execution import cpu_stage
 from .hilbert_samuel import _invariants, monomial_hilbert_series
-from .point_geometry import decode_terms, encode_terms, request
+from .point_geometry import decode_terms, encode_terms, point_operation, request
 from .local_standard import _standard_basis
 from .point_germs import _large_translation, centered_ideal
 from .polynomial import InputError, format_poly, integer_from_decimal
@@ -20,9 +20,8 @@ def _initial_forms(variables, shifts, generators, order, include_forms):
                     # For a hypersurface, the Hilbert series depends only on
                     # the order of its equation. No directional coefficients
                     # need to be computed when only the series is requested.
-                    from .point_order import order_at_rational_point
-                    degree = order_at_rational_point(variables, shifts, f)
-                    return [(degree,) + (0,)*(len(variables)-1)], []
+                    powers = point_operation("principal_series_head", shifts, np.terms(variables, f))
+                    return [tuple(map(integer_from_decimal, powers))], []
                 from .point_initial_form import principal_initial_form
                 generators = (principal_initial_form(variables, shifts, f),)
             else:

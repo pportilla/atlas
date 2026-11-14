@@ -12,10 +12,12 @@ from threading import Lock, get_ident
 _LIBRARY = Path(__file__).resolve().parents[1] / "native" / "build" / (
     "libgroebner.dylib" if sys.platform == "darwin" else "libgroebner.so")
 
-_MODE = os.getenv("ATLAS_GROEBNER", "native")
-if _MODE not in ("native", "sympy", "check"):
-    raise ValueError("ATLAS_GROEBNER must be native, sympy, or check.")
-CHECK = _MODE == "check"
+# Keep accepting old launch configurations. Production always uses the
+# exact native kernels. The independent oracles are called by the test suite.
+if os.getenv("ATLAS_GROEBNER", "native") not in ("native", "sympy", "check"):
+    raise ValueError("Unknown ATLAS_GROEBNER configuration.")
+_MODE = "native"
+CHECK = False
 
 
 @lru_cache(maxsize=1)
@@ -362,14 +364,18 @@ class _ReplayScope:
                     if execute(*args, self.index) != 0:
                         raise RuntimeError("OpenCL replay failed")
                     device = None
+                elif backend == "reference":
+                    host = _kernel().atlas_groebner_replay_host
+                    host.argtypes, host.restype = _BATCH._argtypes_, ctypes.c_int
+                    if host(*args):
+                        raise RuntimeError("Native host replay failed")
+                    device = None
                 else:
                     from . import gpu_replay
-                    device = None
-                    if backend == "triton":
-                        from .gpu_devices import triton_device
-                        device = triton_device(self.index)
-                        if device is None:
-                            raise RuntimeError("Triton device unavailable")
+                    from .gpu_devices import triton_device
+                    device = triton_device(self.index)
+                    if device is None:
+                        raise RuntimeError("Triton device unavailable")
                     if gpu_replay.run_batch(args, device):
                         raise RuntimeError("Modular replay failed")
             except Exception as exc:

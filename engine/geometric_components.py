@@ -5,22 +5,14 @@ candidate returned to the caller is contracted by saturation and its union
 is checked against the *original* ideal. This catches components lying over
 special parameter values. None means a field extension or more work is needed.
 """
-from itertools import combinations
 
 from .kernel_json import kernel_json
-from .point_geometry import encode_terms, decode_terms, support_profile
-from .polynomial import integer_from_decimal, integer_text
-
-from .reference import sp
+from .component_ring import ComponentRing
+from .polynomial import integer_from_decimal, integer_text, rational_text
 from .reference import QQ
-from .chart_expressions import chart_expressions
-from .native_polynomial import native_ring
-
-from . import field_factors, kernel
-from .affine_kernel import (_oracle, _sparse_expression, _sparse_terms, frame_derivative, rational_factor_rows,
-                            sparse_terms)
-from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
-from .groebner import CHECK, _MODE, groebner
+from .affine_kernel import _sparse_expression, rational_factor_rows
+from .blowup_ideal import ideal_basis, saturate
+from . import field_factors
 
 
 def _component_operation(operation, **operands):
@@ -32,467 +24,121 @@ def _encoded_support(powers):
 
 
 def _factor_records(variables, f, domain):
-    """Keep geometric Q-factors in the native sparse representation, including their certificates."""
-    if domain == QQ and _MODE != "sympy":
+    """Retain the ordered native factors, powers, and rational support certificates."""
+    if domain == QQ:
         return [(_sparse_expression(variables, row), m, (row, primitive))
                 for row, m, primitive in rational_factor_rows(variables, f)[1]]
     from .field_polynomial import polynomial
-    source = sp.Poly(f, *variables, domain=domain) if domain == QQ else polynomial(f, variables, domain)
-    return [(p.as_expr(), m, None) for p, m in field_factors.factors(source)]
+    return [(p.as_expr(), m, None) for p, m in field_factors.factors(polynomial(f, variables, domain))]
 
 
 def _certify(variables, expression, data, domain, effort):
-    if data is None:
-        from .field_polynomial import polynomial
-        source = (sp.Poly(expression, *variables, domain=domain) if domain == QQ
-                  else polynomial(expression, variables, domain))
-        return _absolute_factor(source, effort)
-    row, primitive = data
-    if primitive:
-        return True
-    terms = _sparse_terms(row)
-    degrees, degree, homogeneous = support_profile(e for e, _ in terms)
-    used = tuple(i for i, axis_degree in enumerate(degrees) if axis_degree)
-    coords = tuple(variables[i] for i in used)
-    terms = {tuple(e[i] for i in used): c for e, c in terms}
-    if degree == 1:
-        return True
-    if len(used) == 1:
-        return False
-    if 1 in degrees:
-        return True
-    try:
-        answer = _projective_or_plane(coords, expression, terms, degree, QQ, effort, homogeneous=homogeneous)
-    except ArithmeticError:
-        answer = None
-    if answer is None:
-        answer = _coefficient_system(coords, terms, degree, QQ, effort)
-    if CHECK:
-        expected = _absolute_reference(sp.Poly(expression, *coords, domain=QQ), effort)
-        if expected is not None and answer != expected:
-            raise AssertionError("The sparse geometric irreducibility test differs from its reference.")
-    return answer
+    ring = ComponentRing(variables, domain)
+    row, primitive = (ring.row(expression), False) if data is None else data
+    return ring.request("absolute_factor", polynomial=row, primitive=primitive, support_checked=data is not None,
+                        effort=integer_text(effort))
 
 
 def _absolute_factor(poly, effort):
-    """True only for proved absolute irreducibility over the coefficient field."""
-    all_variables = poly.gens
-    if _MODE == "sympy":
-        axis_degrees = tuple(poly.degree(x) for x in all_variables)
-        degree = poly.total_degree()
-    else:
-        axis_degrees, degree, _ = support_profile(poly.monoms())
-    variables = tuple(x for x, d in zip(all_variables, axis_degrees) if d > 0)
-    if variables != all_variables:
-        if native_ring(variables):
-            from .field_polynomial import polynomial
-            poly = polynomial(poly.as_expr(), variables, poly.domain)
-        else:
-            used = [i for i, x in enumerate(all_variables) if x in variables]
-            terms = {tuple(m[i] for i in used): c for m, c in poly.rep.to_dict().items()}
-            poly = sp.Poly.from_dict(terms, *variables, domain=poly.domain)
-    if degree == 1:
-        return True
-    if len(variables) == 1:
-        return False
-    # Called only on K-irreducible factors, so a polynomial of degree one in x
-    # is primitive in x. The content stays a unit over any constant extension.
-    if 1 in axis_degrees:
-        return True
-    if _primitive_vertex_coordinates(poly):
-        return True
-    if _MODE != "sympy":
-        try:
-            answer = _native_absolute(poly, effort)
-        except ArithmeticError:
-            answer = None
-        if answer is not None:
-            if CHECK:
-                expected = _absolute_reference(poly, effort)
-                if expected is not None and answer != expected:
-                    raise AssertionError("The native irreducibility certificate differs from its reference.")
-            return answer
-        # Coefficient comparison is valid in every dimension over any finite field extension.
-        return _factor_equations(poly, effort)
-    return _absolute_reference(poly, effort)
-
-
-def _primitive_vertex_coordinates(poly):
-    """Certify absolute irreducibility of a K-irreducible input from its support.
-
-    The irreducible factors after extension to Qbar are Galois conjugate
-    up to scalars, so they have a common Newton polytope P. The Newton
-    polytope of their product is the Minkowski sum rP, where r is the
-    number of factors. Every coordinate of every vertex is divisible by r.
-    Any collection of exposed vertices whose coordinate gcd is 1 suffices.
-    """
-    from .affine_kernel import _checked, _request, _ring, _polynomial
-
-    ring = _ring(tuple(poly.gens))
-    def native():
-        # Coefficients over the marked field can be discarded for this test.
-        f = _polynomial({e:1 for e in poly.monoms()}, poly.gens)
-        result, = _request(["primitive_support", ring.header, ring.text(f)])
-        return result == "1"
-
-    return _checked(native, lambda: _oracle("_primitive_support", poly.monoms()), poly.gens)
-
-
-def _native_absolute(poly, effort):
-    return _projective_or_plane(poly.gens, poly.as_expr(), poly.as_dict(), poly.total_degree(), poly.domain, effort)
-
-
-def _projective_or_plane(variables, expression, terms, degree, domain, effort, *, homogeneous=None):
-    """Gao's factor count on a plane, then projective tests in higher dimension.
-
-    In characteristic zero the bounded logarithmic-differential system has
-    one independent solution per absolute factor of a squarefree bivariate
-    polynomial (KERNEL.md, “Geometric component counts on coordinate plane
-    curves”). Thus a rational irreducible plane factor is geometrically
-    irreducible exactly when this count is one.
-
-    A homogeneous quadratic splits into linear forms over the algebraic
-    closure exactly when its rank is at most two. Its partial derivatives
-    are the linear equations of the Hessian kernel; their ideal therefore
-    has as many independent linear generators in reduced basis as its rank.
-    For higher degrees any distinct projective factors meet in dimension
-    at least zero when the ambient projective space has dimension at least
-    two. At their common point the entire gradient vanishes. Smoothness
-    therefore certifies absolute irreducibility, and singular inputs defer.
-    """
-    if len(variables) == 2 and domain == QQ:
-        result = kernel.plane_components(variables, (expression,), (), ())
-        return None if result is None else result[0] == 1
-    if homogeneous is None:
-        _, _, homogeneous = support_profile(terms)
-    hvars = variables if homogeneous else (*variables, chart_expressions(variables).Dummy("homogenizer"))
-    if degree > 2 and (degree > 3+effort or len(hvars) > 3+effort):
-        return None
-    # Homogenization extends the exponent vector of each input term.
-    if hvars == variables:
-        h = expression
-    else:
-        api = chart_expressions(hvars)
-        powers = _component_operation("homogenize", support=_encoded_support(terms))
-        lifted = {e:tuple(map(integer_from_decimal, row)) for e,row in zip(terms, powers)}
-        if native_ring(hvars):
-            if domain == QQ:
-                h = api.from_terms(hvars, {lifted[e]: c for e,c in terms.items()})
-            else:
-                source = api.terms((*variables, domain.parameter), expression)
-                h = api.from_terms((*hvars, domain.parameter),
-                                   {(*lifted[e[:-1]], e[-1]): c for e,c in source.items()})
-        else:
-            h = api.Add(*(c*api.prod(v**k for v,k in zip(hvars, lifted[e])) for e,c in terms.items()))
-    if domain == QQ:
-        gradient = tuple(frame_derivative(hvars, h, {v: 1}) for v in hvars)
-    else:
-        from .field_polynomial import lift, lower
-        theta = chart_expressions(variables).Dummy("projective_field")
-        lifted = lift(h, hvars, domain, theta)
-        gradient = tuple(lower(frame_derivative((*hvars, theta), lifted, {v:1}), hvars, domain, theta)
-                         for v in hvars)
-    if degree == 2:
-        return len(groebner(gradient, hvars, domain=domain).exprs) > 2
-    if len(hvars) < 3:
-        return None
-    for x in hvars:
-        rest = tuple(v for v in hvars if v != x)
-        images = tuple(1 if v == x else v for v in hvars)
-        affine = field_factors.compose(rest, images, hvars, gradient, domain)
-        if not empty_locus(rest, affine, domain=domain):
-            return None
-    return True
-
-
-def _absolute_reference(poly, effort):
-    from tests.component_oracle import _absolute_reference as reference
-    return reference(poly, effort)
+    return _certify(poly.gens, poly.as_expr(), None, poly.domain, effort)
 
 
 def _factor_equations(poly, effort):
-    return _coefficient_system(poly.gens, poly.as_dict(), poly.total_degree(), poly.domain, effort)
+    ring = ComponentRing(poly.gens, poly.domain)
+    return ring.request("coefficient_test", polynomial=ring.row(poly.as_expr()), effort=integer_text(effort))
 
 
-def _reference_factor_layouts(coeffs, d, effort):
-    from tests.component_oracle import _reference_factor_layouts as reference
-    return reference(coeffs, d, effort)
-
-
-def _factor_layouts(coeffs, degree, effort):
-    if _MODE == "sympy":
-        return _reference_factor_layouts(coeffs, degree, effort)
-    data = _component_operation("factor_supports", support=_encoded_support(coeffs),
-                                effort=integer_text(effort))
-    lead = tuple(map(integer_from_decimal, data["lead"]))
-    layouts = [[[tuple(map(integer_from_decimal, e)) for e in support] for support in pair]
-               for pair in data["layouts"]]
-    if CHECK and (lead, layouts, data["complete"]) != _reference_factor_layouts(coeffs, degree, effort):
-        raise AssertionError("The factor supports differ from their independent enumeration.")
-    return lead, layouts, data["complete"]
-
-
-def _coefficient_system(variables, coeffs, d, domain, effort):
-    """Test existence of A*B=f over Kbar by exact coefficient comparison.
-
-    Monic A and fixed leading coefficient of B remove the scalar action.
-    Every possible leading monomial split is included. A positive-dimensional
-    solution set still gives a factorization, by the weak Nullstellensatz.
-    """
-    expressions = chart_expressions(variables)
-    lead, layouts, complete = _factor_layouts(coeffs, d, effort)
-    if _MODE != "sympy":
-        theta = None
-        if domain == QQ:
-            source = encode_terms(coeffs)
-        else:
-            from .field_polynomial import lift, modulus
-            theta = expressions.Dummy("factor_field")
-            terms = {(*e, *k): q for e,c in coeffs.items()
-                     for k,q in sparse_terms((theta,), lift(c, (), domain, theta))}
-            source = encode_terms(terms)
-
-    for a, b in layouts:
-        names = tuple(expressions.Dummy(f"factor_{i}") for i in range(len(a)+len(b)-2))
-        if _MODE != "sympy":
-            from .affine_kernel import _polynomial
-
-            parameters = names if theta is None else (*names, theta)
-            rows = _component_operation("factor_conditions", width=len(variables), marked=theta is not None,
-                                        polynomial=source, sides=[_encoded_support(a), _encoded_support(b)])
-            constraints = [_polynomial(decode_terms(row), parameters) for row in rows]
-            if theta is not None:
-                constraints.append(modulus(domain, theta))
-            exists = not empty_locus(parameters, constraints) if parameters else not any(constraints)
-            if not CHECK:
-                if exists:
-                    return False
-                continue
-        left = {a[0]:1, **dict(zip(a[1:], names))}
-        right = {b[0]:coeffs[lead], **dict(zip(b[1:], names[len(a)-1:]))}
-        equations = {m:-c for m,c in coeffs.items()}
-        for ma, ca in left.items():
-            for mb, cb in right.items():
-                key = tuple(i+j for i,j in zip(ma,mb))
-                equations[key] = equations.get(key,0) + ca*cb
-        constraints = tuple(sp.sympify(f) for f in equations.values() if f != 0)
-        expected = (tuple(sp.groebner(constraints, *names, domain=domain).exprs) != (1,)
-                    if names else not constraints)
-        if CHECK and exists != expected:
-            raise AssertionError("The coefficient equations differ from their independent factor test.")
-        if expected:
-            return False
-    return True if complete else None
+def _certified_factors(variables, polynomial, domain, effort, reduced_support, axis=None):
+    ring = ComponentRing(variables, domain)
+    factors = _factor_records(variables, polynomial, domain)
+    indices = ring.request("eligible_factors", factors=[row[0] if row else ring.row(f) for f, _, row in factors],
+                           powers=[integer_text(m) for _, m, _ in factors], reduced=reduced_support, axis=axis)
+    if indices is None:
+        return None
+    primes = []
+    for i in indices:
+        factor, _, data = factors[i]
+        if _certify(variables, factor, data, domain, effort) is not True:
+            return None
+        primes.append(factor)
+    return primes
 
 
 def _disjoint(variables, primes, domain):
-    return all(empty_locus(variables,a+b,domain=domain) for a,b in combinations(primes,2))
+    from .graph_record import _graph_request, _graph_ring
+    names, text, relation = _graph_ring(variables, domain)
+    return _graph_request("disjoint_components", names, relation=relation,
+                          pieces=[list(map(text, prime)) for prime in primes])
 
 
 def _intersection(variables, a, b, domain):
-    selector = chart_expressions(variables).Dummy("union_gate")
-    basis = groebner(tuple(selector*f for f in a) + tuple((1-selector)*g for g in b),
-                     (selector,*variables), order="lex",domain=domain)
-    return tuple(g for g in basis.exprs if selector not in g.free_symbols)
+    from .graph_record import _graph_request, _graph_ring
+    from .field_polynomial import _line_expression
+    names, text, relation = _graph_ring(variables, domain)
+    rows = _graph_request("intersection", names, relation=relation, left=list(map(text, a)), right=list(map(text, b)))
+    if domain == QQ:
+        return tuple(_sparse_expression(tuple(variables), row) for row in rows)
+    return tuple(_line_expression(row, variables, domain) for row in rows)
 
 
 def _coverage(variables, components, ideal, domain, reduced_support):
-    if not components or not reduced_support and not _disjoint(variables,components,domain):
-        return False
-    if not all(ideal_subset(variables,ideal,p,domain=domain) for p in components):
-        return False
-    union = components[0]
-    for prime in components[1:]:
-        union = _intersection(variables, union, prime, domain)
-    contains = radical_subset if reduced_support else ideal_subset
-    return contains(variables,union,ideal,domain=domain)
-
-
-def _projection_matrices_reference(n, effort):
-    from tests.component_oracle import _projection_matrices_reference as reference
-    return reference(n, effort)
-
-
-def _projection_maps(variables, effort):
-    """Permutations, a primitive linear form, then every finite word in integer shears."""
-    n = len(variables)
-    yield variables, variables
-    if n <= 1:
-        return
-    api = chart_expressions(variables)
-    for index in range(1, n+effort+1):
-        pairs = _component_operation("projection", width=n, index=integer_text(index))
-        yield tuple(tuple(api.Add(*(integer_from_decimal(c)*variables[j] for j,c in row))
-                          for row in matrix) for matrix in pairs)
+    from .graph_record import _graph_request, _graph_ring
+    names, text, relation = _graph_ring(variables, domain)
+    return _graph_request("component_coverage", names, relation=relation, reduced=reduced_support,
+                          ambient=list(map(text, ideal)), pieces=[list(map(text, p)) for p in components])
 
 
 def _projections(variables, effort):
-    """SL_n(Z) is Zariski dense. Increasing effort enumerates generic projections."""
-    maps = _projection_maps(variables, effort)
-    if _MODE == "native":
-        yield from maps
-        return
-    coords = sp.Matrix(variables)
-    reference = ((tuple(matrix*coords), tuple(inverse*coords))
-                 for matrix,inverse in _projection_matrices_reference(len(variables), effort))
-    if _MODE == "sympy":
-        yield from reference
-    else:
-        for actual, expected in zip(maps, reference, strict=True):
-            if actual != expected:
-                raise AssertionError("The projection or its inverse differs from the reference linear map.")
-            yield actual
+    """Transport the ordered native projection schedule lazily, stopping at the first complete proof."""
+    count = _component_operation("projection_count", width=len(variables), effort=integer_text(effort))
+    for index in range(integer_from_decimal(count)):
+        pair = _component_operation("projection_rows", width=len(variables), index=integer_text(index))
+        yield tuple(tuple(_sparse_expression(variables, row) for row in images) for images in pair)
 
 
 def _coordinate_images(variables, projection):
-    """Accept explicit matrices from direct callers and coordinate maps from the search."""
     if not hasattr(projection, "todok"):
         return tuple(projection)
     if projection.shape != (len(variables), len(variables)):
         raise ValueError("The projection matrix must be square in the given coordinates.")
-    if _MODE == "sympy":
-        return tuple(projection * sp.Matrix(variables))
-    rows = [[] for _ in variables]
-    for (i,j), c in projection.todok().items():
-        rows[i].append(c * variables[j])
-    images = tuple(chart_expressions(variables).Add(*row) for row in rows)
-    if CHECK and images != tuple(projection * sp.Matrix(variables)):
-        raise AssertionError("The given projection differs from its reference matrix product.")
-    return images
+    matrix = [[] for _ in variables]
+    for (i, j), c in projection.todok().items():
+        matrix[i].append([j, rational_text(c)])
+    rows, = _component_operation("linear_images", width=len(variables), matrix=matrix)
+    return tuple(_sparse_expression(variables, row) for row in rows)
 
 
 def _shape(variables, generators, dimension, domain, effort, matrix, inverse=None, *, reduced_support=False):
-    u, z, t = variables[:dimension], variables[dimension:-1], variables[-1]
     images = _coordinate_images(variables, matrix)
     if inverse is None:
-        # A caller can also supply a matrix without its construction.
         from .affine_kernel import inverse_map
-        images_back = tuple(a/b for a,b in inverse_map(variables, images, variables))
+        # The denominator of a supplied invertible linear matrix is a constant.
+        from .affine_kernel import _ring
+        from .native_library import affine_request
+        wire = _ring(variables)
+        images_back = []
+        for a, b in inverse_map(variables, images, variables):
+            row, = affine_request(["function", wire.header, "("+wire.text(a)+")/("+wire.text(b)+")"])
+            images_back.append(_sparse_expression(variables, row))
     else:
         images_back = _coordinate_images(variables, inverse)
     ideal = field_factors.compose(variables, images, variables, generators, domain)
-    answer = None
-    if _MODE != "sympy":
-        data = _rational_shape(ideal, u, z, t, domain)
-        if data is not None:
-            answer = _shape_components(variables, dimension, domain, effort, images_back, ideal, data, reduced_support)
-        if not CHECK:
-            return answer
-    reference = _fraction_shape(ideal, u, z, t, domain)
-    expected = None if reference is None else _shape_components(
-        variables, dimension, domain, effort, images_back, ideal, reference, reduced_support)
-    if CHECK:
-        if expected is not None and (answer is None or set(answer) != set(expected)):
-            raise AssertionError("The two elimination methods give different geometric components.")
-        return answer
-    return expected
-
-
-def _shape_components(variables, dimension, domain, effort, images, ideal, data, reduced_support):
-    u, t = variables[:dimension], variables[-1]
-    graph, h, numerator = data
-    factors = _factor_records((*u, t), numerator, domain)
-    primes = []
-    for factor,multiplicity,certificate in factors:
-        if t not in factor.free_symbols:
-            continue  # content is invertible in K(u)
-        if (multiplicity != 1 and not reduced_support) or _certify((*u, t), factor, certificate, domain, effort) is not True:
-            return None
-        # The graph over D(product h) is a geometrically integral
-        # hypersurface there. Saturation contracts its prime to the chart.
-        prime = saturate(variables,(*graph,factor),chart_expressions(variables).prod(set(h)),domain=domain)
-        primes.append(prime)
+    ring = ComponentRing(variables, domain)
+    shape = ring.request("projection_shape", generators=[ring.row(f) for f in ideal], dimension=dimension)
+    if shape is None:
+        return None
+    parameters = (*variables[:dimension], variables[-1])
+    factors = _certified_factors(parameters, ring.expression(shape["eliminant"]), domain, effort, reduced_support,
+                                 axis=len(parameters)-1)
+    if factors is None:
+        return None
+    graph = tuple(map(ring.expression, shape["graph"]))
+    denominator = ring.expression(shape["denominator"])
+    primes = [saturate(variables, (*graph, factor), denominator, domain=domain) for factor in factors]
     if not _coverage(variables, primes, ideal, domain, reduced_support):
         return None
-    return [ideal_basis(variables, field_factors.compose(variables, images, variables, prime, domain),
+    return [ideal_basis(variables, field_factors.compose(variables, images_back, variables, prime, domain),
                         domain=domain) for prime in primes]
-
-
-def _rational_shape(ideal, u, z, t, domain):
-    """Lex elimination over K gives candidate graph equations before localization.
-    On D(product h) each h(u)*z_j = g(u,t) has a unique solution. Together
-    with a geometric prime of the eliminant this defines an integral graph.
-    Coverage of the original ideal is verified independently in _shape."""
-    order = (*z, t, *u)
-    basis = groebner(ideal, order, order="lex", domain=domain).exprs
-    parameters = set(u)
-    # A native field coefficient is a reduced polynomial in the marked
-    # primitive element. It belongs to K, independently of the projection.
-    if native_ring(order) and domain != QQ:
-        parameters.add(domain.parameter)
-    eliminated = parameters | {t}
-    relations = [g for g in basis if g.free_symbols <= eliminated]
-    if not relations:
-        return None
-    eliminant = relations[0]
-    if len(relations) > 1:
-        # Gauss's lemma: the gcd of the eliminants in Q[u,t] gives their
-        # gcd in Q(u)[t] up to a unit in Q(u). Ignore pure-u factors below.
-        def factors(g):
-            return {p: m for p, m, _ in _factor_records((*u, t), g, domain)}
-        shared = factors(eliminant)
-        for g in relations[1:]:
-            other = factors(g)
-            shared = {p: min(m, other[p]) for p, m in shared.items() if p in other}
-        eliminant, = field_factors.compose((*u,t), (*u,t), (*u,t), (chart_expressions(order).prod(p**m for p,m in shared.items()),), domain)
-    if t not in eliminant.free_symbols:
-        return None
-    graph, h = [], []
-    for x in z:
-        def equation(rows):
-            for g in rows:
-                if x in g.free_symbols and g.free_symbols <= eliminated | {x}:
-                    linear = field_factors.linear(order, g, x, domain)
-                    if linear and linear[0].free_symbols <= parameters:
-                        return g, linear[0]
-            return None
-        result = equation(basis)
-        if result is None and x != z[-1]:
-            # Eliminate the other graph coordinates first. If x belongs
-            # to Q(u)[t]/(p), clearing denominators gives a relation
-            # d(u)*x - h(u,t); a reduced lex basis of this projection
-            # must have a leading monomial x*u^a dividing its leading term.
-            first = tuple(v for v in z if v != x)
-            result = equation(groebner(ideal, (*first, x, t, *u), order="lex", domain=domain).exprs)
-        if result is None:
-            return None
-        graph.append(result[0])
-        h.append(result[1])
-    return graph, h, eliminant
-
-
-def _fraction_shape(ideal, u, z, t, domain):
-    fraction_field = domain.frac_field(*u) if u else domain
-    # Interreduce the input as univariate coefficients in K(u), before
-    # Buchberger's algorithm: the same monic rows may be supplied many
-    # times by a full basis of the original affine ideal. Raw fractions
-    # in K(u) otherwise accumulate uncancelled numerators and denominators.
-    # Sequential normal forms replace a generator by a residue modulo its
-    # predecessors, which preserves the generated ideal.
-    generic = []
-    for g in ideal:
-        p = sp.Poly(g,*z,t,domain=fraction_field)
-        if generic:
-            p = sp.reduced(p, generic, *z,t, order="lex", domain=fraction_field)[1]
-        if not p.is_zero:
-            generic.append(p.monic())
-    gb = sp.groebner(generic,*z,t, order="lex",domain=fraction_field)
-    relations = [p.as_expr() for p in gb.polys if all(p.degree(x)==0 for x in z)]
-    if len(relations)!=1 or not relations[0].has(t):
-        return None
-    h = []
-    graph = []
-    for x in z:
-        lift = gb.reduce(x)[1].as_expr()
-        if any(lift.has(v) for v in z):
-            return None
-        numerator,denominator = sp.fraction(sp.together(lift))
-        if denominator.has(t):
-            return None
-        graph.append(x*denominator-numerator)
-        h.append(denominator)
-    numerator = sp.together(relations[0]).as_numer_denom()[0]
-    return graph, h, numerator
 
 
 def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1, reduced_support=False):
@@ -512,49 +158,39 @@ def geometric_components(variables, ideal, dimension, *, domain=QQ, effort=1, re
     if not isinstance(effort,int) or effort<1:
         raise ValueError("effort must be a positive integer")
     generators = ideal_basis(variables,ideal,domain=domain)
-    if generators==(1,):
+    ring = ComponentRing(variables, domain)
+    step = ring.request("decomposition_step", generators=[ring.row(g) for g in generators],
+                        dimension=integer_text(dimension))
+    action = step["action"]
+    if action == "empty":
         return []
-    if not 0<=dimension<=len(variables):
+    if action == "ambient":
+        return [()]
+    if action == "undecided":
         return None
-    if not generators:
-        return [()] if dimension==len(variables) else None
-    if dimension==len(variables):
-        return None
-    # Eliminate globally defined graph coordinates before a projection.
-    for f in generators:
-        for x in variables:
-            pair = field_factors.linear(variables, f, x, domain)
-            if pair is None or pair[0].free_symbols.intersection(variables):
-                continue
-            others = tuple(v for v in variables if v!=x)
-            if not others:
-                return [generators] if dimension==0 else None
-            if domain == QQ or pair[0].is_Rational:
-                value = -pair[1]/pair[0]
-            else:
-                # On a graph over K the leading coefficient is a field
-                # unit. Lex reduction sends x to its unique coordinate
-                # expression, inverting the coefficient modulo its relation.
-                value = groebner((f,), (x, *others), order="lex", domain=domain).reduce(x)[1]
-            remaining = [g for g in generators if g!=f]
-            equations = field_factors.compose(others, tuple(value if v==x else v for v in variables),
-                                              variables, remaining, domain)
-            smaller = geometric_components(others,equations,dimension,domain=domain,effort=effort,
-                                           reduced_support=reduced_support)
-            if smaller is None:
-                return None
-            return [ideal_basis(variables,(*prime, f),domain=domain) for prime in smaller]
-    if len(generators)==1:
-        if dimension!=len(variables)-1:
+    if action == "prime":
+        return [generators]
+    if action == "graph":
+        axis, row = step["axis"], step["row"]
+        others = (*variables[:axis], *variables[axis+1:])
+        mapping = (*variables[:axis], ring.expression(step["value"]), *variables[axis+1:])
+        equations = field_factors.compose(others, mapping, variables, (*generators[:row], *generators[row+1:]), domain)
+        smaller = geometric_components(others, equations, dimension, domain=domain, effort=effort,
+                                       reduced_support=reduced_support)
+        if smaller is None:
             return None
-        factors = _factor_records(variables, generators[0], domain)
-        if any((m != 1 and not reduced_support) or _certify(variables, p, data, domain, effort) is not True
-               for p, m, data in factors):
+        return [ideal_basis(variables, (*prime, generators[row]), domain=domain) for prime in smaller]
+    if action == "hypersurface":
+        factors = _certified_factors(variables, generators[0], domain, effort, reduced_support)
+        if factors is None:
             return None
-        candidates = [(p,) for p, _, _ in factors]
-        return candidates if reduced_support or _disjoint(variables,candidates,domain) else None
-    for projection,inverse in _projections(variables,effort):
-        found = _shape(variables,generators,dimension,domain,effort,projection,inverse,reduced_support=reduced_support)
+        candidates = [(p,) for p in factors]
+        return candidates if reduced_support or _disjoint(variables, candidates, domain) else None
+    if action != "project":
+        raise RuntimeError("Unknown native geometric decomposition step.")
+    for projection, inverse in _projections(variables, effort):
+        found = _shape(variables, generators, dimension, domain, effort, projection, inverse,
+                       reduced_support=reduced_support)
         if found is not None:
             return found
     return None

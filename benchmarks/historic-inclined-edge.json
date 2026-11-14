@@ -1,0 +1,24 @@
+{
+  "archive": "reduced-centre-resolution-ryzen-6800h.json.gz",
+  "archive_sha256": "76b4d539a68e85bcc101bc0aac714a1ed3dd4836d76c8110edd457e43732cec0",
+  "program_sha256": "4442fd7a5c2388ed5c63c95083745ea24df6e3b75c638a85b6d9301d8b873f0b",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "charts": [
+    15,
+    23,
+    27,
+    30
+  ],
+  "common_chart": 27,
+  "certificates": {
+    "chart_primes": 4,
+    "generic_holes": 3,
+    "fibre_contains_line": 4,
+    "owned_visible": 4,
+    "equal_ambient_graphs": 3,
+    "equal_prime_graphs": 3,
+    "common_regular_denominator": 3
+  },
+  "geometric_components": 1,
+  "result": "PASSED historical B1-B9"
+}

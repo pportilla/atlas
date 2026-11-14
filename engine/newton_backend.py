@@ -1,5 +1,5 @@
 """A regular Newton modification of a hypersurface germ in arbitrary input dimension."""
-from itertools import combinations
+from .kernel_json import kernel_json
 
 from .chart_batch import transform_atlas
 from .binomial_kernel import _newton, signed_powers
@@ -138,7 +138,6 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     for row in rows[len(rays):]:
         count, *fields = map(int, row.split())
         face_masks[tuple(fields[:count])] = frozenset(fields[count:])
-    intersection_cones = [subset for subset in face_masks if subset[0] >= n]
     faces={}
     families={}
     degenerate=False
@@ -170,48 +169,21 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
         if repair is None or not repair['repairs']:
             return None
     coords=[f'u{i+1}' for i in range(n)]
-    # Each intersection of exceptional components has an open dense torus
-    # stratum. Transversality excludes components contained in its boundary.
-    # In the saturated lattice spanned by the face differences, affine
-    # Lefschetz gives connectedness for a nondegenerate full-dimensional
-    # torus hypersurface of Newton dimension >=2 (Danilov–Khovanskii,
-    # Proposition 3.9 and Remark 3.10). Smoothness gives irreducibility,
-    # and taking the product with the complementary torus preserves it.
-    # A segment instead splits by its distinct roots in the primitive character.
-    strata={}
-    vertices=[]
-    cells=[]
-    # A degenerate fan is an intermediate modification. Its boundary will
-    # be computed once the local blowups have completed the atlas.
-    boundary_cones = () if degenerate else sorted(intersection_cones, key=lambda s: (len(s), s))
-    for subset in boundary_cones:
-        proof=faces[face_masks[subset]]
-        dim=proof['face_dimension']
-        split=mode=='intrinsic' and dim==1
-        count=(0 if dim==0 else proof['edge']['degree'] if split else 1) if mode=='intrinsic' else 1
-        strata[subset]=[]
-        for k in range(1,count+1):
-            if len(subset)==1:
-                ray=subset[0]
-                ident=f'E{ray-n+1}' + (f'.{k}' if split and count>1 else '')
-                record={'id':ident,'ray':rays[ray],'ray_index':ray,'ambient_order':orders[ray]}
-                vertices.append(record)
-            else:
-                ident='C'+'-'.join(str(i) for i in subset)+f'.{k}'
-                def restriction(smaller):
-                    matches=strata[smaller]
-                    if len(matches)==1:
-                        return matches[0]
-                    if face_masks[smaller]!=face_masks[subset]:
-                        raise RuntimeError('Incompatible nested Newton edge labels.')
-                    return matches[k-1]
-                record={'id':ident,'dimension':len(subset)-1,
-                        'vertices':[restriction((i,)) for i in subset],
-                        'faces':[restriction(s) for s in combinations(subset,len(subset)-1)]}
-                cells.append(record)
-            if split:
-                record['root']=proof['root_family']+f'_{k}'
-            strata[subset].append(ident)
+    # The repaired cover has its own divisor intersections after the blowups.
+    vertices, cells = [], []
+    by_ray = {}
+    if not degenerate:
+        face_ids = {mask: i for i, mask in enumerate(faces)}
+        proofs = [(proof['face_dimension'], integer_text(proof['edge']['degree']) if 'edge' in proof else None,
+                   proof.get('root_family')) for proof in faces.values()]
+        orbits = [(subset, face_ids[mask]) for subset, mask in face_masks.items()]
+        layout = kernel_json('atlas_torus_sections', 'newton', dimension=n, intrinsic=mode=='intrinsic',
+                             proofs=proofs, orbits=orbits)
+        vertices, cells = layout['vertices'], layout['cells']
+        for vertex in vertices:
+            i = vertex['ray_index']
+            vertex.update(ray=rays[i], ambient_order=orders[i])
+            by_ray.setdefault(i, []).append(vertex)
 
     equations, batch = transform_atlas(exponents, rays, cones, orders, valuations, compute,
                                        equations=(coords, [poly[e] for e in exponents]))
@@ -233,16 +205,16 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
                 divisors.append({"id": f"E{i-n+1}", "equation": coords[position]})
                 continue
             proof=faces[minima[i]]
-            ids=strata[(i,)]
+            components=by_ray.get(i, ())
             if mode=='embedded' or proof['face_dimension']!=1:
-                divisors.extend({'id':ident,'equation':coords[position]} for ident in ids)
+                divisors.extend({'id':v['id'],'equation':coords[position]} for v in components)
                 continue
             values = direction_orders[tuple(proof['edge']['direction'])]
             powers = [values[r] for r in cone]
             plus, minus = signed_powers(tuple(powers))
             positive, negative = monomial(coords, plus), monomial(coords, minus)
-            for k,ident in enumerate(ids,1):
-                root=proof['root_family']+f'_{k}'
+            for vertex in components:
+                ident, root = vertex['id'], vertex['root']
                 ideal=[coords[position], f'{positive}-{root}*{negative}']
                 divisors.append({'id':ident,'ideal':ideal,'equation':', '.join(ideal)})
         charts.append({'id':f'N{index}','coordinates':coords,'map':maps,

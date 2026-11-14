@@ -11,13 +11,13 @@ from fractions import Fraction
 from functools import cmp_to_key, lru_cache
 
 from .native_library import Unavailable, affine_request, field_request
-from .polynomial import format_poly, integer_from_decimal, integer_text, rational_text, sparse_row
+from .polynomial import format_poly, integer_from_decimal, integer_text, kernel_fraction, rational_text, sparse_row
 from .rational_point import coordinate_fraction
 from .reference import sp
 
 
 def _q(value):
-    return Fraction(int(value.numerator), int(value.denominator))
+    return kernel_fraction(rational_text(value))
 
 
 def _held(operation, args):
@@ -42,11 +42,6 @@ def _summand_relation(atom):
     from .field_coefficient import UnsupportedExpression, program
     if isinstance(atom, sp.CRootOf):
         return tuple(atom.poly.all_coeffs())
-    if atom.is_Pow and atom.base.is_Rational and atom.exp.is_Rational:
-        # QQbar is needed when the displayed root is not of full degree,
-        # e.g. a principal power of a negative number.
-        if atom.base > 0 and atom.exp == sp.S.Half:
-            return (1, 0, -_q(atom.base))
     try:
         description = field_request("atlas_field_description", [" ".join(program(atom))])
     except UnsupportedExpression:

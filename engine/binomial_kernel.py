@@ -1,7 +1,7 @@
 """Transport the exact fan trace and generic orbit incidences from the native kernel."""
 import ctypes
 from functools import lru_cache
-from fractions import Fraction
+from .polynomial import kernel_fraction
 
 from .native_library import Unavailable, _kernel
 from .polynomial import integer_from_decimal as _integer, integer_text as _encode
@@ -113,9 +113,9 @@ def exceptional_data(codimension, orders):
 def character(left, right, a, b):
     """Return the signed and primitive characters, degree, and oriented root coefficient."""
     rows = run(f"character {len(left)}", left, right, (a.numerator, a.denominator, b.numerator, b.denominator))
-    degree, numerator, denominator = map(_integer, rows[0].split())
-    return (tuple(map(_integer, rows[1].split())), degree,
-            tuple(map(_integer, rows[2].split())), Fraction(numerator, denominator))
+    degree, numerator, denominator = rows[0].split()
+    return (tuple(map(_integer, rows[1].split())), _integer(degree),
+            tuple(map(_integer, rows[2].split())), kernel_fraction(numerator + "/" + denominator))
 
 
 def minimum_faces(values):

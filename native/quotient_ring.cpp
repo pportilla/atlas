@@ -284,20 +284,7 @@ std::optional<Polynomial> Ring::inverse(const Polynomial& a) const {
         return result;
     }
 
-    // If each equation solves a coordinate occurring only as a lone linear
-    // term in that equation, the quotient is a polynomial ring in the rest.
-    std::vector<size_t> appearances(width_);
-    for (const auto& g : basis_) for (const auto& [e,coefficient] : g)
-        for (size_t j = 0; j < width_; ++j) if (e[j]) ++appearances[j];
-    const bool polynomial_ring = std::all_of(basis_.begin(),basis_.end(),[&](const auto& g) {
-        for (const auto& [e,coefficient] : g) {
-            const auto it = std::find_if(e.begin(),e.end(),[](const auto& k) { return k != 0; });
-            if (it != e.end() && *it == 1 && appearances[it-e.begin()] == 1 &&
-                std::all_of(it+1,e.end(),[](const auto& k) { return k == 0; })) return true;
-        }
-        return false;
-    });
-    if (polynomial_ring) return std::nullopt;
+    if (independent_graph(basis_,width_)) return std::nullopt;
 
     if (auto result = fast_inverse(a,basis_,width_,lex_)) return normal(*result);
     // Invert a in the graph ideal (I, t*a-1), with t first in lex order.
@@ -331,6 +318,21 @@ std::optional<Polynomial> Ring::inverse(const Polynomial& a) const {
         break;
     }
     return std::nullopt;
+}
+
+bool independent_graph(const Basis& rows, size_t geometric_width) {
+    std::vector<size_t> appearances(geometric_width);
+    for (const auto& g : rows) for (const auto& [e,c] : g)
+        for (size_t j=0; j<geometric_width; ++j) if (e[j]) ++appearances[j];
+    return std::all_of(rows.begin(),rows.end(),[&](const auto& g) {
+        for (const auto& [e,c] : g) {
+            const auto end=e.begin()+geometric_width;
+            const auto it=std::find_if(e.begin(),end,[](const auto& k){return k!=0;});
+            if (it!=end && *it==1 && appearances[it-e.begin()]==1 &&
+                std::all_of(it+1,e.end(),[](const auto& k){return k==0;})) return true;
+        }
+        return false;
+    });
 }
 
 Value Ring::evaluate(const std::string& action, const Basis& args, const mpz_class& exponent) const {

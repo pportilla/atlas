@@ -35,6 +35,31 @@ CASES = [
 
 
 class IdealOperations(unittest.TestCase):
+    def test_ordered_ideal_trace_closes_after_a_basis_exception(self):
+        from contextlib import contextmanager
+        from engine import native_polynomial as np
+        from engine.ideal_operations import intersection
+
+        active = []
+        @contextmanager
+        def observe(name, **counts):
+            active.append(name)
+            try:
+                yield
+            finally:
+                self.assertEqual(active.pop(), name)
+
+        def unavailable(label, variables, generators, order):
+            self.assertEqual(label, "intersection_basis")
+            self.assertEqual(order, "first")
+            raise ArithmeticError("test basis callback failed")
+
+        x, y = map(np.Symbol, ("x", "y"))
+        with self.assertRaisesRegex(ArithmeticError, "test basis callback failed"):
+            intersection((x,y), (x,), (y,), basis=unavailable, stage=observe)
+        self.assertEqual(active, [])
+        self.assertEqual(intersection((x,y), (x,), (y,)).generators, (x*y,))
+
     def test_phase_one_examples(self):
         for policy in ("cpu", "gpu"):
             for op, operands, expected in CASES:
@@ -64,6 +89,27 @@ class IdealOperations(unittest.TestCase):
                 self.assertEqual(record["status"], "ok", record)
                 self.assertEqual(polynomials(record["result"]["generators"], ["x", "y"]),
                                  polynomials(expected, ["x", "y"]))
+
+    def test_dense_regular_saturation_preserves_order_and_embedded_components(self):
+        from engine import kernel, native_polynomial as np
+        variables = ("x", "y", "z")
+        x, y, z = coords = np.symbols("x y z")
+        # x^2, xy has an embedded associated prime (x,y). The first
+        # multiplier misses both primes, the second lies in the embedded one.
+        dense = sum(z**i for i in range(32))
+        for by, formula, expected, regular in (
+                (y+dense, "y+" + "+".join(f"z^{i}" for i in range(32)), (x*x, x*y), True),
+                (y*dense, "y*(" + "+".join(f"z^{i}" for i in range(32)) + ")", (x,), False)):
+            self.assertEqual(kernel.saturate(coords, (x*x, x*y), by), expected)
+            for order in ("lex", "grevlex"):
+                record = calculate("saturation", {"ideal": ["x^2", "x*y"], "polynomial": formula},
+                                   variables, order)
+                self.assertEqual(record["status"], "ok", record)
+                self.assertEqual(record["result"]["ring"]["order"], order)
+                self.assertEqual(polynomials(record["result"]["generators"], variables),
+                                 polynomials(["x^2", "x*y"] if regular else ["x"], variables))
+                stages = [s["operation"] for s in record["execution"]["stages"]]
+                self.assertEqual("adjoin_inverse" in stages, not regular)
 
     def test_quotient_reduces_and_normalizes_divided_rows(self):
         # x+y is not monomial. Removing it from a reduced intersection basis

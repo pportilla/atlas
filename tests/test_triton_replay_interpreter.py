@@ -6,7 +6,8 @@ import unittest
 class InterpretedReplayTests(unittest.TestCase):
     def test_parallel_checks_and_scaling(self):
         import numpy as np
-        from engine.gpu_replay import replay_reference, replay_triton
+        from engine.gpu_replay import replay_triton
+        from tests.gpu_replay_oracle import replay_reference
         # Two term blocks with nonzero residuals for the rejected prime, and
         # a zero leading coefficient which rejects another replay.
         terms, block = 35, 16

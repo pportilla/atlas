@@ -6,6 +6,14 @@ from .chart_expressions import chart_expressions
 from .groebner import groebner
 
 
+def _membership(variables, equations, f, known_nonempty):
+    from .field_wide import _expanded_row
+    from .native_library import ideal_request
+    rows = [_expanded_row(variables, g) for g in (*equations, f)]
+    result, = ideal_request(f"frame_membership {len(variables)} {len(equations)} {int(known_nonempty)}", rows)
+    return result
+
+
 class Frame:
     """A submanifold N of affine space, on an open set, with coordinates and derivations.
 
@@ -29,6 +37,9 @@ class Frame:
         self._cut_coordinates = {}
         self._empty = {}
         self._vanishing = {}
+        self._regular = {}
+        self._known_nonempty = False
+        self._scalar_units = set()
         self._unit = None
 
     def field(self, k):
@@ -104,6 +115,22 @@ class Frame:
             return value
         return self._reduced_terms(value)
 
+    def graph_regular(self, f):
+        """Whether native graph elimination certifies a nonzerodivisor modulo the frame equations."""
+        if self.known_scalar_unit(f):
+            return True
+        if f not in self._regular:
+            from .field_wide import _expanded_row
+            from .native_library import ideal_request
+            rows = [_expanded_row(self.variables, p) for p in (*self.rows, f)]
+            result, = ideal_request(f"graph_regular {len(self.variables)} {len(self.rows)}", rows)
+            self._regular[f] = result == "yes"
+        return self._regular[f]
+
+    def known_scalar_unit(self, f):
+        """Whether the native membership check already proved f is a nonzero rational on this frame."""
+        return f in self._scalar_units
+
     def vanishes(self, f):
         """Whether f is zero on N."""
         if f == 0:
@@ -114,6 +141,15 @@ class Frame:
             return False
         if f in self._vanishing:
             return self._vanishing[f]
+        result = _membership(self.variables, self.rows, f, self._known_nonempty)
+        if result != "unknown":
+            # Both "no" and "scalar" identify a nonzero rational. The latter
+            # still needs a decision about the open frame itself.
+            answer = result == "yes" or (result == "scalar" and self.empty())
+            if not answer:
+                self._scalar_units.add(f)
+            self._vanishing[f] = answer
+            return answer
         residue = self.reduced(f)
         if not residue:
             answer = True
@@ -130,7 +166,7 @@ class Frame:
         open set, use the exact saturated ideal of the whole chart."""
         for start in (2, -3, 5):
             fixed = tuple(v - (start+i) for i, v in enumerate(self.coords))
-            if not self._empty_on(fixed, (*self.units, f)):
+            if not self._empty_on(fixed, (f,)):
                 return True
         return False
 
@@ -180,22 +216,32 @@ class Frame:
                 _expanded_row(self.variables, f)]
 
     def empty(self, *gens):
-        return self._empty_on(gens, self.units)
+        return self._empty_on(gens)
 
     def inside(self, unit, gens):
         """Whether the zero set of the ideal lies in that of `unit`, on N."""
-        return self._empty_on(tuple(gens), (*self.units, unit))
+        return self._empty_on(tuple(gens), (unit,))
 
-    def _empty_on(self, gens, units):
-        key = (gens, units)
+    def _empty_on(self, gens, extra_units=()):
+        key = (gens, extra_units)
         if key not in self._empty:
-            self._empty[key] = frame_locus(self.variables, (*self.rows, *gens), units)
+            self._empty[key] = frame_locus(self.variables, (*self.rows, *gens), (*self.units, *extra_units))
+            if not self._empty[key]:
+                self._known_nonempty = True
         return self._empty[key]
 
-    def restricted(self, z, k, unit):
+    def restricted(self, z, k, unit, *, witness_loci=()):
         """The submanifold z = 0 of N, where D_k z is invertible, on the open set unit != 0."""
-        return Frame(self.variables, tuple(c for c in self.coords if c != k), (*self.rows, z),
-                     (*self.units, unit), self.solved)
+        child = Frame(self.variables, tuple(c for c in self.coords if c != k), (*self.rows, z),
+                      (*self.units, unit), self.solved)
+        # A hit in the parent witnesses this child only if it lies on z=0
+        # and all the child's units were inverted in the nonemptiness test.
+        for gens in witness_loci:
+            if (self._empty.get((gens, (unit,))) is False
+                    and _membership(self.variables, (*self.rows, *gens), z, True) == "yes"):
+                child._known_nonempty = True
+                break
+        return child
 
     def eliminated(self, z, k, coefficients=None):
         """The submanifold z = 0 when z = a*k + b and a is invertible: k = -b/a

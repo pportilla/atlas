@@ -86,9 +86,11 @@ class MarkedRecordTests(unittest.TestCase):
         for literal in ("sin(I*pi)", "cos(pi+I)", "csc(0)", "exp(pi)"):
             with self.subTest(literal=literal), self.assertRaises(InputError):
                 description(literal)
-        field = {"generator": "a", "exact_root": "sqrt(2)",
-                 "minimal_polynomial_coefficients": ["0.5", 0, -1]}
-        self.assertIsNotNone(record_field(field, {}, ["a"], "t")[0])
+        field = {"generator": "a", "exact_root": "sqrt(2)"}
+        for half in ("0.5", "٥.٠e-1", "1_0 / 20"):
+            with self.subTest(half=half):
+                field["minimal_polynomial_coefficients"] = [half, 0, -1]
+                self.assertIsNotNone(record_field(field, {}, ["a"], "t")[0])
         field["minimal_polynomial_coefficients"] = [1, 0, -3]
         with self.assertRaisesRegex(InputError, "does not define"):
             record_field(field, {}, ["a"], "t")
