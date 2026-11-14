@@ -21,6 +21,15 @@ class AlgebraSession {
 
   request(form) {
     const operands = { ...form.operands };
+    if (operands.degrees) {
+      operands.degrees = operands.degrees.map(text => {
+        if (!/^[0-9]+$/.test(text)) throw new Error("Enter each degree as a nonnegative integer.");
+        const digits = text.replace(/^0+(?=[0-9])/, "");
+        const value = Number(digits);
+        if (Number.isSafeInteger(value)) return value;
+        return typeof JSON.rawJSON === "function" ? JSON.rawJSON(digits) : digits;
+      });
+    }
     let owner;
     for (const [key, name] of Object.entries(form.sources)) {
       const saved = this.objects.get(name);
@@ -33,7 +42,7 @@ class AlgebraSession {
       owner = saved.space;
       if (saved.result.type === "local-standard-basis") {
         if (key !== "ideal" || !AlgebraSession.localBasisInputs.has(form.operation)) {
-          throw new Error("Use a saved local standard basis for a local normal form or a local quotient basis.");
+          throw new Error("This operation cannot use a saved local standard basis. Choose the original ideal.");
         }
         const point = operands.point ?? form.ring.variables.map(() => "0");
         if (!AlgebraSession.samePoint(point, saved.result.point)) {
@@ -68,6 +77,9 @@ class AlgebraSession {
   record(form, answer) {
     if (answer.result.scope === "point") {
       form = { ...form, operands: { ...form.operands, point: answer.result.point } };
+    }
+    if (form.operands.degrees) {
+      form = { ...form, operands: { ...form.operands, degrees: answer.result.degrees.map(String) } };
     }
     this.steps.push(form);
     if (!form.name) return;
@@ -164,6 +176,7 @@ class AlgebraSession {
           else if (operation === "eliminate") args.push(...operands.variables.map(v => quote(v)));
         }
         if (operands.point !== undefined) args.push("point=" + quote(operands.point));
+        if (operands.degrees !== undefined) args.push("degrees=[" + operands.degrees.join(", ") + "]");
         args.push("compute=" + quote(form.compute));
         expression = operation.replaceAll("-", "_") + "(" + args.join(", ") + ")";
       }
@@ -175,7 +188,7 @@ class AlgebraSession {
 }
 
 AlgebraSession.hypersurfaceOperations = new Set(["local-jacobian-algebra", "milnor-number", "tjurina-number"]);
-AlgebraSession.localBasisInputs = new Set(["local-normal-form", "local-quotient-basis"]);
+AlgebraSession.localBasisInputs = new Set(["local-normal-form", "local-quotient-basis", "hilbert-samuel-function", "hilbert-samuel-multiplicity"]);
 AlgebraSession.pointOperations = new Set([
   ...AlgebraSession.hypersurfaceOperations, ...AlgebraSession.localBasisInputs, "local-standard-basis",
 ]);
@@ -184,5 +197,6 @@ AlgebraSession.reserved = new Set((
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
   "quotient saturation saturate dimension gcd factor algebra_request help quit exit " +
-  "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form"
+  "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form " +
+  "hilbert_samuel_function hilbert_samuel_multiplicity"
 ).split(" "));

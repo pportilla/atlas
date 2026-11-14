@@ -1,8 +1,10 @@
 """Shell commands for exact polynomial and ideal arithmetic."""
 
 import argparse
-import json
 import sys
+
+from .exact_json import result_json
+from .polynomial import integer_text
 
 
 _DESCRIPTIONS = {
@@ -17,6 +19,8 @@ _DESCRIPTIONS = {
     "quotient": "compute the quotient of two ideals",
     "saturation": "saturate an ideal by a polynomial",
     "dimension": "compute the Krull dimension of the quotient ring",
+    "hilbert-samuel-function": "compute local quotient lengths and graded dimensions at the requested degrees",
+    "hilbert-samuel-multiplicity": "compute the Hilbert–Samuel multiplicity of the local quotient",
     "quotient-basis": "compute a vector space basis of the global quotient algebra over QQ",
     "local-quotient-basis": "compute a vector space basis of the quotient algebra at a rational point",
     "local-standard-basis": "compute a standard basis of an ideal at a rational point",
@@ -34,7 +38,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--poly", "--other-poly", "--point")
+                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--poly", "--other-poly", "--point", "--degrees")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -79,6 +83,9 @@ def register_parser(subparsers):
         if name in POINT_OPERATIONS:
             parser.add_argument("--point", type=_comma_list, metavar="q1,q2,...",
                                 help="rational coordinates in --vars order (default: origin)")
+        if name == "hilbert-samuel-function":
+            parser.add_argument("--degrees", type=_comma_list, metavar="n[,n,...]",
+                                help="ordered nonnegative degrees (default: 0 through 5; use '' for none)")
         compute = parser.add_mutually_exclusive_group()
         compute.add_argument("--compute", metavar="{cpu,auto,gpu}", help="execution mode (default: auto)")
         compute.add_argument("--gpu", dest="compute", action="store_const", const="gpu",
@@ -115,6 +122,14 @@ def _show(record):
         print(f"{label}:", result["polynomial"])
     elif result["type"] == "boolean":
         print("Member:", "yes" if result["value"] else "no")
+    elif record["operation"] in ("hilbert-samuel-function", "hilbert-samuel-multiplicity"):
+        print("Dimension:", integer_text(result["dimension"]))
+        function = result["type"] == "hilbert-samuel-function"
+        print("Hilbert–Samuel multiplicity:", integer_text(result["multiplicity"] if function else result["value"]))
+        if function:
+            print("Degree\tLength of A/m^(n+1)\tDimension of m^n/m^(n+1)")
+            for row in zip(result["degrees"], result["values"], result["graded_values"]):
+                print(*map(integer_text, row), sep="\t")
     elif result["type"] in ("quotient-basis", "local-jacobian-algebra"):
         if result["type"] == "local-jacobian-algebra":
             print("Jacobian generators:", ", ".join(result["generators"]) or "(none)")
@@ -146,8 +161,10 @@ def run(args):
         "ring": ring,
         "operands": {key: getattr(args, key) for key in OPERATION_OPERANDS[args.operation]},
     }
-    if getattr(args, "point", None) is not None:
-        request["operands"]["point"] = args.point
+    for key in ("point", "degrees"):
+        value = getattr(args, key, None)
+        if value is not None:
+            request["operands"][key] = value
     if args.compute is not None:
         request["compute"] = args.compute
     try:
@@ -156,7 +173,7 @@ def run(args):
         print("Algebra calculation interrupted.", file=sys.stderr)
         return 130
     if args.json:
-        print(json.dumps(record, indent=2, ensure_ascii=False))
+        print(result_json(record, indent=2))
     elif status == 200:
         _show(record)
     else:

@@ -3,7 +3,7 @@ import re
 from subprocess import TimeoutExpired
 
 from .algebra_replay import make_replay
-from .polynomial import InputError, integer_text, parse_expression
+from .polynomial import InputError, integer_from_decimal, integer_text, parse_expression
 from .rational_point import normalize_point
 
 
@@ -17,7 +17,12 @@ LOCAL_STANDARD_OPERANDS = {
     "local-standard-basis": ("ideal",),
     "local-normal-form": ("ideal", "polynomial"),
 }
-POINT_OPERATIONS = LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
+HILBERT_SAMUEL_OPERANDS = {
+    "hilbert-samuel-function": ("ideal",),
+    "hilbert-samuel-multiplicity": ("ideal",),
+}
+POINT_OPERATIONS = (LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
+                    | HILBERT_SAMUEL_OPERANDS.keys())
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "factor": ("polynomial",),
@@ -33,6 +38,7 @@ OPERATION_OPERANDS = {
     "quotient-basis": ("ideal",),
     **LOCAL_QUOTIENT_OPERANDS,
     **LOCAL_STANDARD_OPERANDS,
+    **HILBERT_SAMUEL_OPERANDS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
 
@@ -63,6 +69,19 @@ def _names(names):
     return names
 
 
+def _degrees(values):
+    if not isinstance(values, list):
+        raise InputError("degrees must be an array of nonnegative integers.")
+    degrees = []
+    for value in values:
+        if isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+            value = integer_from_decimal(value)
+        if type(value) is not int or value < 0:
+            raise InputError("Each degree must be a nonnegative integer or an unsigned decimal string.")
+        degrees.append(value)
+    return degrees
+
+
 def _request(data):
     _fields(data, "request", ("operation", "ring", "operands"), ("compute",))
     operation = data["operation"]
@@ -82,8 +101,12 @@ def _request(data):
         raise InputError("Unsupported monomial order. Choose lex or grevlex.")
 
     operands = data["operands"]
-    point_operation = operation in POINT_OPERATIONS
-    _fields(operands, "operands", OPERATION_OPERANDS[operation], ("point",) if point_operation else ())
+    optional = ("point",) if operation in POINT_OPERATIONS else ()
+    if operation == "hilbert-samuel-function":
+        optional += ("degrees",)
+    _fields(operands, "operands", OPERATION_OPERANDS[operation], optional)
+    if "degrees" in operands:
+        operands = dict(operands, degrees=_degrees(operands["degrees"]))
     if "point" in operands:
         operands = dict(operands, point=normalize_point(operands["point"], len(names)))
     elif operation in LOCAL_STANDARD_OPERANDS:
@@ -150,6 +173,8 @@ def dispatch(data, *, known_basis=False):
             from . import local_standard as handler
             if known_basis and operation == "local-normal-form":
                 handler_options["known_basis"] = True
+        elif operation in HILBERT_SAMUEL_OPERANDS:
+            from . import hilbert_samuel as handler
         else:
             from . import algebra_ideals as handler
         result = handler.handle(operation, ring, result_operands, **handler_options)
@@ -166,12 +191,15 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None):
     if known_basis:
         args.append("--known-basis")
     try:
-        # Encode point integers in their equivalent string form before the
-        # worker transport calls json.dumps under the host's decimal digit limit.
+        # Send integers as decimal strings across the worker boundary, where
+        # the host's JSON encoder may enforce a decimal digit limit.
         operands = request.get("operands") if isinstance(request, dict) else None
-        if isinstance(operands, dict) and isinstance(operands.get("point"), list):
-            point = [integer_text(v) if type(v) is int else v for v in operands["point"]]
-            request = dict(request, operands=dict(operands, point=point))
+        if isinstance(operands, dict):
+            wire_operands = operands.copy()
+            for key in ("point", "degrees"):
+                if isinstance(operands.get(key), list):
+                    wire_operands[key] = [integer_text(v) if type(v) is int else v for v in operands[key]]
+            request = dict(request, operands=wire_operands)
         return run_worker(args, request, timeout, owner=owner)
     except (TypeError, ValueError, RecursionError):
         return 400, error_record("invalid_request", "Send a JSON algebra request.")

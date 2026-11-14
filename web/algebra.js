@@ -24,6 +24,8 @@ const quotientDescriptions = {
   "tjurina-number": "Compute the dimension over ℚ of the local quotient by f and its partial derivatives.",
   "local-standard-basis": "Compute a standard basis of the ideal in the local ring at the chosen point.",
   "local-normal-form": "Reduce f modulo the ideal in the local ring at the chosen point.",
+  "hilbert-samuel-function": "For the local quotient A at p, compute lengths through each chosen degree and dimensions of its graded pieces. Here m is the maximal ideal of A.",
+  "hilbert-samuel-multiplicity": "Compute the Hilbert–Samuel multiplicity of the local quotient A at p with respect to its maximal ideal.",
 };
 const session = new AlgebraSession();
 let activeOperation = operation.value;
@@ -113,6 +115,7 @@ function updateOperation() {
   else operation.setAttribute("aria-describedby", description.id);
   byId("order-label").textContent = AlgebraSession.pointOperations.has(activeOperation) ? "Local order tie-breaker" : "Monomial order";
   showOperandGroup("local-point-field", AlgebraSession.pointOperations.has(activeOperation));
+  showOperandGroup("degrees-field", activeOperation === "hilbert-samuel-function");
   const needsIdeal = ["intersection", "quotient"].includes(activeOperation);
   showOperandGroup("second-ideal", needsIdeal);
   if (needsIdeal) {
@@ -200,6 +203,10 @@ function readRequest() {
     const point = byId("local-point").value.trim();
     if (point) operands.point = point === "()" ? [] : point.split(",").map(value => value.trim());
   }
+  if (operation.value === "hilbert-samuel-function") {
+    const degrees = byId("degrees").value.trim();
+    if (degrees) operands.degrees = degrees === "[]" ? [] : degrees.split(",").map(value => value.trim());
+  }
   return {
     operation: operation.value,
     ring: inputRing(),
@@ -263,6 +270,8 @@ const resultTitles = {
   "tjurina-number": "Tjurina number",
   "local-standard-basis": "Local standard basis",
   "local-normal-form": "Local normal form",
+  "hilbert-samuel-function": "Hilbert–Samuel function",
+  "hilbert-samuel-multiplicity": "Hilbert–Samuel multiplicity",
 };
 
 // Preserve every source token in the DOM while setting powers, fractions and
@@ -324,6 +333,8 @@ const problemNotation = {
   "tjurina-number": "τ<sub><i>p</i></sub>(<i>f</i>)",
   "local-standard-basis": "SB<sub><i>p</i></sub>(<i>I</i>)",
   "local-normal-form": "NF<sub><i>I,p</i></sub>(<i>f</i>)",
+  "hilbert-samuel-function": "H<sub><i>A,p</i></sub>(<i>n</i>)",
+  "hilbert-samuel-multiplicity": "e<sub><i>p</i></sub>(<i>A</i>)",
 };
 
 function showProblem(request) {
@@ -372,6 +383,13 @@ function showProblem(request) {
       mathSpan("span", "equation-rhs", "(" + point.join(", ") + ")"));
     rows.append(row);
   }
+  if (operation === "hilbert-samuel-function") {
+    const degrees = operands.degrees ?? ["0", "1", "2", "3", "4", "5"];
+    const row = mathSpan("div", "equation-row");
+    row.append(mathSpan("i", "equation-label", "n"), mathSpan("span", "equals", "="),
+      mathSpan("span", "equation-rhs", "[" + degrees.join(", ") + "]"));
+    rows.append(row);
+  }
   byId("problem-ring").textContent = "R = " + ringText(ring).split(" · ")[0];
   const selected = byId("order").selectedOptions[0].textContent;
   const order = AlgebraSession.pointOperations.has(operation) ? "Lowest total degree first · " + selected.toLowerCase() + " tie-breaker" : selected + " order";
@@ -402,20 +420,43 @@ function showFactorization(value, result) {
     value.append(mathSpan("p", "helper", "This constant has no irreducible factors."));
     return;
   }
-  const table = document.createElement("table");
-  table.className = "factorization";
-  const header = table.createTHead().insertRow();
-  for (const title of ["Irreducible factor", "Multiplicity"]) {
-    const column = mathSpan("th", "", title);
-    column.scope = "col";
-    header.append(column);
-  }
+  const table = resultTable(["Irreducible factor", "Multiplicity"]);
   const rows = table.createTBody();
   for (const { polynomial, multiplicity } of result.factors) {
     const row = rows.insertRow();
     row.insertCell().append(expressionText(polynomial));
     row.insertCell().textContent = String(multiplicity);
   }
+  value.append(table);
+}
+
+function resultTable(headings) {
+  const table = document.createElement("table");
+  table.className = "algebra-table";
+  const header = table.createTHead().insertRow();
+  for (const heading of headings) {
+    const column = mathSpan("th", "", heading);
+    column.scope = "col";
+    header.append(column);
+  }
+  return table;
+}
+
+function showHilbertSamuel(value, result) {
+  const multiplicity = result.type === "integer" ? result.value : result.multiplicity;
+  value.replaceChildren(mathSpan("h3", "quotient-label", "Hilbert–Samuel multiplicity"), String(multiplicity),
+    mathSpan("h3", "quotient-label", "Krull dimension"), String(result.dimension));
+  if (result.type !== "hilbert-samuel-function") return;
+  if (!result.degrees.length) {
+    value.append(mathSpan("p", "helper", "No degrees requested."));
+    return;
+  }
+  const table = resultTable(["Degree n", "Cumulative length ℓ(A/mⁿ⁺¹)", "Graded dimension dim(mⁿ/mⁿ⁺¹)"]);
+  const body = table.createTBody();
+  result.degrees.forEach((degree, i) => {
+    const row = body.insertRow();
+    for (const entry of [degree, result.values[i], result.graded_values[i]]) row.insertCell().textContent = String(entry);
+  });
   value.append(table);
 }
 
@@ -477,9 +518,13 @@ function showResult(record) {
     case "local-jacobian-algebra":
       showQuotient(value, result);
       break;
+    case "hilbert-samuel-function":
+      showHilbertSamuel(value, result);
+      break;
     case "boolean":
     case "integer":
-      value.textContent = result.finite === false ? "Infinite" : String(result.value);
+      if (record.operation === "hilbert-samuel-multiplicity") showHilbertSamuel(value, result);
+      else value.textContent = result.finite === false ? "Infinite" : String(result.value);
       break;
     default:
       throw new Error("The service returned an unknown result type.");

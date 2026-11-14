@@ -17,6 +17,22 @@ def _divides(divisor, multiple):
     return all(a <= b for a, b in zip(divisor, multiple))
 
 
+def finite_degree_cutoff(width, heads):
+    """First degree known to vanish in the local quotient, or None."""
+    pure = [None] * width
+    for head in heads:
+        axes = [i for i, exponent in enumerate(head) if exponent]
+        if len(axes) == 1:
+            i = axes[0]
+            if pure[i] is None or head[i] < pure[i]:
+                pure[i] = head[i]
+    if any(bound is None for bound in pure):
+        return None
+    # The associated graded quotient vanishes from N onward. Therefore
+    # m^N=m*m^N in the local quotient, and Nakayama gives m^N=0.
+    return 1 + sum(bound - 1 for bound in pure)
+
+
 @dataclass
 class _Reducer:
     terms: dict
@@ -52,7 +68,6 @@ def weak_normal_form(variables, generators, f, order):
         raise ValueError("Local division requires a lex or grevlex tie order.")
 
     reducers = []
-    pure = [None] * len(variables)
     for generator in generators:
         if not generator:
             continue
@@ -67,11 +82,6 @@ def weak_normal_form(variables, generators, f, order):
             terms = {head: 1}
         ecart = max(map(sum, terms)) - sum(head)
         reducers.append(_Reducer(terms, head, ecart, {}))
-        axes = [i for i, e in enumerate(head) if e]
-        if len(axes) == 1:
-            i = axes[0]
-            if pure[i] is None or head[i] < pure[i]:
-                pure[i] = head[i]
     if not reducers or not f:
         return np.S.One, f, "standard"
 
@@ -103,11 +113,8 @@ def weak_normal_form(variables, generators, f, order):
             raise Unavailable("Rebuild the native kernel for sparse remainder-only division.")
         return np.S.One, basis.remainder(f), "standard"
 
-    # With x_i^b_i in the initial ideal, the associated graded quotient
-    # vanishes from degree N=1+sum(b_i-1). Thus m^N=m*m^N in the local
-    # quotient, and m^N=0 by Nakayama. Discarding these terms is exact.
-    finite = all(b is not None for b in pure)
-    cutoff = 1 + sum(b - 1 for b in pure) if finite else None
+    cutoff = finite_degree_cutoff(len(variables), (r.head for r in reducers))
+    finite = cutoff is not None
     pending = np.terms(variables, f)
     remainder = {}
     if finite:

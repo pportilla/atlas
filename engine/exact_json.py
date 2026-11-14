@@ -16,9 +16,9 @@ def _result_json(value):
     return json.dumps(value, ensure_ascii=False)
 
 
-def result_json(record):
+def result_json(record, *, indent=None):
     try:
-        return json.dumps(record, ensure_ascii=False)
+        return json.dumps(record, indent=indent, ensure_ascii=False)
     except ValueError:
         # Computed multiplicities and quotient dimensions can exceed the
         # interpreter's integer-to-decimal conversion limit.

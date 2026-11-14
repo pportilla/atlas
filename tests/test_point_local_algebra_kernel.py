@@ -191,6 +191,29 @@ class PointLocalAlgebraKernel(unittest.TestCase):
             result = calculate("local-quotient-basis", [equation, x - 2], variables, point=[2, 2])
         self.assertEqual((result["finite"], result["dimension"], result["basis"]), (True, 1, ["1"]))
 
+    def test_moderate_degree_tangent_rank_and_rank_deficient_fallback(self):
+        from engine import point_germs
+
+        x, y = variables = np.symbols("x y")
+        point = [1, 1]
+        # The linear parts (10,1) and (1,10) span the cotangent space.
+        ideal = [x**10 + y - 2, y**10 + x - 2]
+        # The two squared summands also have independent linear parts.
+        morse = (x**5 + y - 2)**2 + (y**5 + x - 2)**2
+        with patch.object(point_germs, "_translate", side_effect=AssertionError("translated full-rank generators")):
+            regular = calculate("local-quotient-basis", ideal, variables, point=point)
+            self.assertEqual((regular["dimension"], regular["basis"]), (1, ["1"]))
+            invariant = calculate("milnor-number", morse, variables, point=point)
+            self.assertEqual((invariant["finite"], invariant["value"]), (True, 1))
+
+        # At x=1 the first generator has a double root. Only y-1 has a
+        # nonzero linear part, so the quotient still contains x-1.
+        with patch.object(point_germs, "_translate", wraps=point_germs._translate) as translate:
+            deficient = calculate("local-quotient-basis", [x**10 - 10*x + 9, y - 1], variables, point=point)
+            self.assertTrue(translate.called)
+        self.assertEqual(deficient["dimension"], 2)
+        self.assertEqual(as_polynomials(deficient["basis"], variables), [1, x - 1])
+
     def test_mixed_wide_power_can_leave_a_finite_or_infinite_jacobian_algebra(self):
         x, y, z = variables = np.symbols("x y z")
         n = 2**64 + 1

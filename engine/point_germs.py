@@ -90,9 +90,9 @@ def _with_powers(variables, powers, f):
     return np.from_terms(variables, terms)
 
 
-def _large_translation(variables, shifts, f):
+def _large_translation(variables, shifts, f, *, min_terms=65537):
     # A shifted monomial expands into the product of its binomial term counts.
-    return any(prod(k + 1 for k, a in zip(powers, shifts) if a) > 65536
+    return any(prod(k + 1 for k, a in zip(powers, shifts) if a) >= min_terms
                for powers in np.terms(variables, f))
 
 
@@ -139,7 +139,9 @@ def centered_ideal(variables, shifts, generators):
                 extra, f = _point_generator(variables, shifts, np.from_terms(variables, terms))
                 powers = tuple(i + j for i, j in zip(powers, extra))
         if f != 1 and shifted:
-            if try_tangent_rank and _large_translation(variables, shifts, f):
+            # Even moderate degrees can require an expensive homogenized basis.
+            # Test from a shifted eighth power or a pair of shifted squares.
+            if try_tangent_rank and _large_translation(variables, shifts, f, min_terms=9):
                 from .point_tangent import maximal_ideal_from_linear_parts
                 # Every original generator vanishes. Full rank of their
                 # linear parts at this point gives the maximal ideal by Nakayama.

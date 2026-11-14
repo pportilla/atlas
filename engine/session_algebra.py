@@ -100,6 +100,10 @@ class _Basis(_IdealResult):
 
 class _AtPoint:
     @property
+    def scope(self):
+        return self._record["result"]["scope"]
+
+    @property
     def point(self):
         result = self._record["result"]
         if result["scope"] == "origin":
@@ -113,10 +117,6 @@ class _PointResult(_AtPoint, _Result):
     order: str
     _record: dict
     _fields = _Result._fields | {"scope", "point"}
-
-    @property
-    def scope(self):
-        return self._record["result"]["scope"]
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -231,6 +231,45 @@ class _LocalNumber(_AtPoint, _QuotientData, _ScalarResult):
 
     def __repr__(self):
         return integer_text(self.value) if self.finite else "infinite"
+
+
+class _HilbertSamuelMultiplicity(_AtPoint, _ScalarResult):
+    _fields = _ScalarResult._fields | {"point", "scope", "dimension"}
+
+    @property
+    def dimension(self):
+        return self._record["result"]["dimension"]
+
+    def __repr__(self):
+        return integer_text(self.value)
+
+
+class _HilbertSamuelFunction(_PointResult):
+    _fields = _PointResult._fields | {"degrees", "values", "graded_values", "dimension", "multiplicity"}
+
+    @property
+    def degrees(self):
+        return list(self._record["result"]["degrees"])
+
+    @property
+    def values(self):
+        return list(self._record["result"]["values"])
+
+    @property
+    def graded_values(self):
+        return list(self._record["result"]["graded_values"])
+
+    @property
+    def dimension(self):
+        return self._record["result"]["dimension"]
+
+    @property
+    def multiplicity(self):
+        return self._record["result"]["multiplicity"]
+
+    def __repr__(self):
+        return (f"Hilbert–Samuel function ({self.scope}, dimension={self.dimension}, "
+                f"multiplicity={integer_text(self.multiplicity)}, values={result_json(self.values)})")
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -389,6 +428,8 @@ def _typed(record, space):
     if kind == "local-normal-form":
         remainder, unit = polynomials((result["remainder"], result["unit"]))
         return _LocalNormalForm(space, order, record, remainder, unit)
+    if kind == "hilbert-samuel-function":
+        return _HilbertSamuelFunction(space, order, record)
     if kind in ("quotient-basis", "local-jacobian-algebra"):
         basis = None if result["basis"] is None else polynomials(result["basis"])
         if kind == "local-jacobian-algebra":
@@ -405,6 +446,8 @@ def _typed(record, space):
         )
         return _Factorization(space, order, record, unit, factors)
     if kind in ("boolean", "integer"):
+        if record["operation"] == "hilbert-samuel-multiplicity":
+            return _HilbertSamuelMultiplicity(space, order, result["value"], record)
         cls = _LocalNumber if "finite" in result else _ScalarResult
         return cls(space, order, result["value"], record)
     raise ValueError(f"Unknown algebra result type {kind!r}.")
@@ -438,7 +481,8 @@ def _require_ideal(value):
 
 def _calculate(operation, left, compute, **operands):
     local_basis = (isinstance(left, _LocalStandardBasis)
-                   and operation in ("local-normal-form", "local-quotient-basis"))
+                   and operation in ("local-normal-form", "local-quotient-basis",
+                                     "hilbert-samuel-function", "hilbert-samuel-multiplicity"))
     if not local_basis:
         left = _require_ideal(left)
     point = operands.pop("point", None)
@@ -560,6 +604,22 @@ def local_quotient_basis(ideal, *, point=None, compute="auto"):
     return _calculate("local-quotient-basis", ideal, compute, point=point)
 
 
+_DEFAULT_DEGREES = object()
+
+
+def hilbert_samuel_function(ideal, *, degrees=_DEFAULT_DEGREES, point=None, compute="auto"):
+    operands = {}
+    if degrees is not _DEFAULT_DEGREES:
+        if not isinstance(degrees, (list, tuple)):
+            raise TypeError("Pass degrees as a list or tuple of nonnegative integers.")
+        operands["degrees"] = list(degrees)
+    return _calculate("hilbert-samuel-function", ideal, compute, point=point, **operands)
+
+
+def hilbert_samuel_multiplicity(ideal, *, point=None, compute="auto"):
+    return _calculate("hilbert-samuel-multiplicity", ideal, compute, point=point)
+
+
 def algebra_bindings():
     return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
             "normal_form": normal_form, "membership": membership,
@@ -567,5 +627,7 @@ def algebra_bindings():
             "eliminate": eliminate, "intersection": intersection, "quotient": quotient,
             "saturation": saturation, "saturate": saturation, "dimension": dimension,
             "quotient_basis": quotient_basis, "local_quotient_basis": local_quotient_basis,
+            "hilbert_samuel_function": hilbert_samuel_function,
+            "hilbert_samuel_multiplicity": hilbert_samuel_multiplicity,
             "local_jacobian_algebra": local_jacobian_algebra, "milnor_number": milnor_number,
             "tjurina_number": tjurina_number, "algebra_request": algebra_request}

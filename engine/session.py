@@ -56,6 +56,11 @@ remainder has a reduced local leading term.
   milnor_number(f).value                 # 2 at the origin
   tjurina_number(f).value                # 2 at the origin
 
+  H = hilbert_samuel_function(ideal(f), degrees=[0, 2, 5])
+  H.values                               # cumulative lengths 1, 5, 11
+  H.graded_values                        # graded piece dimensions 1, 2, 2
+  hilbert_samuel_multiplicity(ideal(f)).value  # 2 at the cusp
+
 Local quotient bases, Jacobian algebras, Milnor numbers and Tjurina numbers
 default to the origin. Pass rational coordinates in ring order to select a point.
 

@@ -4,6 +4,8 @@ import json
 from keyword import iskeyword
 import shlex
 
+from .polynomial import integer_text
+
 
 _MAX_SCRIPT_LINE = 640
 
@@ -40,6 +42,8 @@ def _command(request):
         args.extend(["--eliminate", ",".join(operands["variables"])])
     if "point" in operands:
         args.extend(["--point", ",".join(operands["point"])])
+    if "degrees" in operands:
+        args.extend(["--degrees", ",".join(map(integer_text, operands["degrees"]))])
     args.append("--json")
     return shlex.join(args)
 
@@ -92,6 +96,8 @@ def _script(request, prepared):
         args.extend(prepared["variables"])
     if "point" in prepared:
         args.append(f"point={prepared['point']!r}")
+    if "degrees" in prepared:
+        args.append("degrees=[" + ", ".join(map(integer_text, prepared["degrees"])) + "]")
     args.append(f"compute={request['compute']!r}")
     lines.append(f"result = {op.replace('-', '_')}({', '.join(args)})")
     # Long, expanded polynomials are easier to replay from their input strings.
@@ -105,6 +111,11 @@ def make_replay(request, prepared):
     """Render original operands at the shell and parsed exact values in a script."""
     script = _script(request, prepared)
     if script is None:
-        source = json.dumps(request, ensure_ascii=False)
+        replay_request = request
+        if "degrees" in request["operands"]:
+            # Quoted decimal integers replay even in a digit-limited host.
+            operands = dict(request["operands"], degrees=list(map(integer_text, prepared["degrees"])))
+            replay_request = dict(request, operands=operands)
+        source = json.dumps(replay_request, ensure_ascii=False)
         script = f"result = algebra_request({source!r})"
     return {"command": _command(request), "script": script + "\nprint(result.json)\n"}

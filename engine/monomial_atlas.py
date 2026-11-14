@@ -257,7 +257,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     named = saved and any(re.fullmatch(r"S[0-9]+", c["id"]) for chart,_ in charts for c in chart["components"])
     output = []
     data, strata = {}, Counter()
-    names, by_ray, faces = [], {}, set()
+    by_ray, faces = {}, set()
     f = format_poly(polynomial, base)
     weight, reduced = 1, None
     weighted = saved and (record.get("input_divisor") or any(
@@ -405,14 +405,12 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             if split and not saved and any(k in c and (type(c[k]) != int or c[k] != value)
                                            for k,value in (("multiplicity",order), ("nu",nu))):
                 raise InvalidChart("The exceptional orders differ from the split chart pullback.")
-            if (by_ray.setdefault(cone[j], label) != label or label in names and
+            if (by_ray.setdefault(cone[j], label) != label or label in data and
                     data[label][2] != cone[j]):
                 raise InvalidChart("One exceptional ray must have a single global component label.")
             if (saved and (type(c["multiplicity"]) is not int or type(c["nu"]) is not int or
                            (c["multiplicity"], c["nu"]) != (order, nu))):
                 raise InvalidChart("The exceptional orders differ from the pullback or its Jacobian.")
-            if label not in names:
-                names.append(label)
             if data.setdefault(label, (order, nu, cone[j])) != (order, nu, cone[j]):
                 raise InvalidChart("The charts disagree about exceptional numerical data.")
             components.append(dict(id=label, multiplicity=order, nu=nu, ideal=[coords[j]]))
@@ -499,13 +497,14 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             return None
         found.update(cells=boundary["cells"], dual_complex=boundary)
     elif complex:
-        vertices = [dict(id=name, dimension=n-1) for name in names]
+        vertices = [dict(id=name, dimension=n-1) for name in data]
+        rank = {name: i for i, name in enumerate(data)}
         def cell_id(face):
             return face[0] if len(face) == 1 else "C" + "-".join(face) + ".1"
         cells = []
         for size in range(2, n+1):
-            subsets = [sorted(face, key=names.index) for face in faces if len(face) == size]
-            for face in sorted(subsets, key=lambda f: list(map(names.index, f))):
+            subsets = [sorted(face, key=rank.__getitem__) for face in faces if len(face) == size]
+            for face in sorted(subsets, key=lambda f: list(map(rank.__getitem__, f))):
                 cells.append(dict(id=cell_id(face), dimension=size-1, vertices=face,
                                   faces=[cell_id(sub) for sub in combinations(face, size-1)]))
         found.update(cells=cells, dual_complex={"status": "complete", "vertices": vertices, "cells": cells,
