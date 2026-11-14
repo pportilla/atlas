@@ -1,5 +1,6 @@
 // Compute the extended tangent quotient as a graded vector space. See KERNEL.md.
 #include "ae_graded.hpp"
+#include "ae_graded_surface.hpp"
 #include "local_monomial.hpp"
 #include "local_point_quotient.hpp"
 #include "primary_decomposition.hpp"
@@ -59,6 +60,8 @@ bool has_source(const Powers& e, size_t n) {
 
 std::optional<Json::Value> ae_graded(const Basis& map, const std::vector<std::string>& names) {
     const size_t n = names.size(), p = map.size(), base = n+p, width = base+p;
+    if (n == 2 && p == 3)
+        if (auto ranks = ae_graded_surface(map)) return ranks;
     // Lexicographic graph elimination can grow much faster than a small jet.
     if (width > 18) return std::nullopt;
     size_t terms = 0;

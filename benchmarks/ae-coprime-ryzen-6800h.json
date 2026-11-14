@@ -1,0 +1,537 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    0
+  ],
+  "trials": 3,
+  "conditions": "QQ at the origin. Fresh processes, compulsory single-threaded Singular. One discarded warmup per solver, then alternating order. A timeout omits the median for that solver and triple. The coDimMap limits are at least 45 s for (2,3,5) and 90 s for (2,3,7).",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "binaries_sha256": {
+    "libgroebner.so": "ffd41f0567e0d794191594d31f06b291723e8fc5718a6f06be6e12a463b975f3",
+    "local_algebra": "137f525136e0f658b3df2c894f7b426ac1d9458ab4e570e02a56321339e08d95"
+  },
+  "cases": [
+    {
+      "degrees": [
+        1,
+        2,
+        3
+      ],
+      "value": 1,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            3.939462,
+            4.27157,
+            3.682596
+          ],
+          "method": "double_cover_hypersurface",
+          "median_ms": 3.939462
+        },
+        "singular_codimmap": {
+          "samples_ms": [
+            259.639162,
+            259.03553,
+            257.217881
+          ],
+          "median_ms": 259.03553
+        },
+        "singular_module": {
+          "samples_ms": [
+            6.812968,
+            6.511076,
+            6.395689
+          ],
+          "median_ms": 6.511076
+        }
+      }
+    },
+    {
+      "degrees": [
+        1,
+        3,
+        5
+      ],
+      "value": 20,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            3.547641,
+            4.050492,
+            3.681384
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 3.681384
+        },
+        "singular_codimmap": {
+          "samples_ms": [
+            198.221041,
+            198.175204,
+            197.146769
+          ],
+          "median_ms": 198.175204
+        },
+        "singular_module": {
+          "samples_ms": [
+            7.793713,
+            7.647596,
+            6.642054
+          ],
+          "median_ms": 7.647596
+        }
+      }
+    },
+    {
+      "degrees": [
+        2,
+        3,
+        5
+      ],
+      "value": 115,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            4.020476,
+            4.990359,
+            3.724415
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 4.020476
+        },
+        "singular_codimmap": {
+          "samples_ms": [
+            5092.305084,
+            5081.873972,
+            5152.636309
+          ],
+          "median_ms": 5092.305084
+        },
+        "singular_module": {
+          "samples_ms": [
+            9.931156,
+            9.410992,
+            11.157165
+          ],
+          "median_ms": 9.931156
+        }
+      }
+    },
+    {
+      "degrees": [
+        2,
+        3,
+        7
+      ],
+      "value": 242,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            4.036316,
+            6.445723,
+            5.922463
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 5.922463
+        },
+        "singular_codimmap": {
+          "samples_ms": [
+            31315.326273,
+            37198.332653,
+            33373.540826
+          ],
+          "median_ms": 33373.540826
+        },
+        "singular_module": {
+          "samples_ms": [
+            11.226346,
+            10.868369,
+            12.197884
+          ],
+          "median_ms": 11.226346
+        }
+      }
+    },
+    {
+      "degrees": [
+        3,
+        4,
+        5
+      ],
+      "value": 529,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            5.401237,
+            4.919455,
+            4.545709
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 4.919455
+        },
+        "singular_codimmap": {
+          "samples_ms": [],
+          "timeout_s": 15,
+          "timed_out_during": "warmup"
+        },
+        "singular_module": {
+          "samples_ms": [
+            21.201376,
+            21.570113,
+            21.334948
+          ],
+          "median_ms": 21.334948
+        }
+      }
+    },
+    {
+      "degrees": [
+        2,
+        5,
+        7
+      ],
+      "value": 729,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            5.533377,
+            5.795734,
+            7.225488
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 5.795734
+        },
+        "singular_codimmap": {
+          "samples_ms": [],
+          "timeout_s": 15,
+          "timed_out_during": "warmup"
+        },
+        "singular_module": {
+          "samples_ms": [
+            21.948238,
+            29.729878,
+            27.46854
+          ],
+          "median_ms": 27.46854
+        }
+      }
+    },
+    {
+      "degrees": [
+        3,
+        5,
+        7
+      ],
+      "value": 1710,
+      "timings": {
+        "atlas": {
+          "samples_ms": [
+            9.096397,
+            13.711758,
+            9.16147
+          ],
+          "method": "graded_tangent_ranks",
+          "median_ms": 9.16147
+        },
+        "singular_codimmap": {
+          "samples_ms": [],
+          "timeout_s": 15,
+          "timed_out_during": "warmup"
+        },
+        "singular_module": {
+          "samples_ms": [
+            78.976765,
+            77.144569,
+            73.942572
+          ],
+          "median_ms": 77.144569
+        }
+      }
+    }
+  ],
+  "kernel_profile": {
+    "conditions": "Pre-parsed input; public native entry point, logical CPU 10, five fresh harness calls each with one warmup and seven timed solves. Native per-solve wall ms.",
+    "reproduce": "make -C native -f groebner.mk build/bench_ae_codimension; pass the source variables on the first line, one component per following line, to native/build/bench_ae_codimension 7 solve.",
+    "cases": [
+      {
+        "degrees": [
+          1,
+          2,
+          3
+        ],
+        "method": "double_cover_hypersurface",
+        "value": 1,
+        "last_weight": null,
+        "solve_ms": [
+          0.0019135714285714285,
+          0.0018592857142857144,
+          0.0018577142857142857,
+          0.0019422857142857143,
+          0.0018707142857142857
+        ]
+      },
+      {
+        "degrees": [
+          1,
+          3,
+          5
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 20,
+        "last_weight": 7,
+        "solve_ms": [
+          0.041802,
+          0.04063685714285714,
+          0.04094171428571428,
+          0.04026328571428572,
+          0.04034485714285714
+        ]
+      },
+      {
+        "degrees": [
+          2,
+          3,
+          5
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 115,
+        "last_weight": 21,
+        "solve_ms": [
+          0.09909457142857143,
+          0.10431885714285714,
+          0.09392914285714286,
+          0.09172785714285714,
+          0.09074742857142858
+        ]
+      },
+      {
+        "degrees": [
+          2,
+          3,
+          7
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 242,
+        "last_weight": 31,
+        "solve_ms": [
+          0.2163837142857143,
+          0.21483057142857143,
+          0.21330642857142856,
+          0.21618757142857142,
+          0.21833442857142857
+        ]
+      },
+      {
+        "degrees": [
+          3,
+          4,
+          5
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 529,
+        "last_weight": 50,
+        "solve_ms": [
+          0.6887858571428571,
+          0.6896617142857143,
+          0.6904488571428572,
+          0.6808048571428571,
+          0.693635
+        ]
+      },
+      {
+        "degrees": [
+          2,
+          5,
+          7
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 729,
+        "last_weight": 59,
+        "solve_ms": [
+          1.199602,
+          1.209706857142857,
+          1.1967452857142857,
+          1.202805142857143,
+          1.2019937142857142
+        ]
+      },
+      {
+        "degrees": [
+          3,
+          5,
+          7
+        ],
+        "method": "graded_tangent_ranks",
+        "value": 1710,
+        "last_weight": 93,
+        "solve_ms": [
+          4.784234285714286,
+          4.778972857142858,
+          4.7790674285714285,
+          4.806436285714286,
+          4.798170571428572
+        ]
+      }
+    ]
+  },
+  "original_suite_recheck": {
+    "conditions": "Atlas public CLI on the original twelve maps, five fresh runs after one discarded warmup on logical CPU 13; expected values checked against the published coDimMap results in ae-codimension-ryzen-6800h.json.",
+    "cases": [
+      {
+        "name": "immersion",
+        "value": 0,
+        "method": "regular_map",
+        "median_ms": 2.709946,
+        "samples_ms": [
+          2.498276,
+          2.520157,
+          2.758358,
+          2.712211,
+          2.709946
+        ]
+      },
+      {
+        "name": "univariate",
+        "value": 10,
+        "method": "univariate_order",
+        "median_ms": 2.393638,
+        "samples_ms": [
+          2.393638,
+          2.448051,
+          2.349665,
+          2.346538,
+          2.524826
+        ]
+      },
+      {
+        "name": "scalar-separated",
+        "value": 11,
+        "method": "separated_jacobian",
+        "median_ms": 2.473088,
+        "samples_ms": [
+          2.422111,
+          2.545966,
+          2.473088,
+          2.586373,
+          2.42668
+        ]
+      },
+      {
+        "name": "scalar-mixed",
+        "value": 10,
+        "method": "jacobian_target_powers",
+        "median_ms": 2.522963,
+        "samples_ms": [
+          2.654712,
+          2.519696,
+          2.522963,
+          2.589558,
+          2.46861
+        ]
+      },
+      {
+        "name": "monomial-curve",
+        "value": 7,
+        "method": "monomial_curve_semigroup",
+        "median_ms": 2.645705,
+        "samples_ms": [
+          2.40524,
+          2.487706,
+          2.736958,
+          2.942556,
+          2.645705
+        ]
+      },
+      {
+        "name": "crosscap",
+        "value": 0,
+        "method": "double_cover_hypersurface",
+        "median_ms": 2.429806,
+        "samples_ms": [
+          2.544964,
+          2.429806,
+          2.400722,
+          2.507253,
+          2.39483
+        ]
+      },
+      {
+        "name": "higher-order-double-cover",
+        "value": 11,
+        "method": "double_cover_hypersurface",
+        "median_ms": 2.439154,
+        "samples_ms": [
+          2.439154,
+          2.528533,
+          2.432251,
+          2.434154,
+          2.506932
+        ]
+      },
+      {
+        "name": "plane-graded",
+        "value": 3,
+        "method": "graded_graph",
+        "median_ms": 2.663018,
+        "samples_ms": [
+          2.648791,
+          2.915865,
+          2.663018,
+          2.611249,
+          2.721118
+        ]
+      },
+      {
+        "name": "plane-coordinate-change",
+        "value": 3,
+        "method": "extended_tangent_jets",
+        "median_ms": 2.954378,
+        "samples_ms": [
+          3.074696,
+          3.042876,
+          2.856122,
+          2.954378,
+          2.931014
+        ]
+      },
+      {
+        "name": "space-graded",
+        "value": 1,
+        "method": "graded_graph",
+        "median_ms": 2.784367,
+        "samples_ms": [
+          2.847256,
+          2.729083,
+          2.784367,
+          2.863066,
+          2.758439
+        ]
+      },
+      {
+        "name": "positive-dimensional-contact",
+        "value": null,
+        "method": "ramified_axis",
+        "median_ms": 2.552569,
+        "samples_ms": [
+          2.577295,
+          2.552569,
+          2.560434,
+          2.446648,
+          2.442621
+        ]
+      },
+      {
+        "name": "dense-plane-coordinate-change",
+        "value": 10,
+        "method": "extended_tangent_jets",
+        "median_ms": 13.025509,
+        "samples_ms": [
+          13.025509,
+          12.711616,
+          13.033355,
+          13.066808,
+          12.488333
+        ]
+      }
+    ]
+  }
+}

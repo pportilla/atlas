@@ -1,0 +1,47 @@
+// Inputs: positive integers a,b,c and the ring QQ[X,Y] with X=x^a,Y=y^b.
+// The source is free over this ring with basis x^i*y^j, 0<=i<a,0<=j<b.
+// Encode each extended tangent vector in that basis in three target positions.
+proc slot(int i,int j,int pos)
+{
+  return(X^(i div a)*Y^(j div b)*gen(1 + (i % a)*b + (j % b) + pos*a*b));
+}
+proc binaryPower(int d,int i,int j,int pos)
+{
+  vector v;
+  number binomial=1;
+  for (int k=0;k<=d;k++)
+  {
+    v=v+binomial*slot(i+k,j+d-k,pos);
+    binomial=binomial*(d-k)/(k+1);
+  }
+  return(v);
+}
+module tangent;
+int col=1;
+int i,j,k,pos;
+vector last;
+for (i=0;i<a;i++)
+{
+  for (j=0;j<b;j++)
+  {
+    last=c*binaryPower(c-1,i,j,2);
+    tangent[col]=a*slot(i+a-1,j,0)+last;
+    tangent[col+1]=b*slot(i,j+b-1,1)+last;
+    col=col+2;
+  }
+}
+// Multiplication by h=(x+y)^c is an endomorphism of a free rank-ab
+// module. Cayley-Hamilton gives QQ[X,Y][h] from 1,h,...,h^(ab-1).
+for (k=0;k<a*b;k++)
+{
+  for (pos=0;pos<3;pos++)
+  {
+    tangent[col]=binaryPower(c*k,0,0,pos);
+    col++;
+  }
+}
+// vdim counts the dimension of the quotient of the ambient free module.
+// The presentation is positive-weight graded, so a finite length is all at 0.
+module basis=std(tangent);
+print("AE "+string(vdim(basis)));
+quit;

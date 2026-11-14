@@ -1,10 +1,40 @@
 """Exact analytic families and infinite graded quotients."""
+from itertools import permutations
 import unittest
 
 from tests.test_local_algebra_singular import calculate
 
 
 class AeGradedTests(unittest.TestCase):
+    def test_powers_of_three_lines(self):
+        # Independent finite-module lengths, including permutations with even c.
+        for (a, b, c), expected in [
+            *((triple, 115) for triple in permutations((2, 3, 5))),
+            ((1, 3, 5), 20), ((3, 4, 5), 529), ((2, 5, 7), 729), ((3, 5, 7), 1710),
+        ]:
+            with self.subTest(a=a, b=b, c=c):
+                result = calculate("ae-codimension", components=[f"x^{a}", f"y^{b}", f"(x+y)^{c}"])
+                self.assertEqual((result["finite"], result["value"]), (True, expected))
+                if min(a, b, c) > 1:
+                    self.assertEqual(result["method"], "graded_tangent_ranks")
+                    self.assertGreater(result["last_weight"], 0)
+        oblique = ["-3/7*(2*x+y)^2", "5*(x-3*y)^3", "17/13*(5*x-2*y)^5"]
+        result = calculate("ae-codimension", components=oblique)
+        self.assertEqual((result["finite"], result["value"]), (True, 115))
+
+    def test_mixed_binary_forms_and_non_coprime_powers(self):
+        for components, expected in [
+            (["x^2", "y^4", "(x+y)^3"], None),  # joint gcd 1, but not pairwise
+            (["x^2", "y^4", "(x+y)^3+2*x*y^2"], 69),  # same three degrees, finite
+            (["x^2", "y^3", "(65521*x+y)^5"], 115),  # a bad modular image must fall back to QQ
+            (["x^2", "y^3", "x^5"], None),      # repeated direction
+            (["x^2", "y^3", "x^5+y^5"], None),  # sparse homogeneous nonpower
+            (["x^2", "y^3", "(x+y)^5+x^2*y^3"], 115),  # full support, altered interior coefficient
+        ]:
+            with self.subTest(components=components):
+                result = calculate("ae-codimension", components=components)
+                self.assertEqual((result["finite"], result["value"]), (expected is not None, expected))
+
     def test_plane_unfolding(self):
         # For (x, xy+y^d), eliminate the x component using df/dx.
         # Modulo df/dy, x=-d*y^(d-1). The remaining tangent space has

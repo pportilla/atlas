@@ -227,6 +227,36 @@ the gaps and pseudo-Frobenius numbers using the Apéry set. Regular maps, ramifi
 covers and split unfoldings admit further direct tangent-space calculations.
 [Native formulas and their hypotheses](ae_special.cpp)
 
+**Homogeneous surface maps with a finite coordinate projection.** Suppose
+$f=(x^a,y^b,h(x,y))$ and $h$ is a homogeneous binary form of degree $c$.
+The polynomial source $R=\mathbb Q[x,y]$ is free over $S=\mathbb Q[x^a,y^b]$
+with basis $x^iy^j$ for $i<a$, $j<b$. At weight $w$ the three positions of
+an ambient vector field have polynomial degrees $w+a,w+b,w+c$. In the
+first position, divide by $a x^{a-1}$ and carry the quotient times
+$-\partial_xh$ into the third position. Use $b y^{b-1}$ and $-\partial_yh$
+in the second position. These independent pivots remove precisely the source
+vector fields. This leaves a finite-dimensional vector space in each weight.
+
+Target rows are pullbacks of monomials $X^iY^jZ^k$ in each position.
+Multiplication by $h$ is an endomorphism of the free $S$-module $R$ of rank
+$ab$. Its homogeneous characteristic equation bounds the necessary powers by
+$k<ab$. In the third position it suffices to use $k=0$, since
+$df\cdot(x,y)^{\mathsf T}=(a x^a,b y^b,c h)^{\mathsf T}$ by Euler's identity. Subtract the rank of these
+target rows from the surviving source dimension in each weight. Full rank
+modulo a prime certifies full rank over $\mathbb Q$. Otherwise Atlas computes
+the exact rational rank of the integer matrix.
+
+The remaining quotient $N$ is generated over $S$ by the residue monomials in
+each position. Their maximum weight is $W=a+b-2-\min(a,b,c)$. For $w>W$,
+$N_w=x^aN_{w-a}+y^bN_{w-b}$. Consequently $\max(a,b)$ consecutive zero
+pieces ending at or above $W$ prove that every higher piece vanishes. The
+reported dimension is the sum through this certified tail, and
+`last_weight` records the last weight computed. The positive grading gives
+the same finite dimension for the completed germ at the origin. Three
+powers of distinct rational linear forms can also be put into the coordinate
+projection by a linear source change and independent target rescalings.
+[Native rank computation](ae_graded_surface.cpp) · [Independent rational reference](../tests/test_ae_coprime_reference.py)
+
 **Multiplicity-two maps into a hypersurface.** For $f=(u,v^2,h(u,v))$ set
 $s=v^2$, $A=\mathbb Q[[u,s]]$ and $R=A\oplus vA$. The even part of $h$ can
 be removed by a target coordinate change. Writing its odd part as $vP(u,s)$,
