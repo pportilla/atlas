@@ -2,7 +2,9 @@
 #include "small_prime_rank.hpp"
 
 #include <flint/fmpz.h>
+#include <algorithm>
 #include <cstdlib>
+#include <vector>
 
 namespace atlas::local {
 namespace {
@@ -14,6 +16,45 @@ struct Matrix {
     Matrix(const Matrix&) = delete;
     Matrix& operator=(const Matrix&) = delete;
 };
+
+// Bound the bit size of minors used in fraction-free elimination. A minor
+// selects at most r columns. Hadamard bounds its determinant by the product
+// of their Euclidean norms, including when a few columns have large entries.
+bool bounded_minors(const fmpz_mat_t matrix) {
+    constexpr slong limit = 40000;
+    const slong r = std::min(matrix->r,matrix->c);
+    if (!r) return true;
+    const slong overhead = (FLINT_BIT_COUNT(static_cast<ulong>(r)-1)+1)/2;
+    const auto largest = std::abs(fmpz_mat_max_bits(matrix));
+    if (largest+overhead <= limit/r) return true;
+    std::vector<ulong> heights(matrix->c);
+    for (slong i = 0; i < matrix->r; ++i)
+        for (slong j = 0; j < matrix->c; ++j)
+            heights[j] = std::max(heights[j],fmpz_bits(fmpz_mat_entry(matrix,i,j)));
+    std::sort(heights.rbegin(),heights.rend());
+    if (overhead > limit/r) return false;
+    ulong available = limit-r*overhead;
+    for (slong j = 0; j < r; ++j) {
+        if (heights[j] > available) return false;
+        available -= heights[j];
+    }
+    return true;
+}
+
+// A free variable often contributes just one inherited dual column. Charge
+// and multiply only the nonzero entries of its change-of-basis matrix.
+void compose_dual(fmpz_mat_t result, const fmpz_mat_t previous,
+                  const fmpz_mat_t kernel, int fresh, size_t& updates) {
+    for (slong j = 0; j < previous->c; ++j) for (slong k = 0; k < result->c; ++k) {
+        const auto* factor = fmpz_mat_entry(kernel,fresh+j,k);
+        if (fmpz_is_zero(factor)) continue;
+        const auto length = static_cast<size_t>(previous->r);
+        if (length > updates) throw WeightedRankLimit{};
+        updates -= length;
+        for (slong i = 0; i < previous->r; ++i)
+            fmpz_addmul(fmpz_mat_entry(result,i,k),fmpz_mat_entry(previous,i,j),factor);
+    }
+}
 
 // Scaling a dual vector by a nonzero rational leaves its span unchanged.
 void remove_column_content(fmpz_mat_t matrix) {
@@ -91,28 +132,15 @@ int WeightedQuotient::finish() {
         }
     }
     reserve(width,width);
-    // Bound the cost of fraction-free elimination when earlier dual bases
-    // have already produced large coefficients.
-    if (std::abs(fmpz_mat_max_bits(relations_))*std::min(rows,width) > 40000)
-        throw WeightedRankLimit{};
+    if (!bounded_minors(relations_)) throw WeightedRankLimit{};
     Matrix kernel(width,width);
     const int nullity = width ? fmpz_mat_nullspace(kernel.value,relations_) : 0;
     reserve(columns,nullity);
     Matrix next(columns,nullity);
     if (nullity) {
-        const auto products = static_cast<size_t>(dual_->r)*dual_->c*nullity;
-        if (products > updates_left_) throw WeightedRankLimit{};
-        updates_left_ -= products;
         // In coordinates on the old ambient space and fresh columns, the
         // null vectors are (old_dual * inherited_part, fresh_part).
-        if (dual_->r && dual_->c) {
-            fmpz_mat_t inherited, destination;
-            fmpz_mat_window_init(inherited,kernel.value,fresh_,0,width,nullity);
-            fmpz_mat_window_init(destination,next.value,0,0,dual_->r,nullity);
-            fmpz_mat_mul(destination,dual_,inherited);
-            fmpz_mat_window_clear(destination);
-            fmpz_mat_window_clear(inherited);
-        }
+        compose_dual(next.value,dual_,kernel.value,fresh_,updates_left_);
         for (int i = 0; i < fresh_; ++i) for (int k = 0; k < nullity; ++k)
             fmpz_set(fmpz_mat_entry(next.value,dual_->r+i,k),fmpz_mat_entry(kernel.value,i,k));
         remove_column_content(next.value);

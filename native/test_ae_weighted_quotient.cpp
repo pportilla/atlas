@@ -1,10 +1,32 @@
 #include "ae_graded.hpp"
+#include "ae_weighted_quotient.hpp"
 #include "ae_weighted_ranks.hpp"
 #include "local_io.hpp"
 #include <iostream>
 
+// Each matrix has one free column. Only the second has a high minor
+// bound: its diagonal has 65 large entries instead of one.
+static bool check_height_budget(bool single_large_column) {
+    using namespace atlas::local;
+    size_t cells = 130000, updates = 100000;
+    WeightedQuotient quotient(cells,updates);
+    quotient.begin(65,66);
+    const mpz_class large = mpz_class(1) << 1000;
+    for (int i = 0; i < 65; ++i)
+        quotient.add(i,i,single_large_column && i > 0 ? mpz_class(1) : large);
+    try {
+        return quotient.finish() == 1 && single_large_column;
+    } catch (const WeightedRankLimit&) {
+        return !single_large_column;
+    }
+}
+
 int main() {
     using namespace atlas::local;
+    if (!check_height_budget(true) || !check_height_budget(false)) {
+        std::cerr << "Unexpected exact minor budget decision\n";
+        return 1;
+    }
     const std::vector<std::string> variables{"x","y"};
     // (xy, x²+y²) contains (x,y)^3. Thus k=3 is a valid contact
     // bound. The degree-two shift xy exercises both weight residues.

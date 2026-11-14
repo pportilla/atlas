@@ -1,0 +1,673 @@
+{
+  "cpu": "AMD Ryzen 7 6800H",
+  "coefficient_field": "QQ",
+  "flint": "3.6.0",
+  "cpp_build": "g++ -O3 -std=c++17",
+  "reference": "https://arxiv.org/pdf/1202.4992#page=6",
+  "before_revision": "33cfd19513eb52b41b9c380acfe4526f5466c2c1",
+  "before_library_sha256": "0711f6a7a84cd798aeb537ad809e6081b6a0e6f813e895e20ac7f165fb4ef186",
+  "after_library_sha256": "42a4bb498632e7542dbb2db0c84d80def21a4c92d3f12e02affbe408a9cfa837",
+  "harness_sha256": "06c781b3830dd86ff249ef056b4d47aa7b1f3c20cdd5e409380c21c83d565442",
+  "conditions": {
+    "kernel": "Complete native ae_codimension call in a fresh process, after parsing, before JSON output, timed by std::chrono::steady_clock. No CLI startup or parsing in kernel_ns. All completed calls verified the published finite dimension and stopped with a certified tail.",
+    "limits": "2 GiB virtual address space and 120 seconds elapsed per process. Timed-out trials have no kernel result. Process memory and CPU fields include startup and parsing.",
+    "order": "Baseline calls for different maps overlapped on distinct physical cores, two attempts per presentation and five more for the completed Ahat4. After timings use 9 samples per input in reversing order; inputs run sequentially on the same logical CPU per map as the baseline.",
+    "reproduce": "Build make -C native -f groebner.mk build/bench_ae_codimension. Pipe variables joined by commas, then one map component on each following line to native/build/bench_ae_codimension 1 solve-once. Pin the process to the listed logical CPU with taskset -c and set ulimit -v 2097152 with timeout 120.",
+    "thread_cpu_control": "A separate comparison times exactly the solve-once kernel call with CLOCK_THREAD_CPUTIME_ID on logical CPU 1. Five trials per variant and presentation; builds and inputs alternate in reverse order. The previous solver uses identical native arithmetic to the baseline with relaxed work guards to allow it to complete. The 40000 projected matrix coefficient-bits times rank limit becomes 400000, the 4096-bit dual limit becomes 16384, the cell and projection-update totals as well as the compressed pullback term budget increase tenfold. The updated solver uses its production work limits.",
+    "smaller_map_controls": "Warmed CPU-time comparison of the stock and updated libraries with production limits, on logical CPU 13. Five fresh-process batches per map and build, reversing build order and input order on alternate rounds. Two warm-up calls per process followed by 15 measured solves on Ahat2, Bhat3, Ahat3 or 5 measured solves on each Bhat5 presentation. The samples are nanoseconds per solve. Inputs are published with the earlier Sharland benchmarks."
+  },
+  "cases": {
+    "Ahat4": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^4+x*z+x^6*y",
+        "y*z",
+        "z^2+y^7"
+      ],
+      "published_Ae_codimension": 844,
+      "certificate": {
+        "contact_order": 4,
+        "finite": true,
+        "last_weight": 62,
+        "method": "weighted_tangent_ranks",
+        "value": "844"
+      },
+      "logical_cpu": 3,
+      "before_trials": [
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11736,
+          "outcome": "proved",
+          "kernel_ns": 42868853
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11636,
+          "outcome": "proved",
+          "kernel_ns": 42512319
+        },
+        {
+          "process_wall_s": 0.04,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11728,
+          "outcome": "proved",
+          "kernel_ns": 40332286
+        },
+        {
+          "process_wall_s": 0.03,
+          "process_user_s": 0.02,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11772,
+          "outcome": "proved",
+          "kernel_ns": 24983953
+        },
+        {
+          "process_wall_s": 0.04,
+          "process_user_s": 0.03,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11708,
+          "outcome": "proved",
+          "kernel_ns": 40547343
+        },
+        {
+          "process_wall_s": 0.03,
+          "process_user_s": 0.02,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11796,
+          "outcome": "proved",
+          "kernel_ns": 23955308
+        },
+        {
+          "process_wall_s": 0.03,
+          "process_user_s": 0.02,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11844,
+          "outcome": "proved",
+          "kernel_ns": 22875356
+        }
+      ],
+      "after_trials": [
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11860,
+          "outcome": "proved",
+          "kernel_ns": 39975982
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11836,
+          "outcome": "proved",
+          "kernel_ns": 41127630
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11984,
+          "outcome": "proved",
+          "kernel_ns": 41750749
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11708,
+          "outcome": "proved",
+          "kernel_ns": 44623070
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11876,
+          "outcome": "proved",
+          "kernel_ns": 45471805
+        },
+        {
+          "process_wall_s": 0.02,
+          "process_user_s": 0.01,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11796,
+          "outcome": "proved",
+          "kernel_ns": 19370588
+        },
+        {
+          "process_wall_s": 0.02,
+          "process_user_s": 0.01,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11704,
+          "outcome": "proved",
+          "kernel_ns": 19758593
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.01,
+          "peak_rss_kib": 11860,
+          "outcome": "proved",
+          "kernel_ns": 40940667
+        },
+        {
+          "process_wall_s": 0.05,
+          "process_user_s": 0.04,
+          "process_system_s": 0.0,
+          "peak_rss_kib": 11864,
+          "outcome": "proved",
+          "kernel_ns": 41408351
+        }
+      ],
+      "before_median_proved_kernel_ms": 40.332286,
+      "after_median_kernel_ms": 41.12763,
+      "thread_cpu_control": {
+        "trials": {
+          "previous_with_relaxed_limits": [
+            {
+              "thread_ns": 40817322,
+              "elapsed_ns": 40822494
+            },
+            {
+              "thread_ns": 23805564,
+              "elapsed_ns": 23934419
+            },
+            {
+              "thread_ns": 23954345,
+              "elapsed_ns": 23989563
+            },
+            {
+              "thread_ns": 36547117,
+              "elapsed_ns": 36745614
+            },
+            {
+              "thread_ns": 25895233,
+              "elapsed_ns": 25912068
+            }
+          ],
+          "new": [
+            {
+              "thread_ns": 43794417,
+              "elapsed_ns": 44007896
+            },
+            {
+              "thread_ns": 22972472,
+              "elapsed_ns": 23234485
+            },
+            {
+              "thread_ns": 22978644,
+              "elapsed_ns": 23032834
+            },
+            {
+              "thread_ns": 36800399,
+              "elapsed_ns": 36999214
+            },
+            {
+              "thread_ns": 23854047,
+              "elapsed_ns": 23914081
+            }
+          ]
+        },
+        "median_kernel_cpu_ms": {
+          "previous_with_relaxed_limits": 25.895233,
+          "new": 23.854047
+        }
+      }
+    },
+    "Bhat7_alpha_plus_one": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2+x*y",
+        "y^7+y^6*z+y*z^6-z^7"
+      ],
+      "published_Ae_codimension": 837,
+      "certificate": {
+        "contact_order": 3,
+        "finite": true,
+        "last_weight": 27,
+        "method": "weighted_tangent_ranks",
+        "value": "837"
+      },
+      "logical_cpu": 5,
+      "before_trials": [
+        {
+          "process_wall_s": 120.02,
+          "process_user_s": 118.93,
+          "process_system_s": 0.2,
+          "peak_rss_kib": 202308,
+          "outcome": "timeout"
+        },
+        {
+          "process_wall_s": 120.03,
+          "process_user_s": 119.29,
+          "process_system_s": 0.21,
+          "peak_rss_kib": 208120,
+          "outcome": "timeout"
+        }
+      ],
+      "after_trials": [
+        {
+          "process_wall_s": 1.16,
+          "process_user_s": 1.13,
+          "process_system_s": 0.03,
+          "peak_rss_kib": 31444,
+          "outcome": "proved",
+          "kernel_ns": 1151008289
+        },
+        {
+          "process_wall_s": 1.25,
+          "process_user_s": 1.21,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31400,
+          "outcome": "proved",
+          "kernel_ns": 1238562079
+        },
+        {
+          "process_wall_s": 1.2,
+          "process_user_s": 1.15,
+          "process_system_s": 0.03,
+          "peak_rss_kib": 31412,
+          "outcome": "proved",
+          "kernel_ns": 1188611084
+        },
+        {
+          "process_wall_s": 1.2,
+          "process_user_s": 1.17,
+          "process_system_s": 0.01,
+          "peak_rss_kib": 31420,
+          "outcome": "proved",
+          "kernel_ns": 1190366774
+        },
+        {
+          "process_wall_s": 1.06,
+          "process_user_s": 1.03,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31368,
+          "outcome": "proved",
+          "kernel_ns": 1052233681
+        },
+        {
+          "process_wall_s": 0.79,
+          "process_user_s": 0.77,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31396,
+          "outcome": "proved",
+          "kernel_ns": 780585398
+        },
+        {
+          "process_wall_s": 0.89,
+          "process_user_s": 0.87,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31448,
+          "outcome": "proved",
+          "kernel_ns": 884920961
+        },
+        {
+          "process_wall_s": 1.11,
+          "process_user_s": 1.08,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31416,
+          "outcome": "proved",
+          "kernel_ns": 1100336852
+        },
+        {
+          "process_wall_s": 1.08,
+          "process_user_s": 1.06,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31316,
+          "outcome": "proved",
+          "kernel_ns": 1077166378
+        }
+      ],
+      "before_median_proved_kernel_ms": null,
+      "after_median_kernel_ms": 1100.336852,
+      "thread_cpu_control": {
+        "trials": {
+          "previous_with_relaxed_limits": [
+            {
+              "thread_ns": 1212537523,
+              "elapsed_ns": 1214293458
+            },
+            {
+              "thread_ns": 874243521,
+              "elapsed_ns": 876889023
+            },
+            {
+              "thread_ns": 896116033,
+              "elapsed_ns": 898133055
+            },
+            {
+              "thread_ns": 1256893345,
+              "elapsed_ns": 1261504982
+            },
+            {
+              "thread_ns": 919879797,
+              "elapsed_ns": 921832068
+            }
+          ],
+          "new": [
+            {
+              "thread_ns": 1216700628,
+              "elapsed_ns": 1220869243
+            },
+            {
+              "thread_ns": 813424933,
+              "elapsed_ns": 814783304
+            },
+            {
+              "thread_ns": 794628613,
+              "elapsed_ns": 796588980
+            },
+            {
+              "thread_ns": 938894749,
+              "elapsed_ns": 940518784
+            },
+            {
+              "thread_ns": 830515978,
+              "elapsed_ns": 831382433
+            }
+          ]
+        },
+        "median_kernel_cpu_ms": {
+          "previous_with_relaxed_limits": 919.879797,
+          "new": 830.515978
+        }
+      }
+    },
+    "Bhat7_alpha_minus_one": {
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "components": [
+        "x",
+        "y^2+x*z",
+        "z^2-x*y",
+        "y^7+y^6*z+y*z^6-z^7"
+      ],
+      "published_Ae_codimension": 837,
+      "certificate": {
+        "contact_order": 3,
+        "finite": true,
+        "last_weight": 27,
+        "method": "weighted_tangent_ranks",
+        "value": "837"
+      },
+      "logical_cpu": 7,
+      "before_trials": [
+        {
+          "process_wall_s": 120.02,
+          "process_user_s": 119.79,
+          "process_system_s": 0.2,
+          "peak_rss_kib": 202448,
+          "outcome": "timeout"
+        },
+        {
+          "process_wall_s": 120.06,
+          "process_user_s": 117.82,
+          "process_system_s": 0.18,
+          "peak_rss_kib": 205844,
+          "outcome": "timeout"
+        }
+      ],
+      "after_trials": [
+        {
+          "process_wall_s": 1.21,
+          "process_user_s": 1.19,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31284,
+          "outcome": "proved",
+          "kernel_ns": 1202035850
+        },
+        {
+          "process_wall_s": 1.33,
+          "process_user_s": 1.29,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31284,
+          "outcome": "proved",
+          "kernel_ns": 1318448240
+        },
+        {
+          "process_wall_s": 1.25,
+          "process_user_s": 1.21,
+          "process_system_s": 0.03,
+          "peak_rss_kib": 31368,
+          "outcome": "proved",
+          "kernel_ns": 1242573415
+        },
+        {
+          "process_wall_s": 0.87,
+          "process_user_s": 0.85,
+          "process_system_s": 0.01,
+          "peak_rss_kib": 31400,
+          "outcome": "proved",
+          "kernel_ns": 868008200
+        },
+        {
+          "process_wall_s": 0.88,
+          "process_user_s": 0.84,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31340,
+          "outcome": "proved",
+          "kernel_ns": 875450964
+        },
+        {
+          "process_wall_s": 0.87,
+          "process_user_s": 0.85,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31460,
+          "outcome": "proved",
+          "kernel_ns": 866209489
+        },
+        {
+          "process_wall_s": 0.89,
+          "process_user_s": 0.86,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31404,
+          "outcome": "proved",
+          "kernel_ns": 879555115
+        },
+        {
+          "process_wall_s": 0.86,
+          "process_user_s": 0.84,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31448,
+          "outcome": "proved",
+          "kernel_ns": 856663298
+        },
+        {
+          "process_wall_s": 0.91,
+          "process_user_s": 0.88,
+          "process_system_s": 0.02,
+          "peak_rss_kib": 31440,
+          "outcome": "proved",
+          "kernel_ns": 899211724
+        }
+      ],
+      "before_median_proved_kernel_ms": null,
+      "after_median_kernel_ms": 879.555115,
+      "thread_cpu_control": {
+        "trials": {
+          "previous_with_relaxed_limits": [
+            {
+              "thread_ns": 1264751968,
+              "elapsed_ns": 1266884956
+            },
+            {
+              "thread_ns": 1202269922,
+              "elapsed_ns": 1204198108
+            },
+            {
+              "thread_ns": 879302321,
+              "elapsed_ns": 880757018
+            },
+            {
+              "thread_ns": 807761460,
+              "elapsed_ns": 809102222
+            },
+            {
+              "thread_ns": 923546429,
+              "elapsed_ns": 925409573
+            }
+          ],
+          "new": [
+            {
+              "thread_ns": 1112511981,
+              "elapsed_ns": 1114262084
+            },
+            {
+              "thread_ns": 1117645271,
+              "elapsed_ns": 1120231793
+            },
+            {
+              "thread_ns": 849439170,
+              "elapsed_ns": 851751459
+            },
+            {
+              "thread_ns": 817061912,
+              "elapsed_ns": 817880461
+            },
+            {
+              "thread_ns": 765920904,
+              "elapsed_ns": 766900290
+            }
+          ]
+        },
+        "median_kernel_cpu_ms": {
+          "previous_with_relaxed_limits": 923.546429,
+          "new": 849.43917
+        }
+      }
+    }
+  },
+  "smaller_map_controls": {
+    "Ahat2": {
+      "thread_ns_per_solve": {
+        "before": [
+          500563.2,
+          544010.0,
+          546931.5333333333,
+          321920.93333333335,
+          293041.4
+        ],
+        "after": [
+          507709.3333333333,
+          557198.0666666667,
+          562779.2,
+          286891.93333333335,
+          307596.06666666665
+        ]
+      },
+      "median_thread_ms_per_solve": {
+        "before": 0.5005632,
+        "after": 0.5077093333333333
+      }
+    },
+    "Bhat3": {
+      "thread_ns_per_solve": {
+        "before": [
+          2106872.4,
+          2241470.8,
+          2183557.533333333,
+          1403240.4666666666,
+          1309775.2
+        ],
+        "after": [
+          2087387.2,
+          2276961.3333333335,
+          2221263.533333333,
+          1298697.0666666667,
+          1412470.4
+        ]
+      },
+      "median_thread_ms_per_solve": {
+        "before": 2.1068724,
+        "after": 2.0873871999999998
+      }
+    },
+    "Ahat3": {
+      "thread_ns_per_solve": {
+        "before": [
+          2259530.0,
+          2447866.466666667,
+          2417583.0,
+          1634811.9333333333,
+          2059544.3333333333
+        ],
+        "after": [
+          1942311.2,
+          2314282.6,
+          2420203.2,
+          2499649.6,
+          2425972.6666666665
+        ]
+      },
+      "median_thread_ms_per_solve": {
+        "before": 2.25953,
+        "after": 2.4202032
+      }
+    },
+    "Bhat5_plus": {
+      "thread_ns_per_solve": {
+        "before": [
+          57011312.2,
+          61419124.8,
+          44222479.0,
+          52608234.4,
+          50125918.0
+        ],
+        "after": [
+          57433493.6,
+          65825592.8,
+          46898764.8,
+          45116748.0,
+          41878884.8
+        ]
+      },
+      "median_thread_ms_per_solve": {
+        "before": 52.6082344,
+        "after": 46.898764799999995
+      }
+    },
+    "Bhat5_minus": {
+      "thread_ns_per_solve": {
+        "before": [
+          51675709.8,
+          51423823.8,
+          43098602.0,
+          30685196.8,
+          37064542.2
+        ],
+        "after": [
+          57050898.4,
+          56660562.4,
+          40202868.4,
+          36415667.2,
+          41790797.8
+        ]
+      },
+      "median_thread_ms_per_solve": {
+        "before": 43.098602,
+        "after": 41.7907978
+      }
+    }
+  }
+}

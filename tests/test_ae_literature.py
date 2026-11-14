@@ -14,8 +14,11 @@ SHARLAND = [
     ("Ahat2", ["x", "y^2+x*z+x^2*y", "y*z", "z^2+y^3"], 18, 2, 10),
     ("Bhat3", ["x", "y^2+x*z", "z^2-x*y", "y^3+y^2*z+y*z^2-z^3"], 33, 3, 7),
     ("Ahat3", ["x", "y^3+x*z+x^4*y", "y*z", "z^2+y^5"], 186, 3, 32),
-    # Equation (7) allows either sign of alpha for ell=2.
+    ("Ahat4", ["x", "y^4+x*z+x^6*y", "y*z", "z^2+y^7"], 844, 4, 62),
+    # Equation (7) allows either sign of alpha for ell=2,3.
     *[(f"Bhat5 ({sign})", ["x", "y^2+x*z", f"z^2{sign}x*y", "y^5+y^4*z+y*z^4-z^5"], 252, 3, 17)
+      for sign in ("+", "-")],
+    *[(f"Bhat7 ({sign})", ["x", "y^2+x*z", f"z^2{sign}x*y", "y^7+y^6*z+y*z^6-z^7"], 837, 3, 27)
       for sign in ("+", "-")],
 ]
 
