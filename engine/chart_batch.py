@@ -1,19 +1,18 @@
 """Exact exponent substitutions for all cones of a toric atlas in dimensions 2–8."""
 from array import array
 import ctypes
-from functools import lru_cache, reduce
+from functools import lru_cache
 from itertools import chain, islice
 import os
-from operator import or_
 from struct import iter_unpack
 from time import perf_counter
 
 from .gpu_devices import gpu_preference, triton_device
+from .polynomial import integer_text, integer_from_decimal
 from .native_backend import _LIBRARY, _load, _gpu_config, _gpu_library, gpu_devices
 
 _I32_MAX = 2**31 - 1
 _LIMB_BITS = 14
-_LIMB_MASK = (1 << _LIMB_BITS) - 1
 _MAX_PAIRS = 2_000_000
 _MAX_RAYS = 100_000
 _MAX_ENTRIES = 6_000_000
@@ -26,13 +25,16 @@ def _cpu_functions():
         lib = _load(_LIBRARY)
         run = lib.resolution_chart_cpu_nd
         valid = lib.resolution_chart_valid
+        packed = lib.resolution_chart_packed
     except (OSError, AttributeError) as exc:
         raise RuntimeError("The toric chart batch engine is not built. Run make.") from exc
     run.argtypes = [_WORD]*4 + [ctypes.c_int]*3 + [_WORD]
     run.restype = None
     valid.argtypes = [_WORD, ctypes.c_int]
     valid.restype = ctypes.c_int
-    return run, valid
+    packed.argtypes = [_WORD, _WORD, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    packed.restype = ctypes.c_bool
+    return run, valid, packed
 
 
 @lru_cache(maxsize=1)
@@ -108,14 +110,11 @@ def transform_batch(exps, rays, cones, orders, compute=None):
     _validate_vectors(cones, nr-1, "Cones", dimension)
     if len(orders) != nr or any(type(x) != int or not 0 <= x <= _I32_MAX for x in orders):
         raise ValueError("Expected one nonnegative 32-bit order per ray.")
-    # All input coordinates are nonnegative. Each partial product and sum
-    # is at most max |e|_1 * max r_i. Subtracting order stays in signed range.
-    if max(map(sum, exps))*max(map(max, rays)) > _I32_MAX:
-        raise OverflowError("The chart exponent bound exceeds the signed 32-bit kernel range.")
-
     inputs = [_pack(chain.from_iterable(group)) for group in (exps, rays, cones)] + [_pack(orders)]
     out = (ctypes.c_int32 * entries)()
-    cpu, valid = _cpu_functions()
+    cpu, valid, packed = _cpu_functions()
+    if not packed(*inputs[:2], nt, nr, dimension):
+        raise OverflowError("The chart exponent bound exceeds the signed 32-bit kernel range.")
     _, index, _ = _gpu_config(compute)
     policy = ("auto" if os.getenv("RESOLUTION_GPU", "off") == "auto" else "cpu") if compute is None else compute
     threshold = int(os.getenv("RESOLUTION_GPU_MIN_PAIRS", 50000)) if policy == "auto" else 1
@@ -135,71 +134,79 @@ def transform_batch(exps, rays, cones, orders, compute=None):
     return result, stats
 
 
-def _limb_planes(rows):
-    """Pack only positions with a nonzero base-2^14 digit in some coordinate."""
-    coordinates = tuple(chain.from_iterable(rows))
-    occupied = reduce(or_, coordinates, 0)
-    if occupied < 0:
-        raise ValueError("Chart exponents and rays must have nonnegative coordinates.")
-    shift = 0
-    while occupied:
-        lowest = (occupied & -occupied).bit_length() - 1
-        skip = lowest // _LIMB_BITS * _LIMB_BITS
-        shift += skip
-        yield shift, _pack((v >> shift) & _LIMB_MASK for v in coordinates)
-        shift += _LIMB_BITS
-        occupied >>= skip + _LIMB_BITS
+_DEVICE_CHART = ctypes.CFUNCTYPE(ctypes.c_int, _WORD, _WORD, _WORD, _WORD, _WORD)
 
 
-def _wide_device_values(exps, rays, values, index, stats):
-    """Evaluate each ray/term pair once and check it against the exact fan valuations."""
-    dimension, nr, nt = len(exps[0]), len(rays), len(exps)
+@lru_cache(maxsize=1)
+def _wide_kernel():
+    lib = _load(_LIBRARY)
+    function = lib.resolution_chart_wide
+    function.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, _DEVICE_CHART]
+    function.restype = ctypes.c_void_p
+    return lib, function
+
+
+def _device_callback(nt, nr, dimension, index, stats, errors):
     groups = (nr + dimension - 1) // dimension
     size = groups * nt * dimension
     if nr > _MAX_RAYS or groups*nt > _MAX_PAIRS or size > _MAX_ENTRIES:
         stats["fallback_reason"] = "The ray table exceeds the chart device batch size."
-        return values
+        return _DEVICE_CHART()
     preference = gpu_preference()
     triton = preference != "opencl" and triton_device(index) is not None
     if not triton and (preference == "triton" or not _gpu_function() or
                        not any(d["index"] == index for d in gpu_devices())):
         stats["fallback_reason"] = "The requested chart device is unavailable."
-        return values
+        return _DEVICE_CHART()
 
-    # The kernel emits [group][term][axis]. Group consecutive rays into
-    # synthetic cones, padding the last group with its last valid ray.
-    indices = _pack(min(i, nr-1) for i in range(groups*dimension))
-    zero_orders = (ctypes.c_int32 * nr)()
-    out = (ctypes.c_int32 * size)()
-    accumulated = [0] * size
-    ray_planes = list(_limb_planes(rays))
+    def buffer(pointer, length):
+        return (ctypes.c_int32 * length).from_address(ctypes.addressof(pointer.contents))
+
+    @_DEVICE_CHART
+    def launch(left, right, indices, zero_orders, output):
+        try:
+            inputs = (buffer(left, nt*dimension), buffer(right, nr*dimension),
+                      buffer(indices, groups*dimension), buffer(zero_orders, nr))
+            if _accelerate(inputs, buffer(output, size), nt, nr, groups, dimension, index, stats):
+                stats["limb_batches"] += 1
+                return 1
+            return 0
+        except BaseException as exc:
+            errors.append(exc)
+            return 0
+
     stats.update(limb_bits=_LIMB_BITS, limb_batches=0)
-    for left_shift, left in _limb_planes(exps):
-        for right_shift, right in ray_planes:
-            # At dimension <= 8 the entire digit sum is <= 8*16383^2 < 2^31.
-            # Combine digit products before subtracting arbitrary-size orders.
-            inputs = (left, right, indices, zero_orders)
-            if not _accelerate(inputs, out, nt, nr, groups, dimension, index, stats):
-                stats.pop("device", None)
-                stats["fallback_reason"] = "The chart device did not complete all digit products."
-                return values
-            stats["limb_batches"] += 1
-            shift = left_shift + right_shift
-            for k, product in enumerate(out):
-                if product:
-                    accumulated[k] += product << shift
+    return launch
 
-    result = []
-    for i, reference in enumerate(values):
-        group, axis = divmod(i, dimension)
-        begin = group * nt * dimension + axis
-        row = accumulated[begin:begin + nt*dimension:dimension]
-        if row != list(reference):
+
+def _wide_strict(exps, rays, orders, values, compute, index, stats):
+    nt, nr, dimension = len(exps), len(rays), len(exps[0])
+    errors = []
+    callback = (_device_callback(nt, nr, dimension, index, stats, errors)
+                if compute == "gpu" and 2 <= dimension <= 8 else _DEVICE_CHART())
+    if len(orders) != nr or len(values) != nr or any(len(row) != nt for row in values):
+        raise ValueError("One order and one valuation per term are required for every ray.")
+    rows = chain([orders], values, exps if callback else (), rays if callback else ())
+    text = "\n".join(" ".join(map(integer_text, row)) for row in rows).encode("ascii")
+    lib, kernel = _wide_kernel()
+    pointer = kernel(text, nt, nr, dimension, callback)
+    if not pointer:
+        raise MemoryError("The native chart kernel could not allocate its result.")
+    try:
+        if errors:
+            raise errors[0]
+        header, *strict = ctypes.string_at(pointer).decode("ascii").splitlines()
+    finally:
+        lib.resolution_free(pointer)
+    if header.startswith("error "):
+        raise ValueError(header.removeprefix("error "))
+    if header != "ok":
+        stats.pop("device", None)
+        if header == "unavailable":
+            stats["fallback_reason"] = "The chart device did not complete all digit products."
+        else:
             stats.update(backend="cpu", fallback_reason="A chart device valuation failed its exact check.")
-            stats.pop("device", None)
-            return values
-        result.append(row)
-    return result
+    return [tuple(map(integer_from_decimal, row.split())) for row in strict]
 
 
 def transform_atlas(exps, rays, cones, orders, values, compute=None):
@@ -207,19 +214,20 @@ def transform_atlas(exps, rays, cones, orders, values, compute=None):
     dimension, nt = len(exps[0]), len(exps)
     pairs = nt * len(cones)
     if (2 <= dimension <= 8 and len(rays) <= _MAX_RAYS and pairs <= _MAX_PAIRS and
-            dimension*pairs <= _MAX_ENTRIES and max(map(sum, exps))*max(map(max, rays)) <= _I32_MAX):
-        return transform_batch(exps, rays, cones, orders, compute)
+            dimension*pairs <= _MAX_ENTRIES and
+            all(value <= _I32_MAX for rows in (exps, rays) for row in rows for value in row) and
+            all(order <= _I32_MAX for order in orders)):
+        try:
+            return transform_batch(exps, rays, cones, orders, compute)
+        except OverflowError:
+            pass  # The pairing bounds require the arbitrary-precision chart kernel.
     started = perf_counter()
     _, index, _ = _gpu_config(compute)
     stats = {"backend": "cpu", "arithmetic": "arbitrary precision", "dimension": dimension,
              "chart_term_pairs": pairs}
     # Automatic selection already has a complete exact table from the fan.
     # An explicit GPU request may recompute it with the packed device kernel.
-    if compute == "gpu" and 2 <= dimension <= 8:
-        values = _wide_device_values(exps, rays, values, index, stats)
-    strict = [tuple(v-order for v in row) for row,order in zip(values, orders)]
-    if any(min(row) < 0 for row in strict):
-        raise ValueError("A ray order exceeds the valuation of an input monomial.")
+    strict = _wide_strict(exps, rays, orders, values, compute, index, stats)
     charts = ([tuple(strict[i][j] for i in cone) for j in range(nt)] for cone in cones)
     stats["elapsed_ms"] = (perf_counter()-started)*1000
     return charts, stats

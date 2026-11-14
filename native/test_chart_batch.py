@@ -42,7 +42,7 @@ class ChartBatchTests(unittest.TestCase):
         exps, rays, cones = [(2**90, 5), (3, 7)], [(11, 2**75), (0, 1)], [(1, 0)]
         values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
         orders, expected = projections(exps, rays, cones)
-        with patch("engine.chart_batch._limb_planes", side_effect=AssertionError("unexpected packing")), \
+        with patch("engine.chart_batch._accelerate", side_effect=AssertionError("unexpected device launch")), \
              patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
              patch("engine.chart_batch.triton_device", return_value=None):
             for policy in ("cpu", "auto", "gpu"):
@@ -63,15 +63,29 @@ class ChartBatchTests(unittest.TestCase):
         self.assertEqual(stats["limb_batches"], 1)
         self.assertIn("did not complete", stats["fallback_reason"])
 
+    def test_device_products_must_pass_the_native_exact_check(self):
+        exps, rays = [(2**90, 5), (3, 7)], [(11, 2**75), (0, 1)]
+        cones = [(1, 0)]
+        values = [[sum(a*b for a, b in zip(e, r)) for e in exps] for r in rays]
+        orders, expected = projections(exps, rays, cones)
+        # A device reporting success without filling its output leaves zeros.
+        with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
+             patch("engine.chart_batch.triton_device", return_value={"index": 0}), \
+             patch("engine.chart_batch._accelerate", return_value=True):
+            charts, stats = transform_atlas(exps, rays, cones, orders, values, "gpu")
+        self.assertEqual(list(charts), expected)
+        self.assertEqual(stats["backend"], "cpu")
+        self.assertIn("exact check", stats["fallback_reason"])
+
     def test_oversized_chart_count_still_uses_exact_known_valuations(self):
         exps, rays, cones = [(2,0), (0,3)], [(1,0), (0,1)], [(1,0), (0,1)]
         orders, expected = projections(exps, rays, cones)
-        with patch("engine.chart_batch._MAX_PAIRS", 1), patch("engine.chart_batch._limb_planes") as pack:
+        with patch("engine.chart_batch._MAX_PAIRS", 1), patch("engine.chart_batch._accelerate") as device:
             result, stats = transform_atlas(exps, rays, cones, orders, [(2,0), (0,3)], "gpu")
         self.assertEqual(list(result), expected)
         self.assertEqual(stats["backend"], "cpu")
         self.assertIn("batch size", stats["fallback_reason"])
-        pack.assert_not_called()
+        device.assert_not_called()
 
     @unittest.skipUnless(gpu_devices(), "OpenCL GPU unavailable")
     def test_wide_eight_axis_digit_sums_on_device(self):

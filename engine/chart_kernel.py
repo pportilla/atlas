@@ -65,7 +65,10 @@ def owned_strata(chart):
     if generators:
         shortest = min(generators, key=lambda g: len(sparse_terms(variables, g)))
         _, rows = rational_factor_rows(variables, shortest)
-        if len(rows) > 1 or rows and rows[0][1] > 1:
+        # Independent parameter equations can already define a small finite
+        # algebra. Splitting them introduces overlapping presentations and
+        # can make elimination more expensive. Split a hypersurface base.
+        if len(generators) == 1 and (len(rows) > 1 or rows and rows[0][1] > 1):
             factors = tuple(_sparse_expression(variables, row) for row, _, _ in rows)
     result = {}
     removed = list(chart.removed)
