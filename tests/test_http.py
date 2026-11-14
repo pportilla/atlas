@@ -38,7 +38,10 @@ class WebAPITests(unittest.TestCase):
         with self.assertRaises(HTTPError) as err:
             self.post({'polynomial':'x/0','variables':['x','y']})
         self.assertEqual(err.exception.code,400);err.exception.close()
-        with self.post({'polynomial':'x^2*y^2+z^4+w^5','variables':list('xyzw'),'search':'quick'}) as resp:
+        # Exceed the documented quick-mode expansion limit independently
+        # of which geometric fast paths the native resolver supports.
+        from engine.polynomial import MAX_DEGREE
+        with self.post({'polynomial':f'x^{MAX_DEGREE + 1}+y', 'variables':['x','y'], 'search':'quick'}) as resp:
             result=json.load(resp)
             self.assertEqual(result['status'],'inconclusive')
             self.assertTrue(result['can_search'])

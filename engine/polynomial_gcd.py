@@ -17,8 +17,11 @@ def _device_basis(label, variables, generators, order):
 def _packed_pair(variables, left, right):
     # The intersection adds a selector, and the modular route homogenizes.
     # Count the selector's degree as well when testing the packed input limit.
-    return (len(variables) + 2 <= _MAX_VARIABLES and
-            all(sum(powers) < _MAX_DEGREE for f in (left, right) for powers in np.terms(variables, f)))
+    from .quotient_monomials import degree_bounds
+    if len(variables) + 2 > _MAX_VARIABLES:
+        return False
+    support = (powers for f in (left, right) for powers in np.terms(variables, f))
+    return not (left or right) or degree_bounds(len(variables), support)[1] < _MAX_DEGREE
 
 
 def monic_gcd(variables, left, right, *, order="grevlex"):

@@ -6,6 +6,8 @@ from time import perf_counter_ns
 from .point_geometry import request
 from .algebra_execution import cpu_stage, current_execution, record_fallback, record_stage
 
+RANK_PRIME = 1_000_000_007
+
 
 def _opencl_rows(buffer, rows, cols, prime, index):
     from .native_backend import _gpu_library
@@ -24,7 +26,7 @@ def _opencl_rows(buffer, rows, cols, prime, index):
     return identifiers[:rank]
 
 
-def _device_row_basis(rows, width):
+def _device_row_basis(rows, width, *, residues=None):
     run = current_execution()
     if not run or run.replay.compute == "cpu" or not rows:
         return None
@@ -35,8 +37,9 @@ def _device_row_basis(rows, width):
         record_fallback("The Jacobian exceeds the rank plugin's matrix dimensions.")
         return None
     choices = ("triton", "opencl") if scope.backend == "auto" else (scope.backend,)
-    prime = 1_000_000_007
-    residues = request("residues", width=width, rows=rows, prime=prime)
+    prime = RANK_PRIME
+    if residues is None:
+        residues = request("residues", width=width, rows=rows, prime=prime)
     buffer = (ctypes.c_uint32 * len(residues))(*residues)
     for backend in choices:
         started = perf_counter_ns()
@@ -63,6 +66,23 @@ def _device_row_basis(rows, width):
                      elapsed_ns=perf_counter_ns()-started)
         return ids
     return None
+
+
+def point_jacobian_rank(point, ideal):
+    width = len(point)
+    with cpu_stage("tangent_first_jets", generators=len(ideal), variables=width):
+        rows = request("rank_jets", point=point, ideal=ideal, prime=RANK_PRIME)
+    if isinstance(rows, list):
+        return linear_constraints(rows, width, dimension_only=True)["rank"]
+    witness = _device_row_basis(ideal, width, residues=rows["residues"])
+    if witness is not None:
+        with cpu_stage("certify_jacobian_row_space", candidate_rank=len(witness)):
+            rank = request("sparse_jet_rank", point=point, ideal=ideal, witness=witness)
+        if rank is not None:
+            return rank
+        record_fallback("The modular pivot rows did not span the exact Jacobian. Recomputed over QQ.")
+    with cpu_stage("rational_jacobian_echelon", rows=len(ideal), columns=width):
+        return request("sparse_jet_rank", point=point, ideal=ideal)
 
 
 def linear_constraints(rows, width, *, dimension_only=False):

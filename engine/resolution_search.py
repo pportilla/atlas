@@ -9,18 +9,25 @@ useful general complexity bound; callers should run attempts in killable
 workers and retain the distinction between rejection, timeout and success.
 """
 from dataclasses import dataclass
-from itertools import chain, combinations, count
-from math import prod
+from itertools import chain, combinations, count, islice
 
 from . import native_polynomial as np
 from .chart_expressions import chart_expressions
 from .reference import sp
 from .reference import QQ
+from .rational_point import coordinate_fraction
+from .kernel_json import kernel_json
+from .polynomial import integer_from_decimal, sparse_row
 
-from .affine_kernel import (_sparse_expression, _sparse_terms, frame_derivative,
-                            frame_function, rational_factor_rows, sparse_terms)
+from .affine_kernel import (_checked, _polynomial, _request, _ring, _sparse_expression, frame_derivative,
+                            rational_factor_rows)
 from .blowup_ideal import ideal_basis
-from .groebner import CHECK, groebner
+from .groebner import groebner
+
+
+def _oracle(name, *args):
+    from tests import resolution_search_oracle
+    return getattr(resolution_search_oracle,name)(*args)
 
 
 @dataclass(frozen=True)
@@ -54,18 +61,47 @@ def _candidate(variables, center, source):
                                () if center == (1,) else (center,), QQ, None, source)
 
 
+def _support_profile(variables, f):
+    ring = _ring(variables)
+
+    def native():
+        row, = _request(["support_profile", ring.header, ring.text(f)])
+        degree, count, *active = row.split()
+        return integer_from_decimal(degree), int(count), tuple(map(int, active))
+
+
+    return _checked(native, lambda: _oracle("support_profile", variables, f), variables)
+
+
+def _singular_coordinate_subspaces(variables, f):
+    ring = _ring(variables)
+    subspaces = chain.from_iterable(combinations(range(len(variables)), size)
+                                    for size in range(2, len(variables)))
+    # Bounded batches keep discovery lazy even in a large ambient space.
+    while subset_batch := tuple(islice(subspaces, 128)):
+        def native():
+            rows = _request(["singular_subspaces", ring.header, ring.text(f),
+                             *(" ".join(map(str, indices)) for indices in subset_batch)])
+            return tuple(map(int, rows))
+
+
+        for j in _checked(native, lambda: _oracle("singular_subspaces", variables, f, subset_batch), variables):
+            yield tuple(variables[i] for i in subset_batch[j])
+
+
 def _squarefree_generators(exprs, variables):
+    ring = _ring(variables)
     sqfree = set()
     for expr in exprs:
-        scalar, factors = rational_factor_rows(variables, expr)
-        if scalar:
-            # Each rational irreducible occurs once in the monic squarefree part.
-            monic_factors = (_sparse_expression(variables, row) / max(_sparse_terms(row))[1]
-                             for row, _, _ in factors)
-            value = frame_function(variables, prod(monic_factors, start=chart_expressions(variables).S.One))
-            if CHECK and value != sp.Poly(expr, *variables, domain=QQ).sqf_part().monic().as_expr():
-                raise AssertionError("The squarefree Jacobian generator differs from SymPy's.")
-            sqfree.add(value)
+        if not expr:
+            continue
+        def native():
+            row, = _request(["squarefree_part", ring.header, ring.text(expr)])
+            return _sparse_expression(variables, row)
+
+        value = _checked(native, lambda: _oracle("squarefree", expr, variables),
+                         variables)
+        sqfree.add(value)
     return tuple(sorted(sqfree, key=chart_expressions(variables).default_sort_key))
 
 
@@ -77,7 +113,7 @@ def _jacobian_support(variables, f):
     derivatives = (frame_derivative(variables, f, {v: api.S.One}) for v in variables)
     equations = _squarefree_generators((f, *derivatives), variables)
     for _ in variables:
-        linear = tuple(e for e in equations if all(sum(m) <= 1 for m,_ in sparse_terms(variables, e)))
+        linear = tuple(e for e in equations if _support_profile(variables, e)[0] <= 1)
         if not linear:
             break
         if any(not e.free_symbols for e in linear):
@@ -94,56 +130,20 @@ def _jacobian_support(variables, f):
 def _two_blowup_candidates(variables, f):
     """Find constant rational sections of the repeated relative tangent cone."""
     api = chart_expressions(variables)
-    terms = sparse_terms(variables, f.as_expr() if hasattr(f, "as_expr") else f)
-    if not terms:
-        return
-    parameter = api.Dummy("slope")
+    expr = f.as_expr() if hasattr(f, "as_expr") else f
+    ring = _ring(variables)
     projective = _projective(variables, 3)
     for i, j in combinations(range(len(variables)), 2):
-        order = min(e[i] + e[j] for e, _ in terms)
-        if order < 2:
-            continue
-        # The normal coordinates are x,y. Write in(x,y)(f)(1,s) as a
-        # polynomial in all other coordinates. A line y=s*x is a repeated
-        # direction along the entire base precisely when it is a repeated
-        # common root of every coefficient. Special-fiber tangencies alone
-        # do not supply a section over the coordinate center.
-        coefficients = {}
-        for e, c in terms:
-            if e[i] + e[j] == order:
-                base = e[:i] + e[i+1:j] + e[j+1:]
-                coefficients.setdefault(base, {})[e[j]] = c
-        forms = list(coefficients.values())
         x, y = variables[i], variables[j]
-        directions = []
-        if all(max(form) <= order - 2 for form in forms):
-            directions.append((y, x))  # the missing direction x=0
-        # A rational slope is a repeated root of the gcd precisely when
-        # its linear factor has multiplicity at least two in every form.
-        def slopes(form):
-            expr = api.Add(*(c * parameter**k for k,c in form.items()))
-            found = set()
-            for row, m, _ in rational_factor_rows((parameter,), expr)[1]:
-                if m >= 2:
-                    terms = dict(_sparse_terms(row))
-                    if max(terms) == (1,):
-                        found.add(api.Rational(-terms.get((0,), 0) / terms[(1,)]))
-            return found
 
-        repeated = slopes(forms[0])
-        for form in forms[1:]:
-            if not repeated:
-                break
-            repeated.intersection_update(slopes(form))
-        if CHECK:
-            polys = [sp.Poly.from_dict({(k,): c for k,c in form.items()}, parameter, domain=QQ)
-                     for form in forms]
-            common = polys[0]
-            for form in polys[1:]:
-                common = common.gcd(form)
-            if repeated != {r for r, m in common.ground_roots().items() if m >= 2}:
-                raise AssertionError("The repeated rational tangent slopes differ from SymPy's.")
-        directions.extend((x, y - slope*x) for slope in sorted(repeated))
+        def native():
+            rows = _request(["repeated_directions", ring.header, str(i), str(j), ring.text(expr)])
+            return ("vertical" in rows, tuple(coordinate_fraction(s) for s in rows if s != "vertical"))
+
+
+        vertical, slopes = _checked(native, lambda: _oracle("repeated_directions", variables, expr, i, j), variables)
+        directions = [(y, x)] if vertical else []
+        directions.extend((x, y - api.Rational(slope.numerator, slope.denominator)*x) for slope in slopes)
 
         # For parameters a,b with tangent b=0, first blow up (a,b).
         # In the chart b=a*v the second center is (a,v), while on the
@@ -159,11 +159,10 @@ def _two_blowup_candidates(variables, f):
 
 
 def priority_candidates(variables, polynomial):
-    """Finite sequence of inexpensive geometric hypotheses. polynomial is a SymPy Expr."""
+    """Finite sequence of inexpensive geometric hypotheses in the caller’s coordinates."""
     variables = tuple(variables)
     api = chart_expressions(variables)
     f = polynomial.as_expr() if hasattr(polynomial, "as_expr") else api.sympify(polynomial)
-    terms = sparse_terms(variables, f)
     yield _candidate(variables, (api.S.One,), "identity")
     # Do not compute a large singular ideal before offering the origin.
     yield _candidate(variables, variables, "origin")
@@ -176,24 +175,17 @@ def priority_candidates(variables, polynomial):
         seen.add(key)
         return True
 
-    # Match the historical zero polynomial's degree and singleton zero monomial.
-    exps = [e for e,_ in terms] or [(0,)*len(variables)]
-    degree = max(map(sum, exps))
-    active = tuple(v for i,v in enumerate(variables) if any(e[i] for e in exps))
+    degree, term_count, used = _support_profile(variables, f)
+    active = tuple(variables[i] for i in used)
     if len(active) >= 2 and new(active):
         yield _candidate(variables, active, "support coordinate subspace")
 
-    for size in range(2,len(variables)):
-        for indices in combinations(range(len(variables)), size):
-            # This coordinate subspace lies in Sing(f) iff every term belongs
-            # to the square of its linear ideal. Test on the canonical support.
-            if all(sum(e[i] for i in indices) >= 2 for e in exps):
-                center = tuple(variables[i] for i in indices)
-                if new(center):
-                    yield _candidate(variables, center, "singular coordinate subspace")
+    for center in _singular_coordinate_subspaces(variables, f):
+        if new(center):
+            yield _candidate(variables, center, "singular coordinate subspace")
 
     # These limits only govern the early shortcuts, never the exhaustive family.
-    if len(variables) <= 5 and degree <= 14 and len(exps) <= 140:
+    if len(variables) <= 5 and degree <= 14 and term_count <= 140:
         center = _jacobian_support(variables, f)
         if new(center):
             yield _candidate(variables, center, "equations for the geometric Jacobian locus")
@@ -206,93 +198,6 @@ def priority_candidates(variables, polynomial):
             if new((a,b)):
                 yield _candidate(variables, (a,b), "intersection of two rational factors")
         yield from _two_blowup_candidates(variables, f)
-
-
-class _InvalidCode(Exception):
-    pass
-
-
-class _Reader:
-    """Read a self-delimiting stream of naturals (Elias gamma on value+1)."""
-    def __init__(self, code):
-        self.bits = bin(code + 1)[3:]  # discard the leading 1
-        self.at = 0
-
-    def nat(self):
-        start = self.at
-        # The leading zeroes and the value bits after the first one are
-        # equally long. Once this prefix is all zeroes, no suffix can fit
-        # a complete natural number in the remaining bit length.
-        last = start + (len(self.bits) - start + 1)//2
-        one = self.bits.find("1", start, last)
-        if one < 0:
-            self.at = last
-            raise _InvalidCode
-        self.at = one + (one-start) + 1
-        return int(self.bits[one:self.at], 2) - 1
-
-    def signed(self):
-        n = self.nat()
-        return (n+1)//2 if n%2 else -(n//2)
-
-    def size(self, minimum=0):
-        n = minimum + self.nat()
-        # Every item consumes at least one bit; a short malformed code cannot
-        # claim an enormous vector that blocks subsequent valid candidates.
-        if n > len(self.bits)-self.at:
-            raise _InvalidCode
-        return n
-
-
-def _read_field(reader, api):
-    field_degree = reader.nat() + 1
-    if field_degree == 1:
-        return QQ, None, 1
-    if field_degree > len(reader.bits)-reader.at:
-        raise _InvalidCode
-    coeff = tuple(reader.signed() for _ in range(field_degree))
-    root_index = reader.nat()
-    if root_index >= field_degree:
-        raise _InvalidCode
-    t = api.Symbol("T")
-    coefficients = (1, *reversed(coeff))
-    expr = t**field_degree + api.Add(*(c * t**i for i,c in enumerate(coeff) if c))
-    factors = rational_factor_rows((t,), expr)[1]
-    if len(factors) != 1 or factors[0][1] != 1:
-        raise _InvalidCode
-    if api is np:
-        from .candidate_field import indexed_field
-        domain, primitive = indexed_field(coefficients, root_index)
-    else:
-        from .field_coefficient import indexed_field
-        domain, primitive = indexed_field(coefficients, t, root_index)
-    return domain, primitive, field_degree
-
-
-def _read_poly(reader, variables, field_degree, primitive, projective_start=None):
-    api = chart_expressions(variables)
-    terms = []
-    projective_degree = None
-    for _ in range(reader.size(1)):
-        coeff = reader.signed()
-        if coeff == 0:
-            raise _InvalidCode
-        if field_degree > 1:
-            k = reader.nat()
-            if k >= field_degree:
-                raise _InvalidCode
-            coeff *= primitive**k
-        exps = tuple(reader.nat() for _ in variables)
-        if projective_start is not None:
-            d = sum(exps[projective_start:])
-            if projective_degree is not None and projective_degree != d:
-                raise _InvalidCode
-            projective_degree = d
-        terms.append(coeff * api.prod(v**e for v,e in zip(variables,exps)))
-    poly = api.Add(*terms)
-    if poly == 0:
-        raise _InvalidCode
-    return poly
 
 
 def decode_candidate(variables, code):
@@ -318,38 +223,33 @@ def decode_candidate(variables, code):
 
 
 def _decode_range(variables, code):
-    """Decode one code and advance past every suffix its prefix ruled out."""
     variables = tuple(variables)
-    r = _Reader(code)
-    try:
-        domain, primitive, degree = _read_field(r, chart_expressions(variables))
-        center = tuple(_read_poly(r, variables, 1, None) for _ in range(r.size(1)))
-        u = _projective(variables, len(center))
-        homogeneous = (*variables,*u)
-        components = []
-        for _ in range(r.size()):
-            ideal = tuple(_read_poly(r, homogeneous, degree, primitive, len(variables))
-                          for _ in range(r.size(1)))
-            components.append(ideal)
-        if r.at == len(r.bits):
-            candidate = ResolutionCandidate(center, u, tuple(components), domain, primitive, f"integer code {code:#x}")
-            return candidate, code + 1
-    except _InvalidCode:
-        pass
-    # The parse failed, or finished before the end. For this fixed length
-    # all completions of the prefix that was read have the same failure.
-    # Work with code+1 because its leading sentinel determines the length.
-    unread = len(r.bits) - r.at
-    next_code = (((code + 1) >> unread) + 1) << unread
-    return None, next_code - 1
+    def native():
+        answer = kernel_json("atlas_resolution_candidate", "decode", width=len(variables), code=format(code,"x"))
+        next_code = int(answer["next"],16)
+        if "candidate" not in answer:
+            return None, next_code
+        data = answer["candidate"]
+        domain, primitive = QQ, None
+        if "coefficients" in data:
+            coefficients = tuple(map(integer_from_decimal,data["coefficients"]))
+            if np.native_ring(variables):
+                from .candidate_field import indexed_field
+                domain, primitive = indexed_field(coefficients,data["index"])
+            else:
+                from .field_coefficient import indexed_field
+                domain, primitive = indexed_field(coefficients,sp.Symbol("T"),data["index"])
+        center = tuple(_polynomial(sparse_row(row), variables) for row in data["center"])
+        projective = _projective(variables,len(center))
+        axes = (*variables,*projective) if primitive is None else (*variables,*projective,primitive)
+        boundary = tuple(tuple(_polynomial(sparse_row(row), axes) for row in ideal) for ideal in data["boundary"])
+        return ResolutionCandidate(center,projective,boundary,domain,primitive,f"integer code {code:#x}"), next_code
+    return _checked(native, lambda: _oracle("decode_range",variables,code), variables)
 
 
 def _first_code(variables):
-    # The two shortest payloads have a rational field, a single centre
-    # generator +1 or -1, all exponents zero, and empty boundary. Gamma
-    # code 1 is "010", the smaller of the two nonzero signed coefficients.
-    # In code+1 the leading sentinel and the three one-bit counts come first.
-    return (0b1111011 << (len(variables) + 1)) - 2
+    return _checked(lambda: int(kernel_json("atlas_resolution_candidate", "first", width=len(variables)),16),
+                    lambda: _oracle("first_code",variables), variables)
 
 
 def _code_trials(variables, first, stop=None):

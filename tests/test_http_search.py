@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -89,3 +90,13 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         code, job=self.request("POST","/api/resolve",{"variables":["x","y"],"polynomial":"x+y^150"})
         self.assertEqual(code,202)
         self.assertEqual(self.wait(job["id"])["result"]["search"],"exhaustive")
+
+    def test_default_retries_a_limit_during_verification_and_an_incomplete_zeta(self):
+        body = {"variables":["x","y"], "polynomial":"x+y", "monodromy":True}
+        for reply in ((422, {"code":"computation_limit", "error":"Euler budget"}),
+                      (200, {"status":"resolved", "monodromy_zeta":{"status":"computed"},
+                             "topological_zeta":{"status":"unavailable"}})):
+            with self.subTest(reply=reply), patch("engine.app.run_job", return_value=reply):
+                code, job = self.request("POST", "/api/resolve", body)
+                self.assertEqual(code, 202)
+                self.assertEqual(self.wait(job["id"])["state"], "completed")

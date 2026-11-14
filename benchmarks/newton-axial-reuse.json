@@ -1,0 +1,627 @@
+{
+  "host": "AMD Ryzen 7 6800H",
+  "cpu": 2,
+  "protocol": "Each fresh CLI process is pinned to the same logical CPU. Discard one warm-up pair per germ, then alternate side order and case order for 15 pairs. Include startup, JSON formatting, stdout transfer, and CPU worker subprocess. SHA-256 computed after timing. All native runs block SymPy imports. Compared every returned field except top-level elapsed_ms, execution telemetry and two nested chart_batch timing fields.",
+  "record_canonicalization": "UTF-8 encoding of json.dumps(..., sort_keys=True, separators=(\",\", \":\")); combined hash covers [charts,atlas,dual_complex,monodromy_zeta,topological_zeta].",
+  "supported_cases": {
+    "fiveS": {
+      "input": [
+        "x^2+y^2+z^2+t^2+u^6+(x+y+z+t+u)^14",
+        "x,y,z,t,u"
+      ],
+      "command": [
+        "./atlas",
+        "resolve",
+        "x^2+y^2+z^2+t^2+u^6+(x+y+z+t+u)^14",
+        "--vars",
+        "x,y,z,t,u",
+        "--mode",
+        "intrinsic",
+        "--quick",
+        "--compute",
+        "cpu",
+        "--monodromy",
+        "--json"
+      ],
+      "verified": {
+        "charts": "b467c9b217d0d55a65c23acf3afb346f14d2e167fc31ffad94a6014732267369",
+        "atlas": "cdbed1b25d2df58ed4b83d45d92bcd2d52c7e5245c8caf45fc8536acdab5ff54",
+        "dual_complex": "36a3688473bae917950745590243d09c9497ea653da338420cf6706559013a3c",
+        "monodromy_zeta": "1bc30f2fbeed349c88db781d5ca4672c16734961d3b8fe9921d88f8c8275675a",
+        "topological_zeta": "88d9f41037c65b83f08dbc340928370dc472e71f69b99150d1a21bf92eb70f86",
+        "mathematical_record": "ada45db603ac7d774795ba7ea407638b37eff07c1233e6fdfdc10fa89ad6adc4",
+        "combined": "0ec81c8d9c1656f5554b813a40ecff27180abfeece01223c4e1a2cdef16c828c",
+        "charts_count": 13,
+        "vertices": 3,
+        "cells": 2
+      },
+      "full_cli_seconds": {
+        "wall": {
+          "before": 0.47165474999928847,
+          "after": 0.4478194219991565,
+          "paired_savings": 0.02802424001856707,
+          "paired_speedup": 1.0610000186543949,
+          "pairs_faster": 13,
+          "pairs": 15,
+          "paired_interval": [
+            0.0096055019821506,
+            0.04202793803415261
+          ],
+          "coverage": 0.96484375
+        },
+        "process_cpu": {
+          "before": 0.4671000000000003,
+          "after": 0.44297500000000056,
+          "paired_savings": 0.02752200000000471,
+          "paired_speedup": 1.0631538273717984,
+          "pairs_faster": 13,
+          "pairs": 15,
+          "paired_interval": [
+            0.01096299999999939,
+            0.042037999999999354
+          ],
+          "coverage": 0.96484375
+        }
+      },
+      "native_axial": {
+        "before": {
+          "calls": 10,
+          "native_argument_terms": 3065,
+          "thread_cpu_ms": [
+            29.885396,
+            30.522819,
+            32.838782,
+            32.617725,
+            39.890775
+          ]
+        },
+        "after": {
+          "calls": 1,
+          "native_argument_terms": 3065,
+          "thread_cpu_ms": [
+            3.267066,
+            3.434079,
+            6.504365,
+            6.672862,
+            3.246137
+          ]
+        }
+      }
+    },
+    "seven": {
+      "input": [
+        "x^3+y^3+z^3+t^3+u^3+v^3+w^6+(x+y+z+t+u+v+w)^8",
+        "x,y,z,t,u,v,w"
+      ],
+      "command": [
+        "./atlas",
+        "resolve",
+        "x^3+y^3+z^3+t^3+u^3+v^3+w^6+(x+y+z+t+u+v+w)^8",
+        "--vars",
+        "x,y,z,t,u,v,w",
+        "--mode",
+        "intrinsic",
+        "--quick",
+        "--compute",
+        "cpu",
+        "--monodromy",
+        "--json"
+      ],
+      "verified": {
+        "charts": "7a8e9c2788e2e46cbb5979bf4479b58e8ec765c24ba5dc90bb598b141fe48010",
+        "atlas": "c27b532b94276d0fe9560bbe2115bda82149aa0aed9c1f08c5fbb182878cb04c",
+        "dual_complex": "591772bef49ef30e48be34b88084ec0babc1c58eecc71e0576d8f33d2b572c21",
+        "monodromy_zeta": "89b7345dcd6a64d42c05f77ae089bda2c7719d84040b2e33e84e125cba9b28ba",
+        "topological_zeta": "388a1348535dbbac196d4cb1705fb724475154fb1086926c42e48d61a931b0f3",
+        "mathematical_record": "030e4253d3507a47acc915377f10d2ce39732a98a21fb38869ee432164dba9bc",
+        "combined": "ffe5cc3739c4bb9402dcfa03173d8d98cb2caa16c6f714536a394211d3807c30",
+        "charts_count": 13,
+        "vertices": 2,
+        "cells": 1
+      },
+      "full_cli_seconds": {
+        "wall": {
+          "before": 0.5234994500060566,
+          "after": 0.468438559997594,
+          "paired_savings": 0.052877333015203476,
+          "paired_speedup": 1.1054878307684544,
+          "pairs_faster": 13,
+          "pairs": 15,
+          "paired_interval": [
+            0.04178800497902557,
+            0.07115560202510096
+          ],
+          "coverage": 0.96484375
+        },
+        "process_cpu": {
+          "before": 0.5189069999999996,
+          "after": 0.46372699999999956,
+          "paired_savings": 0.052788000000003166,
+          "paired_speedup": 1.1063850349564632,
+          "pairs_faster": 13,
+          "pairs": 15,
+          "paired_interval": [
+            0.041340999999999184,
+            0.07073000000000462
+          ],
+          "coverage": 0.96484375
+        }
+      },
+      "native_axial": {
+        "before": {
+          "calls": 14,
+          "native_argument_terms": 3010,
+          "thread_cpu_ms": [
+            56.031973,
+            56.923231,
+            59.037727000000004,
+            59.147279,
+            56.357251
+          ]
+        },
+        "after": {
+          "calls": 1,
+          "native_argument_terms": 3010,
+          "thread_cpu_ms": [
+            4.171312,
+            4.039193,
+            3.974082,
+            3.98427,
+            4.185057
+          ]
+        }
+      }
+    }
+  },
+  "build": {
+    "before": {
+      "engine/newton_backend.py": "abb4fb1fdfef9d6cc6cfca7fcec145dcc9a093e628ea55709a94527daaeb8fd8",
+      "native/build/libgroebner.so": "1957d54ba65739f51f8b9583ed357eee0741516c6b2ed89b567fcab064b80b1b",
+      "native/build/newton_fan": "868cf423a636aeddffc8a636254aedc39d6bd9041cf1a5205603c8c8fee925f2"
+    },
+    "after": {
+      "engine/newton_backend.py": "a191e58a2b6e0ae2f8e821a32acb31ab001368718661709b17f5fe216f291201",
+      "native/build/libgroebner.so": "1957d54ba65739f51f8b9583ed357eee0741516c6b2ed89b567fcab064b80b1b",
+      "native/build/newton_fan": "868cf423a636aeddffc8a636254aedc39d6bd9041cf1a5205603c8c8fee925f2"
+    }
+  },
+  "raw_samples": {
+    "fiveS": {
+      "before": [
+        {
+          "wall": 0.49332919402513653,
+          "process_cpu": 0.4887229999999998,
+          "output_bytes": 2467772,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.47165474999928847,
+          "process_cpu": 0.4671000000000003,
+          "output_bytes": 2467772,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.6697306490095798,
+          "process_cpu": 0.664979999999999,
+          "output_bytes": 2467773,
+          "sibling": 0.7313432835820896
+        },
+        {
+          "wall": 0.4534399700060021,
+          "process_cpu": 0.4486449999999991,
+          "output_bytes": 2467775,
+          "sibling": 0.043478260869565216
+        },
+        {
+          "wall": 0.4530139440030325,
+          "process_cpu": 0.44848400000000055,
+          "output_bytes": 2467771,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.49979407698265277,
+          "process_cpu": 0.49506599999999956,
+          "output_bytes": 2467774,
+          "sibling": 0.04
+        },
+        {
+          "wall": 0.49209714398602955,
+          "process_cpu": 0.487305000000001,
+          "output_bytes": 2467774,
+          "sibling": 0.02
+        },
+        {
+          "wall": 0.5267869970120955,
+          "process_cpu": 0.522551,
+          "output_bytes": 2467774,
+          "sibling": 0.09615384615384616
+        },
+        {
+          "wall": 0.5192713869910222,
+          "process_cpu": 0.5150129999999997,
+          "output_bytes": 2467773,
+          "sibling": 0.16981132075471697
+        },
+        {
+          "wall": 0.7345531480095815,
+          "process_cpu": 0.7299570000000024,
+          "output_bytes": 2467778,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.4636585419939365,
+          "process_cpu": 0.45908099999999763,
+          "output_bytes": 2467776,
+          "sibling": 0.2765957446808511
+        },
+        {
+          "wall": 0.4210886990185827,
+          "process_cpu": 0.4162290000000013,
+          "output_bytes": 2467775,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.421005492011318,
+          "process_cpu": 0.4160230000000027,
+          "output_bytes": 2467776,
+          "sibling": 0.023255813953488372
+        },
+        {
+          "wall": 0.4311950780102052,
+          "process_cpu": 0.42632400000000104,
+          "output_bytes": 2467774,
+          "sibling": 0.046511627906976744
+        },
+        {
+          "wall": 0.4208163339935709,
+          "process_cpu": 0.41597199999999646,
+          "output_bytes": 2467774,
+          "sibling": 0.0
+        }
+      ],
+      "after": [
+        {
+          "wall": 0.4513012559909839,
+          "process_cpu": 0.44668500000000044,
+          "output_bytes": 2467774,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.46204924801713787,
+          "process_cpu": 0.4561370000000009,
+          "output_bytes": 2467774,
+          "sibling": 0.06521739130434782
+        },
+        {
+          "wall": 0.7032668209867552,
+          "process_cpu": 0.6987120000000013,
+          "output_bytes": 2467778,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.4413290499942377,
+          "process_cpu": 0.4362760000000012,
+          "output_bytes": 2467776,
+          "sibling": 0.045454545454545456
+        },
+        {
+          "wall": 0.42696883698226884,
+          "process_cpu": 0.4218429999999991,
+          "output_bytes": 2467774,
+          "sibling": 0.023809523809523808
+        },
+        {
+          "wall": 0.4478194219991565,
+          "process_cpu": 0.44297500000000056,
+          "output_bytes": 2467776,
+          "sibling": 0.022222222222222223
+        },
+        {
+          "wall": 0.48913977199117653,
+          "process_cpu": 0.484887999999998,
+          "output_bytes": 2467775,
+          "sibling": 0.12244897959183673
+        },
+        {
+          "wall": 0.4575644090073183,
+          "process_cpu": 0.45330900000000085,
+          "output_bytes": 2467776,
+          "sibling": 0.022222222222222223
+        },
+        {
+          "wall": 0.4815524560108315,
+          "process_cpu": 0.4772730000000003,
+          "output_bytes": 2467772,
+          "sibling": 0.02127659574468085
+        },
+        {
+          "wall": 0.7019711710163392,
+          "process_cpu": 0.6972489999999993,
+          "output_bytes": 2467778,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.40609935598331504,
+          "process_cpu": 0.39967200000000247,
+          "output_bytes": 2467774,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.3898331389937084,
+          "process_cpu": 0.38535899999999756,
+          "output_bytes": 2467778,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.3929812519927509,
+          "process_cpu": 0.388500999999998,
+          "output_bytes": 2467774,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.40706473198952153,
+          "process_cpu": 0.40309600000000145,
+          "output_bytes": 2467772,
+          "sibling": 0.024390243902439025
+        },
+        {
+          "wall": 0.4295143299968913,
+          "process_cpu": 0.42492200000000224,
+          "output_bytes": 2467774,
+          "sibling": 0.023809523809523808
+        }
+      ]
+    },
+    "seven": {
+      "before": [
+        {
+          "wall": 0.5275470339984167,
+          "process_cpu": 0.5226139999999999,
+          "output_bytes": 2205282,
+          "sibling": 0.05660377358490566
+        },
+        {
+          "wall": 0.5234994500060566,
+          "process_cpu": 0.5189069999999996,
+          "output_bytes": 2205280,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.8761908110172953,
+          "process_cpu": 0.871313999999999,
+          "output_bytes": 2205284,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.5145087109995075,
+          "process_cpu": 0.509981999999999,
+          "output_bytes": 2205280,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.501860475022113,
+          "process_cpu": 0.49714099999999917,
+          "output_bytes": 2205282,
+          "sibling": 0.0196078431372549
+        },
+        {
+          "wall": 0.5620325400086585,
+          "process_cpu": 0.5573420000000002,
+          "output_bytes": 2205284,
+          "sibling": 0.18181818181818182
+        },
+        {
+          "wall": 0.5744277970225085,
+          "process_cpu": 0.5696469999999998,
+          "output_bytes": 2205284,
+          "sibling": 0.03571428571428571
+        },
+        {
+          "wall": 0.5541421009984333,
+          "process_cpu": 0.549982,
+          "output_bytes": 2205284,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.5732704090187326,
+          "process_cpu": 0.5688299999999984,
+          "output_bytes": 2205280,
+          "sibling": 0.07017543859649122
+        },
+        {
+          "wall": 0.8989774770161603,
+          "process_cpu": 0.8941840000000028,
+          "output_bytes": 2205284,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.49016806698637083,
+          "process_cpu": 0.48530999999999835,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.47144754900364205,
+          "process_cpu": 0.46710600000000113,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.4739624240028206,
+          "process_cpu": 0.46937499999999943,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.4687552080140449,
+          "process_cpu": 0.4643739999999994,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.49652685000910424,
+          "process_cpu": 0.49223799999999684,
+          "output_bytes": 2205280,
+          "sibling": 0.11764705882352941
+        }
+      ],
+      "after": [
+        {
+          "wall": 0.4786952229915187,
+          "process_cpu": 0.4728620000000001,
+          "output_bytes": 2205282,
+          "sibling": 0.02127659574468085
+        },
+        {
+          "wall": 0.468438559997594,
+          "process_cpu": 0.46372699999999956,
+          "output_bytes": 2205278,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.7501672719954513,
+          "process_cpu": 0.7453409999999998,
+          "output_bytes": 2205282,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.5509610360022634,
+          "process_cpu": 0.5437720000000006,
+          "output_bytes": 2205284,
+          "sibling": 0.36363636363636365
+        },
+        {
+          "wall": 0.43024789699120447,
+          "process_cpu": 0.42570500000000067,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.4237363150168676,
+          "process_cpu": 0.4195820000000001,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.5032721949974075,
+          "process_cpu": 0.49917400000000356,
+          "output_bytes": 2205282,
+          "sibling": 0.06
+        },
+        {
+          "wall": 0.5012647679832298,
+          "process_cpu": 0.4971939999999968,
+          "output_bytes": 2205282,
+          "sibling": 0.04
+        },
+        {
+          "wall": 0.8746078389813192,
+          "process_cpu": 0.8700420000000015,
+          "output_bytes": 2205284,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.8282125119876582,
+          "process_cpu": 0.8234539999999981,
+          "output_bytes": 2205284,
+          "sibling": 1.0
+        },
+        {
+          "wall": 0.44838006200734526,
+          "process_cpu": 0.44396899999999917,
+          "output_bytes": 2205282,
+          "sibling": 0.043478260869565216
+        },
+        {
+          "wall": 0.44437558099161834,
+          "process_cpu": 0.43950399999999945,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        },
+        {
+          "wall": 0.4291056980146095,
+          "process_cpu": 0.42424199999999956,
+          "output_bytes": 2205278,
+          "sibling": 0.06818181818181818
+        },
+        {
+          "wall": 0.4207491370034404,
+          "process_cpu": 0.41635000000000133,
+          "output_bytes": 2205282,
+          "sibling": 0.023809523809523808
+        },
+        {
+          "wall": 0.4351008940138854,
+          "process_cpu": 0.43018,
+          "output_bytes": 2205282,
+          "sibling": 0.0
+        }
+      ]
+    }
+  },
+  "coordinate_choice_controls": {
+    "before": {
+      "cases": 154,
+      "full_eight": 52,
+      "rejected_all": 4,
+      "choices": 651,
+      "axial_calls": 10468,
+      "cases_repeating_same_trial_object": 154,
+      "sha": "852e71b292a877ea1940719a93ae025c08e80ac825644236ee1163d31ed86449"
+    },
+    "after": {
+      "cases": 154,
+      "full_eight": 52,
+      "rejected_all": 4,
+      "choices": 651,
+      "axial_calls": 2811,
+      "cases_repeating_same_trial_object": 0,
+      "sha": "852e71b292a877ea1940719a93ae025c08e80ac825644236ee1163d31ed86449"
+    },
+    "checks": "Deterministic controls in 2\u20136 variables, including an exponent with 4,501 decimal digits. Compared every ordered triple of polynomial, matrix and shear history. Eight additional direct shear controls exercised cancellation, an absent donor, signed and zero shears, and the expansion budget boundary."
+  },
+  "large_fan_regression": {
+    "digest": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "charts": 3915,
+    "vertices": 565,
+    "cells_by_dimension": {
+      "1": 2501,
+      "2": 4008,
+      "3": 2767,
+      "4": 696
+    },
+    "strata": 3860
+  },
+  "validation": {
+    "newton_tests": {
+      "native": 27,
+      "check": 27,
+      "skipped_in_check": 2
+    },
+    "full_native_suite": {
+      "tests": 846,
+      "skipped": 66,
+      "errors": [],
+      "failures": []
+    },
+    "full_comparison_suite": {
+      "tests": 846,
+      "skipped": 94,
+      "errors": [
+        "test_large_degree_graph_transform_uses_wide_quotients (test_local_chart_data.WideNativeChart.test_large_degree_graph_transform_uses_wide_quotients)"
+      ],
+      "failures": [
+        "test_five_variable_binomial_retains_two_poles_with_the_same_eigenvalue_order (test_session_monodromy.SessionMonodromyTests.test_five_variable_binomial_retains_two_poles_with_the_same_eigenvalue_order)"
+      ]
+    },
+    "wide_chart_rerun": "The standalone wide-quotient comparison raised the same Groebner unavailable exception with both candidate and baseline Newton code.",
+    "binomial_rerun": "The 55-second comparison limit expired. Without the limit the binomial verified both pole witnesses and matched the reference mathematical record SHA-256.",
+    "binomial_rerun_sha256": "f11a0a66b3ff175b89fff84ec7212686fb7fc6095678616dbe7389ffbede433b",
+    "milnor_battery": {
+      "agreements_with_singular": 19,
+      "nonisolated": 1,
+      "disagreements": 0
+    },
+    "headless_http": "Both requested 13-chart examples reproduced their combined mathematical hashes."
+  }
+}

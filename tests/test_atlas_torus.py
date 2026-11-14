@@ -182,6 +182,20 @@ class TorusChartCertification(unittest.TestCase):
             self.assertEqual(orbit.call_count, 3)
         self.assertEqual(expected["vertices"], [{"id": "E", "dimension": 0}])
 
+    def test_split_sections_require_the_same_character_on_incident_faces(self):
+        from unittest.mock import patch
+        from engine.atlas_torus import section_complex
+        # A regular 3-cone whose two exceptional rays are internal. Supply
+        # independent section certificates to exercise their restriction map.
+        charts = ((((1, 1, 1), (2, 2, 1), (0, 1, 0)), {0: "E", 1: "F"},
+                   (((0, 0, 0), 1), ((0, 1, 0), 1), ((1, 0, 0), 1))),)
+        def certificate(rays, polynomial, exhaustive):
+            if len(polynomial) == 1:
+                return 2, ("different primitive character",)
+            return 2, ("common primitive character",)
+        with patch("engine.atlas_torus._orbit", side_effect=certificate):
+            self.assertIsNone(section_complex(charts, 3, True, common_source=True))
+
     def test_root_indices_match_on_all_split_incident_curves(self):
         result = resolve({"variables": self.names, "polynomial": "2*x^2+3*y^4-z^7+x*y*z^4",
                           "mode": "intrinsic"})

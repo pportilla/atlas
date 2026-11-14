@@ -77,7 +77,7 @@ from time import monotonic
 
 from .chart_expressions import chart_expressions
 
-from .affine_kernel import frame_derivative, frame_function, frame_linear, frame_locus, frame_restrict
+from .affine_kernel import frame_derivative, frame_function, frame_linear, frame_locus, frame_minor, frame_restrict
 from .blowup_ideal import empty_locus, ideal_basis, radical_subset, saturate
 from .centres import GiveUp, _intersection, _principal
 from .groebner import groebner
@@ -154,21 +154,18 @@ def _models(variables, equations, functions, working, threefold=0):
                 yield names, units, fns, work, (*first, *(e for e, flag in tagged if not flag)), len(first)
 
 
-def _plane_step(names, units, functions, working, *, reference=False):
+def _plane_step(names, units, functions, working):
     """The step of the procedure on one plane model: (key, kind, generators), or None."""
-    if reference:
-        import sympy as sp
+    from .affine_kernel import rational_factor_rows, _sparse_expression
     s, t = names
+
     def expand(f):
-        return sp.expand(f) if reference else frame_function(names, f)
+        return frame_function(names, f)
 
     def derivative(f, v):
-        return sp.diff(f, v) if reference else frame_derivative(names, f, {v: 1})
+        return frame_derivative(names, f, {v: 1})
 
     def factors(f):
-        if reference:
-            return sp.factor_list(f, s, t)[1]
-        from .affine_kernel import rational_factor_rows, _sparse_expression
         return [(_sparse_expression(names, row), m) for row, m, _ in rational_factor_rows(names, f)[1]]
 
     def here(gens, everywhere=False):
@@ -189,17 +186,18 @@ def _plane_step(names, units, functions, working, *, reference=False):
         return None
     whole = expand(chart_expressions(names).prod(curves))
     first = [derivative(whole, v) for v in names]
-    hessian = expand(derivative(first[0], s)*derivative(first[1], t) - derivative(first[0], t)**2)
+    hessian = frame_minor(names, first, names)
     if here((whole, *first, hessian)):
         return (3, 0, 0, ()), "points", (whole, *first, hessian)
-    if any(sum(m.values()) >= 2 for m in curves.values()):
-        top = max(max(m.values()) for m in curves.values())
-        if top >= 2:
-            labels = (max(label for m in curves.values() for label, power in m.items() if power == top),)
-            chosen = [p for p, m in curves.items() if m.get(labels[0]) == top]
-        else:
-            labels = max(tuple(sorted(m)) for m in curves.values() if len(m) >= 2)
-            chosen = [p for p, m in curves.items() if all(label in m for label in labels)]
+    from .binomial_kernel import _integer, run
+    columns = sorted(functions)
+    choice, *matches = run(f"surface_curve_matches {len(curves)} {len(columns)}",
+                  *(tuple(orders.get(label, 0) for label in columns) for orders in curves.values()))
+    if choice != "none":
+        top, *selected = map(_integer, choice.split())
+        labels = tuple(columns[j] for j in selected)
+        equations = tuple(curves)
+        chosen = [equations[j] for j in map(int,matches[0].split())]
         together = expand(chart_expressions(names).prod(chosen))
         singular = (together, derivative(together, s), derivative(together, t))
         if here(singular, everywhere=True):
@@ -213,14 +211,15 @@ def _plane_step(names, units, functions, working, *, reference=False):
     return None
 
 
-def _implicit_step(frame, functions, working, deadline=None, *, reference=False):
+def _implicit_step(frame, functions, working, deadline=None):
     """The same step on a surface given by equations, with two of the variables
     as coordinates: (key, kind, generators in the ring of the frame), or None."""
-    from .groebner import colon
+    from .groebner import _MODE, colon
+    if _MODE == "sympy":
+        from tests.surface_oracle import _implicit_step as reference
+        return reference(frame, functions, working, deadline)
     # Ideals are taken in the variables of the chart, over the equations of the
     # surface; the open set of the frame only enters the tests for emptiness.
-    if reference:
-        import sympy as sp
     ring, base = frame.variables, frame.rows
 
     def here(gens, everywhere=False):
@@ -233,13 +232,7 @@ def _implicit_step(frame, functions, working, deadline=None, *, reference=False)
     def quotient(ideal, by):
         answer = colon(tuple(ideal), tuple(by), ring)
         if answer is None:
-            from .native_polynomial import native_ring
-            if native_ring(ring):
-                raise NoModel("An ideal quotient is not available.")
-            from sympy import QQ
-            polynomials = QQ.old_poly_ring(*ring, order="grevlex")
-            quotient = polynomials.ideal(*ideal).quotient(polynomials.ideal(*by))
-            answer = tuple(polynomials.to_sympy(g) for g in quotient.gens)
+            raise NoModel("An ideal quotient is not available.")
         return tuple(answer)
 
     def derived(ideal):
@@ -253,7 +246,7 @@ def _implicit_step(frame, functions, working, deadline=None, *, reference=False)
         return quotient(ideal, (*ideal, *derived(ideal)))
 
     def expanded(f):
-        return sp.Poly(f, *ring, domain=sp.QQ).as_expr() if reference else frame_function(ring, f)
+        return frame_function(ring, f)
 
     labels = [label for label, f in functions.items() if here((f,))]
     if not labels:
@@ -276,16 +269,21 @@ def _implicit_step(frame, functions, working, deadline=None, *, reference=False)
         da, db = frame.field(a), frame.field(b)
         entries = [(frame_derivative(ring, ga, da), frame_derivative(ring, ga, db),
                     frame_derivative(ring, gb, db)) for ga, gb in gradients if ga != 0 or gb != 0]
+        from .affine_kernel import _request, _ring, _sparse_expression
+        wire = _ring(ring)
+
+        def determinants(rows):
+            lines = (wire.text(value) for triple in rows for value in triple)
+            result = _request(["symmetric_determinants", wire.header, *lines])
+            return tuple(_sparse_expression(ring, row) for row in result)
+
         for w in slices:
             slice_basis = groebner((*base, *singular, *w), ring)
-            hessians = []
-            for row in entries:
-                aa, ab, bb = (slice_basis.reduce(g)[1] for g in row)
-                hessians.append(expanded(aa*bb - ab**2))
+            hessians = determinants(tuple(slice_basis.reduce(g)[1] for g in row) for row in entries)
             if not frame.empty(*singular, *w, *hessians):
                 # The centre itself must still use the whole singular locus;
                 # the working ideals only select which step has priority.
-                whole_hessians = [expanded(aa*bb - ab**2) for aa, ab, bb in entries]
+                whole_hessians = determinants(entries)
                 return (3, 0, 0, ()), "points", (*singular, *whole_hessians)
     # For each divisor, the unions of its curves of multiplicity at least 1, 2, ...
     levels = {}
@@ -298,11 +296,14 @@ def _implicit_step(frame, functions, working, deadline=None, *, reference=False)
             found.append(reduced)
             current = quotient(current, reduced)
         levels[label] = found
-    top = max(len(found) for found in levels.values())
+    from .centre_weights import maximum_indices
+    ordered = sorted(levels)
+    j = maximum_indices(((len(levels[label]),),(i,)) for i,label in enumerate(ordered))[0]
+    top = len(levels[ordered[j]])
     chosen = None
     if top >= 2:
-        key = (max(label for label, found in levels.items() if len(found) == top),)
-        chosen = levels[key[0]][top - 1]
+        key = (ordered[j],)
+        chosen = levels[key[0]][-1]
     else:
         for first, second in sorted(((a, b) for a in labels for b in labels if a < b), reverse=True):
             outside = saturate(ring, levels[first][0], functions[second])
@@ -375,9 +376,12 @@ def _best(variables, found):
     """Of the steps found on the open sets used, the one with the largest key; its locus is the union of theirs."""
     if not found:
         return None
-    key = max(item[0] for item in found)
-    kind = next(item[1] for item in found if item[0] == key)
-    centres = sorted({item[2] for item in found if item[0] == key}, key=chart_expressions(variables).default_sort_key)
+    from .centre_weights import maximum_indices
+    labels = sorted({label for item in found for label in item[0][3]})
+    positions = {label:i for i,label in enumerate(labels)}
+    indices = maximum_indices((key[:3],tuple(positions[label] for label in key[3])) for key,_,_ in found)
+    key, kind, _ = found[indices[0]]
+    centres = sorted({found[i][2] for i in indices}, key=chart_expressions(variables).default_sort_key)
     centre = centres[0]
     for other in centres[1:]:
         centre = tuple(ideal_basis(variables, _intersection(variables, centre, other)))
@@ -399,8 +403,12 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
                   for kind, top, flag, positions, gens in native]
         if not CHECK:
             return native
+    if CHECK or _MODE == "sympy":
+        from tests.surface_oracle import _implicit_step as implicit, _plane_step as plane
+    else:
+        implicit, plane = _implicit_step, _plane_step
     if not left:
-        mine = [_plane_step(names, units, fns, work, reference=CHECK or _MODE == "sympy")]
+        mine = [plane(names, units, fns, work)]
     else:
         # Two of the remaining variables as coordinates, the others determined by the equations left.
         try:
@@ -409,7 +417,7 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
                                   units=tuple(u for u in units if not getattr(u, "is_number", True))))
         except GiveUp as error:
             raise NoModel(str(error)) from error
-        mine = [_implicit_step(frame, fns, part, deadline, reference=CHECK or _MODE == "sympy") for frame, part in frames]
+        mine = [implicit(frame, fns, part, deadline) for frame, part in frames]
     mine = [item for item in mine if item is not None]
     if native is not None:
         # Compared after closure, where generators are canonical.

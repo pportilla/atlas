@@ -5,7 +5,7 @@ for generator (native/ideal.cpp follows that file step by step). It returns
 None when the kernel cannot take the problem: the library is absent or
 switched off with ATLAS_GROEBNER=sympy, the ring has too many variables, an
 exponent exceeds the packed range, or the input is not a polynomial over Q.
-The caller then computes with SymPy, which also reports malformed input.
+Callers can retry in the unpacked native kernel.
 """
 
 from . import native_polynomial as np
@@ -99,6 +99,27 @@ def strict_parts(variables, ambient, divisors, functions):
         result.append((tuple(orders), _exprs(variables, rows[offset:offset + size])))
         offset += size
     return result
+
+
+@_optional
+def graph_strict_part(variables, ambient, pivot, function):
+    """Divide a principal divisor by its exceptional pivot on a graph chart."""
+    _require(len(variables) + 1)
+    rows = _ask(f"graph_strict_part {len(variables)} {len(ambient)} 1 1",
+                _lines(variables, (*ambient, pivot, function)))
+    order, size = map(int, rows[0].split())
+    if size != 1 or len(rows) != 2:
+        raise ArithmeticError("Expected a principal residual ideal on the chart.")
+    return order, _exprs(variables, rows[1:])
+
+
+@_optional
+def residual_dimension_below(variables, base, residual, threshold):
+    """Whether the dimension after adding the residual ideal is below the threshold."""
+    _require(len(variables))
+    rows = _ask(f"residual_dimension_below {len(variables)} {threshold} {len(base)}",
+                _lines(variables, (*base, *residual)))
+    return bool(int(rows[0]))
 
 
 @_optional
@@ -339,8 +360,10 @@ def strata(variables, base, ideals, removed=()):
 @_optional
 def plane_components(variables, equations, region, removed):
     """Owned geometric and rational component counts of a coordinate plane curve."""
+    if _MODE in ("sympy", "check"):
+        from tests.plane_components_oracle import plane_components as reference
     if _MODE == "sympy":
-        return _plane_components_reference(variables, equations, region, removed)
+        return reference(variables, equations, region, removed)
     _require(len(variables))
     sizes = [len(equations), len(region), *map(len, removed)]
     rows = _ask("plane_components " + " ".join(map(str, (len(variables), *sizes))),
@@ -348,46 +371,6 @@ def plane_components(variables, equations, region, removed):
     if rows == ["unsupported"]:
         return None
     counts = tuple(map(int, rows[0].split()))
-    if _MODE == "check" and counts != _plane_components_reference(variables, equations, region, removed):
+    if _MODE == "check" and counts != reference(variables, equations, region, removed):
         raise AssertionError("The plane component counts differ from the reference.")
     return counts
-
-
-def _plane_components_reference(variables, equations, region, removed):
-    """Factor over Q and solve Gao's closed-form equations symbolically."""
-    zero = {v: 0 for v in variables if any(sp.sympify(g).as_coeff_Mul()[1] == v for g in equations)}
-    free = [v for v in variables if v not in zero]
-    if len(free) != 2:
-        return None
-    x, y = free
-
-    def restrict(g):
-        return sp.Poly(sp.sympify(g).xreplace(zero), x, y, domain=sp.QQ)
-
-    remaining = [g for g in map(restrict, equations) if not g.is_zero]
-    if len(remaining) != 1:
-        return None
-    equation, = remaining
-    geometric = rational = 0
-    for p, _ in equation.factor_list()[1]:
-        def vanishes(ideal):
-            return all(restrict(g).rem(p).is_zero for g in ideal)
-
-        if not vanishes(region) or any(vanishes(z) for z in removed):
-            continue
-        rational += 1
-        m, n = p.degree(x), p.degree(y)
-        if not m or not n:
-            geometric += m + n
-            continue
-        f = p.as_expr()
-        # Column polynomials of f*(g_y-h_x) - g*f_y + h*f_x.
-        columns = [f*q.diff(y) - q*f.diff(y) for i in range(m) for j in range(n+1)
-                   for q in (x**i*y**j,)]
-        columns.extend(q*f.diff(x) - f*q.diff(x) for i in range(m+1) for j in range(n)
-                       for q in (x**i*y**j,))
-        sparse = [sp.Poly(q, x, y).as_dict() for q in columns]
-        powers = sorted(set().union(*sparse))
-        matrix = sp.Matrix([[column.get(power, 0) for column in sparse] for power in powers])
-        geometric += len(columns) - matrix.to_DM().rank()
-    return geometric, rational

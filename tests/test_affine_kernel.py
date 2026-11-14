@@ -11,6 +11,29 @@ from engine.affine_kernel import (canonical_laurent_terms, chart_data, decode, f
 
 
 class AffineMaps(unittest.TestCase):
+    def test_fan_boundary_keeps_the_union_of_exceptional_restrictions(self):
+        from engine.native_library import affine_request
+        from engine.polynomial import sparse_row
+
+        # Two exceptional coordinates attain their minima at different terms.
+        # The mixed term vanishes on both, including for a very large exponent.
+        wide = "1" + "0" * 4500
+        head = ["x y", "u v", f"2/3*x^3-4*y^2/3+x^{wide}*y", "1 0", "0 1"]
+        cones = [
+            (["1 1", "1 2"], (0, 1)),
+            (["1 0", "1 1"], (1,)),
+            (["1 0", "0 1"], ()),
+        ]
+        for rays, exceptional in cones:
+            with self.subTest(rays=rays):
+                rows = [*head, *rays, "1 2"]
+                full = affine_request(["fan_charts_with_projection", *rows])
+                extended = affine_request(["fan_charts_with_boundary", *rows])
+                self.assertEqual(extended[:-1], full)
+                terms = sparse_row(full[2])
+                expected = {e: c for e, c in terms.items() if any(e[i] == 0 for i in exceptional)}
+                self.assertEqual(sparse_row(extended[-1]), expected)
+
     def test_fan_chart_equation_text_matches_the_exact_sparse_row(self):
         from engine.native_library import affine_request
         from engine.polynomial import format_poly, sparse_row
@@ -21,6 +44,10 @@ class AffineMaps(unittest.TestCase):
              ["1/3*u^3*v^3-u*v^5-v^6+u+v-5/3",
               "1/3*u^3*v^6-u*v^6-v^6+u*v+v-5/3"]),
             ("-3/7", ["-3/7", "-3/7"]),
+            # Each strict exponent fits int32, but the tied total degrees do not.
+            ("2/3*x^2147483647*y+x*y^2147483647-x^2147483647",
+             ["2/3*u^2147483647*v+u*v^2147483647-u^2147483647",
+              "2/3*u^2147483647*v-u^2147483647+u*v"]),
         ]
         # The exponents and the rational coefficient exceed the Python
         # decimal limit. A graded degree tie still uses chart-variable order.
@@ -247,6 +274,19 @@ class AffineMaps(unittest.TestCase):
         self.assertEqual(dimension(variables, (a*b, c*d, e*f, b*c)), 4)
         # One coordinate now covers the bridge and both outer edges.
         self.assertEqual(dimension(variables, (a*b, b*c, b*d, e*f)), 5)
+
+    @unittest.skipUnless(affine_kernel.gb._MODE == "native", "Exercises the unbounded native coefficient reader.")
+    def test_sparse_wide_symbolic_poly_and_integral_factor_domain(self):
+        from engine.field_wide import wide_block_basis
+        variables = sp.symbols("w:40")
+        x, y = variables[0], variables[-1]
+        coefficient = 10**5000 + 109
+        poly = sp.Poly(x + coefficient*y, x, y, domain=sp.ZZ)
+        self.assertEqual(wide_block_basis((poly,), variables, "lex").exprs, [x + coefficient*y])
+        p = sp.Poly(-6*(2*x-y)**2*(x+2), x, y, domain=sp.ZZ)
+        with patch.object(sp.Poly, "factor_list", side_effect=AssertionError("symbolic factorization")):
+            scalar, parts = rational_factors(p)
+        self.assertEqual((scalar, parts), p.factor_list())
 
     def test_inverse_wider_than_packed_graph(self):
         local, base = sp.symbols("u:17"), sp.symbols("x:17")

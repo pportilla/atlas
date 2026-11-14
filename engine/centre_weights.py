@@ -7,11 +7,23 @@ The order condition at threshold v is therefore an ordinary jet condition
 of order ceil(v*w_i - sum_I e_ih) for every row. The chart decides which
 of these conditions has a point on its owned open set.
 """
-from fractions import Fraction
-from math import ceil
+from .kernel_json import kernel_json
+from .rational_point import coordinate_fraction
 
 from . import native_library
-from .polynomial import checked_native
+from .polynomial import checked_native, integer_from_decimal, integer_text, rational_text
+
+
+def level_weights(operation, weights, **fields):
+    return kernel_json("atlas_centre_level", operation, weights=list(map(rational_text, weights)), **fields)
+
+
+def invariant_row(values):
+    return ["inf" if x == float("inf") else rational_text(x) for x in values]
+
+
+def maximum_indices(values):
+    return level_weights("maximum", (), values=[[invariant_row(value),invariant_row(key)] for value,key in values])
 
 
 class Presentation:
@@ -19,7 +31,7 @@ class Presentation:
         self.labels = tuple(labels)
         self.weights = tuple(w for _, _, w in collection)
         self.exponents = tuple(tuple(e[h] for h in labels) for e, _, _ in collection)
-        self.rows = (f"{len(labels)} {len(collection)}", *(" ".join(map(str, (w, *row)))
+        self.rows = (f"{len(labels)} {len(collection)}", *(" ".join(map(rational_text, (w, *row)))
                      for w, row in zip(self.weights, self.exponents)))
 
     def request(self, operation, extra=()):
@@ -29,32 +41,26 @@ class Presentation:
 
     def residual(self):
         def reference():
-            alpha = tuple(min(row[j]/w for row, w in zip(self.exponents, self.weights))
-                          for j in range(len(self.labels)))
-            return (alpha, *(tuple(x-a*w for x, a in zip(row, alpha))
-                             for row, w in zip(self.exponents, self.weights)))
+            from tests.centre_weight_oracle import residual
+            return residual(self)
         def native():
-            return tuple(tuple(map(Fraction, s.split())) for s in self.request("bm_residual"))
+            return tuple(tuple(map(coordinate_fraction, s.split())) for s in self.request("bm_residual"))
         return tuple(dict(zip(self.labels, row)) for row in checked_native(native, reference))
 
     def candidate_values(self, strata, bounds):
         def reference():
-            values = {Fraction(0)}
-            for chosen, orders in zip(strata, bounds):
-                for row, w, order in zip(self.exponents, self.weights, orders):
-                    c = sum(row[j] for j in chosen)
-                    values.update((k+c)/w for k in range(order+1))
-            return sorted(values)
+            from tests.centre_weight_oracle import values
+            return values(self, strata, bounds)
         def native():
-            extra = [" ".join(map(str, (len(ids), *ids, *orders))) for ids, orders in zip(strata, bounds)]
-            return list(map(Fraction, self.request("bm_values", extra)))
+            extra = [" ".join(map(integer_text, (len(ids), *ids, *orders))) for ids, orders in zip(strata, bounds)]
+            return list(map(coordinate_fraction, self.request("bm_values", extra)))
         return checked_native(native, reference)
 
     def requirements(self, strata, value):
         def reference():
-            return [tuple(ceil(value*w-sum(row[j] for j in ids)) for w, row in zip(self.weights, self.exponents))
-                    for ids in strata]
+            from tests.centre_weight_oracle import requirements
+            return requirements(self, strata, value)
         def native():
-            extra = [str(value), *(" ".join(map(str, (len(ids), *ids))) for ids in strata)]
-            return [tuple(map(int, row.split())) for row in self.request("bm_requirements", extra)]
+            extra = [rational_text(value), *(" ".join(map(str, (len(ids), *ids))) for ids in strata)]
+            return [tuple(map(integer_from_decimal, row.split())) for row in self.request("bm_requirements", extra)]
         return checked_native(native, reference)

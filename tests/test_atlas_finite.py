@@ -20,11 +20,50 @@ class FiniteCentre(unittest.TestCase):
         counts = {frozenset(("D",)): None}
         self.assertIsNone(finite_complex([c], 3, counts))
         other = replace(c, removed=((t**2+t+1,),))
-        self.assertEqual(len(finite_complex([c, other], 3, counts)["vertices"]), 3)
+        dual = finite_complex([c, other], 3, counts)
+        self.assertEqual(len(dual["vertices"]), 3)
+        domains = dual["finite_sheet_certificate"]["chart_sections"]
+        self.assertEqual([row["id"] for row in domains[0]["divisors"]["D"]], ["D.1", "D.2"])
+        self.assertEqual([row["id"] for row in domains[1]["divisors"]["D"]], ["D.3"])
         self.assertIsNone(finite_complex([c, other, c], 3, counts))
         away = (("x", sp.S.One), ("y", t), ("z", v))
         self.assertIsNone(finite_complex([replace(c, coordinates=away, fibre=(sp.S.One, t, v), removed=())],
                                          3, counts))
+
+    def test_two_independent_sheet_parameters_and_wide_graph_equation(self):
+        from engine import atlas
+        from engine.chart_expressions import runtime_expressions
+        api = runtime_expressions()
+        a, b, v, w, h = api.symbols("a b v w h")
+        high = 2**72
+        coefficient = 2**160 + 7
+        p, q = a**2-2, b**3-3
+        images = (v*p*q, a*v*p*q, b*v*p*q, w*p*q)
+        mapping = tuple(zip(("x", "y", "z", "t"), images))
+        chart = Chart((h,a,b,v,w), (h-coefficient*w**high,), (("D",1,1,(p,)),("E",1,1,(q,))),
+                      images, (), mapping, ())
+        dual = atlas.boundary_complex([chart], 4)
+        self.assertEqual(dual["status"], "complete")
+        self.assertEqual(len(dual["vertices"]), 5)
+        self.assertEqual({tuple(cell["vertices"]) for cell in dual["cells"]},
+                         {(f"D.{i}", f"E.{j}") for i in (1,2) for j in (1,2,3)})
+        self.assertTrue(all(set(c["faces"]) == set(c["vertices"]) for c in dual["cells"]))
+        self.assertEqual({tuple(s["intersection"]):s["degree"] for s in dual["finite_sheet_certificate"]["bases"]},
+                         {("D",):2, ("E",):3, ("D","E"):6})
+        from engine.atlas_finite import geometric_chart_records
+        from engine.session_values import Resolution
+        public = dict(id="C1", coordinates=[str(x) for x in chart.variables], ambient_ideal=[str(chart.ambient[0])],
+                      map={k:str(f) for k,f in mapping}, strict_transform="1", exceptional=[
+                          {"id": "D", "ideal": ["a^2-2"]}, {"id": "E", "ideal": ["b^3-3"]}])
+        record = {"variables": list(dict(mapping)), "charts": [public], "dual_complex": dual}
+        projected = geometric_chart_records(record)
+        self.assertEqual(geometric_chart_records({**record, "charts": projected}), projected)
+        linked = Resolution(record)
+        self.assertEqual({v.id for v in linked.chart("C1").divisors}, {v["id"] for v in dual["vertices"]})
+        left = linked.divisor("D.1").ideal_in(linked.chart("C1"))
+        right = linked.divisor("D.2").ideal_in(linked.chart("C1"))
+        self.assertEqual(left[0], right[0])
+        self.assertNotEqual(left[1], right[1])
 
     def test_independent_roots_and_relative_field_sheet(self):
         from engine.atlas_finite import marked_primes, splitting_charts

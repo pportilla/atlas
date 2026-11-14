@@ -49,7 +49,7 @@ def handle(operation, ring, operands):
                     # Its total degree alone determines their Hilbert series.
                     from .point_order import order_at_rational_point
                     order = order_at_rational_point(variables, shifts, generators[0])
-                    heads = [(order,) + (0,)*(len(variables)-1)]
+                    heads = [tuple(order if i == 0 else 0 for i in range(len(variables)))]
                 else:
                     generators = centered_ideal(variables, shifts, generators)
 

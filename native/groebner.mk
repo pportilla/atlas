@@ -7,20 +7,34 @@ ifeq ($(shell uname -s),Darwin)
   LOCAL_RPATH := -Wl,-rpath,@loader_path
 else
   GROEBNER_LIB := build/libgroebner.so
-  GROEBNER_SHARED := -shared
+  GROEBNER_SHARED := -shared -Wl,--no-undefined
   LOCAL_RPATH := -Wl,-rpath,'$$ORIGIN'
 endif
 
 .PHONY: all
-all: $(GROEBNER_LIB) build/local_algebra
+all: $(GROEBNER_LIB) build/local_algebra build/primary_decomposition build/normalization build/localization build/ideal_power build/symbolic_power
 
 LOCAL_SOURCES := local_cli.cpp
-build/local_algebra: $(LOCAL_SOURCES) local_io.hpp local_basis.hpp local_division.hpp $(GROEBNER_LIB)
+build/bench_local_dimension: ../benchmarks/local_dimension_kernel.cpp local_dimension.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/bench_ideal_powers: ../benchmarks/ideal_powers_kernel.cpp ideal_powers.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/local_algebra: $(LOCAL_SOURCES) local_io.hpp local_basis.hpp local_division.hpp primary_decomposition.hpp normalization.hpp localization.hpp ideal_powers.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(LOCAL_SOURCES) -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
-KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp affine.cpp zeta.cpp \
-  field_wide.cpp field_coefficient.cpp lattice_volume.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp \
-  monomial_quotient.cpp point_geometry.cpp polynomial_factors.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp
+# Install a command marker only once the corresponding native frontend exists.
+build/primary_decomposition build/normalization build/localization build/ideal_power build/symbolic_power: build/local_algebra
+	ln -sf local_algebra $@
+
+KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
+  field_wide.cpp field_coefficient.cpp field_factorization.cpp marked_scalar.cpp lattice_volume.cpp toric_graph.cpp fan_cover.cpp centre_weights.cpp binomial_fan.cpp \
+  atlas_incidence.cpp torus_sections.cpp monomial_resolution.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
+  triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \
+  ideal_powers.cpp ideal_power_principal.cpp ideal_powers_packed.cpp ideal_powers_dense.cpp ideal_powers_echelon.cpp ideal_powers_content.cpp ideal_powers_monomial.cpp localization.cpp localization_membership.cpp localization_special.cpp normalization.cpp normalization_content.cpp normalization_special.cpp primary_decomposition.cpp primary_special.cpp polynomial_factors.cpp resolution_tangents.cpp \
+  resolution_candidate.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
+  local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp
@@ -30,12 +44,18 @@ build/kernel/%.o: %.cpp
 -include $(KERNEL_OBJECTS:.o=.d)
 
 $(GROEBNER_LIB): $(KERNEL_OBJECTS)
-	$(CXX) $(GROEBNER_SHARED) $(GROEBNER_ID) $^ -o $@.tmp $(LDFLAGS) $(shell pkg-config --libs flint jsoncpp) -lgmpxx -lgmp -pthread
-	mv $@.tmp $@
+	@set -e; output=$$(mktemp "$@.XXXXXX"); trap 'rm -f "$$output"' EXIT; \
+	  $(CXX) $(GROEBNER_SHARED) $(GROEBNER_ID) $^ -o "$$output" $(LDFLAGS) $(shell pkg-config --libs flint jsoncpp) -lgmpxx -lgmp -pthread; \
+	  chmod 755 "$$output"; mv -f "$$output" "$@"
+
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify
+test-verify: build/test_groebner_verify build/test_local_dimension_graph
 	./build/test_groebner_verify
+	./build/test_local_dimension_graph
+
+build/test_local_dimension_graph: test_local_dimension_graph.cpp local_dimension_graph.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp
 
 build/test_groebner_verify: test_groebner_verify.cpp groebner_verify.hpp groebner.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< $(abspath $(GROEBNER_LIB)) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread

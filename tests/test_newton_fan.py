@@ -5,7 +5,7 @@ from itertools import combinations
 from math import gcd, prod
 import unittest
 
-from engine.newton_fan import build_fan
+from engine.newton_fan import build_fan, trial_supports
 from engine.polynomial import LimitError, parse
 
 
@@ -60,6 +60,30 @@ def check_fan(test, fan, support):
 
 
 class NewtonFan(unittest.TestCase):
+    def test_bounded_native_fans_match_isolated_normal_fans(self):
+        from unittest.mock import patch
+        from engine import newton_fan
+
+        supports = [[(2, 0, 0, 0), (0, 2, 1, 0), (0, 2, 0, 1)],
+                    [(0, 1, 0, 0), (2, 0, 0, 0)],
+                    [(0, 2), (3, 0), (0, 2)], [(2, 2), (0, 0), (1, 1)]]
+        for support in supports:
+            with self.subTest(support=support):
+                with patch.object(newton_fan, "_small_fan", return_value=None):
+                    expected = build_fan(support)
+                    proposals = trial_supports(support)
+                with patch.object(newton_fan.subprocess, "run", side_effect=AssertionError):
+                    fan = build_fan(support)
+                    self.assertEqual(trial_supports(support), proposals)
+                self.assertEqual(fan, expected)
+                check_fan(self, fan, support)
+
+        support = [(2, 3, 0), (1, 1, 3)]
+        with patch.object(newton_fan.subprocess, "run", wraps=newton_fan.subprocess.run) as run:
+            fan = build_fan(support)
+        run.assert_called_once()
+        check_fan(self, fan, support)
+
     def test_exhaustive_resolution_certifies_large_compact_face(self):
         from engine.resolve import resolve
 
@@ -104,6 +128,14 @@ class NewtonFan(unittest.TestCase):
         self.assertEqual(f["newton_vertex_count"],3)
         self.assertTrue(f["isomorphism_off_origin"])
         check_fan(self,f,list(p))
+
+    def test_axial_dominance_preserves_mixed_vertices_and_boundary_faces(self):
+        vertices = [(3, 0, 0), (0, 2, 1), (1, 0, 1)]
+        support = [(5, 0, 0), (3, 1, 0), *vertices, (3, 0, 0), (3, 0, 2)]
+        fan = build_fan(support)
+        self.assertEqual(fan, build_fan(vertices))
+        self.assertEqual(fan["newton_vertex_count"], len(vertices))
+        check_fan(self, fan, support)
 
     def test_shared_nonsimplicial_faces(self):
         # Hyperplane cuts the 5-orthant into two nonsimplicial normal cones.

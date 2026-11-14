@@ -1,0 +1,1071 @@
+{
+  "case": "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+  "cli": [
+    "./atlas",
+    "resolve",
+    "x^4+y^2*z+z^6+t^3*x+t^5+u^3*y+u^6",
+    "--vars",
+    "x,y,z,t,u",
+    "--mode",
+    "embedded",
+    "--quick",
+    "--compute",
+    "cpu",
+    "--monodromy",
+    "--json"
+  ],
+  "host": "AMD Ryzen 7 6800H",
+  "comparison": {
+    "method": "Identical executable and native libraries; the baseline Python selects original generic presentation, candidate selects fused native projector. The pre-rollout build was independently checked on the exact mathematical hash.",
+    "initially_installed_native_sha256": "2895ab856c84f7f0c9d8be00e35c303a58349a89a3badcca47bd7b3ff5677409",
+    "pre_projection_kernel_sha256": "608c3d3e422f95be221222d613448577a9f85422d9e86fc7d9ea41e1886f6335",
+    "fused_kernel_in_both": "935da5434ecf9a531402cdc9df0fd9b80b22701d4940b8c6336a980e420a0f3f",
+    "affine_source_in_both": "4df87b659c2736508294ab44c1c1f8f3a0047123ad5ee2e1d86c0da073571afc",
+    "python_changes": {
+      "engine/monomial_atlas.py": {
+        "before": "610f86c411cb2f8f85af9fab60b9693a76c052d25fb454539ebe6209d56813aa",
+        "after": "af71ef1854e267bb53f9889dce7dd371b627deec2b94c5adaa6c3da871ab2dbd"
+      }
+    }
+  },
+  "projection_counts": {
+    "original_applications": 3915,
+    "projection_coordinates": 19575,
+    "matrix_entries_sorted": 97875,
+    "nonzero_terms_written": 23490,
+    "sorted_zero_coefficients": 74385,
+    "text_identical": 19494,
+    "alternate_spellings": 81,
+    "_row_parse_cache_misses": 162,
+    "coordinates_with_1_term": 15660,
+    "coordinates_with_2_terms": 3915,
+    "canonical_text_bytes": 508768,
+    "common_linear_matrix": [
+      [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "projection_profile": {
+    "units": "milliseconds",
+    "method": "Six alternating pairs of fresh solves using stock kernels end to end, perf_counter_ns around unmodified Python verifier around each chart, cheap monotonic user-space clock. Includes occasional preemption. Add full stock legacy-v-new native differential, 19 pairs over original 62 packets on same core. Cross-check with 15 paired replays with just two clock reads for whole loop. Ratios computed per same-order pair.",
+    "cpu": 14,
+    "old_projection_median_ms": 106.522643,
+    "new_inclusive_projection_median_ms": 49.51452650000002,
+    "median_paired_speedup": 2.154356514207286,
+    "new_validation_and_frame_setup_median_ms": 24.146522500000003,
+    "per_solve_validation_and_frame_setup_ms": {
+      "before": [
+        161.622473,
+        107.29958,
+        105.745706,
+        109.499171,
+        101.389447,
+        100.447184
+      ],
+      "after": [
+        34.301497999999995,
+        25.371167,
+        22.830018000000003,
+        23.808095,
+        24.205257,
+        24.087788
+      ]
+    },
+    "new_incremental_native_and_transport": {
+      "method": "Stock 935da543 kernel called on all 62 real batches, alternating old and new protocols in both orders inside each pair, validating every row once before 19 paired repeats over all 3915 charts. Includes native computation, all batch response transfer, row slicing and cleanup. Time is thread CPU.",
+      "ms": {
+        "4": [
+          73.261027,
+          74.956986,
+          85.402415,
+          92.408836,
+          81.41438,
+          81.09639,
+          79.466391,
+          80.28189,
+          77.166017,
+          78.018894,
+          73.85406,
+          140.2776,
+          142.757671,
+          154.230456,
+          157.379584,
+          157.943827,
+          158.654165,
+          159.281473,
+          145.577477
+        ],
+        "9": [
+          92.209252,
+          94.938996,
+          106.508304,
+          117.77684,
+          106.948924,
+          104.197879,
+          100.217401,
+          102.5451,
+          97.918321,
+          99.188111,
+          93.780087,
+          179.265886,
+          182.677462,
+          198.05891,
+          201.975715,
+          201.80383,
+          202.999641,
+          205.142926,
+          185.153292
+        ]
+      },
+      "paired_additions_ms": [
+        18.948225000000008,
+        19.982010000000002,
+        21.10588899999999,
+        25.368004000000013,
+        25.53454400000001,
+        23.101489,
+        20.751009999999994,
+        22.26321,
+        20.75230400000001,
+        21.169217000000003,
+        19.92602699999999,
+        38.98828599999999,
+        39.919791000000004,
+        43.828453999999994,
+        44.596131000000014,
+        43.860003000000006,
+        44.34547599999999,
+        45.86145299999998,
+        39.575815000000006
+      ],
+      "median_increment_ms": 25.368004000000013
+    },
+    "old_stage_replay_method": "Replayed actual chart headers in blocks of 16, measuring thread CPU with one pair of reads per block stage, outside full-solve timing. Same map in every row checked against certified atlas. Steps split sorting/coefficients/power assembly to avoid per-term clocks. Splitting introduces a small list and tuple per nonzero term.",
+    "old_stage_replay_median_ms": {
+      "transpose and map keys": 4.8474,
+      "dict": 8.4667,
+      "sort": 20.9096,
+      "filter and rational coefficients": 15.6985,
+      "variable factors/powers and text joining": 38.1661,
+      "compare": 6.5346,
+      "native alternate-spelling validation": 5.7401
+    },
+    "old_stage_replay_samples_seconds": [
+      {
+        "transpose and map keys": 0.004840655,
+        "dict": 0.008290777,
+        "sort": 0.020481766,
+        "filter and rational coefficients": 0.01538405,
+        "variable factors/powers and text joining": 0.037716805,
+        "compare": 0.006524809,
+        "native alternate-spelling validation": 0.005740123
+      },
+      {
+        "transpose and map keys": 0.004957907,
+        "dict": 0.008705384,
+        "sort": 0.021472854,
+        "filter and rational coefficients": 0.016274974,
+        "variable factors/powers and text joining": 0.039192096,
+        "compare": 0.006632112,
+        "native alternate-spelling validation": 0.005553411
+      },
+      {
+        "transpose and map keys": 0.004847434,
+        "dict": 0.008332936,
+        "sort": 0.02058922,
+        "filter and rational coefficients": 0.015623236,
+        "variable factors/powers and text joining": 0.037682423,
+        "compare": 0.006501253,
+        "native alternate-spelling validation": 0.005936417
+      },
+      {
+        "transpose and map keys": 0.004844376,
+        "dict": 0.008466659,
+        "sort": 0.020909602,
+        "filter and rational coefficients": 0.015698474,
+        "variable factors/powers and text joining": 0.038166095,
+        "compare": 0.006534631,
+        "native alternate-spelling validation": 0.005741316
+      },
+      {
+        "transpose and map keys": 0.004944136,
+        "dict": 0.008634957,
+        "sort": 0.021673672,
+        "filter and rational coefficients": 0.016334975,
+        "variable factors/powers and text joining": 0.039200745,
+        "compare": 0.006693752,
+        "native alternate-spelling validation": 0.005394561
+      }
+    ],
+    "alternate_spellings": {
+      "method": "17 paired alternating replays, same new verification lines, two clock reads for all 3915 charts. Canonical copy replaces every saved map with its expected string, bypassing the 81 native comparison pairs. Increment isolates alternate verification cost.",
+      "mismatches": 81,
+      "paired_increment_ms": 5.482489
+    },
+    "contended_thread_cpu_crosscheck": {
+      "clock": "thread CPU",
+      "method": "7 alternating pairs of fresh full solves. Per-chart bracket around all of original Python projection header and verification, and around same lines on new. Timed native isolated build matched production fan_charts verbatim, checked. All complete results hash identical. 19 independently paired full-stock native protocol replays yield incremental cost including full transfer. This increment+Python validation+Python extra frame setup is the inclusive best estimate; split clocks give an instrumented cross-check and are not added again. Heavy host load on this series.",
+      "old_median_ms": 248.135526,
+      "new_median_ms": 99.01597899999999,
+      "median_paired_speedup": 2.491485106840244,
+      "wire_only_ms": 1.4998164999999997
+    }
+  },
+  "full_cli": {
+    "method": "One CPU shared by alternating CLI or warm resolve requests. Fresh trials include startup, the complete mathematical solve, formatting the full JSON output and transferring it over stdout. Warm trials exclude CLI/JSON overhead and follow one untimed full solve in each interpreter. All workers block SymPy import. The driver validates every non-telemetry field outside the timed interval. All pairs were retained.",
+    "lower_contention_series_stopping_rule": "Both siblings busy <25%, process CPU divided by wall >=0.90 for each of the two members. After the initial 24 pairs, continue when required in 12-pair blocks until 20 low-contention pairs, max 72 pairs. All raw data retained. All timings transferred and validated complete CLI JSON.",
+    "matched_runs": {
+      "scores": {
+        "wall_seconds": {
+          "before": 1.5706989360041916,
+          "after": 1.4935198635066627,
+          "median_paired_savings": 0.06675140051811468,
+          "median_paired_ratio": 1.0447609457962739,
+          "pairs_faster": 34,
+          "pairs": 36,
+          "median_paired_savings_interval_seconds": [
+            0.05453402499551885,
+            0.08834676002152264
+          ],
+          "median_paired_ratio_interval": [
+            1.0343713096616334,
+            1.0622252991404484
+          ],
+          "nominal_coverage": 0.9711832803441212
+        },
+        "process_cpu_seconds": {
+          "before": 1.5431879999999971,
+          "after": 1.4775140000000064,
+          "median_paired_savings": 0.06470950000000286,
+          "median_paired_ratio": 1.044907604652365,
+          "pairs_faster": 34,
+          "pairs": 36,
+          "median_paired_savings_interval_seconds": [
+            0.051940000000001874,
+            0.09098499999998921
+          ],
+          "median_paired_ratio_interval": [
+            1.0331388853620438,
+            1.0607796813750259
+          ],
+          "nominal_coverage": 0.9711832803441212
+        }
+      },
+      "low_contention_scores": {
+        "wall_seconds": {
+          "before": 1.5483795090112835,
+          "after": 1.4844607390114106,
+          "median_paired_savings": 0.06433740200009197,
+          "median_paired_ratio": 1.0424882458398685,
+          "pairs_faster": 30,
+          "pairs": 31,
+          "median_paired_savings_interval_seconds": [
+            0.03967602099874057,
+            0.07850397698348388
+          ],
+          "median_paired_ratio_interval": [
+            1.0276111139358206,
+            1.056079120157312
+          ],
+          "nominal_coverage": 0.9705506265163422
+        },
+        "process_cpu_seconds": {
+          "before": 1.5294569999999936,
+          "after": 1.4665609999999987,
+          "median_paired_savings": 0.06445000000000789,
+          "median_paired_ratio": 1.041866687320016,
+          "pairs_faster": 30,
+          "pairs": 31,
+          "median_paired_savings_interval_seconds": [
+            0.03897999999999868,
+            0.08561900000000833
+          ],
+          "median_paired_ratio_interval": [
+            1.0273840568306984,
+            1.0606385936232878
+          ],
+          "nominal_coverage": 0.9705506265163422
+        }
+      },
+      "quiet_pair_ids": [
+        0,
+        1,
+        2,
+        5,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35
+      ]
+    },
+    "samples": {
+      "before": {
+        "wall_seconds": [
+          1.6869344229926355,
+          1.5883848020166624,
+          1.6303129119914956,
+          2.8218648080073763,
+          2.159041188977426,
+          1.7756711390102282,
+          1.9063838760193903,
+          2.3485626930196304,
+          3.11771152500296,
+          1.7058130289951805,
+          1.641148719994817,
+          1.6332329630095046,
+          1.6187894329777919,
+          1.6544617130130064,
+          1.6300803710182663,
+          1.5483795090112835,
+          1.5252755930123385,
+          1.5483844979899004,
+          1.5793892530200537,
+          1.6053577849816065,
+          1.5032138070091605,
+          1.5154281530121807,
+          1.508667450019857,
+          1.5080497519811615,
+          1.4985497789748479,
+          1.4925227530184202,
+          1.4783828759973403,
+          1.4873502120026387,
+          1.5620086189883295,
+          1.6141492880124133,
+          1.5182120569807012,
+          1.5005402420065366,
+          1.5140230460092425,
+          1.5081351940170862,
+          1.476634380989708,
+          1.5083067679952364
+        ],
+        "process_cpu_seconds": [
+          1.6557819999999999,
+          1.575577,
+          1.6150919999999998,
+          2.677258,
+          2.048124999999999,
+          1.7567930000000054,
+          1.8902669999999944,
+          2.242872000000002,
+          2.995155000000004,
+          1.6831219999999973,
+          1.619283000000003,
+          1.6136529999999993,
+          1.599342,
+          1.6319899999999947,
+          1.609656000000001,
+          1.5294569999999936,
+          1.507006000000004,
+          1.5296730000000025,
+          1.547783999999993,
+          1.5843440000000015,
+          1.4891559999999942,
+          1.5016980000000046,
+          1.4955360000000013,
+          1.494805999999997,
+          1.471052,
+          1.4797319999999994,
+          1.465014,
+          1.4749850000000002,
+          1.5385920000000013,
+          1.599179999999997,
+          1.5040779999999998,
+          1.4868260000000006,
+          1.4961989999999972,
+          1.4956910000000008,
+          1.4624360000000003,
+          1.494297000000003
+        ],
+        "output_bytes": [
+          19269708,
+          19269710,
+          19269710,
+          19269706,
+          19269708,
+          19269710,
+          19269710,
+          19269710,
+          19269708,
+          19269710,
+          19269710,
+          19269708,
+          19269710,
+          19269706,
+          19269710,
+          19269706,
+          19269708,
+          19269710,
+          19269708,
+          19269708,
+          19269710,
+          19269710,
+          19269708,
+          19269712,
+          19269710,
+          19269710,
+          19269709,
+          19269712,
+          19269710,
+          19269708,
+          19269708,
+          19269708,
+          19269712,
+          19269710,
+          19269712,
+          19269710
+        ],
+        "sibling_busy_fraction": [
+          0.03932584269662921,
+          0.005952380952380952,
+          0.04678362573099415,
+          0.852233676975945,
+          0.46846846846846846,
+          0.12041884816753927,
+          0.3431372549019608,
+          0.6194331983805668,
+          1.0,
+          0.12429378531073447,
+          0.08139534883720931,
+          0.07100591715976332,
+          0.08284023668639054,
+          0.15028901734104047,
+          0.13450292397660818,
+          0.10429447852760736,
+          0.06289308176100629,
+          0.06790123456790123,
+          0.07407407407407407,
+          0.10179640718562874,
+          0.06918238993710692,
+          0.06962025316455696,
+          0.06875,
+          0.03164556962025317,
+          0.0,
+          0.006369426751592357,
+          0.01910828025477707,
+          0.03184713375796178,
+          0.05521472392638037,
+          0.14792899408284024,
+          0.012422360248447204,
+          0.06918238993710692,
+          0.06918238993710692,
+          0.012738853503184714,
+          0.0064516129032258064,
+          0.0379746835443038
+        ]
+      },
+      "after": {
+        "wall_seconds": [
+          1.581454137020046,
+          1.566214011021657,
+          1.608029858005466,
+          1.5223260260245297,
+          2.355018027999904,
+          1.7089357340009883,
+          1.7578627159819007,
+          2.1550127020163927,
+          2.863075820991071,
+          1.6948256040050182,
+          1.586614694999298,
+          1.5688955610094126,
+          1.5609811459726188,
+          1.4879649950016756,
+          1.4844607390114106,
+          1.479567066009622,
+          1.5470644519955385,
+          1.514456014992902,
+          1.4598210899857804,
+          1.487303884990979,
+          1.4990747320116498,
+          1.5125344719854183,
+          1.4459312460094225,
+          1.4354016660072375,
+          1.441312042006757,
+          1.4316926439933013,
+          1.3998788990138564,
+          1.4195696099777706,
+          1.4399904730089474,
+          1.4436806200246792,
+          1.5156157269957475,
+          1.4709056389983743,
+          1.447255649982253,
+          1.4197884339955635,
+          1.4369583599909674,
+          1.421261338982731
+        ],
+        "process_cpu_seconds": [
+          1.561118,
+          1.552143,
+          1.5924440000000004,
+          1.511317,
+          2.3353220000000015,
+          1.6923429999999975,
+          1.7319670000000045,
+          2.102451999999996,
+          2.8270999999999944,
+          1.672466,
+          1.567343000000001,
+          1.548993000000003,
+          1.5380949999999984,
+          1.470550000000003,
+          1.4665609999999987,
+          1.4384720000000044,
+          1.512594,
+          1.4938730000000007,
+          1.4420319999999975,
+          1.4683530000000076,
+          1.48447800000001,
+          1.4982649999999893,
+          1.430776999999992,
+          1.4231450000000052,
+          1.4171850000000001,
+          1.4202700000000004,
+          1.388891,
+          1.4068819999999995,
+          1.4204149999999984,
+          1.4310440000000018,
+          1.5013020000000026,
+          1.4568440000000002,
+          1.4323809999999995,
+          1.4074230000000014,
+          1.4234560000000016,
+          1.4086779999999948
+        ],
+        "output_bytes": [
+          19269710,
+          19269708,
+          19269709,
+          19269708,
+          19269710,
+          19269710,
+          19269708,
+          19269708,
+          19269708,
+          19269710,
+          19269706,
+          19269708,
+          19269710,
+          19269710,
+          19269708,
+          19269708,
+          19269708,
+          19269708,
+          19269709,
+          19269710,
+          19269708,
+          19269710,
+          19269707,
+          19269709,
+          19269705,
+          19269711,
+          19269709,
+          19269711,
+          19269711,
+          19269707,
+          19269710,
+          19269709,
+          19269711,
+          19269709,
+          19269711,
+          19269709
+        ],
+        "sibling_busy_fraction": [
+          0.017964071856287425,
+          0.023391812865497075,
+          0.05357142857142857,
+          0.03067484662576687,
+          0.75,
+          0.15555555555555556,
+          0.23157894736842105,
+          0.5903083700440529,
+          0.9932885906040269,
+          0.14204545454545456,
+          0.0963855421686747,
+          0.09876543209876543,
+          0.06748466257668712,
+          0.08227848101265822,
+          0.05806451612903226,
+          0.057692307692307696,
+          0.09202453987730061,
+          0.0880503144654088,
+          0.058823529411764705,
+          0.08917197452229299,
+          0.09615384615384616,
+          0.11949685534591195,
+          0.07894736842105263,
+          0.0,
+          0.012987012987012988,
+          0.013245033112582781,
+          0.0,
+          0.013157894736842105,
+          0.012987012987012988,
+          0.0,
+          0.0880503144654088,
+          0.11038961038961038,
+          0.0728476821192053,
+          0.006711409395973154,
+          0.02,
+          0.02702702702702703
+        ]
+      }
+    },
+    "blocks": [
+      {
+        "start": 0,
+        "end": 24,
+        "cpu": 8
+      },
+      {
+        "start": 24,
+        "end": 36,
+        "cpu": 8
+      }
+    ],
+    "initial_contended_run": {
+      "cpu": 0,
+      "scores": {
+        "wall_seconds": {
+          "before": 4.969024568999885,
+          "after": 4.6051692590117455,
+          "median_paired_speedup": 0.9665232125106452,
+          "median_paired_savings": -0.05834464551298879,
+          "pairs_faster": 4,
+          "pairs": 12,
+          "paired_savings_interval_seconds": {
+            "lower": -0.839540498011047,
+            "upper": 0.29119897802593186,
+            "nominal_coverage": 0.96142578125
+          },
+          "paired_ratio_interval": {
+            "lower": 0.870066104252587,
+            "upper": 1.051391182126604,
+            "nominal_coverage": 0.96142578125
+          }
+        },
+        "process_cpu_seconds": {
+          "before": 3.027598000000001,
+          "after": 2.954220000000001,
+          "median_paired_speedup": 0.9829293715056049,
+          "median_paired_savings": -0.0396164999999975,
+          "pairs_faster": 5,
+          "pairs": 12,
+          "paired_savings_interval_seconds": {
+            "lower": -0.2202389999999994,
+            "upper": 0.11026499999999118,
+            "nominal_coverage": 0.96142578125
+          },
+          "paired_ratio_interval": {
+            "lower": 0.9278517350354079,
+            "upper": 1.044757532653692,
+            "nominal_coverage": 0.96142578125
+          }
+        }
+      },
+      "samples": {
+        "before": {
+          "wall_seconds": [
+            7.690665666013956,
+            16.29042670299532,
+            5.615346045000479,
+            4.322703092999291,
+            5.957520825002575,
+            7.863413471990498,
+            7.216440973978024,
+            2.6847210279956926,
+            1.9115698630048428,
+            1.681111192010576,
+            1.635821716976352,
+            1.756181638018461
+          ],
+          "process_cpu_seconds": [
+            3.9889780000000004,
+            3.5042120000000008,
+            3.2228460000000005,
+            2.8323500000000017,
+            3.385511000000001,
+            3.5866030000000038,
+            3.6036089999999987,
+            2.673466999999995,
+            1.8993880000000019,
+            1.672421,
+            1.6272570000000002,
+            1.7495270000000005
+          ],
+          "output_bytes": [
+            19269708,
+            19269707,
+            19269708,
+            19269708,
+            19269710,
+            19269708,
+            19269708,
+            19269710,
+            19269710,
+            19269708,
+            19269710,
+            19269706
+          ],
+          "sibling_busy_fraction": [
+            0.9988009592326139,
+            1.0,
+            0.9982788296041308,
+            0.9211711711711712,
+            0.9887278582930756,
+            1.0,
+            0.9987146529562982,
+            1.0,
+            0.25,
+            0.13450292397660818,
+            0.1317365269461078,
+            0.12429378531073447
+          ]
+        },
+        "after": {
+          "wall_seconds": [
+            11.23199843999464,
+            12.09676659302204,
+            3.6644437600043602,
+            4.9682467480015475,
+            5.666321846976643,
+            8.702953970001545,
+            7.216485098004341,
+            4.242091770021943,
+            1.8414437149767764,
+            1.815076708997367,
+            1.7067833240143955,
+            1.801909322006395
+          ],
+          "process_cpu_seconds": [
+            3.8030409999999994,
+            3.9498809999999995,
+            3.1216719999999967,
+            3.052589000000001,
+            2.8558510000000012,
+            3.622276999999997,
+            3.847457999999996,
+            2.563202000000004,
+            1.8180180000000021,
+            1.8040939999999992,
+            1.6976379999999978,
+            1.7930860000000024
+          ],
+          "output_bytes": [
+            19269706,
+            19269706,
+            19269706,
+            19269708,
+            19269710,
+            19269710,
+            19269710,
+            19269708,
+            19269709,
+            19269710,
+            19269710,
+            19269710
+          ],
+          "sibling_busy_fraction": [
+            1.0,
+            0.9992331288343558,
+            0.9947780678851175,
+            0.9923224568138196,
+            0.9580645161290322,
+            0.9978094194961665,
+            0.9986559139784946,
+            0.815068493150685,
+            0.21578947368421053,
+            0.23118279569892472,
+            0.14606741573033707,
+            0.15934065934065933
+          ]
+        }
+      }
+    },
+    "warm_api": {
+      "seconds": {
+        "before": [
+          1.1004797639907338,
+          1.0816813700075727,
+          1.2150498680130113,
+          1.3620431580056902,
+          1.0285806150059216,
+          1.0626833779970184,
+          1.019675767980516,
+          1.0009689170110505,
+          0.9945634140167385,
+          0.9438023039838299,
+          1.0315454509982374,
+          0.9986618029943202
+        ],
+        "after": [
+          0.9943681450095028,
+          1.0227727830060758,
+          1.1234374229970854,
+          1.058570872002747,
+          0.9810347339953296,
+          0.9857604590069968,
+          0.9524618470168207,
+          0.9447135569935199,
+          0.9300485069979914,
+          0.8949478780268691,
+          1.0175454189884476,
+          0.9438098880054895
+        ]
+      },
+      "process_cpu_seconds": {
+        "before": [
+          1.0651147019999998,
+          1.0465252969999996,
+          1.1716821040000003,
+          1.3139004520000004,
+          0.9919318329999998,
+          1.0300844389999995,
+          0.9880449050000006,
+          0.9691829869999999,
+          0.961727229000001,
+          0.9118126399999991,
+          0.9984744899999995,
+          0.9658530230000011
+        ],
+        "after": [
+          0.9591286449999998,
+          0.9858900839999998,
+          1.0777315549999997,
+          1.0158020599999995,
+          0.9475441370000004,
+          0.9503819150000004,
+          0.92061773,
+          0.9079959549999987,
+          0.8977042169999994,
+          0.8625800370000007,
+          0.9848307050000003,
+          0.9117510630000005
+        ]
+      },
+      "scores": {
+        "wall_seconds": {
+          "before": 1.0300630330020795,
+          "after": 0.9833975965011632,
+          "median_paired_speedup": 1.0644573904542938,
+          "median_paired_savings": 0.06171174701012205,
+          "pairs_faster": 12,
+          "pairs": 12,
+          "paired_savings_interval_seconds": {
+            "lower": 0.04885442595696077,
+            "upper": 0.09161244501592591,
+            "nominal_coverage": 0.96142578125
+          },
+          "paired_ratio_interval": {
+            "lower": 1.0545891298884045,
+            "upper": 1.0815465491362428,
+            "nominal_coverage": 0.96142578125
+          }
+        },
+        "process_cpu_seconds": {
+          "before": 0.9952031614999997,
+          "after": 0.9489630260000004,
+          "median_paired_speedup": 1.0693527519029122,
+          "median_paired_savings": 0.0626050220000014,
+          "pairs_faster": 12,
+          "pairs": 12,
+          "paired_savings_interval_seconds": {
+            "lower": 0.04923260299999832,
+            "upper": 0.09395054900000055,
+            "nominal_coverage": 0.96142578125
+          },
+          "paired_ratio_interval": {
+            "lower": 1.0570759823879372,
+            "upper": 1.08717435113051,
+            "nominal_coverage": 0.96142578125
+          }
+        }
+      }
+    }
+  },
+  "verified": {
+    "geometry_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "charts": 3915,
+    "vertices": 565,
+    "cells": 9972,
+    "components": 566,
+    "strata": 3860,
+    "sha256_by_key": {
+      "charts": "4215ee4e048be5a34fdd65e07c93fd83d249a27db760d9acd583c9c10bd9fb87",
+      "atlas": "729fd8f41b7383d5fdddbf559420edffa5bc8eb71d03ffdf7fd335686ee8cf2e",
+      "dual_complex": "ffd5c754a2ad594cf05ad8f826c9fbc9d9f7cb7284b47ae790f7f9eb1ddc6421",
+      "monodromy_zeta": "00e75cbee4d5c4503924f8e9531793b66b102aa3fecaaf2ad89895ee2939c47f",
+      "topological_zeta": "a25cab6aba92ec31ab62107f0710dff5e007d702ae9afbc28f01896d1d185505"
+    },
+    "independent_replay": {
+      "digest": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+      "charts": 3915,
+      "codimension_one_incidences": 31574,
+      "euler_characteristic": 1,
+      "vertices": 565,
+      "cells_by_dimension": {
+        "1": 2501,
+        "2": 4008,
+        "3": 2767,
+        "4": 696
+      },
+      "strata": 3860,
+      "checks": "Recomputed from serialized cleaned chart maps, original polynomial and ordered variables; full labelled complex and every codimension-one attachment, Euler characteristic 1, all divisor data and strata and both complete local zetas."
+    },
+    "eight_control_solves": {
+      "embedded x^5+z*y^3+z^15+t^4*x+t^8": [
+        "complete",
+        598,
+        169,
+        1608,
+        "d2beb03eeca05a8f27fc76bb824f3ee96ca2ba272c60ae84234e8dbf912e850e"
+      ],
+      "intrinsic x^5+z*y^3+z^15+t^4*x+t^8": [
+        "complete",
+        598,
+        99,
+        404,
+        "162785b7f3987daf084b0c530cb328e3d8604aa33aa9aa7aebaa54cbe481d2b7"
+      ],
+      "embedded x^2+y^3+z^3+t^6+y*z*t^2": [
+        "complete",
+        14,
+        4,
+        5,
+        "c4f352b03bc2fd56cd7f313f6d80b881e3303bd0270d0501850f194ff70c156c"
+      ],
+      "intrinsic x^2+y^3+z^3+t^6+y*z*t^2": [
+        "complete",
+        14,
+        4,
+        3,
+        "880da2d01a15bcd5544227b071260d264ec6324ad270733b545956b1014fa817"
+      ],
+      "embedded x^3*y^6-z^2*t^2*u^4": [
+        "complete",
+        87,
+        31,
+        692,
+        "f11a0a66b3ff175b89fff84ec7212686fb7fc6095678616dbe7389ffbede433b"
+      ],
+      "intrinsic x^3*y^6-z^2*t^2*u^4": [
+        "complete",
+        87,
+        15,
+        104,
+        "474cbd40186e4a1ea771acb93084521d34c587b67e823a178befd88d93eb1fae"
+      ],
+      "embedded (x+y)^2+z^3+x^3": [
+        "complete",
+        15,
+        6,
+        17,
+        "2d14049a7ae8b5548e81faab199a49d95682d022709d296480d98b90894adaa5"
+      ],
+      "intrinsic (x+y)^2+z^3+x^3": [
+        "partial",
+        15,
+        2,
+        0,
+        "846ed30f4a0a41143feacb845ba3e4393c6fbbc517c0c9a2dab644c0588283de"
+      ]
+    },
+    "renamed_signed_maps": {
+      "sheared_two_chart_equivalent_spellings_and_renamed_coordinates": "6e0312beecaa4f4dad2efaae66a6143d4079427c96ea5e12f3f907afa354216c",
+      "changed_x_or_y_maps_rejected": true
+    },
+    "installed_cli_with_sympy_blocked": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "installed_headless_http_replay_sha256": "dcd4fa0c687fa8c59fcffac37d00d6cf8079869c6f1ef36055573e5b4ca4e266",
+    "seeded_regressions": {
+      "dimensions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "records": 210,
+      "charts": 1050,
+      "projections": 6090,
+      "forged_maps_rejected": 14,
+      "digest": "d7dbba4338e4013a581ac2e7a43eac7d71b0d6abd0ec82cc3624dd9647d6de56"
+    },
+    "regression_suite": {
+      "native": {
+        "total": 806,
+        "skipped": 61,
+        "failures": 0
+      },
+      "check": {
+        "total": 806,
+        "skipped": 89,
+        "failures": 1,
+        "five_variable_binomial": {
+          "quick_worker_limit_seconds": 55,
+          "unbounded_solve_seconds": 108.27215628200793,
+          "verified_mathematical_record_sha256": "f11a0a66b3ff175b89fff84ec7212686fb7fc6095678616dbe7389ffbede433b"
+        }
+      },
+      "milnor_battery": {
+        "isolated_agreements": 19,
+        "nonisolated": 1,
+        "disagreements": 0
+      }
+    }
+  }
+}

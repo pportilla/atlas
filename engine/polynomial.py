@@ -126,7 +126,7 @@ def sparse_row(row):
 
 
 def _parse_tokens(tokens, variables, bounded):
-    from .reference import parse_tokens
+    from tests.polynomial_parser_oracle import parse_tokens
     return parse_tokens(tokens, variables, bounded)
 
 

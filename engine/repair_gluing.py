@@ -10,7 +10,6 @@ child over one centre with the unmodified copy of a different centre.
 """
 from dataclasses import replace
 from functools import lru_cache
-from math import lcm
 
 from .affine_kernel import decode, pullbacks
 from .atlas_finite import _extend_chart, _field_mark, _integer_polynomial
@@ -59,7 +58,7 @@ def _birational_parameters(chart, mapping):
 @lru_cache(maxsize=4096)
 def _reduced_fraction(chart, a, b):
     """Cancel in the field polynomial ring. Its UFD then gives the regular locus."""
-    from .affine_kernel import _ring, _request, _sparse_expression, _sparse_terms
+    from .affine_kernel import _ring, _request, _sparse_expression
     from .atlas_finite import _power_domain
     from .field_factors import factors
     from .field_polynomial import lift, polynomial
@@ -97,30 +96,11 @@ def _reduced_fraction(chart, a, b):
         return sp.cancel(a/b).as_numer_denom()
     ring = _ring(coords)
     header = [ring.header, "lex"]
-    row, = _request(["polynomial_gcd", *header, ring.text(a), ring.text(b)])
-    gcd = _sparse_expression(coords, row)
-    reduced = a,b
-    if gcd != 1:
-        # The previous factorization divided by positive-leading primitive
-        # integer factors. For a monic gcd, clearing its coefficient
-        # denominators gives exactly their primitive product (Gauss's lemma).
-        scale = lcm(*(c.denominator for _, c in _sparse_terms(row)))
-        divisor = ring.text(scale*gcd)
-        def cofactor(f):
-            quotient, remainder = _request(["wide_division", *header, ring.text(f), divisor])
-            if remainder:
-                raise ArithmeticError("The transition gcd did not divide over the rationals.")
-            return _sparse_expression(coords, quotient)
-        reduced = cofactor(a), cofactor(b)
+    rows = _request(["primitive_gcd_cofactors", *header, ring.text(a), ring.text(b)])
+    reduced = tuple(_sparse_expression(coords, row) for row in rows)
     if _MODE == "check":
-        from sympy.polys.rings import ring as symbolic_ring
-        from .affine_kernel import sparse_terms
-        reference, *_ = symbolic_ring(tuple(sp.Dummy(v.name) for v in coords), sp.QQ)
-        left, right = [reference.from_dict(dict(sparse_terms(coords, f))) for f in (a,b)]
-        _, primitive = left.gcd(right).monic().clear_denoms()
-        for f, answer in zip((left, right), reduced):
-            if f.exquo(primitive) != reference.from_dict(dict(sparse_terms(coords, answer))):
-                raise AssertionError("The transition cofactors differ from the rational reference.")
+        from tests.transition_cofactor_oracle import check
+        check(coords, a, b, reduced)
     return reduced
 
 
@@ -192,20 +172,18 @@ def transition_on_field_sheet(source, target, source_map, target_map, *, target_
         mid = tuple(_reduced_fraction(source,n,d) for n,d in zip(mid[::2],mid[1::2]))
         # After substitution an inverse fraction is a fraction of fractions.
         # Clear exactly the SAME powers on its numerator and denominator.
-        from .affine_kernel import sparse_terms
+        from .affine_kernel import _polynomial, sparse_terms
+        from .kernel_json import kernel_json
+        from .point_geometry import decode_terms, encode_terms
+        api = chart_expressions(source.variables)
+        homogenizers = tuple(api.Dummy("transition_den") for _ in base)
+        all_coords = (*base, *homogenizers)
+        images = tuple(n for n, _ in mid) + tuple(d for _, d in mid)
         def lift_pair(a,b):
-            rows = [sparse_terms(base,g) for g in (a,b)]
-            degrees = [max((e[j] for entries in rows for e,_ in entries),default=0) for j in range(len(base))]
-            # Use a single homogenizing coordinate per denominator. Homogenize
-            # the coefficient rows, then FLINT performs the entire substitution.
-            api = chart_expressions(source.variables)
-            homogenizers = tuple(api.Dummy("transition_den") for _ in base)
-            all_coords = (*base,*homogenizers)
-            from .affine_kernel import _polynomial
-            homogenized = [_polynomial({(*e,*(d-k for d,k in zip(degrees,e))):c for e,c in entries},all_coords)
-                           for entries in rows]
-            return pullbacks(source.variables,tuple(n for n,_ in mid)+tuple(d for _,d in mid),
-                             all_coords,homogenized,modulus=modulus)
+            rows = kernel_json("atlas_component_geometry", "homogenize_fraction", width=len(base),
+                               pair=[encode_terms(dict(sparse_terms(base, g))) for g in (a, b)])
+            homogenized = [_polynomial(decode_terms(row), all_coords) for row in rows]
+            return pullbacks(source.variables, images, all_coords, homogenized, modulus=modulus)
         specialized = tuple(g for a,b in inverse for g in lift_pair(a,b))
     if any(not b for b in specialized[1::2]):
         return None
@@ -419,6 +397,8 @@ def parent_transitions(charts):
     its exceptional divisors and restriction to both retained opens.
     """
     from functools import cache
+    from .affine_kernel import _polynomial, sparse_terms
+    from .binomial_kernel import signed_powers
     from .fan_geometry import _determinant, lattice_characters
     parents = {c.repair_projection[0]:c for c in charts if c.repair_projection and c.torus
                and c.repair_projection[1] == c.variables[:-1]}
@@ -437,11 +417,17 @@ def parent_transitions(charts):
             lattice_characters(rays,tuple(tuple(int(i==j) for i in range(len(rays))) for j in range(len(rays))))
         except (ArithmeticError, ValueError):
             return False
-        api = chart_expressions(variables)
-        monomials = tuple(api.Mul(*(x**r[j] for x,r in zip(variables,rays))) for j in range(len(rays)))
-        images = tuple(sum(k*g for k,g in zip(row,monomials)) for row in linear)
-        return all(not g for g in pullbacks(c.variables,c.variables,c.variables,
-                                     (p-q for p,(_,q) in zip(images,c.coordinates)),modulus=c.coefficient_field[1]))
+        # On this field sheet, reduce the supplied maps modulo its modulus.
+        # In a unimodular chart each matrix column names a distinct monomial;
+        # the appended zero is its exponent in the field parameter.
+        columns = tuple((*column, 0) for column in zip(*rays))
+        actual = pullbacks(c.variables, c.variables, c.variables, (g for _, g in c.coordinates),
+                           modulus=c.coefficient_field[1])
+        for row, image in zip(linear, actual):
+            expected = {power: coefficient for power, coefficient in zip(columns, row) if coefficient}
+            if expected != dict(sparse_terms(c.variables, image)):
+                return False
+        return True
 
     @cache
     def powers(i,j):
@@ -462,7 +448,8 @@ def parent_transitions(charts):
         exponents = powers(i,j)
         if exponents is None:
             return None
-        api = chart_expressions(a.variables)
-        return [(api.Mul(*(v**max(0,n) for v,n in zip(source,e))),
-                 t, api.Mul(*(v**max(0,-n) for v,n in zip(source,e)))) for t,e in zip(target,exponents)]
+        base = parents[i].variables[:-1]
+        monomials = (_polynomial({powers: 1}, base) for e in exponents for powers in signed_powers(e))
+        factors = iter(pullbacks(a.variables, source, base, monomials))
+        return [(next(factors), t, next(factors)) for t in target]
     return equations

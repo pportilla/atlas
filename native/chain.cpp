@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -109,6 +110,7 @@ struct Chart {
     std::array<Triple,3> rays;
     std::array<std::string,3> parentMap;
     bool leaf=true;
+    std::vector<int> center;
 };
 
 void subdivide(std::vector<Chart>& atlas,int index,const std::vector<int>& axes,
@@ -121,6 +123,7 @@ void subdivide(std::vector<Chart>& atlas,int index,const std::vector<int>& axes,
         Chart child=parent;
         child.id=step+"."+names[p]+"."+std::to_string(index);
         child.leaf=true; child.parent=parent.id; child.step=step;
+        child.center = axes;
         child.rays[p]=sum;
         for(int q=0;q<3;++q) child.parentMap[q]=names[q];
         for(int q:axes) if(q!=p) child.parentMap[q]=std::string(names[p])+"*"+names[q];
@@ -132,7 +135,7 @@ std::string render(const Polynomial& p,bool intrinsic) {
     const Form f=normalize(p);
     if (!f.k) return "defer\n";
     const int j=f.k/2;
-    std::vector<Chart> atlas={{"N","","",identity,{"a","b","c"},true}};
+    std::vector<Chart> atlas={{"N","","",identity,{"a","b","c"},true,{}}};
     int spine=0;
     for(int i=1;i<=j;++i) {
         subdivide(atlas,spine,{0,1,2},"P"+std::to_string(i));
@@ -153,9 +156,18 @@ std::string render(const Polynomial& p,bool intrinsic) {
         }
     }
     std::ostringstream out;
-    out<<"A\t"<<f.k<<'\t'<<f.unit<<'\t'<<f.discriminant<<'\n';
+    out<<"A\t"<<f.k<<'\t'<<f.unit<<'\t'<<f.discriminant<<'\t'<<f.k-1<<'\n';
+    using Face = std::vector<std::string>;
+    std::set<std::pair<size_t, Face>> cells;
+    std::set<std::string> curves;
     for(const auto& chart:atlas) {
         out<<"chart\t"<<chart.id<<'\t'<<chart.parent<<'\t'<<chart.step<<'\t'<<chart.leaf<<'\n';
+        if (!chart.center.empty()) {
+            out<<"center";
+            for (int coordinate : chart.center) out<<'\t'<<names[coordinate];
+            out<<'\n';
+        }
+        Face exceptional;
         Triple ue{}, ve{}, ze{}, common{}, left{}, right{};
         for(int q=0;q<3;++q) {
             ue[q]=chart.rays[q][0]; ve[q]=chart.rays[q][1]; ze[q]=chart.rays[q][2];
@@ -179,19 +191,48 @@ std::string render(const Polynomial& p,bool intrinsic) {
             int i=ray[1];
             bool finalLine=ray[0]!=ray[1];
             std::string e="E"+std::to_string(i+int(finalLine));
+            exceptional.push_back(e);
             out<<"ambient\t"<<e<<'\t'<<names[q]<<'\t'<<common[q]<<'\n';
             if(!intrinsic) continue;
-            if(2*i==f.k) out<<"curve\t"<<e<<'\t'<<names[q]<<'\n';
+            if(2*i==f.k) {
+                out<<"curve\t"<<e<<"\t0\t-2\t"<<names[q]<<'\n';
+                if (chart.leaf) curves.insert(e);
+            }
             else {
                 // On E_i the uv term of the residual binomial vanishes.
                 // Its remaining factors are the U and/or V coordinate rays.
                 // U=0 is the branch with relatively larger valuation of u.
                 for(int h=0;h<3;++h) if(left[h]) {
                     std::string side=chart.rays[h]==identity[0]?"v":"u";
-                    out<<"curve\t"<<e<<side<<'\t'<<names[q]<<'\t'<<names[h]<<'\n';
+                    out<<"curve\t"<<e<<side<<"\t0\t-2\t"<<names[q]<<'\t'<<names[h]<<'\n';
+                    if (chart.leaf) curves.insert(e+side);
                 }
             }
         }
+        if (!intrinsic && chart.leaf) {
+            std::sort(exceptional.begin(), exceptional.end());
+            for (size_t a=0; a<exceptional.size(); ++a)
+                for (size_t b=a+1; b<exceptional.size(); ++b)
+                    cells.insert({1, {exceptional[a],exceptional[b]}});
+            if (exceptional.size()==3) cells.insert({2,exceptional});
+        }
+    }
+    if (intrinsic) {
+        Face chain;
+        for (int i=1; i<(f.k+1)/2; ++i) chain.push_back("E"+std::to_string(i)+"u");
+        if (f.k%2==0) chain.push_back("E"+std::to_string(j));
+        for (int i=(f.k+1)/2-1; i>=1; --i) chain.push_back("E"+std::to_string(i)+"v");
+        if (curves != std::set<std::string>(chain.begin(), chain.end()))
+            throw std::logic_error("Curve labels do not cover the exceptional chain.");
+        for (size_t i=1; i<chain.size(); ++i) {
+            const auto ends=std::minmax(chain[i-1],chain[i]);
+            cells.insert({1, {ends.first,ends.second}});
+        }
+    }
+    for (const auto& [dimension, face] : cells) {
+        out<<"cell\t"<<dimension;
+        for(const auto& vertex : face) out<<'\t'<<vertex;
+        out<<'\n';
     }
     return out.str();
 }

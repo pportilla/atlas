@@ -1,6 +1,13 @@
 // Pullbacks, Jacobians and transitions of affine charts over Q. See KERNEL.md §9.5.
+#include "chart_equation.hpp"
 #include "groebner.hpp"
+#include "local_dimension.hpp"
 #include "polynomial_factors.hpp"
+#include "primary_decomposition.hpp"
+#include "normalization.hpp"
+#include "localization.hpp"
+#include "ideal_powers.hpp"
+#include "resolution_tangents.hpp"
 #include <flint/mpoly.h>
 #include <flint/fmpq_mpoly.h>
 #include <flint/fmpq_mpoly_factor.h>
@@ -10,10 +17,20 @@
 #include <sstream>
 #include <cctype>
 #include <unordered_set>
+#include <memory>
+
+extern "C" {
+char* atlas_wide_block(const char*, size_t) noexcept;
+void atlas_groebner_release(char*) noexcept;
+const char* atlas_groebner_error() noexcept;
+}
 
 namespace atlas {
+std::string scalar_arithmetic(const std::string&, const std::string&, const std::string&);
 std::string fan_cover(std::istream& in);
 std::string monomial_quotient(std::istream&, const std::string&);
+std::string field_factorization(std::istream&);
+std::string implicit_frame_operation(std::istream&, bool);
 namespace local { std::string operations(std::istream&, const std::string&); }
 std::string centre_weights(std::istream& in, const std::string& operation);
 namespace {
@@ -158,7 +175,8 @@ struct Variables {
         fmpq_mpoly_ctx_init(ctx, n, ordering);
     }
     explicit Variables(int n, ordering_t ordering = ORD_LEX) : n(n) {
-        packed.init(n, 1);
+        if (n <= 0) throw Limit("Unsupported number of variables.");
+        if (n <= MAX_VARIABLES) packed.init(n, 1);
         fmpq_mpoly_ctx_init(ctx, n, ordering);
     }
     ~Variables() { fmpq_mpoly_ctx_clear(ctx); }
@@ -244,12 +262,43 @@ std::string equation_text(const Polynomial& equation, std::vector<const char*>& 
     return text;
 }
 
-// The public order is descending total degree, then lexicographic order.
-std::string chart_equation_text(const Polynomial& strict, const Variables& graded,
-                                const std::vector<slong>& axes, std::vector<const char*>& names) {
-    Polynomial equation(graded);
-    fmpq_mpoly_compose_fmpq_mpoly_gen(equation.p, strict.p, axes.data(), strict.ring.ctx, graded.ctx);
-    return equation_text(equation, names);
+// A regular monomial substitution and division by a monomial change only
+// exponents. The source's complete rational coefficients remain in term order.
+std::vector<std::string> coefficient_texts(const Polynomial& source) {
+    const slong terms = fmpq_mpoly_length(source.p, source.ring.ctx);
+    std::vector<std::string> coefficients;
+    coefficients.reserve(terms);
+    fmpq_t coefficient;
+    fmpq_init(coefficient);
+    const std::unique_ptr<fmpq, decltype(&fmpq_clear)> cleanup(coefficient, fmpq_clear);
+    for (slong k = 0; k < terms; ++k) {
+        fmpq_mpoly_get_term_coeff_fmpq(coefficient, source.p, k, source.ring.ctx);
+        const std::unique_ptr<char, decltype(&flint_free)> digits(
+            fmpq_get_str(nullptr, 10, coefficient), flint_free);
+        coefficients.emplace_back(digits.get());
+    }
+    return coefficients;
+}
+
+void append_fan_equation(std::string& out, const IntegerMatrix& values,
+                         const std::vector<std::string>& coefficients,
+                         const std::vector<std::string>& names) {
+    const slong n = fmpz_mat_nrows(values.matrix), terms = fmpz_mat_ncols(values.matrix);
+    // Strict exponents are nonnegative. The shared formatter sums at most
+    // eight int32 exponents in int64, or uses GMP for larger exponents.
+    if (fmpz_mat_max_bits(values.matrix) <= 31) {
+        std::vector<int32_t> powers(coefficients.size() * names.size());
+        for (slong k = 0; k < terms; ++k)
+            for (slong j = 0; j < n; ++j)
+                powers[k*n+j] = fmpz_get_si(fmpz_mat_entry(values.matrix, j, k));
+        append_chart_equation(out, powers.data(), coefficients, names);
+    } else {
+        std::vector<mpz_class> powers(coefficients.size() * names.size());
+        for (slong k = 0; k < terms; ++k)
+            for (slong j = 0; j < n; ++j)
+                fmpz_get_mpz(powers[k*n+j].get_mpz_t(), fmpz_mat_entry(values.matrix, j, k));
+        append_chart_equation(out, powers.data(), coefficients, names);
+    }
 }
 
 // The squarefree supports generate the radical of the owned monomial ideal.
@@ -305,7 +354,7 @@ Polynomial crossing_jet(const Polynomial& strict, const std::string& supports) {
 // For a regular cone R and a character a, the pullback exponent is R*a.
 // Distinct characters stay distinct. On an exceptional ray r the minimum
 // pairing is the order, and nu is sum(r) by the logarithmic volume form.
-std::string fan_charts(std::istream& in, bool projections) {
+std::string fan_charts(std::istream& in, bool projections, bool boundary_terms) {
     Variables base(line(in));
     Variables chart(line(in));
     const int n = base.n;
@@ -314,8 +363,7 @@ std::string fan_charts(std::istream& in, bool projections) {
     const slong terms = fmpq_mpoly_length(source.p, base.ctx);
     if (!terms) throw std::invalid_argument("Expected a nonzero fan equation.");
     Variables graded(n, ORD_DEGLEX);
-    std::vector<slong> axes(n);
-    for (int j = 0; j < n; ++j) axes[j] = j;
+    const auto coefficients = coefficient_texts(source);
     std::vector<std::vector<Z>> linear;
     if (projections) {
         for (int i = 0; i < n; ++i) {
@@ -354,8 +402,10 @@ std::string fan_charts(std::istream& in, bool projections) {
         if (!fmpz_is_pm1(&det.v)) throw std::invalid_argument("Expected a regular fan cone.");
         fmpz_mat_mul(values.matrix, rays.matrix, support.matrix);
         std::string orders;
+        std::vector<int> exceptional;
         for (int i = 0; i < n; ++i) {
             if (fmpz_is_one(&nu[i].v)) continue;  // A standard axis is not exceptional.
+            if (boundary_terms) exceptional.push_back(i);
             Z minimum;
             fmpz_set(&minimum.v, fmpz_mat_entry(values.matrix, i, 0));
             for (slong k = 1; k < terms; ++k) {
@@ -374,16 +424,24 @@ std::string fan_charts(std::istream& in, bool projections) {
             }
         }
         Polynomial strict(chart);
+        Polynomial boundary(chart);
         for (slong k = 0; k < terms; ++k) {
             for (int j = 0; j < n; ++j) exponent[j] = fmpz_mat_entry(values.matrix, j, k);
             fmpz_mpoly_push_term_fmpz_fmpz(strict.p->zpoly, source.p->zpoly->coeffs + k,
                                            exponent.data(), chart.ctx->zctx);
+            // Every orbit used to certify torus sections sets at least one
+            // exceptional coordinate to zero. Keep the union of their supports.
+            if (boundary_terms && std::any_of(exceptional.begin(), exceptional.end(),
+                                              [&](int i) { return fmpz_is_zero(exponent[i]); }))
+                fmpz_mpoly_push_term_fmpz_fmpz(boundary.p->zpoly, source.p->zpoly->coeffs + k,
+                                               exponent.data(), chart.ctx->zctx);
         }
         fmpz_mpoly_sort_terms(strict.p->zpoly, chart.ctx->zctx);
         fmpq_set(strict.p->content, source.p->content);
         fmpq_mpoly_reduce(strict.p, chart.ctx);
         result += fmpq_mpoly_is_fmpq(strict.p, chart.ctx) ? '0' : '1';
-        result += orders + "\n" + chart_equation_text(strict, graded, axes, chart.pointers) + "\n";
+        result += orders + "\n";
+        append_fan_equation(result, values, coefficients, chart.names);
         emit(result, strict);
         emit(result, crossing_jet(strict, line(in)));
         // Projection i is sum_j L_ij u^(R[:,j]). Regularity makes the
@@ -397,6 +455,12 @@ std::string fan_charts(std::istream& in, bool projections) {
             }
             fmpq_mpoly_sort_terms(projection.p, graded.ctx);
             result += equation_text(projection, chart.pointers) + "\n";
+        }
+        if (boundary_terms) {
+            fmpz_mpoly_sort_terms(boundary.p->zpoly, chart.ctx->zctx);
+            fmpq_set(boundary.p->content, source.p->content);
+            fmpq_mpoly_reduce(boundary.p, chart.ctx);
+            emit(result, boundary);
         }
     }
     return result;
@@ -671,18 +735,8 @@ Polynomial coordinate_residual(const Polynomial& f, const std::vector<int>& vari
 // In characteristic zero, gcd(f, all partials of f) removes exactly one
 // copy of each prime factor of f. The quotient is its monic squarefree part.
 Polynomial squarefree_part(const Polynomial& f) {
-    const auto& chart = f.ring;
-    Polynomial common(chart), derivative(chart), result(chart);
-    if (fmpq_mpoly_is_zero(f.p, chart.ctx))
-        throw std::invalid_argument("Expected a nonzero polynomial for its squarefree part.");
-    fmpq_mpoly_set(common.p, f.p, chart.ctx);
-    for (int j = 0; j < chart.n && !fmpq_mpoly_is_fmpq(common.p, chart.ctx); ++j) {
-        fmpq_mpoly_derivative(derivative.p, f.p, j, chart.ctx);
-        if (!fmpq_mpoly_gcd(result.p, common.p, derivative.p, chart.ctx)) throw Limit("A polynomial gcd failed.");
-        fmpq_mpoly_swap(result.p, common.p, chart.ctx);
-    }
-    if (!fmpq_mpoly_divides(result.p, f.p, common.p, chart.ctx)) throw Limit("Inexact squarefree quotient.");
-    fmpq_mpoly_make_monic(result.p, result.p, chart.ctx);
+    Polynomial result(f.ring);
+    rational_squarefree_part(result.p, f.p, f.ring.ctx);
     return result;
 }
 
@@ -740,6 +794,92 @@ void inverse_coordinate(std::string& answer, const Variables& base,
         return;
     }
     throw std::invalid_argument("The chart map has no rational inverse.");
+}
+
+std::string wide_answer(const std::string& request) {
+    std::unique_ptr<char, decltype(&atlas_groebner_release)> reply(
+        atlas_wide_block(request.data(), request.size()), atlas_groebner_release);
+    if (!reply) throw std::runtime_error(atlas_groebner_error());
+    return reply.get();
+}
+
+std::string wide_inverse(const Variables& base, const std::vector<Polynomial>& map) {
+    const int n = base.n;
+    const auto& chart = map.front().ring;
+    // Replace chart coordinates whose base images are coordinates directly.
+    // Only the remaining chart coordinates need elimination variables.
+    std::vector<int> known(n, -1);
+    for (int i = 0; i < n; ++i) {
+        if (!fmpq_mpoly_is_gen(map[i].p, -1, chart.ctx)) continue;
+        for (int j = 0; j < n; ++j)
+            if (fmpq_mpoly_is_gen(map[i].p, j, chart.ctx)) { known[j] = i; break; }
+    }
+    const int unknown = std::count(known.begin(), known.end(), -1);
+    Variables graph(n + unknown);
+    Polynomial one(base), coordinate(base);
+    fmpq_mpoly_one(one.p, base.ctx);
+    std::string result;
+    for (int k = 0; k < n; ++k) {
+        if (known[k] >= 0) {
+            fmpq_mpoly_gen(coordinate.p, known[k], base.ctx);
+            emit(result, coordinate);
+            emit(result, one);
+            continue;
+        }
+        std::vector<slong> columns(n);
+        int next = 0;
+        for (int j = 0; j < n; ++j) {
+            if (known[j] >= 0) columns[j] = unknown + known[j];
+            else columns[j] = j == k ? unknown-1 : next++;
+        }
+        std::string request = "inverse_fraction " + std::to_string(graph.n) + " 1 0 " + std::to_string(n) + "\n";
+        Polynomial lifted(graph), x(graph);
+        for (int i = 0; i < n; ++i) {
+            fmpq_mpoly_compose_fmpq_mpoly_gen(lifted.p, map[i].p, columns.data(), chart.ctx, graph.ctx);
+            fmpq_mpoly_gen(x.p, unknown+i, graph.ctx);
+            fmpq_mpoly_sub(lifted.p, lifted.p, x.p, graph.ctx);
+            if (!fmpq_mpoly_is_zero(lifted.p, graph.ctx)) emit(request, lifted);
+        }
+        result += wide_answer(request);
+    }
+    return result;
+}
+
+std::string affine_frame_locus(std::istream& in, Variables& chart, bool closure) {
+    const int count = std::stoi(line(in));
+    if (count < 0) throw std::invalid_argument("Invalid frame equation count.");
+    std::vector<Polynomial> equations, units;
+    for (int i = 0; i < count; ++i) equations.push_back(read(in, chart));
+    while (in.peek() != std::char_traits<char>::eof()) units.push_back(read(in, chart));
+    try {
+        if (!chart.packed.n) throw Limit("Unsupported number of variables.");
+        std::vector<Poly> packed_equations, packed_units;
+        for (const auto& f : equations) packed_equations.push_back(packed(f));
+        for (const auto& f : units) packed_units.push_back(packed(f));
+        return frame_locus(chart.packed, packed_equations, packed_units, closure);
+    } catch (const Limit&) {
+        // An input or an intermediate monomial exceeded the packed basis range.
+    }
+    Variables extended(chart.n+1);
+    std::vector<slong> columns(chart.n);
+    for (int j = 0; j < chart.n; ++j) columns[j] = j+1;
+    std::string request = (closure ? "frame_basis " : "frame_empty ") + std::to_string(extended.n)
+                        + (closure ? " 2 0\n" : " 0 0\n");
+    Polynomial lifted(extended), product(extended);
+    for (const auto& f : equations) {
+        fmpq_mpoly_compose_fmpq_mpoly_gen(lifted.p, f.p, columns.data(), chart.ctx, extended.ctx);
+        emit(request, lifted);
+    }
+    fmpq_mpoly_gen(product.p, 0, extended.ctx);
+    for (const auto& unit : units) {
+        fmpq_mpoly_compose_fmpq_mpoly_gen(lifted.p, unit.p, columns.data(), chart.ctx, extended.ctx);
+        fmpq_mpoly_mul(product.p, product.p, lifted.p, extended.ctx);
+    }
+    if (!units.empty()) {
+        fmpq_mpoly_sub_ui(product.p, product.p, 1, extended.ctx);
+        emit(request, product);
+    }
+    return wide_answer(request);
 }
 
 // For an irreducible factor over Q with r geometric components, its Newton
@@ -994,16 +1134,124 @@ int component_cover_height(Supports& supports, int n) {
     return total;
 }
 
+// Sparse wide-ring counterpart of owned_crossings. On a smooth chart the
+// bad set of a k-fold intersection is cut out by the equations and the
+// (codim W + k)-row minors of their Jacobian. Invert a chosen generator
+// of every removed ideal to test emptiness on each open piece.
+std::string wide_owned_crossings(std::istream& in) {
+    Variables ring(line(in), ORD_DEGREVLEX);
+    const slong dimension = std::stol(line(in));
+    if (dimension < 0 || dimension > ring.n) throw std::invalid_argument("Invalid chart dimension.");
+    const auto read_list = [&]() {
+        const auto size = std::stol(line(in));
+        if (size < 0) throw std::invalid_argument("Negative ideal size.");
+        std::vector<Polynomial> rows;
+        for (slong i = 0; i < size; ++i) rows.push_back(read(in, ring));
+        return rows;
+    };
+    auto ambient = read_list(), fibre = read_list();
+    const auto count = std::stol(line(in));
+    std::vector<std::vector<Polynomial>> parts, holes;
+    for (slong i = 0; i < count; ++i) parts.push_back(read_list());
+    const auto removed = std::stol(line(in));
+    for (slong i = 0; i < removed; ++i) holes.push_back(read_list());
+    if (count < 0 || removed < 0) throw std::invalid_argument("Invalid chart component count.");
+    Variables extended(ring.n+1, ORD_DEGREVLEX);
+    std::vector<slong> columns(ring.n);
+    for (slong j = 0; j < ring.n; ++j) columns[j] = j+1;
+    Polynomial one(extended);
+    fmpq_mpoly_one(one.p, extended.ctx);
+    std::string unit_basis;
+    emit(unit_basis, one);
+    auto empty = [&](const std::vector<fmpq_mpoly_struct*>& equations, const Polynomial& unit) {
+        // Intermediate degrees, as well as inputs, can exceed a machine word.
+        // Use the same unbounded QQ basis engine as the public algebra API.
+        std::string request = "basis " + std::to_string(extended.n) + " 0 0\n";
+        Polynomial lifted(extended), inverse(extended);
+        for (auto* g : equations) {
+            if (fmpq_mpoly_is_zero(g, ring.ctx)) continue;
+            if (fmpq_mpoly_is_fmpq(g, ring.ctx)) return true;
+            fmpq_mpoly_compose_fmpq_mpoly_gen(lifted.p, g, columns.data(), ring.ctx, extended.ctx);
+            emit(request, lifted);
+        }
+        if (fmpq_mpoly_is_zero(unit.p, ring.ctx)) return true;
+        if (!fmpq_mpoly_is_fmpq(unit.p, ring.ctx)) {
+            fmpq_mpoly_compose_fmpq_mpoly_gen(lifted.p, unit.p, columns.data(), ring.ctx, extended.ctx);
+            fmpq_mpoly_gen(inverse.p, 0, extended.ctx);
+            fmpq_mpoly_mul(lifted.p, lifted.p, inverse.p, extended.ctx);
+            fmpq_mpoly_sub_ui(lifted.p, lifted.p, 1, extended.ctx);
+            emit(request, lifted);
+        }
+        std::unique_ptr<char, decltype(&atlas_groebner_release)> reply(
+            atlas_wide_block(request.data(), request.size()), atlas_groebner_release);
+        if (!reply) throw std::runtime_error(atlas_groebner_error());
+        return unit_basis == reply.get();
+    };
+    std::vector<fmpq_mpoly_struct*> selected;
+    for (auto& g : ambient) selected.push_back(g.p);
+    auto visit = [&](auto&& self, size_t first, slong rank) -> bool {
+        for (size_t i = first; i < parts.size(); ++i) {
+            const auto previous = selected.size();
+            for (auto& g : parts[i]) selected.push_back(g.p);
+            std::vector<Polynomial> entries;
+            for (auto* g : selected)
+                for (slong j = 0; j < ring.n; ++j)
+                    fmpq_mpoly_derivative(entries.emplace_back(ring).p, g, j, ring.ctx);
+            std::vector<fmpq_mpoly_struct*> matrix;
+            for (auto& g : entries) matrix.push_back(g.p);
+            std::vector<PolyValue> minors;
+            if (rank <= ring.n && rank <= static_cast<slong>(selected.size()))
+                minors = reduced_minors(matrix, selected.size(), rank, {}, ring.ctx);
+            auto equations = selected;
+            for (auto& g : fibre) equations.push_back(g.p);
+            for (auto& g : minors) equations.push_back(g.p);
+            auto across = [&](auto&& next, size_t k, const Polynomial& product) -> bool {
+                if (k == holes.size()) return empty(equations, product);
+                for (auto& g : holes[k]) {
+                    Polynomial unit(ring);
+                    fmpq_mpoly_mul(unit.p, product.p, g.p, ring.ctx);
+                    if (!next(next, k+1, unit)) return false;
+                }
+                return true;
+            };
+            Polynomial one(ring);
+            fmpq_mpoly_one(one.p, ring.ctx);
+            if (!across(across, 0, one) || !self(self, i+1, rank+1)) return false;
+            selected.resize(previous);
+        }
+        return true;
+    };
+    return visit(visit, 0, ring.n-dimension+1) ? "yes\n" : "no\n";
+}
+
 std::string ordered_polynomials(std::istream& in, const std::string& operation) {
     const auto names = line(in), order = line(in);
     if (order != "lex" && order != "grevlex") throw std::invalid_argument("Unknown monomial order.");
     Variables ring(names, order == "lex" ? ORD_LEX : ORD_DEGREVLEX);
+    if (operation == "reduced_minors") {
+        const auto rank = std::stol(line(in)), nrows = std::stol(line(in));
+        if (nrows < 0) throw std::invalid_argument("Invalid Jacobian row count.");
+        std::vector<Polynomial> entries, divisors;
+        for (slong row = 0; row < nrows; ++row)
+            for (slong column = 0; column < ring.n; ++column) entries.push_back(read(in, ring));
+        while (in.peek() != std::char_traits<char>::eof()) divisors.push_back(read(in, ring));
+        std::vector<fmpq_mpoly_struct*> matrix, basis;
+        for (auto& entry : entries) matrix.push_back(entry.p);
+        for (auto& divisor : divisors) basis.push_back(divisor.p);
+        std::string result;
+        for (const auto& minor : reduced_minors(matrix, nrows, rank, basis, ring.ctx)) {
+            Polynomial value(ring);
+            fmpq_mpoly_set(value.p, minor.p, ring.ctx);
+            emit(result, value);
+        }
+        return result;
+    }
     if (operation == "ordered_factorization") return factorization(read(in, ring), operation);
     std::string out;
-    if (operation == "polynomial_gcd" || operation == "gcd_from_lcm") {
+    if (operation == "primitive_gcd_cofactors" || operation == "polynomial_gcd" || operation == "gcd_from_lcm") {
         const auto a = read(in, ring), b = read(in, ring);
         Polynomial result(ring);
-        if (operation == "polynomial_gcd") {
+        if (operation != "gcd_from_lcm") {
             if (!fmpq_mpoly_gcd(result.p, a.p, b.p, ring.ctx))
                 throw Limit("FLINT could not compute the polynomial gcd.");
         } else {
@@ -1017,6 +1265,18 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
         }
         if (!fmpq_mpoly_is_zero(result.p, ring.ctx))
             fmpq_mpoly_make_monic(result.p, result.p, ring.ctx);
+        if (operation == "primitive_gcd_cofactors") {
+            if (fmpq_mpoly_is_zero(result.p, ring.ctx)) throw std::invalid_argument("Zero polynomial gcd.");
+            // A monic rational polynomial has positive primitive integer part.
+            fmpq_one(fmpq_mpoly_content_ref(result.p, ring.ctx));
+            for (const auto* input : {&a, &b}) {
+                Polynomial cofactor(ring);
+                if (!fmpq_mpoly_divides(cofactor.p, input->p, result.p, ring.ctx))
+                    throw std::logic_error("Inexact primitive gcd division.");
+                emit(out, cofactor);
+            }
+            return out;
+        }
         emit(out, result);
         return out;
     }
@@ -1086,15 +1346,30 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
 
 std::string affine(std::istream& in) {
     const auto operation = line(in);
+    if (operation == "implicit_jet" || operation == "implicit_coordinates")
+        return implicit_frame_operation(in,operation == "implicit_jet");
+    if (operation == "field_factorization") return field_factorization(in);
+    if (operation == "scalar_arithmetic") {
+        const auto op = line(in), left = line(in), right = line(in);
+        return scalar_arithmetic(op, left, right);
+    }
+    if (operation == "ideal_power" || operation == "symbolic_power")
+        return ideal_powers::operation(in,operation == "symbolic_power");
+    if (operation == "localization") return localization::operation(in);
+    if (operation == "normalization") return normalization::operation(in);
+    if (operation == "primary_decomposition" || operation == "ideal_radical" || operation == "ideal_radical_gpu")
+        return primary::operation(in, operation);
     if (operation.rfind("local_", 0) == 0) return local::operations(in, operation);
     if (operation.rfind("monomial_", 0) == 0) return monomial_quotient(in, operation);
     if (operation == "bm_residual" || operation == "bm_requirements" || operation == "bm_values")
         return centre_weights(in, operation);
     if (operation == "fan_cover") return fan_cover(in);
-    if (operation == "fan_charts" || operation == "fan_charts_with_projection")
-        return fan_charts(in, operation == "fan_charts_with_projection");
-    if (operation == "ordered_factorization") return ordered_polynomials(in, operation);
-    if (operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
+    if (operation == "fan_charts" || operation == "fan_charts_with_projection" || operation == "fan_charts_with_boundary")
+        return fan_charts(in, operation != "fan_charts", operation == "fan_charts_with_boundary");
+    if (operation == "wide_owned_crossings") return wide_owned_crossings(in);
+    if (operation == "ordered_factorization" || operation == "reduced_minors")
+        return ordered_polynomials(in, operation);
+    if (operation == "primitive_gcd_cofactors" || operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
         operation == "wide_basis" || operation == "wide_division" ||
         operation == "wide_dimension" || operation == "basis_dimension")
         return ordered_polynomials(in, operation);
@@ -1106,6 +1381,32 @@ std::string affine(std::istream& in) {
         std::string result;
         emit(result, squarefree_part(read(in, chart)));
         return result;
+    }
+    if (operation == "primitive_support") return primitive_vertices(read(in, chart)) ? "1\n" : "0\n";
+    if (operation == "support_profile") return support_profile(read(in, chart).p, chart.ctx);
+    if (operation == "singular_subspaces") {
+        const auto f = read(in, chart);
+        std::vector<std::vector<slong>> axes;
+        while (in.peek() != std::char_traits<char>::eof()) {
+            std::istringstream entry(line(in));
+            axes.emplace_back();
+            for (slong j; entry >> j;) axes.back().push_back(j);
+            if (!entry.eof()) throw std::invalid_argument("Invalid coordinate subspace.");
+        }
+        return singular_subspaces(f.p, axes, chart.ctx);
+    }
+    if (operation == "lowest_form") {
+        std::vector<slong> axes(chart.n);
+        for (int j = 0; j < chart.n; ++j) axes[j] = j;
+        Polynomial tangent(chart);
+        lowest_form(tangent.p, read(in, chart).p, axes, chart.ctx);
+        std::string result;
+        emit(result, tangent);
+        return result;
+    }
+    if (operation == "repeated_directions") {
+        const auto x = std::stol(line(in)), y = std::stol(line(in));
+        return repeated_directions(read(in, chart).p, x, y, chart.ctx);
     }
     if (operation == "factor_multiplicity") {
         const slong axes = std::stol(line(in));
@@ -1141,13 +1442,19 @@ std::string affine(std::istream& in) {
         emit(result, RecordParser(line(in), chart, &budget).run());
         return result;
     }
-    if (operation == "frame_empty" || operation == "frame_basis") {
-        std::vector<Poly> equations, units;
-        const int count = std::stoi(line(in));
-        for (int i = 0; i < count; ++i) equations.push_back(packed(read(in, chart)));
-        while (in.peek() != std::char_traits<char>::eof()) units.push_back(packed(read(in, chart)));
-        if (!chart.packed.n) throw Limit("Unsupported number of variables.");
-        return frame_locus(chart.packed, equations, units, operation == "frame_basis");
+    if (operation == "frame_empty" || operation == "frame_basis")
+        return affine_frame_locus(in, chart, operation == "frame_basis");
+    if (operation == "symmetric_determinants") {
+        std::string result;
+        Polynomial determinant(chart), square(chart);
+        while (in.peek() != std::char_traits<char>::eof()) {
+            const auto aa = read(in,chart), ab = read(in,chart), bb = read(in,chart);
+            fmpq_mpoly_mul(determinant.p,aa.p,bb.p,chart.ctx);
+            fmpq_mpoly_mul(square.p,ab.p,ab.p,chart.ctx);
+            fmpq_mpoly_sub(determinant.p,determinant.p,square.p,chart.ctx);
+            emit(result,determinant);
+        }
+        return result;
     }
     if (operation == "function") {
         std::string result;
@@ -1277,7 +1584,11 @@ std::string affine(std::istream& in) {
                 emit(result, one);
             }
         } else {
-            for (int i = 0; i < chart.n; ++i) inverse_coordinate(result, base, map, i);
+            try {
+                for (int i = 0; i < chart.n; ++i) inverse_coordinate(result, base, map, i);
+            } catch (const Limit&) {
+                return wide_inverse(base, map);
+            }
         }
         return result;
     }
@@ -1330,6 +1641,10 @@ std::string affine(std::istream& in) {
     return result;
 }
 }  // namespace
+
+int local::monomial_support_dimension(std::vector<std::vector<int>> supports, int width) {
+    return width - component_cover_height(supports, width);
+}
 }  // namespace atlas
 
 extern "C" int atlas_lattice_abi() noexcept { return 1; }
@@ -1341,6 +1656,7 @@ extern "C" int atlas_jet_abi() noexcept { return 1; }
 extern "C" int atlas_crossing_jet_abi() noexcept { return 1; }
 extern "C" int atlas_fan_charts_abi() noexcept { return 1; }
 extern "C" int atlas_fan_projection_abi() noexcept { return 1; }
+extern "C" int atlas_fan_boundary_terms_abi() noexcept { return 1; }
 extern "C" int atlas_residual_abi() noexcept { return 1; }
 
 extern "C" char* atlas_affine(const char* input, size_t length) noexcept {

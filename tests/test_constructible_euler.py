@@ -78,6 +78,31 @@ class ConstructibleEuler(unittest.TestCase):
         # Delete the branch point above 0 and both points above 4.
         self.assertEqual(euler_characteristic((x,y),(curve,),((x,y),(x-4,))),-4)
 
+    def test_quadratic_projection_with_nonconstant_leading_coefficient(self):
+        # At x=0 the fibre is a line, a point or empty in these examples.
+        # The remaining fibres have generically two roots and one at a
+        # simple discriminant zero. The coordinate exclusion removes x=0.
+        for equation, total, punctured in (
+                (x*y**2+x+1, -1, -1),
+                (x*y**2+y+1, 0, -1),
+                (x*(y**2+x+1), 0, -1),
+                (x*y**2+y, 1, 0)):
+            with self.subTest(equation=equation):
+                self.assertEqual(euler_characteristic((x,y),(equation,)), total)
+                self.assertEqual(euler_characteristic((x,y),(equation,),((x,),)), punctured)
+
+    def test_contact_chart_quadratic_and_coordinate_exclusions(self):
+        from engine.native_library import _MODE
+        if _MODE == "sympy":
+            self.skipTest("Exercises the native character-lattice projection.")
+        q = x*y - z**2
+        a = 2*q**6 + 3*x**6 + 5*y**6 + 7*z**6 + 1
+        h = sp.Symbol("h")
+        equation = a*h**2 - (q**3 + z**3 + 1)*h + 1
+        with patch("engine.groebner.CHECK", False):
+            self.assertEqual(euler_characteristic((x,y,z,h), (equation,)), -622)
+            self.assertEqual(euler_characteristic((x,y,z,h), (), ((h,), (equation,))), 622)
+
     def test_specialized_gcd_and_nonreduced_fibers(self):
         # The degree of the common zero set jumps at x=0,1,−1. At 0 the
         # double root counts once; each of the other fibers has two points.

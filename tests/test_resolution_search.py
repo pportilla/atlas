@@ -108,6 +108,20 @@ class SearchTests(unittest.TestCase):
         self.assertIsNone(decode_candidate((x,y),as_code(field+center+mixed)))
         self.assertIsNone(decode_candidate((x,y),0))
 
+    def test_unbounded_exponents_cancellation_and_reducible_fields(self):
+        from engine.native_polynomial import symbols
+        x, = symbols("x")
+        exponent = 2**80 + 19
+        def rational_center(terms):
+            return as_code(natural(0)+sequence([sequence(terms,1)],1)+sequence([]))
+        candidate = decode_candidate((x,),rational_center([term(1,(exponent,))]))
+        self.assertEqual(candidate.center,(x**exponent,))
+        self.assertIsNone(decode_candidate((x,),rational_center([term(7,(exponent,)),term(-7,(exponent,))])))
+        # The unit-leading candidate polynomial for the field is T^2-1.
+        reducible = natural(1)+integer(-1)+integer(0)+natural(0)
+        center = sequence([sequence([term(1,(1,))],1)],1)
+        self.assertIsNone(decode_candidate((x,),as_code(reducible+center+sequence([]))))
+
     def test_prefix_skipping_preserves_every_valid_code(self):
         variables = s.symbols("x y z t u")
         for count in (1, 2, 5):

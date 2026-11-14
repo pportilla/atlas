@@ -1,10 +1,12 @@
-"""Regression tests that exercise the point-local executable through ./atlas."""
+"""Regression tests that exercise the native CPU executable through ./atlas."""
 import json
 import os
 from pathlib import Path
 import shlex
+import signal
 import subprocess
 import sys
+from time import monotonic, sleep
 import unittest
 
 
@@ -77,6 +79,57 @@ class LocalNativeCliTests(unittest.TestCase):
                     stages = [s["operation"] for s in result["execution"]["stages"]]
                     self.assertEqual("finite_jet_standard_basis" in stages, finite)
 
+    def test_homogeneous_division_respects_the_local_tie_order(self):
+        # x*z leads y^2 under lex, while y^2 leads x*z under grevlex.
+        # Adding z^3 makes the local quotient finite in both orders.
+        for finite in (False, True):
+            for order, quadratic in (("lex", "y^2"), ("grevlex", "x*z")):
+                with self.subTest(finite=finite, order=order):
+                    args = ["local-normal-form", "--vars", "x,y,z", "--order", order,
+                            "--gen", "x*z-y^2", "--gen", "x^3", "--poly", "x*z/2+x+1"]
+                    if finite:
+                        args.extend(["--gen", "z^3"])
+                    record = self.record(args)
+                    stages = {s["operation"]: s.get("label") for s in record["execution"]["stages"]}
+                    self.assertEqual(stages.get("homogeneous_native_standard_basis"), "local_standard_basis")
+                    self.assertEqual(stages.get("homogeneous_native_normal_form"), "local_normal_form")
+                    result = record["result"]
+                    self.assertEqual((result["unit"], result["remainder"], result["reduction"]),
+                                     ("1", f"1/2*{quadratic}+x+1", "standard"))
+
+    def test_homogeneous_division_at_a_shifted_point_uses_a_finite_jet(self):
+        # u=x-1, v=y+2/3 satisfy u^2=-v^2 and v^3=0.
+        # Hence (1+u)^6000 = 1+6000*u-C(6000,2)*v^2-C(6000,3)*u*v^2.
+        u, v = "(x-1)", "(y+2/3)"
+        args = ["local-normal-form", "--vars", "x,y", "--point", "1,-2/3",
+                "--gen", f"{u}^2+{v}^2", "--gen", f"{v}^3", "--poly", "x^6000"]
+        expected = ("-35982002000*x*y^2-143928008000/3*x*y+35964005000*y^2"
+                    "-143927954000/9*x+143856020000/3*y+143855966009/9")
+        for order in ("lex", "grevlex"):
+            with self.subTest(order=order):
+                result = self.record([*args, "--order", order])["result"]
+                self.assertEqual((result["unit"], result["remainder"], result["reduction"]),
+                                 ("1", expected, "standard"))
+
+    def test_homogeneous_division_beyond_packed_exponents(self):
+        exponent = 2**64 + 1
+        cases = [
+            (["x-y", "z^2"], f"x^{exponent}+z+1", f"y^{exponent}+z+1"),
+            ([f"x^{exponent}-y^{exponent}", "z^2"], "x+y+z^2+1", "x+y+1"),
+        ]
+        for order in ("lex", "grevlex"):
+            for generators, query, expected in cases:
+                with self.subTest(order=order, query=query):
+                    args = ["local-normal-form", "--vars", "x,y,z", "--order", order, "--poly", query]
+                    for g in generators:
+                        args.extend(["--gen", g])
+                    record = self.record(args)
+                    result = record["result"]
+                    self.assertEqual((result["unit"], result["remainder"], result["reduction"]),
+                                     ("1", expected, "standard"))
+                    self.assertNotIn("homogeneous_native_normal_form",
+                                     [s["operation"] for s in record["execution"]["stages"]])
+
     def test_invalid_point_keeps_cli_diagnostics(self):
         args = ["algebra", "local-normal-form", "--vars", "x", "--point", "1/0",
                 "--poly", "x", "--gen", "x", "--json"]
@@ -84,3 +137,61 @@ class LocalNativeCliTests(unittest.TestCase):
         self.assertNotEqual(direct.returncode, 0)
         self.assertEqual((direct.returncode, direct.stdout, direct.stderr),
                          (reference.returncode, reference.stdout, reference.stderr))
+
+    def test_primary_decomposition_both_replays_and_cli_output(self):
+        args = ["primary-decomposition", "--vars", "y,x", "--order", "lex",
+                "--gen", "-x^2", "--gen", "x*y"]
+        record = self.record(args)
+        self.assertCountEqual([c["prime"] for c in record["result"]["components"]], [["x"], ["y", "x"]])
+        self.assertNotIn("point", record["result"])
+        stage, = [s for s in record["execution"]["stages"] if s["operation"] == "primary_decomposition"]
+        self.assertEqual(stage["generators"], 2)
+        replays = (self.invoke(["algebra", *args, "--compute", "cpu", "--json"], interpreter=True),
+                   self.invoke(shlex.split(record["replay"]["command"])[1:]),
+                   self.invoke(["run", "-"], stdin=record["replay"]["script"]))
+        for response in replays:
+            self.assertEqual(response.returncode, 0, response.stderr)
+            self.assertEqual(json.loads(response.stdout)["result"], record["result"])
+        text_args = ["algebra", *args, "--compute", "cpu"]
+        self.assertEqual(self.invoke(text_args).stdout, self.invoke(text_args, interpreter=True).stdout)
+
+    def test_primary_decomposition_rejects_local_options(self):
+        args = ["algebra", "primary-decomposition", "--vars", "x", "--gen", "x", "--point", "0"]
+        direct, reference = self.invoke(args), self.invoke(args, interpreter=True)
+        self.assertNotEqual(direct.returncode, 0)
+        self.assertEqual((direct.returncode, direct.stdout, direct.stderr),
+                         (reference.returncode, reference.stdout, reference.stderr))
+
+    @unittest.skipUnless(Path("/proc/self/task").exists(), "observes the worker using Linux procfs")
+    def test_primary_worker_interruption_and_unexpected_exit(self):
+        args = [str(ROOT / "atlas"), "algebra", "primary-decomposition", "--compute", "cpu",
+                "--vars", "x,y", "--gen", "(x+y+1)^260", "--json"]
+        env = dict(os.environ, ATLAS_GROEBNER="native", ATLAS_GROEBNER_GPU="", PYTHONINTMAXSTRDIGITS="")
+        for cancel in (True, False):
+            with self.subTest(cancel=cancel), subprocess.Popen(
+                args, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                start_new_session=True,
+            ) as cli:
+                try:
+                    children = Path(f"/proc/{cli.pid}/task/{cli.pid}/children")
+                    deadline = monotonic() + 5
+                    while not (workers := children.read_text().split()):
+                        self.assertLess(monotonic(), deadline, "Native CLI did not start a worker")
+                        sleep(0.001)
+                    worker, = map(int, workers)
+                    os.kill(worker, signal.SIGSTOP)
+                    if cancel:
+                        cli.send_signal(signal.SIGINT)
+                    else:
+                        os.kill(worker, signal.SIGKILL)
+                    stdout, stderr = cli.communicate(timeout=5)
+                    if cancel:
+                        self.assertEqual((cli.returncode, stdout, stderr),
+                                         (130, "", "Algebra calculation interrupted.\n"))
+                    else:
+                        self.assertEqual(cli.returncode, 2)
+                        self.assertEqual(json.loads(stdout)["error"]["code"], "worker_unavailable")
+                    self.assertFalse(Path(f"/proc/{worker}").exists())
+                finally:
+                    if cli.poll() is None:
+                        os.killpg(cli.pid, signal.SIGKILL)

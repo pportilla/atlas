@@ -16,7 +16,8 @@ _WORKER = Path(__file__).resolve().parents[1] / "native" / "build" / "plane"
 def resolve_plane(poly, variables, mode, *, exhaustive=False):
     if not _WORKER.is_file():
         raise RuntimeError("Native plane resolver is not built. Run make.")
-    if any(sum(e)>sys.maxsize for e in poly):
+    from .quotient_monomials import degree_bounds
+    if degree_bounds(len(variables), poly)[1] > sys.maxsize:
         raise LimitError("Plane input degree exceeds a signed native word.")
     payload = {"terms":[[*e,rational_text(c)] for e,c in poly.items()],
                "variables":variables, "mode":mode, "exhaustive":exhaustive}
@@ -52,7 +53,7 @@ def ordered_roots(polynomial):
 
 
 @lru_cache(maxsize=256)
-def coefficient_field(roots, rectangles=None):
+def coefficient_field(roots, rectangles=None, *, exhaustive=False):
     """Common field for FLINT's exact root identifiers, including the embedding."""
     parsed = []
     for text in roots:
@@ -60,7 +61,7 @@ def coefficient_field(roots, rectangles=None):
         if match is None:
             raise ValueError("Invalid algebraic coefficient in a plane chart.")
         parsed.append({"coefficients": match.group(1).split(", "), "index": int(match.group(2))})
-    request = {"field_roots": parsed}
+    request = {"field_roots": parsed, "exhaustive": exhaustive}
     if rectangles is not None:
         request["root_rectangles"] = rectangles
     done = subprocess.run([str(_WORKER)], input=json.dumps(request),

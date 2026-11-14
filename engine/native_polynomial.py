@@ -12,6 +12,7 @@ from functools import cached_property, lru_cache
 from itertools import count
 
 from .native_library import affine_request
+from .rational_point import coordinate_fraction
 from .polynomial import format_poly, integer_text, rational_text, sparse_row
 
 
@@ -79,13 +80,13 @@ class Expr:
             return self.is_number and self.scalar == other
         return NotImplemented
     def __lt__(self, other):
-        return self.scalar < coerce(other).scalar
+        return scalar_arithmetic("compare", self.scalar, coerce(other).scalar) < 0
     def __le__(self, other):
-        return self.scalar <= coerce(other).scalar
+        return scalar_arithmetic("compare", self.scalar, coerce(other).scalar) <= 0
     def __gt__(self, other):
-        return self.scalar > coerce(other).scalar
+        return scalar_arithmetic("compare", self.scalar, coerce(other).scalar) > 0
     def __ge__(self, other):
-        return self.scalar >= coerce(other).scalar
+        return scalar_arithmetic("compare", self.scalar, coerce(other).scalar) >= 0
     def __neg__(self):
         return _binary('-', coerce(0), self)
     def __add__(self, other):
@@ -263,10 +264,11 @@ def _binary(op, left, right):
     return _decode(keys, result)
 
 
+@lru_cache(maxsize=4096)
 def count_ops(value):
+    from .point_geometry import encode_terms, request
     f = coerce(value)
-    return max(0,len(f._terms)-1) + sum(sum(power > 1 for power in e) + max(0,sum(bool(i) for i in e)-1)
-               + int(bool(e) and abs(c)!=1) for e,c in f._terms)
+    return int(request("expression_size", width=len(f._coords), terms=encode_terms(dict(f._terms))))
 
 
 def default_sort_key(value):
@@ -297,10 +299,19 @@ def _combine(values, operation):
 def product(values):
     return _combine(values, "*")
 
+def scalar_arithmetic(op, left, right):
+    row, = affine_request(["scalar_arithmetic", op, rational_text(left), rational_text(right)])
+    return coordinate_fraction(row)
+
+
 def Rational(a, b=None):
-    numerator = a.scalar if isinstance(a, Expr) else a
-    denominator = b.scalar if isinstance(b, Expr) else b
-    return coerce(Fraction(numerator, denominator) if denominator is not None else Fraction(numerator))
+    numerator = a.scalar if isinstance(a, Expr) else Fraction(a)
+    if b is None:
+        return coerce(numerator)
+    denominator = b.scalar if isinstance(b, Expr) else Fraction(b)
+    if not denominator:
+        raise ZeroDivisionError
+    return coerce(scalar_arithmetic("/", numerator, denominator))
 
 
 def symbols(pattern):

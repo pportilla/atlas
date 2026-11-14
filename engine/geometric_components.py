@@ -5,7 +5,11 @@ candidate returned to the caller is contracted by saturation and its union
 is checked against the *original* ideal. This catches components lying over
 special parameter values. None means a field extension or more work is needed.
 """
-from itertools import combinations, product
+from itertools import combinations
+
+from .kernel_json import kernel_json
+from .point_geometry import encode_terms, decode_terms, support_profile
+from .polynomial import integer_from_decimal, integer_text
 
 from .reference import sp
 from .reference import QQ
@@ -13,10 +17,18 @@ from .chart_expressions import chart_expressions
 from .native_polynomial import native_ring
 
 from . import field_factors, kernel
-from .affine_kernel import (_primitive_support, _sparse_expression, _sparse_terms, frame_derivative, rational_factor_rows,
+from .affine_kernel import (_oracle, _sparse_expression, _sparse_terms, frame_derivative, rational_factor_rows,
                             sparse_terms)
 from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
 from .groebner import CHECK, _MODE, groebner
+
+
+def _component_operation(operation, **operands):
+    return kernel_json("atlas_component_geometry", operation, **operands)
+
+
+def _encoded_support(powers):
+    return [[integer_text(k) for k in row] for row in powers]
 
 
 def _factor_records(variables, f, domain):
@@ -39,18 +51,18 @@ def _certify(variables, expression, data, domain, effort):
     if primitive:
         return True
     terms = _sparse_terms(row)
-    used = tuple(i for i in range(len(variables)) if any(e[i] for e, _ in terms))
+    degrees, degree, homogeneous = support_profile(e for e, _ in terms)
+    used = tuple(i for i, axis_degree in enumerate(degrees) if axis_degree)
     coords = tuple(variables[i] for i in used)
     terms = {tuple(e[i] for i in used): c for e, c in terms}
-    degree = max(map(sum, terms))
     if degree == 1:
         return True
     if len(used) == 1:
         return False
-    if any(max(e[j] for e in terms) == 1 for j in range(len(used))):
+    if 1 in degrees:
         return True
     try:
-        answer = _projective_or_plane(coords, expression, terms, degree, QQ, effort)
+        answer = _projective_or_plane(coords, expression, terms, degree, QQ, effort, homogeneous=homogeneous)
     except ArithmeticError:
         answer = None
     if answer is None:
@@ -65,7 +77,12 @@ def _certify(variables, expression, data, domain, effort):
 def _absolute_factor(poly, effort):
     """True only for proved absolute irreducibility over the coefficient field."""
     all_variables = poly.gens
-    variables = tuple(x for x in all_variables if poly.degree(x) > 0)
+    if _MODE == "sympy":
+        axis_degrees = tuple(poly.degree(x) for x in all_variables)
+        degree = poly.total_degree()
+    else:
+        axis_degrees, degree, _ = support_profile(poly.monoms())
+    variables = tuple(x for x, d in zip(all_variables, axis_degrees) if d > 0)
     if variables != all_variables:
         if native_ring(variables):
             from .field_polynomial import polynomial
@@ -74,14 +91,13 @@ def _absolute_factor(poly, effort):
             used = [i for i, x in enumerate(all_variables) if x in variables]
             terms = {tuple(m[i] for i in used): c for m, c in poly.rep.to_dict().items()}
             poly = sp.Poly.from_dict(terms, *variables, domain=poly.domain)
-    degree = poly.total_degree()
     if degree == 1:
         return True
     if len(variables) == 1:
         return False
     # Called only on K-irreducible factors, so a polynomial of degree one in x
     # is primitive in x. The content stays a unit over any constant extension.
-    if any(poly.degree(x) == 1 for x in variables):
+    if 1 in axis_degrees:
         return True
     if _primitive_vertex_coordinates(poly):
         return True
@@ -110,14 +126,23 @@ def _primitive_vertex_coordinates(poly):
     number of factors. Every coordinate of every vertex is divisible by r.
     Any collection of exposed vertices whose coordinate gcd is 1 suffices.
     """
-    return _primitive_support(poly.monoms())
+    from .affine_kernel import _checked, _request, _ring, _polynomial
+
+    ring = _ring(tuple(poly.gens))
+    def native():
+        # Coefficients over the marked field can be discarded for this test.
+        f = _polynomial({e:1 for e in poly.monoms()}, poly.gens)
+        result, = _request(["primitive_support", ring.header, ring.text(f)])
+        return result == "1"
+
+    return _checked(native, lambda: _oracle("_primitive_support", poly.monoms()), poly.gens)
 
 
 def _native_absolute(poly, effort):
     return _projective_or_plane(poly.gens, poly.as_expr(), poly.as_dict(), poly.total_degree(), poly.domain, effort)
 
 
-def _projective_or_plane(variables, expression, terms, degree, domain, effort):
+def _projective_or_plane(variables, expression, terms, degree, domain, effort, *, homogeneous=None):
     """Gao's factor count on a plane, then projective tests in higher dimension.
 
     In characteristic zero the bounded logarithmic-differential system has
@@ -138,26 +163,27 @@ def _projective_or_plane(variables, expression, terms, degree, domain, effort):
     if len(variables) == 2 and domain == QQ:
         result = kernel.plane_components(variables, (expression,), (), ())
         return None if result is None else result[0] == 1
-    hvars = variables if all(sum(e) == degree for e in terms) else (*variables, chart_expressions(variables).Dummy("homogenizer"))
+    if homogeneous is None:
+        _, _, homogeneous = support_profile(terms)
+    hvars = variables if homogeneous else (*variables, chart_expressions(variables).Dummy("homogenizer"))
     if degree > 2 and (degree > 3+effort or len(hvars) > 3+effort):
         return None
     # Homogenization extends the exponent vector of each input term.
     if hvars == variables:
         h = expression
     else:
+        api = chart_expressions(hvars)
+        powers = _component_operation("homogenize", support=_encoded_support(terms))
+        lifted = {e:tuple(map(integer_from_decimal, row)) for e,row in zip(terms, powers)}
         if native_ring(hvars):
-            api = chart_expressions(hvars)
             if domain == QQ:
-                h = api.from_terms(hvars, {(*e, degree-sum(e)): c for e,c in terms.items()})
+                h = api.from_terms(hvars, {lifted[e]: c for e,c in terms.items()})
             else:
-                # Homogenize only geometric coordinates, keeping the stored
-                # rational coefficient rows in the same marked power basis.
                 source = api.terms((*variables, domain.parameter), expression)
                 h = api.from_terms((*hvars, domain.parameter),
-                                   {(*e[:-1], degree-sum(e[:-1]), e[-1]): c for e,c in source.items()})
+                                   {(*lifted[e[:-1]], e[-1]): c for e,c in source.items()})
         else:
-            api = chart_expressions(hvars)
-            h = api.Add(*(c*api.prod(v**k for v,k in zip(hvars, (*e, degree-sum(e)))) for e,c in terms.items()))
+            h = api.Add(*(c*api.prod(v**k for v,k in zip(hvars, lifted[e])) for e,c in terms.items()))
     if domain == QQ:
         gradient = tuple(frame_derivative(hvars, h, {v: 1}) for v in hvars)
     else:
@@ -180,42 +206,30 @@ def _projective_or_plane(variables, expression, terms, degree, domain, effort):
 
 
 def _absolute_reference(poly, effort):
-    variables = poly.gens
-    degree = poly.total_degree()
-    homogeneous = poly.is_homogeneous
-    hvars = variables if homogeneous else (*variables, sp.Dummy("homogenizer"))
-    h = poly if homogeneous else poly.homogenize(hvars[-1])
-    if degree == 2:
-        # A homogeneous quadratic splits into two linear forms over Kbar
-        # precisely when its symmetric matrix has rank at most two.
-        return sp.hessian(h.as_expr(), hvars).to_DM(domain=poly.domain).rank() > 2
-    # A smooth projective hypersurface of dimension >=1 is geometrically
-    # integral: distinct positive-degree factors must meet in projective space.
-    if len(hvars)>=3 and degree <= 3+effort and len(hvars)<=3+effort:
-        gradient = [h.diff(x).as_expr() for x in hvars]
-        for x in hvars:
-            rest = tuple(t for t in hvars if t!=x)
-            if not empty_locus(rest,tuple(g.subs(x,1) for g in gradient),domain=poly.domain):
-                break
-        else:
-            return True
-    return _factor_equations(poly, effort)
-
-
-def _monomials(bounds, degree, leading):
-    """Monomials that can occur below a prescribed graded lex leading term."""
-    def visit(j, remaining, powers):
-        if j == len(bounds):
-            if (sum(powers), powers) < (degree, leading):
-                yield powers
-            return
-        for e in range(min(bounds[j],remaining)+1):
-            yield from visit(j+1,remaining-e,(*powers,e))
-    return visit(0, degree, ())
+    from tests.component_oracle import _absolute_reference as reference
+    return reference(poly, effort)
 
 
 def _factor_equations(poly, effort):
     return _coefficient_system(poly.gens, poly.as_dict(), poly.total_degree(), poly.domain, effort)
+
+
+def _reference_factor_layouts(coeffs, d, effort):
+    from tests.component_oracle import _reference_factor_layouts as reference
+    return reference(coeffs, d, effort)
+
+
+def _factor_layouts(coeffs, degree, effort):
+    if _MODE == "sympy":
+        return _reference_factor_layouts(coeffs, degree, effort)
+    data = _component_operation("factor_supports", support=_encoded_support(coeffs),
+                                effort=integer_text(effort))
+    lead = tuple(map(integer_from_decimal, data["lead"]))
+    layouts = [[[tuple(map(integer_from_decimal, e)) for e in support] for support in pair]
+               for pair in data["layouts"]]
+    if CHECK and (lead, layouts, data["complete"]) != _reference_factor_layouts(coeffs, degree, effort):
+        raise AssertionError("The factor supports differ from their independent enumeration.")
+    return lead, layouts, data["complete"]
 
 
 def _coefficient_system(variables, coeffs, d, domain, effort):
@@ -226,86 +240,49 @@ def _coefficient_system(variables, coeffs, d, domain, effort):
     solution set still gives a factorization, by the weak Nullstellensatz.
     """
     expressions = chart_expressions(variables)
-    lead = max(coeffs, key=lambda e: (sum(e), e))
-    lc = coeffs[lead]
-    bounds = tuple(map(max, zip(*coeffs)))
-    max_unknowns = 6 + 2*effort
-    max_pivots = 32*effort
-    checked = 0
-    for alpha in product(*(range(i+1) for i in lead)):
-        a_degree = sum(alpha)
-        if not 1 <= a_degree <= d//2:
-            continue
-        checked += 1
-        if checked > max_pivots:
-            return None
-        beta = tuple(e-i for e,i in zip(lead,alpha))
-        items = []
-        for mon, top, degree in [(alpha,1,a_degree),(beta,lc,d-a_degree)]:
-            row = {mon:top}
-            for k in _monomials(bounds,degree,mon):
-                if len(row) > max_unknowns:
-                    return None
-                row[k] = expressions.Dummy("coefficient")
-            items.append(row)
-        left, right = items
-        unknowns = tuple(left.values())[1:] + tuple(right.values())[1:]
-        if len(unknowns)>max_unknowns:
-            return None
-        names = tuple(expressions.Dummy(f"factor_{i}") for i in range(len(unknowns)))
-        replacements = dict(zip(unknowns, names))
+    lead, layouts, complete = _factor_layouts(coeffs, d, effort)
+    if _MODE != "sympy":
+        theta = None
+        if domain == QQ:
+            source = encode_terms(coeffs)
+        else:
+            from .field_polynomial import lift, modulus
+            theta = expressions.Dummy("factor_field")
+            terms = {(*e, *k): q for e,c in coeffs.items()
+                     for k,q in sparse_terms((theta,), lift(c, (), domain, theta))}
+            source = encode_terms(terms)
+
+    for a, b in layouts:
+        names = tuple(expressions.Dummy(f"factor_{i}") for i in range(len(a)+len(b)-2))
         if _MODE != "sympy":
-            from .affine_kernel import frame_function
-            ring = (*variables, *names)
-            if domain != QQ:
-                from .field_polynomial import lift, modulus
-                theta = expressions.Dummy("factor_field")
-                ring = (*ring, theta)
+            from .affine_kernel import _polynomial
 
-            def coefficient(c):
-                if c in replacements:
-                    return replacements[c]
-                return c if domain == QQ else lift(c, (), domain, theta)
-
-            parameters = ring[len(variables):]
-
-            def polynomial(terms):
-                if native_ring(ring):
-                    return expressions.from_terms(ring, {(*m, *e): q for m,c in terms.items()
-                                                  for e,q in expressions.terms(parameters, coefficient(c)).items()})
-                return expressions.Add(*(coefficient(c)*expressions.prod(v**e for v,e in zip(variables,k)) for k,c in terms.items()))
-
-            # FLINT multiplies the two unknown factors, then the exponents of
-            # x distinguish coefficient equations in the unknowns and theta.
-            residual = frame_function(ring, polynomial(left)*polynomial(right) - polynomial(coeffs))
-            groups = {}
-            for exponents, c in sparse_terms(ring, residual):
-                groups.setdefault(exponents[:len(variables)], {})[exponents[len(variables):]] = c
-            if native_ring(ring):
-                constraints = [expressions.from_terms(parameters, terms) for terms in groups.values()]
-            else:
-                constraints = [expressions.Add(*(c*expressions.prod(v**k for v,k in zip(parameters,e))
-                                                for e,c in terms.items())) for terms in groups.values()]
-            if domain != QQ:
+            parameters = names if theta is None else (*names, theta)
+            rows = _component_operation("factor_conditions", width=len(variables), marked=theta is not None,
+                                        polynomial=source, sides=[_encoded_support(a), _encoded_support(b)])
+            constraints = [_polynomial(decode_terms(row), parameters) for row in rows]
+            if theta is not None:
                 constraints.append(modulus(domain, theta))
             exists = not empty_locus(parameters, constraints) if parameters else not any(constraints)
             if not CHECK:
                 if exists:
                     return False
                 continue
+        left = {a[0]:1, **dict(zip(a[1:], names))}
+        right = {b[0]:coeffs[lead], **dict(zip(b[1:], names[len(a)-1:]))}
         equations = {m:-c for m,c in coeffs.items()}
         for ma, ca in left.items():
             for mb, cb in right.items():
                 key = tuple(i+j for i,j in zip(ma,mb))
                 equations[key] = equations.get(key,0) + ca*cb
-        constraints = tuple(sp.sympify(f).xreplace(replacements) for f in equations.values() if f != 0)
+        constraints = tuple(sp.sympify(f) for f in equations.values() if f != 0)
         expected = (tuple(sp.groebner(constraints, *names, domain=domain).exprs) != (1,)
                     if names else not constraints)
         if CHECK and exists != expected:
             raise AssertionError("The coefficient equations differ from their independent factor test.")
         if expected:
             return False
-    return True
+    return True if complete else None
 
 
 def _disjoint(variables, primes, domain):
@@ -332,31 +309,8 @@ def _coverage(variables, components, ideal, domain, reduced_support):
 
 
 def _projection_matrices_reference(n, effort):
-    """Independent dense-matrix reference for the ordered projection schedule."""
-    identity = sp.eye(n)
-    yield identity, identity
-    if n<=1:
-        return
-    for k in range(1,n):
-        permutation = identity[:,tuple((i+k)%n for i in range(n))]
-        yield permutation, permutation.T
-    # Separate finite fibers immediately in common examples such as grids of
-    # rational points. The exhaustive shear sequence below is still needed.
-    primitive = sp.eye(n)
-    for i in range(n-1):
-        primitive[n-1,i] = 2**(i+1)
-    yield primitive, 2*identity - primitive
-    shears = [(i,j,s) for i in range(n) for j in range(n) if i!=j for s in (1,-1)]
-    for code in range(1,effort+1):
-        matrix, inverse = sp.eye(n), sp.eye(n)
-        while code:
-            code, index = divmod(code-1,len(shears))
-            i,j,s = shears[index]
-            matrix[i,:] += s*matrix[j,:]
-            # Left multiplication by an elementary shear changes the
-            # inverse by the inverse elementary column operation on the right.
-            inverse[:,j] -= s*inverse[:,i]
-        yield matrix, inverse
+    from tests.component_oracle import _projection_matrices_reference as reference
+    return reference(n, effort)
 
 
 def _projection_maps(variables, effort):
@@ -365,24 +319,11 @@ def _projection_maps(variables, effort):
     yield variables, variables
     if n <= 1:
         return
-    for k in range(1,n):
-        yield variables[-k:] + variables[:-k], variables[k:] + variables[:k]
-    form = sum(2**(i+1)*v for i,v in enumerate(variables[:-1]))
-    yield (*variables[:-1], variables[-1]+form), (*variables[:-1], variables[-1]-form)
-
-    shears = [(i,j,s) for i in range(n) for j in range(n) if i!=j for s in (1,-1)]
-    for code in range(1,effort+1):
-        images, back = list(variables), list(variables)
-        word = []
-        while code:
-            code, index = divmod(code-1, len(shears))
-            i,j,s = shears[index]
-            word.append((i,j,s))
-            images[i] += s*images[j]
-        # The inverse of a product applies the opposite shears in reverse order.
-        for i,j,s in reversed(word):
-            back[i] -= s*back[j]
-        yield tuple(images), tuple(back)
+    api = chart_expressions(variables)
+    for index in range(1, n+effort+1):
+        pairs = _component_operation("projection", width=n, index=integer_text(index))
+        yield tuple(tuple(api.Add(*(integer_from_decimal(c)*variables[j] for j,c in row))
+                          for row in matrix) for matrix in pairs)
 
 
 def _projections(variables, effort):

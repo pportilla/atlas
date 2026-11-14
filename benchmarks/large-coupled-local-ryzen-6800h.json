@@ -1,0 +1,4242 @@
+{
+  "date_utc": "2026-11-14T09:35:26.891183+00:00",
+  "seconds_per_process": 3.0,
+  "address_space_mib": 768,
+  "repeats": 3,
+  "affinity": [
+    5
+  ],
+  "host": "x86_64",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "benchmark_sha256": "41c558ad65e8a84f4124651f816e516275c72fddf2e1fc255f2c817f64e0dbba",
+  "atlas_sha256": {
+    "atlas": "a2bace539eaf7a8e059fd7e23f666630245137699f558e4510b2c74616925099",
+    "native/build/libgroebner.so": "f93d7bf2038c030592ae9491392720eb1b5f53f74152d6490b2fafd0091d8366",
+    "native/build/local_algebra": "d9bdde8db5ca060031bfec64799ced50df13aa67d87cd1c18554be5aa273dd87",
+    "native/point_geometry.cpp": "47a22a64828a870901d70c2186c33c0dc173783c2e00672f3c14a83abc28b254",
+    "native/local_dimension_graph.cpp": "e6f3a4329352a4f3a829440112206bb1d4f588a9a641cb763c2eaccd26eccd6e",
+    "native/local_io.cpp": "2c2d3d5df4e6caf5a1cca9a1810664493638c01043e95ba298a8d3df83d9800b",
+    "native/local_power_coordinates.cpp": "58bad6ba33f929fc95b8c9bf4fd233e7889f69dd9a71cf5660cc85464c86c296",
+    "engine/local_dimension.py": "3194ce1e3ac4575d82b0f66e106571632760594913598c57328982224123007d",
+    "native/local_cli.cpp": "ee7f4a9b322010caecb3c0b1868fd69135ea30e3e94907b34c91f2c03de74051"
+  },
+  "baseline_sha256": {
+    "atlas": "0b82a27011bdfc58f46e9b7cf5a3af2596daeb454a41acf64cf851ee53c55ae0",
+    "native/build/libgroebner.so": "fe90c78e712393dced2a5f95fc2b1720172fae3564ba20c8318678c35490be50",
+    "native/build/local_algebra": "d3e51527513e059cea79ae34a5798c42ebc48be1980ff4de48affade09cace07",
+    "native/point_geometry.cpp": "02199c4ae26d90010418fb836ce0c72f222e6eb6ca2308ef85d5346c5538419c",
+    "engine/local_dimension.py": "fe8a8a3dc60dfe692d2426c81ee3a1fdaeac4bd37c46c101b2c13baf3b87e48c",
+    "native/local_cli.cpp": "d928cb659824c894da82992b56101eb7ad44573ab21751ea21d12c0112e4f6ce"
+  },
+  "command": [
+    "python3",
+    "benchmarks/large_coupled_local.py",
+    "--atlas-root",
+    "/tmp/atlas-local-dimension-cpu-blbdw148",
+    "--baseline-root",
+    "/tmp/atlas-local-dimension-cpu-yz8r4uu6",
+    "--cpu",
+    "5",
+    "--seconds",
+    "3",
+    "--memory-mib",
+    "768",
+    "--repeats",
+    "3",
+    "--output",
+    "/tmp/large-coupled-local-substitution-ryzen-6800h.json"
+  ],
+  "scope": "Fresh process wall time including startup, input construction and solution. Chart is a separately supplied mathematical oracle, excluded from original-input comparisons. Only first failure sampled; no successful times inferred from failures.",
+  "cases": [
+    {
+      "name": "axis-union-7",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^7-1)*(y^7-1)",
+        "(x^7-1)*(z)",
+        "(y^7-1)*(z)"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^7-1",
+        "y^7-1",
+        "z"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "49",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "axis-union-1001",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^1001-1)*(y^1001-1)",
+        "(x^1001-1)*(z)",
+        "(y^1001-1)*(z)"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^1001-1",
+        "y^1001-1",
+        "z"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1002001",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "parameter-squares-17",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "((x^17-1)+(y))^2",
+        "((x^17-1)+(z))^2",
+        "((y)+(z))^2"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^17-1",
+        "y",
+        "z"
+      ],
+      "chart_ideal": [
+        "(a+b)^2",
+        "(a+c)^2",
+        "(b+c)^2"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "17",
+      "dimension": 0,
+      "embedding": 3
+    },
+    {
+      "name": "parameter-squares-1000001",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "((x^1000001-1)+(y))^2",
+        "((x^1000001-1)+(z))^2",
+        "((y)+(z))^2"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^1000001-1",
+        "y",
+        "z"
+      ],
+      "chart_ideal": [
+        "(a+b)^2",
+        "(a+c)^2",
+        "(b+c)^2"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1000001",
+      "dimension": 0,
+      "embedding": 3
+    },
+    {
+      "name": "parameter-squares-18446744073709551623",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "((x^18446744073709551623-1)+(y))^2",
+        "((x^18446744073709551623-1)+(z))^2",
+        "((y)+(z))^2"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^18446744073709551623-1",
+        "y",
+        "z"
+      ],
+      "chart_ideal": [
+        "(a+b)^2",
+        "(a+c)^2",
+        "(b+c)^2"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "18446744073709551623",
+      "dimension": 0,
+      "embedding": 3
+    },
+    {
+      "name": "graph-cancellation",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "x-1",
+        "y^2+z^3",
+        "y*z+(x^1000001-1)*z^2"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x-1",
+        "y",
+        "z"
+      ],
+      "chart_ideal": [
+        "a",
+        "b^2+c^3",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1",
+      "dimension": 0,
+      "embedding": 2
+    },
+    {
+      "name": "graph-cancellation-curve",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "ideal": [
+        "x-1",
+        "y^2+z^3",
+        "y*z+z^2*((x^1001-1)*w^1001+(x-1)*(w+1))"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0",
+        "1"
+      ],
+      "chart": [
+        "x-1",
+        "y",
+        "z",
+        "w-1"
+      ],
+      "chart_ideal": [
+        "a",
+        "b^2+c^3",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "independent-higher-jets",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^1001*y^1001+x+y-3)^2",
+        "(x^1001*y^1001+x+y-3)^2+(x-y)^3",
+        "(x^1001*y^1001+x+y-3)^2+(x-y)^3+(z)^4"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^1001*y^1001+x+y-3",
+        "x-y",
+        "z"
+      ],
+      "chart_ideal": [
+        "a^2",
+        "a^2+b^3",
+        "a^2+b^3+c^4"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "-2004",
+      "dimension": 0,
+      "embedding": 3
+    },
+    {
+      "name": "nonreduced-line",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^1001*y^1001+x+y-3)^2",
+        "(x^1001*y^1001+x+y-3)*(x-y)",
+        "(x-y)^2"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^1001*y^1001+x+y-3",
+        "x-y",
+        "z"
+      ],
+      "chart_ideal": [
+        "a^2",
+        "a*b",
+        "b^2"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "-2004",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "oblique-axis-union-7",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^7*y^7+x+y-3+z)*(x-y+z)",
+        "(x^7*y^7+x+y-3+z)*(z+x-1)",
+        "(x-y+z)*(z+x-1)"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^7*y^7+x+y-3+z",
+        "x-y+z",
+        "z+x-1"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "-7",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "oblique-axis-union-1001",
+      "order": "grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "ideal": [
+        "(x^1001*y^1001+x+y-3+z)*(x-y+z)",
+        "(x^1001*y^1001+x+y-3+z)*(z+x-1)",
+        "(x-y+z)*(z+x-1)"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "chart": [
+        "x^1001*y^1001+x+y-3+z",
+        "x-y+z",
+        "z+x-1"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "b*c"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "-1001",
+      "dimension": 1,
+      "embedding": 3
+    },
+    {
+      "name": "mixed-crossing",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "ideal": [
+        "(x^1001+x-2)*(y^1001+y-2)",
+        "(x^1001+x-2)*(z)",
+        "(x^1001+x-2)*(w)"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^1001+x-2",
+        "y^1001+y-2",
+        "z",
+        "w"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "a*d"
+      ],
+      "chart_point": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1004004",
+      "dimension": 3,
+      "embedding": 4
+    },
+    {
+      "name": "mixed-line",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "ideal": [
+        "(x^1001+x-2)*(y^1001+y-2)",
+        "(x^1001+x-2)*(z)",
+        "(x^1001+x-2)*(w)"
+      ],
+      "point": [
+        "-1",
+        "1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^1001+x-2",
+        "y^1001+y-2",
+        "z",
+        "w"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "a*d"
+      ],
+      "chart_point": [
+        "-4",
+        "0",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1004004",
+      "dimension": 1,
+      "embedding": 1
+    },
+    {
+      "name": "mixed-hyperplane",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "ideal": [
+        "(x^1001+x-2)*(y^1001+y-2)",
+        "(x^1001+x-2)*(z)",
+        "(x^1001+x-2)*(w)"
+      ],
+      "point": [
+        "1",
+        "-1",
+        "1/2",
+        "0"
+      ],
+      "chart": [
+        "x^1001+x-2",
+        "y^1001+y-2",
+        "z",
+        "w"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "a*d"
+      ],
+      "chart_point": [
+        "0",
+        "-4",
+        "1/2",
+        "0"
+      ],
+      "jacobian_determinant": "1004004",
+      "dimension": 3,
+      "embedding": 3
+    },
+    {
+      "name": "mixed-outside",
+      "order": "lex",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "ideal": [
+        "(x^1001+x-2)*(y^1001+y-2)",
+        "(x^1001+x-2)*(z)",
+        "(x^1001+x-2)*(w)"
+      ],
+      "point": [
+        "-1",
+        "-1",
+        "0",
+        "0"
+      ],
+      "chart": [
+        "x^1001+x-2",
+        "y^1001+y-2",
+        "z",
+        "w"
+      ],
+      "chart_ideal": [
+        "a*b",
+        "a*c",
+        "a*d"
+      ],
+      "chart_point": [
+        "-4",
+        "-4",
+        "0",
+        "0"
+      ],
+      "jacobian_determinant": "1004004",
+      "dimension": -1,
+      "embedding": -1
+    }
+  ],
+  "results": [
+    {
+      "case": "axis-union-7",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.899397005327046,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.2629649948794395,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.971113005420193,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 6.971113005420193
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.495943012647331,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.103061023168266,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 5.314709997037426,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 5.495943012647331
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.318158983252943,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.2505610005464405,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.4176969937980175,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 7.318158983252943
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 21.52284001931548,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 21.456494985613972,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 20.368176978081465,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 21.456494985613972
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.658754028147087,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.821241004625335,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.972116000019014,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 8.658754028147087
+        }
+      }
+    },
+    {
+      "case": "axis-union-7",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.8005000066477805,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.627042999956757,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.073196018813178,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.627042999956757
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.030143005773425,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.476889015175402,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.996580981649458,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.476889015175402
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.347445003688335,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.438447006279603,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.042728994041681,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.438447006279603
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 20.70474298670888,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 20.931873004883528,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 21.207273995969445,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 20.931873004883528
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.54293501470238,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.130196005571634,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.856547017581761,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.54293501470238
+        }
+      }
+    },
+    {
+      "case": "axis-union-1001",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.7824450195766985,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.558582012075931,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.497325986856595,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 6.497325986856595
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 373.5802659939509,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 372.4462410027627,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 374.95510501321405,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 373.5802659939509
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.430492016486824,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.226868027122691,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.880894019966945,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 8.430492016486824
+        }
+      }
+    },
+    {
+      "case": "axis-union-1001",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.68546199449338,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.3278980164323,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.276007974520326,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.68546199449338
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 616.9630419753958,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 611.7249369854107,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 610.044529021252,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 611.7249369854107
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.258738002041355,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.156332983868197,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.656378991669044,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.656378991669044
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-17",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.718475022353232,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.720821013208479,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.77930997335352,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.77930997335352
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.064191999845207,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.076634993311018,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.002363997045904,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 10.064191999845207
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.508841001661494,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.689563991036266,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.588382003130391,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.588382003130391
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.933835011906922,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.937822993379086,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.287363005569205,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.933835011906922
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-17",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.559574016137049,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.567410997580737,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.751067005097866,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.751067005097866
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.630582004319876,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.509874991839752,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 11.164914001710713,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 10.509874991839752
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.024674985790625,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.683171985670924,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.290137997595593,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.290137997595593
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.611104014562443,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.303484014002606,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.93385399831459,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.93385399831459
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-1000001",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.002761994954199,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.7838279937859625,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.40064402250573,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.7838279937859625
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "allocation_failure",
+              "diagnostic": "Singular error: no more memory\nSystem 755119k:755119k Appl 754994k/124k Malloc 753071k/0k Valloc 2048k/124k Pages 502/10 Regions 1:1 Internal: 120\n\nhalt 14"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 103.53561001829803,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 104.45956801413558,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 104.7105919860769,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 104.45956801413558
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.099678019993007,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.251134015154094,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.48614698043093,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.48614698043093
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-1000001",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.628366001881659,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.257032993948087,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.7105600028298795,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.257032993948087
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "allocation_failure",
+              "diagnostic": "Singular error: no more memory\nSystem 755119k:755119k Appl 754995k/123k Malloc 753071k/0k Valloc 2048k/123k Pages 502/10 Regions 1:1 Internal: 120\n\nhalt 14"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 105.34910002024844,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 102.95383000629954,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 103.34147300454788,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 103.34147300454788
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.116909990552813,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.013156017521396,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.901794004486874,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.116909990552813
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-18446744073709551623",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.905768997967243,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.45223302510567,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.104444986907765,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.104444986907765
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "unsupported_exponent",
+              "diagnostic": "? `poly` ^ `bigint` failed"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "unsupported_exponent",
+              "diagnostic": "? `poly` ^ `bigint` failed"
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.739297995110974,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.473514975979924,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.524972003418952,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.524972003418952
+        }
+      }
+    },
+    {
+      "case": "parameter-squares-18446744073709551623",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.412447012029588,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.3414329963270575,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.009236014913768,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.412447012029588
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "unsupported_exponent",
+              "diagnostic": "? `poly` ^ `bigint` failed"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "unsupported_exponent",
+              "diagnostic": "? `poly` ^ `bigint` failed"
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.401850013295189,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.664844994200394,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.747192001668736,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.747192001668736
+        }
+      }
+    },
+    {
+      "case": "graph-cancellation",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.62391701573506,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.900729989865795,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.8733580119442195,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.900729989865795
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "allocation_failure",
+              "diagnostic": "Singular error: no more memory\nSystem 755123k:755154k Appl 753112k/2010k Malloc 751027k/0k Valloc 4096k/2010k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 147.08292900468223,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 136.47058099741116,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 83.82140001049265,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 136.47058099741116
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.518037997419015,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.414912008447573,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.160502988379449,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.518037997419015
+        }
+      }
+    },
+    {
+      "case": "graph-cancellation",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.836087006377056,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.864010007120669,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.345190009800717,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.864010007120669
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "allocation_failure",
+              "diagnostic": "Singular error: no more memory\nSystem 755123k:755154k Appl 753113k/2009k Malloc 751027k/0k Valloc 4096k/2009k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 80.26724797673523,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 79.48161300737411,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 80.06638899678364,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 80.06638899678364
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.533237007213756,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.966375986346975,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.50552401971072,
+              "result": [
+                0,
+                2,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.533237007213756
+        }
+      }
+    },
+    {
+      "case": "graph-cancellation-curve",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.911931006470695,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.978479007259011,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.706716973800212,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 9.978479007259011
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 11.511028016684577,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.985583998262882,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.96430400502868,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 10.985583998262882
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 13.878714991733432,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 11.363249010173604,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.843826021300629,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 11.363249010173604
+        }
+      }
+    },
+    {
+      "case": "graph-cancellation-curve",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.954214008757845,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 17.155322013422847,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.861705982591957,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 16.861705982591957
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 22.12758400128223,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 21.21428700047545,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.863622990669683,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 21.21428700047545
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 17.74904498597607,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.66735898470506,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.260970995062962,
+              "result": [
+                1,
+                3,
+                1,
+                0
+              ]
+            }
+          ],
+          "median_ms": 16.66735898470506
+        }
+      }
+    },
+    {
+      "case": "independent-higher-jets",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 15.20669599995017,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 12.985266017494723,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 13.882963015930727,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 13.882963015930727
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 18.827243009582162,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.354685990838334,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.762615988729522,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 14.762615988729522
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 14.838410017546266,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.22017301269807,
+              "result": [
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 15.973707020748407,
+              "result": [
+                0
+              ]
+            }
+          ],
+          "median_ms": 15.973707020748407
+        }
+      }
+    },
+    {
+      "case": "independent-higher-jets",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 16.9527179969009,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.81759298662655,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.992093005683273,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 16.9527179969009
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 20.4869220033288,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 17.485355987446383,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.03337298426777,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 19.03337298426777
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 17.980240983888507,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 18.17709399620071,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 18.946608004625887,
+              "result": [
+                0,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 18.17709399620071
+        }
+      }
+    },
+    {
+      "case": "nonreduced-line",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 15.800309018231928,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.21868001529947,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.10604699817486,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 16.10604699817486
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 34.915686992462724,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 35.104543989291415,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 35.30433200648986,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 35.104543989291415
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 19.238059991039336,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 17.838213010691106,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.94440599810332,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 19.238059991039336
+        }
+      }
+    },
+    {
+      "case": "nonreduced-line",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 17.2231100150384,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.513536007143557,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 17.4260729982052,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 17.2231100150384
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 34.055650990922004,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 31.362999026896432,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 29.992286988999695,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 31.362999026896432
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 17.655878007644787,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 18.438197002978995,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 22.011744993506,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 18.438197002978995
+        }
+      }
+    },
+    {
+      "case": "oblique-axis-union-7",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 18.959303008159623,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.01245400402695,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.079530999064445,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 10.079530999064445
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 20.066005003172904,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.494665999431163,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.932042012223974,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 10.494665999431163
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 21.500188013305888,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.896185995079577,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.495416994672269,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 10.896185995079577
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.239634022582322,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.870324982330203,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.830219991272315,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 9.870324982330203
+        }
+      }
+    },
+    {
+      "case": "oblique-axis-union-7",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.787688992219046,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.612316993298009,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.835039003519341,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.787688992219046
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.208333987975493,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.862420003628358,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.382514010416344,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 10.208333987975493
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.605265008052811,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.565599979599938,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.83055100752972,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 10.605265008052811
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.171093977987766,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.998026973335072,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.737773973029107,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.998026973335072
+        }
+      }
+    },
+    {
+      "case": "oblique-axis-union-1001",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.678031008457765,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.899667001562193,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.913213990628719,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 6.913213990628719
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.348787989234552,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.52970899338834,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.006379997823387,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 8.006379997823387
+        }
+      }
+    },
+    {
+      "case": "oblique-axis-union-1001",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.71841501025483,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.84262000140734,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.682726991130039,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 6.71841501025483
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.040845015784726,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.296950021758676,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.911383007420227,
+              "result": [
+                1,
+                3,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 8.296950021758676
+        }
+      }
+    },
+    {
+      "case": "mixed-crossing",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.463162018917501,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.276790973264724,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.568643999751657,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 7.276790973264724
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 23.494288994697854,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 22.864516999106854,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 25.21573400008492,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 23.494288994697854
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.142728998791426,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.017744003562257,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.703810996143147,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 9.703810996143147
+        }
+      }
+    },
+    {
+      "case": "mixed-crossing",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.64768201042898,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.650505994912237,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.560457015642896,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 7.560457015642896
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 24.945664015831426,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 25.219560979167,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 22.51265197992325,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 24.945664015831426
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.03870299225673,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.818826008588076,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 9.382823016494513,
+              "result": [
+                3,
+                4,
+                0,
+                0
+              ]
+            }
+          ],
+          "median_ms": 9.03870299225673
+        }
+      }
+    },
+    {
+      "case": "mixed-line",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.955051019554958,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.308819982223213,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.584662012755871,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 6.308819982223213
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.28138701338321,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.340681022265926,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 5.9071609866805375,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 5.9071609866805375
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 11.636795999947935,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.788708986481652,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.369957999093458,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 8.369957999093458
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.803458011243492,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.231847023125738,
+              "result": [
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.161092991940677,
+              "result": [
+                1
+              ]
+            }
+          ],
+          "median_ms": 8.231847023125738
+        }
+      }
+    },
+    {
+      "case": "mixed-line",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.8810419868677855,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 5.807061999803409,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.199452996952459,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            }
+          ],
+          "median_ms": 5.8810419868677855
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.44557799003087,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 5.497136007761583,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.022359011694789,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            }
+          ],
+          "median_ms": 5.497136007761583
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.259646994294599,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 8.833124011289328,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.605511986184865,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            }
+          ],
+          "median_ms": 7.605511986184865
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.0425070114433765,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.966788016958162,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.017109979642555,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            }
+          ],
+          "median_ms": 7.017109979642555
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 6.585712981177494,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.898415991803631,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 10.21797300199978,
+              "result": [
+                1,
+                1,
+                3,
+                1
+              ]
+            }
+          ],
+          "median_ms": 7.898415991803631
+        }
+      }
+    },
+    {
+      "case": "mixed-hyperplane",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 5.992852995404974,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 6.148226006189361,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 5.542560975300148,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 5.992852995404974
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 37.43497098912485,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 32.10385900456458,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 32.22927698516287,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 32.22927698516287
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 8.865365001838654,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.542021980043501,
+              "result": [
+                3
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 7.275177980773151,
+              "result": [
+                3
+              ]
+            }
+          ],
+          "median_ms": 7.542021980043501
+        }
+      }
+    },
+    {
+      "case": "mixed-hyperplane",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "translation_cap",
+              "diagnostic": "Large coordinate translation."
+            }
+          ]
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 7.062325981678441,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 11.788371979491785,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 12.255023990292102,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            }
+          ],
+          "median_ms": 11.788371979491785
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "timeout",
+              "lower_bound_s": 3.0
+            }
+          ]
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 30.92933798325248,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 40.81185697577894,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 30.68706000340171,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            }
+          ],
+          "median_ms": 30.92933798325248
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 13.221202010754496,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 13.583467021817341,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.628638023277745,
+              "result": [
+                3,
+                3,
+                1,
+                1
+              ]
+            }
+          ],
+          "median_ms": 13.583467021817341
+        }
+      }
+    },
+    {
+      "case": "mixed-outside",
+      "operation": "local-dimension",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 10.192635003477335,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 15.173723979387432,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.138636994175613,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 14.138636994175613
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 9.127391007496044,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 12.25227999384515,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 12.137473007896915,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 12.137473007896915
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 14.274644025135785,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.503317011985928,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 16.842379001900554,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 14.503317011985928
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 18.02409501397051,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 17.72615101072006,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 21.6795269807335,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 18.02409501397051
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 13.84180597960949,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 18.883359007304534,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 20.750480005517602,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 18.883359007304534
+        }
+      }
+    },
+    {
+      "case": "mixed-outside",
+      "operation": "local-smoothness",
+      "methods": {
+        "atlas-baseline": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 17.454366985475644,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 12.391752999974415,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.962515007937327,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 14.962515007937327
+        },
+        "atlas": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 12.398586026392877,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.11949101020582,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 15.774410014273599,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 14.11949101020582
+        },
+        "translated": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 16.333527979440987,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 21.56596301938407,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 18.183857027906924,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 18.183857027906924
+        },
+        "components": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 13.390140986302868,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 14.64429299812764,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 15.92233998235315,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 14.64429299812764
+        },
+        "chart": {
+          "samples": [
+            {
+              "status": "ok",
+              "milliseconds": 16.37705002212897,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.827634998364374,
+              "result": [
+                -1
+              ]
+            },
+            {
+              "status": "ok",
+              "milliseconds": 19.470539991743863,
+              "result": [
+                -1
+              ]
+            }
+          ],
+          "median_ms": 19.470539991743863
+        }
+      }
+    }
+  ]
+}

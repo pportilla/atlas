@@ -10,6 +10,25 @@ from tests.test_cli_session import ROOT, run_prompt, run_script
 
 
 class LocalStandardBasisSessionTests(unittest.TestCase):
+    def test_saved_wide_basis_keeps_a_large_rational_point_through_replay(self):
+        q = "1" + "0"*4400 + "7/3"
+        n = 2**64+7
+        source = f'''
+            x,y,z = coordinates("x","y","z",coeffs=QQ)
+            I = ideal(polynomial("x^{n}*z-(y-({q}))^2", variables=[x,y,z]))
+            B = local_standard_basis(I, point=["1","{q}","0"], compute="cpu")
+            R = local_normal_form(z,B,compute="cpu")
+            print(R.json)
+        '''
+        saved = run_script(source)
+        self.assertEqual(saved.returncode, 0, saved.stderr)
+        record = json.loads(saved.stdout)
+        result = record["result"]
+        self.assertEqual((result["point"], result["unit"], result["reduction"]), (["1",q,"0"], f"x^{n}", "standard"))
+        replay = run_script(record["replay"]["script"])
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(json.loads(replay.stdout)["result"], result)
+
     def test_local_membership_and_unit_certificate_at_prompt_and_in_script(self):
         source = dedent("""
             x, y = coordinates("x", "y", coeffs=QQ)

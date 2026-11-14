@@ -5,10 +5,12 @@ from .native_library import affine_request
 from .polynomial import rational_text
 
 
-def local_request(operation, variables, order, generators, *, point=None):
+def local_request(operation, variables, order, generators, *, point=None, known_basis=None):
     header = [operation, " ".join(v.name for v in variables), order]
     if point is not None:
         header.append(" ".join(map(rational_text, point)))
+    if known_basis is not None:
+        header.append("1" if known_basis else "0")
     return affine_request([*header, *(np.row(variables, f) for f in generators)])
 
 

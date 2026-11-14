@@ -74,6 +74,86 @@ def eval_poly(source, symbols, dimension):
     return visit(expression(source))
 
 
+class NewtonCoordinateChoices(unittest.TestCase):
+    def test_bounded_first_trial_preserves_earlier_boundary_and_parallel_fallback(self):
+        from unittest.mock import patch
+        from engine import native_library, newton_trials
+        from engine.resolve import resolve
+
+        if native_library._MODE != "native":
+            self.skipTest("The bounded first trial uses the native production solver.")
+        names = list("xyzt")
+        source = "x^2-y^2*(z+t)"
+        request = dict(polynomial=source, variables=names, mode="embedded", compute="cpu")
+        with patch("engine.exhaustive_resolution.search", side_effect=AssertionError):
+            fast = resolve(request)
+        self.assertEqual(fast["engine"], "verified-monomial-modification")
+        with patch.object(newton_trials, "bounded_first_trial", side_effect=OSError):
+            fallback = resolve(request)
+        for record in (fast, fallback):
+            record.pop("elapsed_ms")
+        self.assertEqual(fast, fallback)
+
+        with patch("engine.newton_backend._boundary_centres", return_value=[]), \
+                patch.object(newton_trials, "_try", side_effect=AssertionError):
+            self.assertIsNone(newton_trials.bounded_first_trial(parse(source, names), names))
+        first_fails = "x*y^2*z^2*t^2+x^2*y*z-x^2*y*t"
+        with patch.object(newton_trials, "_try", wraps=newton_trials._try) as tried:
+            self.assertIsNone(newton_trials.bounded_first_trial(parse(first_fails, names), names))
+            tried.assert_called_once()
+
+    def test_small_monomial_construction_and_external_replay(self):
+        import copy
+        from unittest.mock import patch
+        from engine import native_library
+        from engine.monomial_construction import construct
+        from engine.resolve import resolve
+        from engine.strata import InvalidChart, rational_chart_outputs
+
+        if native_library._MODE != "native" or not hasattr(native_library._library(), "atlas_monomial_resolution"):
+            self.skipTest("The native monomial construction is not available.")
+        names = list("xyzt")
+        for policy, want in (("quick", False), ("exhaustive", True)):
+            request = dict(polynomial="2*x^2-y^2*(3*z+5*t)", variables=names, mode="embedded",
+                           compute="cpu", search=policy, monodromy=want)
+            with patch("engine.monomial_construction.construct", wraps=construct) as build, \
+                    patch("engine.monomial_atlas._verify_charts", side_effect=AssertionError):
+                result = resolve(request)
+            self.assertEqual(build.call_count, 1)
+            # An undecided orbit integral still permits the regular verifier
+            # to certify this same candidate and materialize the requested zetas.
+            with patch("engine.monomial_construction.construct", return_value=None):
+                fallback = resolve(request)
+            for record in (result, fallback):
+                del record["elapsed_ms"]
+            self.assertEqual(result, fallback)
+        polynomial = parse(request["polynomial"], names)
+        valid = rational_chart_outputs(result, polynomial, complex=False)
+        self.assertEqual(valid[1]["strata"], result["topological_zeta"]["strata"])
+        tampered = copy.deepcopy(result)
+        tampered["atlas"][0]["components"][0]["multiplicity"] += 1
+        with self.assertRaises(InvalidChart):
+            rational_chart_outputs(tampered, polynomial)
+
+    def test_each_trial_uses_its_own_axial_statistics_once(self):
+        from unittest.mock import patch
+        from engine import newton_backend
+
+        source = parse("x^5+z^3+t^2-t*y", VARS)
+        with patch.object(newton_backend, "_newton", wraps=newton_backend._newton) as request:
+            choices = list(newton_backend.coordinate_choices(source, len(VARS)))
+
+        # The z shear gives a smaller y intercept than the x shear. In the t
+        # shear the two prospective y^2 terms cancel, so that trial is rejected.
+        self.assertEqual([changes for _, _, changes in choices], [[(2, 1)], [(0, 1)]])
+        self.assertEqual([poly for poly, _, _ in choices], [
+            parse("x^5+(z+y)^3+t^2-t*y", VARS),
+            parse("(x+y)^5+z^3+t^2-t*y", VARS),
+        ])
+        axial_requests = [call for call in request.call_args_list if call.args[0] == "axial"]
+        self.assertEqual(len(axial_requests), 4)  # Input and each of three shears.
+
+
 class GeneralNewton(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

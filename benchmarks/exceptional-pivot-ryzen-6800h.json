@@ -1,0 +1,56 @@
+{
+  "machine": "x86_64",
+  "field": "QQ",
+  "timing": "microseconds, warm processes, exact inputs already built, no correctness-check time",
+  "Singular_residual_order": "dp(w,d,t) then dp(a,b,e)",
+  "samples": {
+    "principal": {
+      "Atlas_us": [
+        1007.475,
+        68.099,
+        42.401,
+        35.156,
+        31.92,
+        30.869,
+        30.849
+      ],
+      "Singular_us": [
+        458,
+        218,
+        202,
+        157,
+        152,
+        152,
+        149
+      ],
+      "median_us": {
+        "Atlas": 35.156,
+        "Singular": 157
+      }
+    },
+    "residual_dimension": {
+      "Atlas_us": [
+        71.475,
+        22.062,
+        16.491,
+        14.577,
+        14.577,
+        14.096,
+        13.435
+      ],
+      "Singular_us": [
+        1407668,
+        1567586,
+        1377133,
+        1355268,
+        1283787,
+        1259071,
+        1187444
+      ],
+      "median_us": {
+        "Atlas": 14.577,
+        "Singular": 1355268
+      }
+    }
+  }
+}

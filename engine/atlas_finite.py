@@ -1,20 +1,8 @@
 """Identify strata with finite geometric parameters on the resolution atlas.
 
-Suppose a ratio of two original coordinates has a regular representative
-t on every chart of a divisor D. The denominator is a nonzerodivisor in
-each chart, so these representatives agree on overlaps by density. A lex
-basis of a section can exhibit its coordinate algebra as Q[t,u_1,...,u_r]/
-(p(t)), with the other coordinates monic linear graphs. For squarefree p
-the section is one affine space per root, over the algebraic closure.
-
-We require this presentation on every nonempty chart of every intersection
-involving D, and ideal containment proves that the entire section maps to
-the origin. The rational prime obtained by imposing one irreducible factor
-of p contains a chart's ownership ideal precisely when each geometric
-conjugate is generically owned there, unless a removed centre contains it.
-The owned pieces partition the fibre, so exactly one owner for each root
-proves one global component per root. Its faces carrying D have that same
-value of t. Every other incident face must already be uniquely determined.
+A native computation identifies finite tuples of regular coordinate ratios
+on the supporting charts, proves the local affine-space presentations and
+checks generic ownership on every geometric sheet.
 
 For intrinsic strata, a finite coordinate eliminant or a univariate
 specialization can supply a candidate splitting field. Lines with collinear
@@ -31,144 +19,84 @@ from dataclasses import replace
 from fractions import Fraction
 from functools import lru_cache
 import re
-from itertools import combinations, permutations
 
 from .chart_expressions import chart_expressions
 
-from .affine_kernel import _sparse_expression, rational_factor_rows, sparse_terms
-from .blowup_ideal import ideal_subset, saturate
+from .affine_kernel import rational_factor_rows, sparse_terms
 from .groebner import groebner
 from .local_blowups import _is_strict, _own_failures
 
 
-def _finite_base(chart, ideal, t, dimension):
-    variables = tuple(v for v in chart.variables if v != t) + (t,)
-    basis = groebner(ideal, variables, order="lex")
-    if tuple(basis.exprs) == (1,):
-        return chart_expressions(chart.variables).S.One
-    polynomial = None
-    pivots = set()
-    for row in basis.exprs:
-        head = sparse_terms(variables, row)[0][0]
-        if not any(head[:-1]):
-            if polynomial is not None or head[-1] < 2:
-                return None
-            polynomial = row
-        else:
-            # Lexicographic order makes this a monic graph in its head
-            # coordinate with a polynomial in later coordinates as tail.
-            if sum(head) != 1:
-                return None
-            pivots.add(head.index(1))
-    return polynomial if len(variables)-1-len(pivots) == dimension else None
-
-
-def _parameter(chart, numerator, denominator, boundary, dimension):
-    mapping = dict(chart.coordinates)
-    if numerator not in mapping or denominator not in mapping:
+def _finite_graph(variables, rows, dimension, *, require_eliminant):
+    from .geometric_components import _component_operation, _encoded_support
+    if not rows or dimension < 0:
         return None
-    a, b = mapping[numerator], mapping[denominator]
-    for v in chart.variables:
-        if not ideal_subset(chart.variables, (v*b-a,), chart.ambient):
-            continue
-        if not ideal_subset(chart.variables, saturate(chart.variables, chart.ambient, b), chart.ambient):
-            return None
-        p = _finite_base(chart, (*chart.ambient, *boundary), v, dimension-1)
-        if p is not None and p != 1:
-            return v, p
-    return None
-
-
-def _owners(chart, boundary, parameter, polynomial, factors, keys, dimension):
-    """Count generic owners for each rational factor. Return None unless
-    every section lies over the origin and has the expected presentation."""
-    owners = {}
-    for key in keys:
-        if not key <= boundary.keys():
-            continue
-        ideal = (*chart.ambient, *(g for label in sorted(key) for g in boundary[label]))
-        p = _finite_base(chart, ideal, parameter, dimension-len(key))
-        if p == 1:
-            continue
-        if p != polynomial or not ideal_subset(chart.variables, chart.fibre, ideal):
-            return None
-        owners[key] = []
-        for f in factors:
-            prime = (*ideal, f)
-            present = not any(ideal_subset(chart.variables, hole, prime) for hole in chart.removed)
-            owners[key].append(present and ideal_subset(chart.variables, chart.region, prime))
-    return owners
-
-
-def _complex(counts, label, degree, dimension):
-    names, vertices, cells = {}, [], []
-    for key in sorted(counts, key=lambda ids: (len(ids), sorted(ids))):
-        labels = sorted(key)
-        for i in range(degree if label in key else 1):
-            if len(key) == 1:
-                name = labels[0] + (f".{i+1}" if label in key else "")
-                vertices.append({"id": name, "dimension": dimension-1})
-            else:
-                def face(ids):
-                    ids = frozenset(ids)
-                    return names[ids, i if label in ids else 0]
-                name = "C" + "-".join(labels) + f".{i+1}"
-                cells.append({"id": name, "dimension": len(key)-1, "vertices": [face((v,)) for v in labels],
-                              "faces": [face(f) for f in combinations(labels, len(key)-1)]})
-            names[key, i] = name
-    return {"status": "complete", "vertices": vertices, "cells": cells,
-            "convention": "Ambient exceptional divisor in the germ over the origin over Qbar."}
+    heads = (sparse_terms(variables, f)[0][0] for f in rows)
+    return _component_operation("finite_graph", support=_encoded_support(heads),
+                                dimension=dimension, require_eliminant=require_eliminant)
 
 
 def finite_complex(charts, dimension, counts):
-    """A single split divisor with a regular coordinate ratio on all its opens."""
-    unknown = [next(iter(key)) for key, value in counts.items() if len(key) == 1 and value is None]
-    if len(unknown) != 1 or any(chart.coefficient_field for chart in charts):
-        return None
-    label, = unknown
-    if any(n != 1 for key, n in counts.items() if label not in key):
-        return None
-    if any(key-{v} not in counts for key in counts if len(key) > 1 for v in key):
-        return None
-    keys = [key for key in counts if label in key]
-    supporting = [(c, {k: ideal for k, _, _, ideal in c.components if not _is_strict(k)})
-                  for c in charts if any(k == label for k, _, _, _ in c.components)]
-    if not supporting or any(
-        len(c.coordinates) != dimension or len(dict(c.coordinates)) != dimension or
-        set(c.fibre) != set(dict(c.coordinates).values()) for c, _ in supporting
-    ):
-        return None
-    for numerator, denominator in permutations(dict(supporting[0][0].coordinates), 2):
-        first_t = None
-        for chart, boundary in supporting:
-            found = _parameter(chart, numerator, denominator, boundary[label], dimension)
-            if found is None:
-                break
-            t, p = found
-            if first_t is None:
-                first_t, first_p = t, p
-                degree = sparse_terms((t,), p)[0][0][0]
-                parts = rational_factor_rows((t,), p)[1]
-                if any(e != 1 for _, e, _ in parts) or any(counts[k] not in (None, degree) for k in keys):
-                    break
-                roots = [_sparse_expression((t,), row) for row, _, _ in parts]
-                owners = {key: [0]*len(roots) for key in keys}
-            swap = {first_t: t}
-            if p != first_p.xreplace(swap):
-                break
-            local = _owners(chart, boundary, t, p, [f.xreplace(swap) for f in roots], keys, dimension)
-            if local is None:
-                break
-            for key, row in local.items():
-                owners[key] = [n+int(yes) for n, yes in zip(owners[key], row)]
-        else:
-            if all(n == 1 for row in owners.values() for n in row):
-                for chart in charts:
-                    boundary = tuple(row for row in chart.components if not _is_strict(row[0]))
-                    if _own_failures(replace(chart, components=boundary), dimension, {})[0]:
-                        return None
-                return _complex(counts, label, degree, dimension)
-    return None
+    """Identify geometric sheets of exceptional intersections over finite parameter bases."""
+    from .atlas import _record_text
+    from .incidence import _intersections
+    from .kernel_json import kernel_json
+    payload = []
+    for chart in charts:
+        def text(f):
+            return _record_text(f, chart.variables)
+        payload.append({"coordinates": [v.name for v in chart.variables],
+                        "ambient_ideal": [text(f) for f in chart.ambient],
+                        "components": {label: [text(f) for f in ideal] for label, _, _, ideal in chart.components
+                                       if not _is_strict(label)},
+                        "map": {name: text(f) for name, f in chart.coordinates},
+                        "region": [text(f) for f in chart.region], "fibre": [text(f) for f in chart.fibre],
+                        "removed": [[text(f) for f in hole] for hole in chart.removed],
+                        "coefficient_field": chart.coefficient_field[3] if chart.coefficient_field else None})
+    result = kernel_json("atlas_finite_sheets", "complex", charts=payload, counts=_intersections(counts),
+                         dimension=dimension)
+    if result is not None:
+        for chart in charts:
+            boundary = tuple(row for row in chart.components if not _is_strict(row[0]))
+            if _own_failures(replace(chart, components=boundary), dimension, {})[0]:
+                return None
+    return result
+
+
+def geometric_chart_records(record):
+    """Expose the certified local sheet ideals while retaining rational chart equations for replay."""
+    from .polynomial import InputError
+    charts = record["charts"]
+    dual = record.get("dual_complex", {})
+    sections = dual.get("finite_sheet_certificate", {}).get("chart_sections")
+    if sections is None:
+        return charts
+    if len(charts) != len(sections):
+        raise InputError("The finite sheet certificate has a different number of charts.")
+    result = []
+    for chart, entry in zip(charts, sections):
+        if chart["coordinates"] != entry["coordinates"]:
+            raise InputError("The finite sheet chart coordinates differ from the saved resolution.")
+        sheets = entry["divisors"]
+        if not sheets:
+            result.append(chart)
+            continue
+        rational = chart.get("rational_exceptional", chart["exceptional"])
+        rows = []
+        for divisor in rational:
+            label = divisor["id"]
+            if label not in sheets:
+                rows.append(divisor)
+                continue
+            ideal = divisor.get("ideal")
+            if ideal is None:
+                ideal = [divisor["equation"]]
+            for section in sheets[label]:
+                generators = [*ideal, *section["restrictions"]]
+                rows.append({**divisor, "id": section["id"], "ambient_divisor": label,
+                             "ideal": generators, "equation": ", ".join(generators)})
+        result.append({**chart, "exceptional": rows, "rational_exceptional": rational})
+    return result
 
 
 def _integer_polynomial(variable, polynomial):
@@ -265,16 +193,8 @@ def _finite_linear_sections(chart, equations, coords, dimension):
         basis = tuple(groebner(gens, ring, order="lex").exprs)
         if basis == (1,):
             return []
-        pivots = set()
-        for f in basis:
-            head = sparse_terms(ring, f)[0][0]
-            if any(head[:-1]):
-                if sum(head) != 1:
-                    break
-                pivots.add(head.index(1))
-        else:
-            if len(coords)-len(pivots) == dimension:
-                return [tuple(f for f in basis if f.free_symbols != {t})]
+        if _finite_graph(ring, basis, dimension, require_eliminant=False) is not None:
+            return [tuple(f for f in basis if f.free_symbols != {t})]
         for f in basis:
             geometric = f.free_symbols - {t}
             if len(geometric) != 1:

@@ -1,16 +1,17 @@
+import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from engine import exhaustive_resolution as exhaustive
 from engine.polynomial import LimitError, parse
 from engine.resolve import resolve
 
 
 class ExhaustiveFallback(unittest.TestCase):
-    def test_newton_budget_still_reaches_constructive_blowups(self):
+    def test_positive_dimensional_newton_failure_reaches_constructive_blowups(self):
         request = dict(polynomial="(x*y-z*t+u^2)^2 + x^5+2*y^5+3*z^5+4*t^5+5*u^5",
                        variables=list("xyztu"), mode="embedded", search="exhaustive")
-        with patch("engine.newton_backend.resolve_newton", side_effect=LimitError("fan limit")):
-            result = resolve(request)
+        result = resolve(request)
         self.assertEqual(result["status"], "resolved")
         self.assertEqual([step["rule"] for step in result["steps"]], ["repeated tangent"] * 3)
         self.assertEqual(len(result["atlas"]), len(result["charts"]))
@@ -39,3 +40,129 @@ class ExhaustiveFallback(unittest.TestCase):
         exhaustive.assert_not_called()
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["monodromy_zeta"]["status"], "unavailable")
+
+    def test_newton_limit_leaves_fallbacks_eligible(self):
+        payload = dict(terms=[[[2, 0, 0], "1"]], variables=list("xyz"), mode="embedded",
+                       compute="cpu", replay={"compute": "cpu"})
+        with patch("engine.newton_backend.resolve_newton", side_effect=LimitError("fan limit")) as newton:
+            self.assertIsNone(exhaustive._run("newton", payload)["record"])
+        self.assertEqual(newton.call_args.kwargs, {"compute": "cpu", "seconds": 1200, "defer_outputs": True})
+
+    def test_newton_and_fallbacks_complete_independently(self):
+        # Real workers use marker files to synchronize, so a slow CI machine
+        # cannot change which method wins a given case.
+        from subprocess import Popen
+        script = """
+import json, os, sys, time
+from pathlib import Path
+method, winner, root = sys.argv[1:]
+root = Path(root)
+args = json.load(sys.stdin)
+assert args['replay'] == {'compute': 'gpu', 'backend': 'opencl', 'index': 1}
+(root / method).write_text(str(os.getpid()))
+if method == 'newton' and winner == 'fast':
+    pass
+elif method == winner:
+    deadline = time.monotonic() + 5
+    for sibling in ('newton', 'origin', 'certificates'):
+        while not (root / sibling).exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+    if not all((root / s).exists() for s in ('newton', 'origin', 'certificates')):
+        sys.exit(3)
+else:
+    time.sleep(6)
+    sys.exit(4)
+print(json.dumps({'record': {'engine': method, 'compute': args['compute']}, 'replay': {'winner': method}}))
+"""
+        for winner in ("fast", "origin", "newton", "certificates"):
+            with self.subTest(winner=winner), tempfile.TemporaryDirectory() as root:
+                workers = {}
+                def spawn(argv, **kwargs):
+                    method = argv[-2]
+                    self.assertNotIn(method, workers)
+                    workers[method] = Popen([argv[0], "-c", script, method, winner, root], **kwargs)
+                    return workers[method]
+                scope = Mock()
+                scope.settings.return_value = {"compute": "gpu", "backend": "opencl", "index": 1}
+                grace = 2 if winner == "fast" else .02
+                with patch.object(exhaustive.subprocess, "Popen", side_effect=spawn), \
+                     patch.object(exhaustive, "NEWTON_GRACE_SECONDS", grace), \
+                     patch.object(exhaustive, "current_replay_scope", return_value=scope):
+                    result = exhaustive.search({(2, 0, 0): 1}, list("xyz"), "embedded", compute="gpu")
+                expected = "newton" if winner == "fast" else winner
+                self.assertEqual(result, {"engine": expected, "compute": "gpu"})
+                scope.merge.assert_called_once_with({"winner": expected})
+                self.assertEqual(set(workers), {"newton"} if winner == "fast" else {"newton", "origin", "certificates"})
+                self.assertTrue(all(child.poll() is not None for child in workers.values()))
+
+    def test_lane_reaps_native_descendant_on_success_and_outer_cancellation(self):
+        import os
+        import select
+        import subprocess
+        import sys
+
+        # A pipe borrowed by the native grandchild gives observable EOF
+        # when it exits, including on systems where an orphan remains a
+        # zombie until the OS reaps it. A separate pipe signals readiness.
+        lane_script = """
+import json, os, sys, subprocess, threading
+from engine.exhaustive_resolution import _watch_coordinator
+method, guard, live, ready, let_win = sys.argv[1:]
+threading.Thread(target=_watch_coordinator, args=(int(guard),), daemon=True).start()
+json.load(sys.stdin)
+if method == 'newton':
+    fds = (int(live), int(ready))
+    native = subprocess.Popen([sys.executable, '-c',
+        'import os,sys,time; os.write(int(sys.argv[1]), b"r"); time.sleep(15)', ready],
+        pass_fds=fds, stdout=subprocess.DEVNULL)
+    for fd in fds: os.close(fd)
+    native.wait()
+else:
+    if os.read(int(let_win), 1):
+        print(json.dumps({'record': {'engine': method}}))
+"""
+        coordinator_script = """
+from engine import exhaustive_resolution as e
+import os, subprocess, sys
+worker, live, ready, let_win = sys.argv[1:]
+spawn = subprocess.Popen
+def start(argv, **kw):
+    method, guard = argv[-2:]
+    extra = (int(live), int(ready)) if method == 'newton' else (int(let_win),)
+    kw['pass_fds'] += extra
+    process = spawn([sys.executable, '-c', worker, method, guard, live, ready, let_win], **kw)
+    if method == 'newton':
+        os.close(int(live)); os.close(int(ready))
+    return process
+e.subprocess.Popen = start
+e.NEWTON_GRACE_SECONDS = .02
+print(e.search({(2,0,0): 1}, list('xyz'), 'embedded'))
+"""
+        for killed in (False, True):
+            with self.subTest(killed=killed):
+                live, live_w = os.pipe()
+                ready, ready_w = os.pipe()
+                go, go_w = os.pipe()
+                process = subprocess.Popen([sys.executable, "-c", coordinator_script,
+                                            lane_script, str(live_w), str(ready_w), str(go)],
+                                           pass_fds=(live_w, ready_w, go), stdout=subprocess.PIPE)
+                os.close(live_w)
+                os.close(ready_w)
+                os.close(go)
+                try:
+                    self.assertTrue(select.select([ready], [], [], 5)[0])
+                    self.assertEqual(os.read(ready, 1), b"r")
+                    if killed:
+                        process.kill()
+                    else:
+                        os.write(go_w, b"g")
+                    process.communicate(timeout=6)
+                    self.assertEqual(process.returncode, -9 if killed else 0)
+                    self.assertTrue(select.select([live], [], [], 5)[0])
+                    self.assertEqual(os.read(live, 1), b"")
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait()
+                    for fd in (ready, live, go_w):
+                        os.close(fd)

@@ -8,91 +8,47 @@ The further centres, when needed, use the Jacobian rank-defect scheme of
 the strict transform on the second exceptional divisor. All these schemes
 are intrinsic to the indicated components, so their chart ideals glue.
 """
-from functools import lru_cache
-from itertools import combinations
-
-from .affine_kernel import _polynomial, _sparse_expression, rational_factor_rows, sparse_terms
+from .affine_kernel import _request, _ring, _sparse_expression, rational_factor_rows
 from .blowup_ideal import empty_locus, ideal_basis
 from .centres import GiveUp
-from .chart_expressions import chart_expressions
 from .groebner import groebner
 
 
-def _minors(variables, matrix, rank, basis):
-    """Jacobian rank minors modulo a fixed base ideal, stopping at a unit."""
-    api = chart_expressions(variables)
-
-    @lru_cache(maxsize=None)
-    def minor(rows, columns):
-        if not rows:
-            return api.S.One
-        total = api.S.Zero
-        for index, column in enumerate(columns):
-            entry = matrix[rows[-1]][column]
-            if entry:
-                sign = (-1)**(len(rows)-1+index)
-                total += sign * entry * minor(rows[:-1], columns[:index] + columns[index+1:])
-        return basis.reduce(total)[1]
-
-    nonzero = set()
-    try:
-        for rows in combinations(range(len(matrix)), rank):
-            for columns in combinations(range(len(variables)), rank):
-                value = minor(rows, columns)
-                if value and not value.free_symbols:
-                    return (api.S.One,)
-                if value:
-                    nonzero.add(value)
-        return tuple(nonzero)
-    finally:
-        minor.cache_clear()
-
-
 def certify_fibre(chart, dimension):
-    """Certify the divisor ranks on the owned fibre of a smooth chart.
-
-    Split a factored fibre or region equation into closed pieces. Reduce
-    derivatives modulo the piece *after differentiating*. This avoids
-    computing a Gröbner basis with the high-degree strict transform before
-    the simpler exceptional equations have been used.
-    """
-    from .affine_kernel import frame_derivative
-    from .local_blowups import _generators, _is_strict, _present
+    """Check Jacobian ranks on all owned strata with the native ideal kernel."""
+    from .kernel import _lines
+    from .local_blowups import _is_strict
+    from .native_library import Unavailable, affine_request, ideal_request
 
     variables = chart.variables
-    ambient = _generators(variables, (), chart.ambient) if chart.ambient else ()
     base = tuple(dict.fromkeys((*chart.region, *chart.fibre)))
-    pieces = [base]
-    nonzero = [g for g in base if g != 0]
-    if nonzero:
-        shortest = min(nonzero, key=lambda g: len(sparse_terms(variables, g)))
-        _, factors = rational_factor_rows(variables, shortest)
-        # A cover of its zero set over the algebraic closure. A rational
-        # irreducible factor may represent several geometric branches.
-        pieces = [(*base, _sparse_expression(variables, row)) for row, _, _ in factors]
+    sizes = []
+    for label, _, _, generators in chart.components:
+        sizes.extend((int(_is_strict(label)), len(generators)))
+    header = ["owned_crossings", len(variables), dimension, len(chart.ambient), len(chart.components),
+              len(base), len(chart.removed), *sizes, *(len(ideal) for ideal in chart.removed)]
+    equations = [*chart.ambient, *base, *(g for _, _, _, ideal in chart.components for g in ideal),
+                 *(g for ideal in chart.removed for g in ideal)]
+    try:
+        result, = ideal_request(" ".join(map(str, header)), _lines(variables, equations))
+    except Unavailable:
+        # Packed degree and variable limits do not restrict the exhaustive
+        # verifier. The sparse FLINT kernel uses arbitrary-precision exponents.
+        ring = _ring(variables)
 
-    parts = [(label, ideal) for label, _, _, ideal in chart.components]
-    api = chart_expressions(variables)
-    one = api.S.One
-    gradients = {g: tuple(frame_derivative(variables, g, {v: one}) for v in variables)
-                 for g in {*ambient, *(g for _, ideal in parts for g in ideal)}}
-    for piece in pieces:
-        for size in range(1, len(parts) + 1):
-            for subset in combinations(parts, size):
-                boundary = [g for label, ideal in subset if not _is_strict(label) for g in ideal]
-                strict = [g for label, ideal in subset if _is_strict(label) for g in ideal]
-                basis = groebner((*piece, *ambient, *boundary), variables)
-                if tuple(basis.exprs) == (1,):
-                    continue
-                locus = (*basis.exprs, *(basis.reduce(g)[1] for g in strict))
-                if not _present(variables, locus, chart.removed):
-                    continue
-                rank = len(variables) - dimension + size
-                jacobian = [tuple(basis.reduce(d)[1] for d in gradients[g])
-                            for g in (*ambient, *boundary, *strict)]
-                minors = _minors(variables, jacobian, rank, basis)
-                if minors != (one,) and _present(variables, (*locus, *minors), chart.removed):
-                    raise GiveUp("The total transform fails normal crossings on the owned fibre.")
+        def ideal(generators):
+            return [str(len(generators)), *(ring.text(g) for g in generators)]
+
+        request = ["wide_owned_crossings", ring.header, str(dimension),
+                   *ideal(chart.ambient), *ideal(base), str(len(chart.components))]
+        for _, _, _, generators in chart.components:
+            request.extend(ideal(generators))
+        request.append(str(len(chart.removed)))
+        for generators in chart.removed:
+            request.extend(ideal(generators))
+        result, = affine_request(request)
+    if result != "yes":
+        raise GiveUp("The total transform fails normal crossings on the owned fibre.")
 
 
 def _power_support(variables, polynomial):
@@ -100,6 +56,12 @@ def _power_support(variables, polynomial):
     if len(factors) != 1 or factors[0][1] < 2:
         raise GiveUp("The tangent section is not a power of one reduced hypersurface.")
     return _sparse_expression(variables, factors[0][0])
+
+
+def tangent_power_support(variables, polynomial):
+    ring = _ring(variables)
+    row, = _request(["lowest_form", ring.header, ring.text(polynomial)])
+    return _power_support(variables, _sparse_expression(variables, row))
 
 
 def _intersection(chart, first, second):
@@ -143,10 +105,7 @@ class RepeatedTangent:
             if (chart.ambient or chart.fibre != chart.variables or len(chart.components) != 1
                     or chart.components[0][0] != "strict" or len(chart.components[0][3]) != 1):
                 raise GiveUp("The repeated-tangent rule starts with a hypersurface at the origin.")
-            terms = sparse_terms(chart.variables, chart.components[0][3][0])
-            order = min(sum(m) for m, _ in terms)
-            tangent = _polynomial({m: c for m, c in terms if sum(m) == order}, chart.variables)
-            _power_support(chart.variables, tangent)
+            tangent_power_support(chart.variables, chart.components[0][3][0])
             chosen = [chart.variables]
         elif stage == 1:
             chosen = []

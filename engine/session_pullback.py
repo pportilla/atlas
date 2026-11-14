@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from math import lcm
 import re
 
 from . import native_polynomial as native
 from .marked_field import flint_literal, record_field
 from .plane_backend import ordered_roots
-from .polynomial import InputError, parse_expression
+from .polynomial import InputError, parse_expression, rational_text
+from .point_geometry import request as point_request, support_profile
 from .session_polynomial import Polynomial, QQ, _CoordinateSpace, _NumberField
 
 
@@ -36,15 +36,15 @@ def _expressions(value):
 def _local_field(data):
     name = data["generator"]
     terms = parse_expression(data["minimal_polynomial"], (name,))
-    degree = max((power for (power,) in terms), default=0)
-    if not degree or data["degree"] != degree:
+    _, degree, _ = support_profile(terms)
+    if degree < 1 or data["degree"] != degree:
         raise ValueError("The chart's coefficient field has an inconsistent defining degree.")
     coefficients = tuple(terms.get((j,), 0) for j in range(degree, -1, -1))
     mark = data["embedding"]
     numbered = re.fullmatch(r"root (\d+) \(FLINT order\)", mark)
     if numbered:
-        denominator = lcm(*(q.denominator for q in coefficients))
-        mark = flint_literal(tuple(int(q*denominator) for q in coefficients), int(numbered[1]))
+        integers = point_request("marked_coefficients", coefficients=list(map(rational_text, coefficients)))
+        mark = flint_literal(integers, int(numbered[1]))
     return dict(generator=name, exact_root=mark, minimal_polynomial_coefficients=coefficients)
 
 

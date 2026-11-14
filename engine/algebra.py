@@ -29,9 +29,13 @@ TANGENT_SPACE_OPERANDS = {
     "zariski-tangent-space": ("ideal",),
     "embedding-dimension": ("ideal",),
 }
+LOCAL_DIMENSION_OPERANDS = {
+    "local-dimension": ("ideal",),
+    "local-smoothness": ("ideal",),
+}
 POINT_OPERATIONS = (LOCAL_QUOTIENT_OPERANDS.keys() | LOCAL_STANDARD_OPERANDS.keys()
                     | HILBERT_SAMUEL_OPERANDS.keys() | TANGENT_CONE_OPERANDS.keys()
-                    | TANGENT_SPACE_OPERANDS.keys())
+                    | TANGENT_SPACE_OPERANDS.keys() | LOCAL_DIMENSION_OPERANDS.keys())
 OPERATION_OPERANDS = {
     "gcd": ("polynomial", "other_polynomial"),
     "resultant": ("polynomial", "other_polynomial", "variables"),
@@ -42,6 +46,11 @@ OPERATION_OPERANDS = {
     "membership": ("ideal", "polynomial"),
     "eliminate": ("ideal", "variables"),
     "radical": ("ideal",),
+    "ideal-power": ("ideal", "exponent"),
+    "symbolic-power": ("ideal", "exponent"),
+    "primary-decomposition": ("ideal",),
+    "normalization": ("ideal",),
+    "localization": ("ideal", "prime"),
     "intersection": ("ideal", "other_ideal"),
     "quotient": ("ideal", "other_ideal"),
     "saturation": ("ideal", "polynomial"),
@@ -54,6 +63,7 @@ OPERATION_OPERANDS = {
     **HILBERT_SAMUEL_OPERANDS,
     **TANGENT_CONE_OPERANDS,
     **TANGENT_SPACE_OPERANDS,
+    **LOCAL_DIMENSION_OPERANDS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
 
@@ -119,7 +129,16 @@ def _request(data):
     optional = ("point",) if operation in POINT_OPERATIONS else ()
     if operation == "hilbert-samuel-function":
         optional += ("degrees",)
+    if operation == "localization":
+        optional += ("numerator", "denominator")
     _fields(operands, "operands", OPERATION_OPERANDS[operation], optional)
+    if "exponent" in operands:
+        exponent = operands["exponent"]
+        if type(exponent) is int:
+            exponent = integer_text(exponent)
+        if not isinstance(exponent, str) or not re.fullmatch(r"[0-9]+", exponent):
+            raise InputError("The exponent must be a nonnegative integer or an unsigned decimal string.")
+        operands = dict(operands, exponent=exponent.lstrip("0") or "0")
     if "degrees" in operands:
         operands = dict(operands, degrees=_degrees(operands["degrees"]))
     if "point" in operands:
@@ -127,11 +146,11 @@ def _request(data):
     elif operation in LOCAL_STANDARD_OPERANDS:
         # These two operations have always returned an explicit origin point.
         operands = dict(operands, point=["0"] * len(names))
-    for key in ("ideal", "other_ideal"):
+    for key in ("ideal", "other_ideal", "prime"):
         if key in operands and (not isinstance(operands[key], list)
                                 or not all(isinstance(f, str) for f in operands[key])):
             raise InputError(f"{key} must be an array of polynomial strings.")
-    for key in ("polynomial", "other_polynomial"):
+    for key in ("polynomial", "other_polynomial", "numerator", "denominator"):
         if key in operands and not isinstance(operands[key], str):
             raise InputError(f"{key} must be a polynomial string.")
     if "variables" in operands:
@@ -169,11 +188,24 @@ def dispatch(data, *, known_basis=False):
             raise InputError("A polynomial string must contain valid Unicode.") from exc
         return native.from_terms(variables, terms)
 
+    # These point operations produce a complete execution trace in one scoped
+    # native CPU call. Nested callers keep the enclosing replay accounting.
+    if operation in LOCAL_DIMENSION_OPERANDS and request["compute"] == "cpu":
+        from .native_library import current_replay_scope
+        if current_replay_scope() is None:
+            from time import perf_counter_ns
+            from .local_dimension import calculate_cpu
+            started = perf_counter_ns()
+            operands["ideal"] = [parse(text) for text in operands["ideal"]]
+            result, observed = calculate_cpu(operation, ring, operands, canonical=True, started=started)
+            return {"status": "ok", "operation": operation, "result": result,
+                    "execution": observed, "replay": make_replay(request, operands)}
+
     with algebra_execution(request["compute"]) as execution:
-        for key in ("ideal", "other_ideal"):
+        for key in ("ideal", "other_ideal", "prime"):
             if key in operands:
                 operands[key] = [parse(text) for text in operands[key]]
-        for key in ("polynomial", "other_polynomial"):
+        for key in ("polynomial", "other_polynomial", "numerator", "denominator"):
             if key in operands:
                 operands[key] = parse(operands[key])
         result_operands = operands
@@ -201,6 +233,8 @@ def dispatch(data, *, known_basis=False):
             from . import tangent_cone as handler
         elif operation in TANGENT_SPACE_OPERANDS:
             from . import zariski_tangent as handler
+        elif operation in LOCAL_DIMENSION_OPERANDS:
+            from . import local_dimension as handler
         else:
             from . import algebra_ideals as handler
         result = handler.handle(operation, ring, result_operands, **handler_options)
@@ -222,6 +256,8 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None):
         operands = request.get("operands") if isinstance(request, dict) else None
         if isinstance(operands, dict):
             wire_operands = operands.copy()
+            if type(operands.get("exponent")) is int:
+                wire_operands["exponent"] = integer_text(operands["exponent"])
             for key in ("point", "degrees"):
                 if isinstance(operands.get(key), list):
                     wire_operands[key] = [integer_text(v) if type(v) is int else v for v in operands[key]]

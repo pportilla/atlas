@@ -16,10 +16,10 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 
 from .atlas_torus import _normalized
-from .chart_kernel import crossings_rows, strata_rows
+from .chart_kernel import crossings_rows, strata_rows, strata_totals
 from .fan_geometry import canonical_laurent_terms
 from .native_library import affine_request, ideal_request
-from .polynomial import format_poly, sparse_row
+from .polynomial import format_poly, sparse_row, rational_text, integer_text
 
 
 _AXES = ("x", "y", "z")
@@ -27,7 +27,7 @@ _UNITS = tuple(tuple(int(i == j) for j in range(3)) for i in range(3))
 
 
 def _row(terms):
-    return ";".join(f"{c} " + " ".join(map(str, e)) for e, c in terms)
+    return ";".join(rational_text(c) + " " + " ".join(map(integer_text, e)) for e, c in terms)
 
 
 @lru_cache(maxsize=4096)
@@ -53,7 +53,7 @@ def _factors(terms, index):
 
 
 def surface_complex(charts):
-    groups, parents, counts = defaultdict(list), {}, Counter()
+    groups, parents, contributions = defaultdict(list), {}, []
     for rays, boundary, terms, owned in charts:
         pieces = {}
         for i, label in boundary.items():
@@ -78,7 +78,8 @@ def surface_complex(charts):
         keys = list(pieces)
         for indices, value in strata_rows(3, [strict, *owned], list(pieces.values()), ()).items():
             if len(indices) == 2:
-                counts[frozenset(keys[i] for i in indices)] += value
+                contributions.append((frozenset(keys[i] for i in indices), 1, value))
+    counts = strata_totals(contributions)
     names = {key: label if len(group) == 1 else f"{label}.{i}"
              for label, group in sorted(groups.items()) for i, key in enumerate(group, 1)}
     if len(set(names.values())) != len(names):

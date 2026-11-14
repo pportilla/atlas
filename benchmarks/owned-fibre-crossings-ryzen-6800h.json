@@ -1,0 +1,80 @@
+{
+  "machine": "x86_64",
+  "processor": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "Warm CPU processes, fibres and equations as in the script. Atlas reads owned chart ideals. Singular uses the explicit Jacobians for z and f.",
+  "batch": 50,
+  "trials": 5,
+  "results": {
+    "crossing": {
+      "snc": true,
+      "atlas_us": [
+        20.526619999999998,
+        17.2404,
+        16.48476,
+        16.46094,
+        17.04062
+      ],
+      "singular_us": [
+        31.18,
+        46.58,
+        43.52,
+        33.52,
+        25.08
+      ]
+    },
+    "tangency": {
+      "snc": false,
+      "atlas_us": [
+        20.5218,
+        18.42604,
+        18.26954,
+        18.090999999999998,
+        18.0375
+      ],
+      "singular_us": [
+        27.38,
+        25.66,
+        25.16,
+        24.76,
+        24.78
+      ]
+    }
+  },
+  "before_coordinate_reuse": {
+    "crossing": {
+      "snc": true,
+      "atlas_us": [
+        150.89732,
+        145.9668,
+        147.77242,
+        144.96972,
+        146.88152
+      ],
+      "singular_us": [
+        64.74,
+        63.24,
+        60.28,
+        58.7,
+        61.48
+      ]
+    },
+    "tangency": {
+      "snc": false,
+      "atlas_us": [
+        101.31938,
+        99.0551,
+        97.35688,
+        103.91768,
+        100.33211999999999
+      ],
+      "singular_us": [
+        31.54,
+        29.62,
+        42.74,
+        44.0,
+        41.72
+      ]
+    }
+  }
+}

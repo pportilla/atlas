@@ -1,29 +1,8 @@
 #include "polynomial_factors.hpp"
-#include "groebner.hpp"
+#include "flint_polynomial.hpp"
 
 namespace atlas {
 namespace {
-
-struct Exponents {
-    std::vector<Z> values;
-    std::vector<fmpz*> entries;
-
-    explicit Exponents(slong n) : values(n) {
-        for (auto& x : values) entries.push_back(&x.v);
-    }
-
-    void read(const fmpq_mpoly_t p, slong term, const fmpq_mpoly_ctx_t ctx) {
-        fmpq_mpoly_get_term_exp_fmpz(entries.data(), p, term, ctx);
-    }
-};
-
-struct PolyValue {
-    fmpq_mpoly_t p;
-    const fmpq_mpoly_ctx_struct* ctx;
-    explicit PolyValue(const fmpq_mpoly_ctx_struct* c) : ctx(c) { fmpq_mpoly_init(p, ctx); }
-    ~PolyValue() { fmpq_mpoly_clear(p, ctx); }
-    PolyValue(const PolyValue&) = delete;
-};
 
 std::string decimal(const Z& value) {
     auto raw = fmpz_get_str(nullptr, 10, &value.v);
@@ -104,6 +83,29 @@ const char* ordered_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t f,
     if (!fmpq_mpoly_factor(out, f, ctx) || !fmpq_mpoly_factor_make_monic(out, ctx))
         throw Limit("Rational factorization did not finish.");
     return "flint";
+}
+
+void rational_squarefree_part(fmpq_mpoly_t out, const fmpq_mpoly_t f, const fmpq_mpoly_ctx_t ctx) {
+    if (fmpq_mpoly_is_zero(f, ctx))
+        throw std::invalid_argument("Expected a nonzero polynomial for its squarefree part.");
+    if (fmpq_mpoly_length(f, ctx) == 1) {
+        Exponents powers(fmpq_mpoly_ctx_nvars(ctx));
+        powers.read(f, 0, ctx);
+        for (auto exponent : powers.entries)
+            if (!fmpz_is_zero(exponent)) fmpz_one(exponent);
+        fmpq_mpoly_one(out, ctx);
+        fmpq_mpoly_set_term_exp_fmpz(out, 0, powers.entries.data(), ctx);
+        return;
+    }
+    PolyValue common(ctx), derivative(ctx);
+    fmpq_mpoly_set(common.p, f, ctx);
+    for (slong j = 0; j < fmpq_mpoly_ctx_nvars(ctx) && !fmpq_mpoly_is_fmpq(common.p, ctx); ++j) {
+        fmpq_mpoly_derivative(derivative.p, f, j, ctx);
+        if (!fmpq_mpoly_gcd(out, common.p, derivative.p, ctx)) throw Limit("A polynomial gcd failed.");
+        fmpq_mpoly_swap(out, common.p, ctx);
+    }
+    if (!fmpq_mpoly_divides(out, f, common.p, ctx)) throw Limit("Inexact squarefree quotient.");
+    fmpq_mpoly_make_monic(out, out, ctx);
 }
 
 std::string factor_multiplicity(const fmpq_mpoly_t value, const fmpq_mpoly_t divisor,

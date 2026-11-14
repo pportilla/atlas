@@ -1,6 +1,7 @@
 """Local standard bases and point-specific normal forms through the guided UI."""
 
 import json
+import shlex
 import subprocess
 
 from engine.polynomial import parse_expression
@@ -23,6 +24,43 @@ class BrowserLocalStandardBasisTests(AlgebraBrowserCase):
                                 capture_output=True, text=True, timeout=65)
         self.assertEqual(result.returncode, 0, result.stderr)
         return [json.loads(line)["result"] for line in result.stdout.splitlines()]
+
+    def test_wide_shifted_saved_basis_and_normal_form_replay(self):
+        page = self.page
+        choose = page.locator("#operation").select_option
+        n = 2**64+7
+        page.locator("#variables").fill("x, y, z")
+        choose("local-standard-basis")
+        self.rows("#generators", "#add-generator", [f"x^{n}*z-y^2"])
+        page.locator("#local-point").fill("1, 0, 0")
+        page.locator("#compute").select_option("cpu")
+        _, basis = self.submit("B")
+        self.assertTrue(basis["result"]["generators"])
+        expect(page.locator("#result-ring")).to_contain_text("at (x = 1, y = 0, z = 0)")
+        choose("local-normal-form")
+        page.locator("#ideal-source").select_option("B")
+        expect(page.locator("#local-point")).to_have_value("1, 0, 0")
+        page.locator("#polynomial").fill("z")
+        page.locator("#compute").select_option("gpu")
+        request, record = self.submit("R")
+        self.assertEqual(request["operands"]["ideal"], basis["result"]["generators"])
+        result = record["result"]
+        self.assertEqual(result["point"], ["1","0","0"])
+        # Here x^N*z-y² is the generator. The class of z is y²/x^N.
+        self.assertEqual((result["unit"], result["remainder"], result["reduction"]), (f"x^{n}", "y^2", "standard"))
+        expect(page.locator(".local-representative")).to_have_text(f"y^2 / x^{n}")
+        self.assertEqual(json.loads(self.download("#export")), record)
+        self.assertEqual(self.replay(self.download("#download-script")), [result])
+        shell = subprocess.run(shlex.split(page.locator("#command").text_content()), cwd=ROOT,
+                               capture_output=True, text=True, timeout=65)
+        self.assertEqual(shell.returncode, 0, shell.stdout + shell.stderr)
+        self.assertEqual(json.loads(shell.stdout)["result"], result)
+        page.locator("#session-replay summary").click()
+        script = self.download("#download-session")
+        self.assertIn("local_normal_form(", script)
+        self.assertIn("B, point=", script)
+        self.assertIn(str(n), script)
+        self.assertEqual(self.replay(script), [basis["result"], result])
 
     def test_fractional_point_local_normal_form_with_nonconstant_unit_and_replay(self):
         page = self.page

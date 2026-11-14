@@ -5,6 +5,7 @@ from unittest.mock import patch
 import sympy as sp
 from sympy import QQ
 
+from tests.plane_components_oracle import plane_components as plane_components_reference
 from engine import blowup_ideal as ideals
 from engine import kernel
 from engine.general_resolution import _attempt, _charts, _pieces, _workers
@@ -74,6 +75,41 @@ class KernelIdealTests(unittest.TestCase):
         self.assertEqual(kernel.strata((x,y), base, cuts, ((x,y),)),
                          {(0,): -1, (1,): -1, (0,2): 1, (1,2): 1})
 
+    def test_strata_of_a_finite_torus_quotient_and_a_deleted_intersection(self):
+        from engine.chart_kernel import owned_strata
+        from engine.constructible_euler import euler_characteristic
+        from engine.local_blowups import Chart, _strata
+
+        # The torus stratum of x^d+y^d=1 is a d^2-sheeted cover of a
+        # twice-punctured affine line. Its two axial strata have d points each.
+        self.assertEqual(euler_characteristic((x, y), (x**11 + y**11 - 1,)), 22 - 121)
+        # xy=1 is a free torus orbit with Euler characteristic zero.
+        self.assertEqual(euler_characteristic((x, y), (x**4*y**4 - 1,)), 0)
+        # Each two-coordinate orbit cuts out a free one-torus. The dense
+        # orbit is a degree-16 cover of a plane minus three lines.
+        self.assertEqual(euler_characteristic((x, y, z),
+                         (x**2*y**2 + x**2*z**2 + y**2*z**2 - 1,)), 16)
+        components = (("E", 3, 2, (x,)), ("strict", 1, 1, (y,)))
+        chart = Chart((x, y), (), components, (x*y,), (), (), (), removed=((x-1, y),))
+        self.assertEqual(owned_strata(chart), {(0, 1): 1, (1,): -1})
+
+        # A marked coefficient represents one of two conjugate sheets. The
+        # degree-two torus cover and an excluded point apply on each sheet.
+        field = z, z**2 - 2, 2, "sqrt(2)"
+        chart = Chart((x, y, z), (field[1],), (("strict", 1, 1, (x**2 + z*y**2 - 1,)),),
+                      (), (), (), (), removed=((x-1, y),), coefficient_field=field)
+        self.assertEqual(_strata([chart])[1], {frozenset(("strict",)): -1})
+
+    def test_torus_lattice_with_wide_exponents_and_coefficients(self):
+        from engine.constructible_euler import euler_characteristic
+
+        # (xy, xy^2) is a change of torus coordinates. Taking d-th
+        # powers next gives d^2 sheets over a line missing two points.
+        d = 10**20
+        with patch("engine.groebner.CHECK", False):
+            f = (x*y)**d + 2**500*(x*y**2)**d - 1
+            self.assertEqual(euler_characteristic((x, y), (f,)), -d**2)
+
     def test_geometric_plane_factors_in_owned_regions(self):
         q = x**2 + y**2
         f = (q * (x*y - 1))**2
@@ -83,7 +119,7 @@ class KernelIdealTests(unittest.TestCase):
             with self.subTest(region=region, removed=removed):
                 args = ((x, y, z), (2*z, f), region, removed)
                 self.assertEqual(kernel.plane_components(*args), expected)
-                self.assertEqual(kernel._plane_components_reference(*args), expected)
+                self.assertEqual(plane_components_reference(*args), expected)
 
     def test_saturation_is_the_lexicographic_basis(self):
         cases = [((x, y), (x*y,), x), ((x, y, z), (x*z - y**2, x**3 - y*z), x),

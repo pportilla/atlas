@@ -3,6 +3,7 @@
 #include "groebner.hpp"
 #include <flint/fmpq.h>
 #include <map>
+#include <set>
 #include <sstream>
 
 namespace atlas {
@@ -235,6 +236,182 @@ void print_row(std::string& out, const Terms& p) {
     out += '\n';
 }
 
+// With lex order [other chart coordinates, v, base coordinates], a row whose
+// leading chart power is v and whose other chart powers are zero is D*v-N.
+// The reduced basis is monic, so D already has leading coefficient one.
+std::string inverse_fraction(Rows rows, size_t base_size, Order order) {
+    if (base_size == 0 || base_size >= order.n || order.kind != 1 || order.coefficient)
+        throw std::invalid_argument("Invalid chart inverse ring.");
+    const size_t v = order.n - base_size - 1;
+    const Order base{base_size, 1, false};
+    for (const auto& row : basis(std::move(rows))) {
+        const auto& head = row.begin()->first;
+        if (!fmpz_is_one(&head[v].v) || std::any_of(head.begin(), head.begin()+v,
+                    [](const Z& power) { return !fmpz_is_zero(&power.v); })) continue;
+        Terms numerator(base), denominator(base);
+        for (const auto& [exponents, value] : row) {
+            Powers projected(exponents.begin()+v+1, exponents.end());
+            if (fmpz_is_zero(&exponents[v].v)) {
+                Coefficient negative;
+                fmpq_neg(negative.q, value.q);
+                numerator.emplace(std::move(projected), std::move(negative));
+            } else denominator.emplace(std::move(projected), value);
+        }
+        std::string result;
+        print_row(result, numerator);
+        print_row(result, denominator);
+        return result;
+    }
+    throw std::invalid_argument("The chart map has no rational inverse.");
+}
+
+// The first variable is an inverse of the product of the frame units. A
+// first-variable elimination order induces grevlex after this contraction.
+std::string frame_result(Rows rows, Order order, bool closure) {
+    auto reduced = basis(std::move(rows));
+    if (!closure) {
+        if (reduced.size() != 1) return "0\n";
+        const auto& head = reduced.front().begin()->first;
+        return std::all_of(head.begin(), head.end(),
+                    [](const Z& p) { return fmpz_is_zero(&p.v); }) ? "1\n" : "0\n";
+    }
+    const Order contracted{order.n-1, 0, false};
+    std::string result;
+    for (const auto& row : reduced) {
+        if (!fmpz_is_zero(&row.begin()->first.front().v)) continue;
+        Terms projected(contracted);
+        for (const auto& [m, c] : row)
+            projected.emplace(Powers(m.begin()+1, m.end()), c);
+        print_row(result, projected);
+    }
+    return result;
+}
+
+using VectorField = std::vector<std::pair<size_t, Terms>>;
+
+Terms derivative(const Terms& f, const VectorField& field) {
+    Terms out(f.key_comp());
+    for (const auto& [axis, coefficient] : field) for (const auto& [e,c] : f) {
+        if (fmpz_is_zero(&e[axis].v)) continue;
+        Powers head(e);
+        fmpz_sub_ui(&head[axis].v,&head[axis].v,1);
+        Coefficient scale;
+        fmpq_mul_fmpz(scale.q,c.q,&e[axis].v);
+        add_shifted(out,coefficient,head,scale);
+    }
+    return out;
+}
+
+Terms lift_inverse(const Terms& p, Order extended, bool multiply_inverse) {
+    Terms result(extended);
+    for (const auto& [e,c] : p) {
+        Powers shifted(e);
+        shifted.emplace(shifted.begin());
+        if (multiply_inverse) fmpz_one(&shifted.front().v);
+        result.emplace(std::move(shifted),c);
+    }
+    return result;
+}
+
+Terms product(const Terms& f, const Terms& g) {
+    Terms result(f.key_comp());
+    for (const auto& [e,c] : f) add_shifted(result,g,e,c);
+    return result;
+}
+
+// Derivatives and coordinate orders on a localized implicit chart. Bind the
+// chart's cached reduced bases once for all layers and repeated divisions.
+std::string implicit_frame(std::istream& input, bool jet) {
+    auto line = [&]() {
+        std::string value;
+        if (!std::getline(input,value)) throw std::invalid_argument("Incomplete implicit frame.");
+        return value;
+    };
+    auto integer = [&]() { return std::stoul(line()); };
+    const size_t n = integer();
+    if (!n) throw std::invalid_argument("Missing implicit frame coordinates.");
+    const Order chart{n,0,false}, inverse{n+1,2,false}, localized{n+1,0,false};
+    auto rows = [&](Order order) {
+        const size_t count = integer();
+        Rows g;
+        for (size_t j = 0; j < count; ++j) {
+            auto p = read_row(line(),order);
+            if (!p.empty()) g.push_back(std::move(p));
+        }
+        return g;
+    };
+    const auto reducers = rows(chart);
+    Terms f = read_row(line(),chart);
+    std::string result;
+    if (jet) {
+        auto order = integer();
+        const auto saturated = rows(chart);
+        const size_t count = integer();
+        std::vector<VectorField> fields(count);
+        std::vector<bool> plain(count,false);
+        for (size_t k = 0; k < count; ++k) {
+            plain[k] = integer() != 0;
+            const auto entries = integer();
+            for (size_t j = 0; j < entries; ++j) {
+                const auto axis = integer();
+                if (axis >= n) throw std::invalid_argument("Invalid derivative coordinate.");
+                fields[k].emplace_back(axis, read_row(line(),chart));
+            }
+        }
+        print_row(result,f);
+        std::set<std::string> seen{result};
+        Rows layer{std::move(f)};
+        for (size_t i = 1; i < order && !layer.empty(); ++i) {
+            Rows next;
+            for (const auto& p : layer) for (size_t k = 0; k < count; ++k) {
+                auto d = derivative(p,fields[k]);
+                if (!plain[k]) d = divide(std::move(d),reducers);
+                if (d.empty() || divide(d,saturated).empty()) continue;
+                std::string row;
+                print_row(row,d);
+                if (seen.insert(row).second) {
+                    result += row;
+                    next.push_back(std::move(d));
+                }
+            }
+            layer = std::move(next);
+        }
+        return result;
+    }
+    const auto unit = read_row(line(),chart);
+    const size_t axes = integer();
+    for (size_t k = 0; k < axes; ++k) {
+        const auto status = line();
+        if (status == "absent") { result += "0\n"; continue; }
+        if (status != "present") throw std::invalid_argument("Invalid divisor cut.");
+        const auto cut = rows(chart), open_cut = rows(localized), over = rows(inverse);
+        Z order;
+        if (f.empty()) throw std::invalid_argument("Zero has no finite coordinate order.");
+        while (divide(f,cut).empty() || (!open_cut.empty() && divide(lift_inverse(f,localized,false),open_cut).empty())) {
+            auto g = divide(f,reducers);
+            bool found = false;
+            for (int retry = 0; retry < 12; ++retry) {
+                auto q = divide(lift_inverse(g,inverse,true),over);
+                if (q.empty() || fmpz_is_zero(&q.begin()->first.front().v)) {
+                    f.clear();
+                    for (const auto& [e,c] : q) f.emplace(Powers(e.begin()+1,e.end()),c);
+                    fmpz_add_ui(&order.v,&order.v,1);
+                    found = true;
+                    break;
+                }
+                g = divide(product(g,unit),reducers);
+            }
+            if (!found || f.empty()) return "quotient_unavailable\n";
+        }
+        char* count = fmpz_get_str(nullptr,10,&order.v);
+        result += count;
+        result += '\n';
+        flint_free(count);
+    }
+    print_row(result,f);
+    return result;
+}
+
 std::string calculate(std::istream& input) {
     std::string header;
     std::getline(input, header);
@@ -247,6 +424,16 @@ std::string calculate(std::istream& input) {
     Rows rows;
     for (std::string line; std::getline(input,line);) rows.push_back(read_row(line, order));
     std::string result;
+    if (op == "inverse_fraction") {
+        size_t base_size;
+        if (!(fields >> base_size)) throw std::invalid_argument("Missing chart inverse size.");
+        return inverse_fraction(std::move(rows), base_size, order);
+    }
+    if (op == "frame_basis" || op == "frame_empty") {
+        if (order.n < 2 || coefficient || (op == "frame_basis" && kind != 2))
+            throw std::invalid_argument("Invalid open frame order.");
+        return frame_result(std::move(rows), order, op == "frame_basis");
+    }
     if (op == "basis") {
         for (auto& p : basis(std::move(rows))) print_row(result, p);
     } else if ((op == "divide" || op == "remainder") && !rows.empty()) {
@@ -261,6 +448,7 @@ std::string calculate(std::istream& input) {
     return result;
 }
 }  // namespace
+std::string implicit_frame_operation(std::istream& input, bool jet) { return implicit_frame(input,jet); }
 }  // namespace atlas
 
 extern "C" char* atlas_wide_block(const char* input, size_t length) noexcept {

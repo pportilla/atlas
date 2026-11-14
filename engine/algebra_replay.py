@@ -26,7 +26,8 @@ def _command(request):
     ring, operands = request["ring"], request["operands"]
     args = ["./atlas", "algebra", request["operation"], "--vars", ",".join(ring["variables"]),
             "--field", ring["field"], "--order", ring["order"], "--compute", request["compute"]]
-    for key, flag in (("ideal", "--gen"), ("other_ideal", "--other-gen"),
+    for key, flag in (("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
+                      ("numerator", "--numerator"), ("denominator", "--denominator"),
                       ("polynomial", "--poly"), ("other_polynomial", "--other-poly")):
         if key not in operands:
             continue
@@ -38,6 +39,8 @@ def _command(request):
                 args.append(flag + "=" + value)
             else:
                 args.extend([flag, value])
+    if "exponent" in operands:
+        args.extend(["--exponent", operands["exponent"]])
     if "variables" in operands:
         args.extend(["--eliminate", ",".join(operands["variables"])])
     if "point" in operands:
@@ -57,9 +60,10 @@ def _script(request, prepared):
         return None
     # Each ideal declaration has its own line. The polynomial operands share
     # the operation line. Check all three before formatting any polynomial.
-    polynomial_args = (prepared[key] for key in ("polynomial", "other_polynomial") if key in prepared)
+    polynomial_args = (prepared[key] for key in ("polynomial", "other_polynomial", "numerator", "denominator")
+                       if key in prepared)
     if any(_arguments_too_long(group) for group in
-           (prepared.get("ideal", ()), prepared.get("other_ideal", ()), polynomial_args)):
+           (prepared.get("ideal", ()), prepared.get("other_ideal", ()), prepared.get("prime", ()), polynomial_args)):
         return None
     names = request["ring"]["variables"]
     session = new_session(None)
@@ -72,7 +76,7 @@ def _script(request, prepared):
     if names:
         labels = ", ".join(map(json.dumps, names))
         lines.append(f"{variables} = coordinates({labels}, coeffs=QQ)")
-    for var, key in (("I", "ideal"), ("J", "other_ideal")):
+    for var, key in (("I", "ideal"), ("J", "other_ideal"), ("J", "prime")):
         if key not in prepared:
             continue
         generators = prepared[key]
@@ -90,8 +94,13 @@ def _script(request, prepared):
         args.extend([f"variables=[{variables}]", f"order={request['ring']['order']!r}"])
     elif op in ("normal-form", "membership", "local-normal-form"):
         args.insert(0, str(prepared["polynomial"]))
+    elif op in ("ideal-power", "symbolic-power"):
+        args.append(prepared["exponent"])
     elif op == "saturation":
         args.append(str(prepared["polynomial"]))
+    elif op == "localization":
+        args.append("J")
+        args.extend(f"{key}={prepared[key]}" for key in ("numerator", "denominator") if key in prepared)
     elif op in ("intersection", "quotient"):
         args.append("J")
     elif op == "eliminate":

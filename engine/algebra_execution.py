@@ -32,7 +32,9 @@ class _Execution:
     def collect(self):
         # Snapshot monotonically increasing, request-local counters at stage
         # boundaries. One quotient can compute several different bases.
-        report = self.replay.report() or {}
+        report = self.replay.report()
+        if not report:
+            return
         previous = self.previous
         for op, now, before in (
             ("groebner_trace", report.get("trace", {}).get("backends", {}),

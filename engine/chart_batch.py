@@ -8,7 +8,7 @@ from struct import iter_unpack
 from time import perf_counter
 
 from .gpu_devices import gpu_preference, triton_device
-from .polynomial import integer_text, integer_from_decimal
+from .polynomial import integer_text, integer_from_decimal, rational_text
 from .native_backend import _LIBRARY, _load, _gpu_config, _gpu_library, gpu_devices
 
 _I32_MAX = 2**31 - 1
@@ -88,7 +88,33 @@ def _accelerate(inputs, out, nt, nr, nc, dimension, index, stats):
     return False
 
 
-def transform_batch(exps, rays, cones, orders, compute=None):
+def _equation_header(names, coefficients, dimension, terms):
+    if len(names) != dimension or len(coefficients) != terms:
+        raise ValueError("Expected one variable per chart axis and one coefficient per input term.")
+    return " ".join(names) + "\n" + " ".join(map(rational_text, coefficients))
+
+
+def _packed_equations(out, nt, nc, dimension, equations):
+    lib = _load(_LIBRARY)
+    formatter = lib.resolution_chart_equations
+    formatter.argtypes = [ctypes.c_char_p, _WORD, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t]
+    formatter.restype = ctypes.c_void_p
+    header = _equation_header(*equations, dimension, nt)
+    pointer = formatter(header.encode("ascii"), out, nt, nc, dimension)
+    if not pointer:
+        raise MemoryError("The native chart formatter could not allocate its result.")
+    try:
+        rows = ctypes.string_at(pointer).decode("ascii").splitlines()
+    finally:
+        lib.resolution_free(pointer)
+    if rows and rows[0].startswith("error "):
+        raise ValueError(rows[0].removeprefix("error "))
+    if len(rows) != nc:
+        raise ValueError("Incomplete native chart equations.")
+    return rows
+
+
+def transform_batch(exps, rays, cones, orders, compute=None, *, equations=None):
     """Return strict exponent vectors by chart and term, plus execution timings.
 
     The caller supplies the vanishing order on each ray. Negative transformed
@@ -128,8 +154,11 @@ def transform_batch(exps, rays, cones, orders, compute=None):
     if not valid(out, entries):
         raise ValueError("A ray order exceeds the valuation of an input monomial.")
     stats["native_elapsed_ms"] = (perf_counter()-native_start)*1000
-    vectors = iter_unpack(f"={dimension}i", out)
-    result = [list(islice(vectors, nt)) for _ in range(nc)]
+    if equations is None:
+        vectors = iter_unpack(f"={dimension}i", out)
+        result = [list(islice(vectors, nt)) for _ in range(nc)]
+    else:
+        result = _packed_equations(out, nt, nc, dimension, equations)
     stats["elapsed_ms"] = (perf_counter()-started)*1000
     return result, stats
 
@@ -179,7 +208,10 @@ def _device_callback(nt, nr, dimension, index, stats, errors):
     return launch
 
 
-def _wide_strict(exps, rays, orders, values, compute, index, stats):
+def strict_valuations(exps, rays, orders, values, compute="cpu", index=0, stats=None, *, cones=(), equations=None):
+    """Subtract each ray order from its paired values in arbitrary precision."""
+    if stats is None:
+        stats = {}
     nt, nr, dimension = len(exps), len(rays), len(exps[0])
     errors = []
     callback = (_device_callback(nt, nr, dimension, index, stats, errors)
@@ -188,6 +220,10 @@ def _wide_strict(exps, rays, orders, values, compute, index, stats):
         raise ValueError("One order and one valuation per term are required for every ray.")
     rows = chain([orders], values, exps if callback else (), rays if callback else ())
     text = "\n".join(" ".join(map(integer_text, row)) for row in rows).encode("ascii")
+    if equations is not None:
+        header = _equation_header(*equations, dimension, nt)
+        indices = "\n".join(" ".join(map(integer_text, cone)) for cone in cones)
+        text += f"\nequations {len(cones)}\n{header}\n{indices}".encode("ascii")
     lib, kernel = _wide_kernel()
     pointer = kernel(text, nt, nr, dimension, callback)
     if not pointer:
@@ -206,11 +242,15 @@ def _wide_strict(exps, rays, orders, values, compute, index, stats):
             stats["fallback_reason"] = "The chart device did not complete all digit products."
         else:
             stats.update(backend="cpu", fallback_reason="A chart device valuation failed its exact check.")
+    if equations is not None:
+        if len(strict) != len(cones):
+            raise ValueError("Incomplete native chart equations.")
+        return strict
     return [tuple(map(integer_from_decimal, row.split())) for row in strict]
 
 
-def transform_atlas(exps, rays, cones, orders, values, compute=None):
-    """Use the packed kernel when possible, or the fan's exact ray valuations."""
+def transform_atlas(exps, rays, cones, orders, values, compute=None, *, equations=None):
+    """Return transformed powers, or strict equation strings given (chart names, coefficients)."""
     dimension, nt = len(exps[0]), len(exps)
     pairs = nt * len(cones)
     if (2 <= dimension <= 8 and len(rays) <= _MAX_RAYS and pairs <= _MAX_PAIRS and
@@ -218,7 +258,7 @@ def transform_atlas(exps, rays, cones, orders, values, compute=None):
             all(value <= _I32_MAX for rows in (exps, rays) for row in rows for value in row) and
             all(order <= _I32_MAX for order in orders)):
         try:
-            return transform_batch(exps, rays, cones, orders, compute)
+            return transform_batch(exps, rays, cones, orders, compute, equations=equations)
         except OverflowError:
             pass  # The pairing bounds require the arbitrary-precision chart kernel.
     started = perf_counter()
@@ -227,7 +267,8 @@ def transform_atlas(exps, rays, cones, orders, values, compute=None):
              "chart_term_pairs": pairs}
     # Automatic selection already has a complete exact table from the fan.
     # An explicit GPU request may recompute it with the packed device kernel.
-    strict = _wide_strict(exps, rays, orders, values, compute, index, stats)
-    charts = ([tuple(strict[i][j] for i in cone) for j in range(nt)] for cone in cones)
+    strict = strict_valuations(exps, rays, orders, values, compute, index, stats, cones=cones, equations=equations)
+    charts = strict if equations is not None else (
+        [tuple(strict[i][j] for i in cone) for j in range(nt)] for cone in cones)
     stats["elapsed_ms"] = (perf_counter()-started)*1000
     return charts, stats

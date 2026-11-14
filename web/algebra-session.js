@@ -102,13 +102,46 @@ class AlgebraSession {
     const survivors = answer.result.ring.variables;
     const space = survivors.length || origin.tangentSpace ? JSON.stringify([origin, survivors]) : "QQ";
     this.objects.set(form.name, { result: answer.result, basisRef: answer.basis_ref, origin, space });
+    const saveField = (field, result, context = {}) => {
+      this.objects.set(form.name + field, {
+        result: { ring: answer.result.ring, ...result }, owner: form.name, field, origin, space, ...context,
+      });
+    };
     if (answer.result.type === "factorization") {
       answer.result.factors.forEach(({ polynomial }, index) => {
-        const field = ".factors[" + index + "].polynomial";
-        this.objects.set(form.name + field, {
-          result: { type: "polynomial", ring: answer.result.ring, polynomial },
-          owner: form.name, field, origin, space,
+        saveField(".factors[" + index + "].polynomial", { type: "polynomial", polynomial });
+      });
+    } else if (answer.result.type === "localization") {
+      saveField(".contraction", { type: "ideal", generators: answer.result.generators });
+      saveField(".prime", { type: "ideal", generators: answer.result.prime });
+      if (answer.result.element) {
+        for (const field of ["numerator", "denominator"]) {
+          saveField(".element." + field, { type: "polynomial", polynomial: answer.result.element[field] });
+        }
+      }
+    } else if (answer.result.type === "normalization") {
+      answer.result.components.forEach((component, i) => {
+        const prefix = ".components[" + i + "]";
+        saveField(prefix + ".prime", { type: "ideal", generators: component.prime });
+        component.fractions.forEach((fraction, j) => {
+          for (const field of ["numerator", "denominator"]) {
+            saveField(prefix + ".fractions[" + j + "]." + field, { type: "polynomial", polynomial: fraction[field] });
+          }
         });
+        // Even components with identically named variables have separate presentations.
+        const origin = { normalization: form.name, component: i };
+        const context = { origin, space: component.ring.variables.length ? JSON.stringify([origin, component.ring.variables]) : "QQ",
+          coordinateOwner: prefix };
+        saveField(prefix + ".relations", { type: "ideal", ring: component.ring, generators: component.relations }, context);
+        component.images.forEach((polynomial, j) => {
+          saveField(prefix + ".images[" + j + "]", { type: "polynomial", ring: component.ring, polynomial }, context);
+        });
+      });
+    } else if (answer.result.type === "primary-decomposition") {
+      answer.result.components.forEach((component, index) => {
+        for (const field of ["primary", "prime"]) {
+          saveField(".components[" + index + "]." + field, { type: "ideal", generators: component[field] });
+        }
       });
     }
   }
@@ -153,8 +186,9 @@ class AlgebraSession {
     for (const form of this.steps) {
       const { operation, operands, sources, ring } = form;
       const firstSource = Object.values(sources)[0];
-      const owner = firstSource && (this.objects.get(firstSource).owner || firstSource);
-      const coords = owner ? names.get(owner) + ".coordinates" : ringCoordinates(ring);
+      const savedSource = firstSource && this.objects.get(firstSource);
+      const coords = savedSource ? names.get(savedSource.owner || firstSource) + (savedSource.coordinateOwner || "") + ".coordinates"
+                                 : ringCoordinates(ring);
       const variableArgs = "variables=" + coords;
       const quote = JSON.stringify;
       const literal = (expr) => "polynomial(" + quote(expr) + ", " + variableArgs + ")";
@@ -184,8 +218,19 @@ class AlgebraSession {
         } else {
           args = [ideal("ideal")];
           if (["normal-form", "local-normal-form", "membership"].includes(operation)) args.unshift(poly("polynomial"));
+          else if (AlgebraSession.powerOperations.has(operation)) {
+            // Preserve arbitrarily large decimals and allow leading zeros in the form.
+            const n = operands.exponent.replace(/^0+(?=[0-9])/, "");
+            args.push(n.length > 640 ? quote(n) : n);
+          }
           else if (operation === "saturation") args.push(poly("polynomial"));
           else if (operation === "quotient" || operation === "intersection") args.push(ideal("other_ideal"));
+          else if (operation === "localization") {
+            args.push(ideal("prime"));
+            for (const field of ["numerator", "denominator"]) {
+              if (field in operands || sources[field]) args.push(field + "=" + poly(field));
+            }
+          }
           else if (operation === "eliminate") args.push(...operands.variables.map(v => quote(v)));
         }
         if (operands.point !== undefined) args.push("point=" + quote(operands.point));
@@ -205,8 +250,11 @@ class AlgebraSession {
   }
 }
 
+AlgebraSession.powerOperations = new Set(["ideal-power", "symbolic-power"]);
 AlgebraSession.hypersurfaceOperations = new Set(["local-jacobian-algebra", "milnor-number", "tjurina-number"]);
-AlgebraSession.coneInputs = new Set(["tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension"]);
+AlgebraSession.coneInputs = new Set([
+  "tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension", "local-dimension", "local-smoothness",
+]);
 AlgebraSession.localBasisInputs = new Set([
   "local-normal-form", "local-quotient-basis", "hilbert-samuel-function", "hilbert-samuel-multiplicity",
   "tangent-cone", ...AlgebraSession.coneInputs,
@@ -218,8 +266,8 @@ AlgebraSession.reserved = new Set((
   "False None True and as assert async await break class continue def del elif else except finally for from " +
   "global if import in is lambda nonlocal not or pass raise return try while with yield " +
   "QQ coordinates polynomial resolve len print ideal groebner normal_form membership eliminate intersection " +
-  "quotient saturation saturate radical dimension multiplicity gcd factor resultant algebra_request help quit exit " +
+  "quotient saturation saturate radical ideal_power symbolic_power primary_decomposition normalization localize localization dimension multiplicity gcd factor resultant algebra_request help quit exit " +
   "quotient_basis local_quotient_basis local_jacobian_algebra milnor_number tjurina_number local_standard_basis local_normal_form " +
   "hilbert_series hilbert_samuel_function hilbert_samuel_multiplicity tangent_cone tangent_cone_hilbert_series " +
-  "zariski_tangent_space embedding_dimension"
+  "zariski_tangent_space embedding_dimension local_dimension local_smoothness"
 ).split(" "));

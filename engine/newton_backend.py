@@ -1,15 +1,15 @@
 """A regular Newton modification of a hypersurface germ in arbitrary input dimension."""
 from itertools import combinations
-from math import comb, prod
 
 from .chart_batch import transform_atlas
+from .binomial_kernel import _newton, signed_powers
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 from .newton_fan import build_fan
 from .polynomial import format_poly, integer_from_decimal, integer_text, LimitError
 
 
 def pairing(vector, exponent):
-    return sum(a*b for a, b in zip(vector, exponent))
+    return _valuations((vector,), (exponent,))[0][0]
 
 
 def monomial(coordinates, powers):
@@ -19,44 +19,39 @@ def monomial(coordinates, powers):
 
 def shear(poly, donor, axis, scalar=1):
     """Pull back by x_donor = v_donor + scalar*v_axis."""
-    if sum(e[donor]+1 for e in poly)>100_000:
+    _, _, expansion = _axial_data(poly)
+    return _shear(poly, donor, axis, scalar, expansion)
+
+
+def _shear(poly, donor, axis, scalar, expansion):
+    if expansion[donor] > 100_000:
         raise LimitError('The trial coordinate substitution exceeds its expansion budget.')
     from .native_library import affine_request
-    from .polynomial import checked_native, sparse_row
+    from .polynomial import sparse_row
     n = len(next(iter(poly)))
     names = [f"v{i}" for i in range(n)]
-    def native():
-        images = names.copy()
-        images[donor] = f"({names[donor]}+({scalar})*{names[axis]})"
-        ring = " ".join(names)
-        row, = affine_request(["pullbacks", ring, ring, *images, "0", format_poly(poly, names)])
-        return sparse_row(row)
-    return checked_native(native, lambda: _shear_reference(poly, donor, axis, scalar))
+    images = names.copy()
+    images[donor] = f"({names[donor]}+({scalar})*{names[axis]})"
+    ring = " ".join(names)
+    row, = affine_request(["pullbacks", ring, ring, *images, "0", format_poly(poly, names)])
+    return sparse_row(row)
 
 
 def _valuations(rays, exponents):
     """Pair every Newton ray with the complete support in one integer matrix product."""
     from .native_library import affine_request, _kernel, Unavailable
-    from .polynomial import checked_native
-    def native():
-        if not hasattr(_kernel(), "atlas_valuations_abi"):
-            raise Unavailable("The lattice pairing kernel is unavailable.")
-        rows = affine_request(["lattice_valuations", str(len(rays[0])), str(len(rays)),
-                               *(" ".join(map(integer_text, r)) for r in (*rays, *exponents))])
-        return [list(map(integer_from_decimal, row.split())) for row in rows]
-    return checked_native(native, lambda: [[pairing(v, e) for e in exponents] for v in rays])
+    if not hasattr(_kernel(), "atlas_valuations_abi"):
+        raise Unavailable("The lattice pairing kernel is unavailable.")
+    rows = affine_request(["lattice_valuations", str(len(rays[0])), str(len(rays)),
+                           *(" ".join(map(integer_text, r)) for r in (*rays, *exponents))])
+    return [list(map(integer_from_decimal, row.split())) for row in rows]
 
 
-def _shear_reference(poly, donor, axis, scalar):
-    result = {}
-    for exponent, coefficient in poly.items():
-        for k in range(exponent[donor]+1):
-            new = list(exponent)
-            new[donor] -= k
-            new[axis] += k
-            key = tuple(new)
-            result[key] = result.get(key, 0) + coefficient * comb(exponent[donor], k)*scalar**k
-    return {e:c for e,c in result.items() if c}
+def _axial_data(poly):
+    n = len(next(iter(poly)))
+    header, expansion = _newton("axial", n, (len(poly),), *poly)
+    volume, *intercepts = map(integer_from_decimal, header.split())
+    return volume, intercepts, tuple(map(integer_from_decimal, expansion.split()))
 
 
 def coordinate_choices(poly, n):
@@ -66,45 +61,38 @@ def coordinate_choices(poly, n):
     term without changing the germ. Its inverse is again a linear substitution.
     """
     identity = tuple(tuple(int(i==j) for j in range(n)) for i in range(n))
-    candidates = [(poly, identity, [])]
+    candidates = [(poly, identity, [], _axial_data(poly))]
     for axis in range(n):
         next_candidates = []
-        for current, matrix, changes in candidates:
-            if any(e[axis] and sum(e)==e[axis] for e in current):
-                next_candidates.append((current, matrix, changes))
+        for candidate in candidates:
+            current, matrix, changes, (_, intercepts, expansion) = candidate
+            if intercepts[axis]:
+                next_candidates.append(candidate)
                 continue
             for donor in range(n):
                 if donor == axis:
                     continue
                 try:
-                    changed = shear(current,donor,axis)
+                    changed = _shear(current, donor, axis, 1, expansion)
                 except LimitError:
                     continue
-                if len(changed)>4096:
+                if len(changed) > 4096 or changed == current:
                     continue
-                if not any(e[axis] and sum(e)==e[axis] for e in changed):
+                changed_data = _axial_data(changed)
+                if not changed_data[1][axis]:
                     continue
-                new_matrix = tuple(tuple(v+row[donor] if j==axis else v
-                                         for j,v in enumerate(row)) for row in matrix)
-                next_candidates.append((changed,new_matrix,[*changes,(donor,axis)]))
+                rows = _newton("shear", n, (donor, axis), *matrix)
+                new_matrix = tuple(tuple(map(integer_from_decimal, row.split())) for row in rows)
+                next_candidates.append((changed, new_matrix, [*changes, (donor, axis)], changed_data))
         def score(trial):
             # The product of axial intercepts is the normalized volume of
             # their simplex. Preserve earlier improvements when processing an
             # already-convenient axis, which otherwise reshuffles the trials.
-            intercepts = {}
-            for exponent in trial[0]:
-                support = [i for i,power in enumerate(exponent) if power]
-                if len(support)==1:
-                    j, = support
-                    intercepts[j] = min(intercepts.get(j,exponent[j]),exponent[j])
-            return -len(intercepts), prod(intercepts.values()), len(trial[0])
+            volume, intercepts, _ = trial[3]
+            return intercepts.count(0), volume, len(trial[0])
         candidates = sorted(next_candidates,key=score)[:8]
-    yield from candidates
-
-
-def subsets(cone):
-    for size in range(1,len(cone)+1):
-        yield from combinations(sorted(cone),size)
+    for transformed, matrix, changes, _ in candidates:
+        yield transformed, matrix, changes
 
 
 def _label_roots(index, edge):
@@ -114,6 +102,18 @@ def _label_roots(index, edge):
         'degree':edge['degree'], 'polynomial':polynomial, 'direction':edge['direction'],
         'definition':f'{family}_j is root j of {polynomial} = 0, ordered by real then imaginary part, starting at 1.'
     }
+
+
+def _boundary_centres(poly, variables, fan):
+    """Certify the images of exceptional boundary rays by the native singular-locus test."""
+    from .native_library import affine_request
+    targets = tuple(dict.fromkeys(tuple(j for j, value in enumerate(fan["rays"][i]) if value)
+                                  for i in fan["boundary_rays"]))
+    singular = affine_request(["singular_subspaces", " ".join(variables), format_poly(poly, variables),
+                               *(" ".join(map(str, axes)) for axes in targets)])
+    if len(singular) != len(targets):
+        return None
+    return [[variables[i] for i in axes] for axes in targets]
 
 
 def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False):
@@ -129,21 +129,16 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     # exactly this common face, including strata over the origin with some
     # original coordinate rays as generators.
     valuations = _valuations(rays, exponents)
-    orders = list(map(min,valuations))
-    minima = [frozenset(i for i,h in enumerate(values) if h==order)
-              for values,order in zip(valuations,orders)]
-    face_masks = {}
-    intersection_cones = set()
-    for cone in cones:
-        for subset in subsets(cone):
-            if subset in face_masks or not any(i>=n for i in subset):
-                continue
-            mask = frozenset.intersection(*(minima[i] for i in subset))
-            if not mask:
-                raise RuntimeError('Newton chart lacks a common minimizing monomial.')
-            face_masks[subset]=mask
-            if min(subset)>=n:
-                intersection_cones.add(subset)
+    rows = _newton("faces", n, (len(rays), len(cones), len(exponents)), *valuations, *cones)
+    orders, minima, face_masks = [], [], {}
+    for row in rows[:len(rays)]:
+        order, *mask = map(integer_from_decimal, row.split())
+        orders.append(order)
+        minima.append(frozenset(mask))
+    for row in rows[len(rays):]:
+        count, *fields = map(int, row.split())
+        face_masks[tuple(fields[:count])] = frozenset(fields[count:])
+    intersection_cones = [subset for subset in face_masks if subset[0] >= n]
     faces={}
     families={}
     degenerate=False
@@ -164,6 +159,8 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
         faces[mask]=proof
     repair = None
     if degenerate:
+        if not fan['isomorphism_off_origin']:
+            return None  # The point-repair chart producer uses exceptional rays over the origin.
         from .groebner import CHECK
         from .newton_repair import strata as repair_strata
 
@@ -216,19 +213,18 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
                 record['root']=proof['root_family']+f'_{k}'
             strata[subset].append(ident)
 
-    powers_by_chart, batch = transform_atlas(exponents, rays, cones, orders, valuations, compute)
-    coefficients = [poly[e] for e in exponents]
+    equations, batch = transform_atlas(exponents, rays, cones, orders, valuations, compute,
+                                       equations=(coords, [poly[e] for e in exponents]))
     directions = list(dict.fromkeys(tuple(proof["edge"]["direction"]) for proof in faces.values()
                       if not degenerate and mode == "intrinsic" and proof["face_dimension"] == 1))
     direction_orders = dict(zip(directions, zip(*_valuations(rays, directions)))) if directions else {}
     charts=[]
-    for index,(cone,powers) in enumerate(zip(cones,powers_by_chart),1):
+    for index, (cone, strict) in enumerate(zip(cones, equations, strict=True), 1):
         rr=[rays[i] for i in cone]
         minimum=[orders[i] for i in cone]
         torus_map=[monomial(coords,[ray[j] for ray in rr]) for j in range(n)]
         maps={name:'+'.join(word if c==1 else f'{c}*{word}' for c,word in zip(row,torus_map) if c)
               for name,row in zip(variables,matrix)}
-        strict=dict(zip(powers,coefficients))
         divisors=[]
         for position,i in enumerate(cone):
             if i<n:
@@ -243,14 +239,14 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
                 continue
             values = direction_orders[tuple(proof['edge']['direction'])]
             powers = [values[r] for r in cone]
-            positive=monomial(coords,[max(0,v) for v in powers])
-            negative=monomial(coords,[max(0,-v) for v in powers])
+            plus, minus = signed_powers(tuple(powers))
+            positive, negative = monomial(coords, plus), monomial(coords, minus)
             for k,ident in enumerate(ids,1):
                 root=proof['root_family']+f'_{k}'
                 ideal=[coords[position], f'{positive}-{root}*{negative}']
                 divisors.append({'id':ident,'ideal':ideal,'equation':', '.join(ideal)})
         charts.append({'id':f'N{index}','coordinates':coords,'map':maps,
-                       'exceptional':divisors,'strict_transform':format_poly(strict,coords),
+                       'exceptional':divisors,'strict_transform':strict,
                        'pullback_factor':monomial(coords,minimum),'ray_indices':cone})
     dual={'status':'complete','convention':('Ambient exceptional divisor' if mode=='embedded' else
           'Reduced exceptional divisor on the smooth strict transform')+' over the origin over Qbar.',
@@ -304,13 +300,41 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     return result
 
 
-def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False):
+def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False):
     """A regular Newton modification, completed by blowups where a face is
     degenerate. Those blowups may use `seconds` in all, over the coordinate
     choices tried; past that the degenerate choices give no answer."""
     from time import monotonic
     deadline = monotonic()+seconds
     last_limit = None
+    if mode == 'embedded' and not all(_axial_data(poly)[1]):
+        # A subdivision on the boundary is permissible if it preserves the
+        # smooth locus. Each exceptional ray maps onto the coordinate subspace
+        # cut out by its positive entries. For a reduced polynomial, membership
+        # in the square of each corresponding ideal certifies that inclusion.
+        try:
+            fan = build_fan(poly, exhaustive=exhaustive_faces())
+            if fan['boundary_rays']:
+                centres = _boundary_centres(poly, variables, fan)
+                if centres is None:
+                    from .newton_trials import resolve_trials
+                    trial = resolve_trials(poly, variables, verified=verified, integrals=integrals)
+                    if trial is not None:
+                        return trial
+                else:
+                    matrix = tuple(tuple(int(i == j) for j in range(len(variables))) for i in range(len(variables)))
+                    result = _assemble(poly, variables, mode, fan, matrix, compute, deadline, original=poly,
+                                       defer_outputs=defer_outputs)
+                    if result is not None:
+                        proof = result['certificate']
+                        proof['boundary_image_coordinate_ideals'] = centres
+                        proof['description'] = ('The nontrivial coordinate images of the exceptional divisors '
+                            'lie in the singular locus. Every maximal cone has lattice determinant one. '
+                            'The strict transform is smooth and transverse to the toric strata over the origin.')
+                        proof['exceptional_orbit_faces'] = proof.pop('compact_faces')
+                        return result
+        except LimitError as error:
+            last_limit = error
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
             fan=build_fan(transformed, exhaustive=exhaustive_faces())

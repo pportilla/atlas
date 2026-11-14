@@ -1,0 +1,2438 @@
+{
+  "date_utc": "2026-11-14T09:36:35.051490+00:00",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "atlas_commit": "819a59eec366c16fd4e829d4fc5870341142c01c",
+  "sha256": {
+    "benchmarks/local_dimension_cpu.py": "95ec2d1ed52cce22c0105297ea51534dec6dcce681c635e004ce4b3d4963dc81",
+    "native/build/libgroebner.so": "0a05c40eb81eca531c09db8c29c5d2038b497fc08be4627ff75c06988dfd1f46",
+    "native/build/bench_local_dimension": "20f39a6d9ac3af0431fad64f820f30f593a8d14c741170867b405c86ace8eb93",
+    "native/build/local_algebra": "6a7512f0f3a5ac293e6c1a402e6a612f4141a3ebd3a74ebfbc80dc8d5c77f535",
+    "native/local_operations.cpp": "da0f1e3ab86e27bdc4defe168c69ae23f02c974134e2ccb2bccf36d9079caa34",
+    "native/point_geometry.cpp": "8402e0aefd8e507c4f66bef8ef0cab74bfd8b15672d3bd514a6d67884f77937b",
+    "native/local_cli.cpp": "ee7f4a9b322010caecb3c0b1868fd69135ea30e3e94907b34c91f2c03de74051",
+    "native/local_basis.cpp": "d9cd74b61838f52804c61d09c6d267aa0fe4b28fc4041a81f0ba1eeb2b5818dc",
+    "native/local_basis.hpp": "98070296f85ab38774d08d1463ecf2bdb5460ee487e95b3c23509a2744214c43",
+    "benchmarks/local_dimension_kernel.cpp": "0f09c52cb163204fc09d361e0fdbf2200d6078ad5994d2346be7d37c4905b936",
+    "atlas": "a2bace539eaf7a8e059fd7e23f666630245137699f558e4510b2c74616925099",
+    "engine/local_dimension.py": "72a53fa8e586f2fdadfff9981f07a9fd4fbd238ad3b47c27bef4c07839f165c9",
+    "engine/local_dimension_input.py": "1ee3650fc3014961780965b7c48f48c5480e6fa4e199bb35941db705a419e05f",
+    "engine/algebra_execution.py": "65cb47385b3a589df2fa572d78723165f8a33d6f44bb222964d654f8c33ad40e",
+    "engine/native_library.py": "0f7618f7d3d4181a014a6c3984bd970c42ac7f0eb6843892514f04981f696d77",
+    "engine/native_polynomial.py": "acccf71c0d885baea86836c35c8a48411356be0fe46a15e3e1a4f710125ecf07"
+  },
+  "python": "3.14.4",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "command": [
+    "python3",
+    "benchmarks/local_dimension_cpu.py",
+    "--batch",
+    "96",
+    "--repeats",
+    "7",
+    "--cpu",
+    "3",
+    "--cold-repeats",
+    "5",
+    "--output",
+    "benchmarks/large-coupled-ordinary-recheck-ryzen-6800h.json"
+  ],
+  "affinity": [
+    3
+  ],
+  "unit": "microseconds per call",
+  "batch": 96,
+  "repeats": 7,
+  "cold_repeats": 5,
+  "scope": "Warm Atlas public CPU handler including policy/stages and native request/response; separate warmed Atlas C++ CPU kernel on a parsed ideal and point; two warm Singular procedures in a parsed rational local ring. Generic uses dim(std(J)) and, for smoothness, the rank of the first jet. Specialized uses dimension bounds and shortcuts for principal ideals and maximal rank. Report both medians and their minimum. Nonzero-point translation or evaluation and incidence are included; parsing, process startup, replay generation and printing excluded. All timed operations compute the same scalar(s); both sides warm up then recompute. Cold measures the installed ./atlas CLI + JSON and fresh Singular -q + source + printed invariant tuple. Singular uses one thread and its native wall clock. Warm engine order rotates per sample.",
+  "rows": [
+    {
+      "case": {
+        "name": "regular-plane",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [],
+        "point": [],
+        "dimension": 2,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        2
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          2.3548645833333333,
+          4.313052083333333,
+          4.6241562499999995,
+          4.1205,
+          4.15515625,
+          4.555270833333333,
+          4.301677083333334
+        ],
+        "atlas_typed": [
+          0.038927083333333334,
+          0.03672916666666667,
+          0.036625,
+          0.03684375,
+          0.038406249999999996,
+          0.036625,
+          0.037260416666666664
+        ],
+        "singular_generic": [
+          3.625,
+          3.625,
+          3.6354166666666665,
+          3.6770833333333335,
+          3.59375,
+          3.7083333333333335,
+          3.6458333333333335
+        ],
+        "singular_specialized": [
+          6.322916666666667,
+          6.28125,
+          6.375,
+          6.5,
+          6.791666666666667,
+          6.770833333333333,
+          6.364583333333333
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 4.301677083333334,
+        "atlas_typed": 0.03684375,
+        "singular_generic": 3.6354166666666665,
+        "singular_specialized": 6.375,
+        "singular_best": 3.6354166666666665
+      },
+      "cold_us": {
+        "atlas": [
+          4140.48,
+          4779.979,
+          4955.22,
+          5050.44,
+          4877.664
+        ],
+        "singular_generic": [
+          7499.592,
+          7927.271,
+          13025.572,
+          6450.508,
+          9739.297
+        ],
+        "singular_specialized": [
+          10001.203,
+          8951.287,
+          9209.235,
+          8559.005,
+          10092.175
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4877.664,
+        "singular_generic": 7927.271,
+        "singular_specialized": 9209.235,
+        "singular_best": 7927.271
+      }
+    },
+    {
+      "case": {
+        "name": "regular-plane",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [],
+        "point": [],
+        "dimension": 2,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        2,
+        2,
+        0,
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          2.2285833333333334,
+          2.6331041666666666,
+          4.50665625,
+          4.5190624999999995,
+          4.563427083333333,
+          2.30790625,
+          2.244458333333333
+        ],
+        "atlas_typed": [
+          0.03736458333333333,
+          0.03694791666666667,
+          0.03757291666666667,
+          0.03736458333333333,
+          0.05803125,
+          0.03767708333333333,
+          0.03735416666666667
+        ],
+        "singular_generic": [
+          7.791666666666667,
+          7.739583333333333,
+          44.333333333333336,
+          24.020833333333332,
+          33.260416666666664,
+          11.729166666666666,
+          34.760416666666664
+        ],
+        "singular_specialized": [
+          14.947916666666666,
+          11.166666666666666,
+          20.59375,
+          38.635416666666664,
+          17.104166666666668,
+          17.885416666666668,
+          20.166666666666668
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 2.6331041666666666,
+        "atlas_typed": 0.03736458333333333,
+        "singular_generic": 24.020833333333332,
+        "singular_specialized": 17.885416666666668,
+        "singular_best": 17.885416666666668
+      },
+      "cold_us": {
+        "atlas": [
+          4687.294,
+          4710.027,
+          4371.697,
+          4270.595,
+          4800.799
+        ],
+        "singular_generic": [
+          9751.721,
+          8046.376,
+          8770.355,
+          8681.757,
+          12185.914
+        ],
+        "singular_specialized": [
+          9469.056,
+          8895.892,
+          8012.522,
+          9098.777,
+          7601.395
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4687.294,
+        "singular_generic": 8770.355,
+        "singular_specialized": 8895.892,
+        "singular_best": 8770.355
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-cusp",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "(y+2/3)^2-(x-1/2)^3"
+        ],
+        "point": [
+          "1/2",
+          "-2/3"
+        ],
+        "dimension": 1,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          9.76815625,
+          6.639010416666667,
+          7.763229166666666,
+          7.2055,
+          14.433645833333335,
+          10.2446875,
+          7.362156250000001
+        ],
+        "atlas_typed": [
+          1.5726562499999999,
+          1.5666145833333334,
+          1.5458333333333334,
+          1.9845833333333334,
+          3.2099270833333335,
+          1.5473020833333333,
+          1.5573229166666664
+        ],
+        "singular_generic": [
+          39.489583333333336,
+          26.177083333333332,
+          36.885416666666664,
+          16.1875,
+          17.239583333333332,
+          37.125,
+          37.166666666666664
+        ],
+        "singular_specialized": [
+          63.458333333333336,
+          49.677083333333336,
+          49.375,
+          39.104166666666664,
+          39.395833333333336,
+          18.229166666666668,
+          18.59375
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 7.763229166666666,
+        "atlas_typed": 1.5666145833333334,
+        "singular_generic": 36.885416666666664,
+        "singular_specialized": 39.395833333333336,
+        "singular_best": 36.885416666666664
+      },
+      "cold_us": {
+        "atlas": [
+          4762.406,
+          5866.574,
+          5666.756,
+          5806.981,
+          5030.413
+        ],
+        "singular_generic": [
+          9327.398,
+          14201.986,
+          10440.083,
+          9043.962,
+          10086.965
+        ],
+        "singular_specialized": [
+          8769.363,
+          10922.715,
+          7930.066,
+          8847.852,
+          12887.962
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 5666.756,
+        "singular_generic": 10086.965,
+        "singular_specialized": 8847.852,
+        "singular_best": 8847.852
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-cusp",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "(y+2/3)^2-(x-1/2)^3"
+        ],
+        "point": [
+          "1/2",
+          "-2/3"
+        ],
+        "dimension": 1,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        2,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          7.341281250000001,
+          12.120635416666666,
+          15.724427083333333,
+          15.367083333333333,
+          9.092395833333333,
+          12.832812500000001,
+          12.6835625
+        ],
+        "atlas_typed": [
+          2.314270833333333,
+          2.3094791666666667,
+          4.952916666666667,
+          4.73384375,
+          2.335875,
+          2.341614583333333,
+          2.315729166666667
+        ],
+        "singular_generic": [
+          40.78125,
+          41.125,
+          40.854166666666664,
+          51.1875,
+          40.614583333333336,
+          41.020833333333336,
+          40.5625
+        ],
+        "singular_specialized": [
+          22.96875,
+          54.614583333333336,
+          26.125,
+          66.3125,
+          22.989583333333332,
+          23.208333333333332,
+          23.375
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 12.6835625,
+        "atlas_typed": 2.335875,
+        "singular_generic": 40.854166666666664,
+        "singular_specialized": 23.375,
+        "singular_best": 23.375
+      },
+      "cold_us": {
+        "atlas": [
+          4241.281,
+          5037.867,
+          4620.347,
+          4906.348,
+          4503.326
+        ],
+        "singular_generic": [
+          8733.356,
+          10025.639,
+          9313.863,
+          9181.823,
+          9585.227
+        ],
+        "singular_specialized": [
+          12886.208,
+          9026.059,
+          8741.991,
+          10185.802,
+          6950.333
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4620.347,
+        "singular_generic": 9313.863,
+        "singular_specialized": 9026.059,
+        "singular_best": 9026.059
+      }
+    },
+    {
+      "case": {
+        "name": "smooth-on-cusp",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "(y+2/3)^2-(x-1/2)^3"
+        ],
+        "point": [
+          "3/2",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          4.949885416666667,
+          6.599354166666667,
+          6.428302083333333,
+          11.05403125,
+          6.693593750000001,
+          8.782020833333332,
+          11.821625
+        ],
+        "atlas_typed": [
+          1.5069062500000001,
+          3.2148229166666664,
+          1.5246458333333335,
+          1.5533541666666668,
+          1.5715104166666667,
+          1.5314375,
+          1.6098125
+        ],
+        "singular_generic": [
+          39.260416666666664,
+          20.28125,
+          43.552083333333336,
+          71.75,
+          50.78125,
+          18.677083333333332,
+          16.572916666666668
+        ],
+        "singular_specialized": [
+          64.45833333333333,
+          41.677083333333336,
+          69.34375,
+          77.3125,
+          64.29166666666667,
+          21.854166666666668,
+          18.635416666666668
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 6.693593750000001,
+        "atlas_typed": 1.5533541666666668,
+        "singular_generic": 39.260416666666664,
+        "singular_specialized": 64.29166666666667,
+        "singular_best": 39.260416666666664
+      },
+      "cold_us": {
+        "atlas": [
+          4382.988,
+          4603.265,
+          4526.6,
+          4888.154,
+          4994.945
+        ],
+        "singular_generic": [
+          8949.975,
+          10137.41,
+          9592.069,
+          9013.455,
+          14280.585
+        ],
+        "singular_specialized": [
+          9819.88,
+          9838.525,
+          7239.911,
+          9861.658,
+          10508.592
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4603.265,
+        "singular_generic": 9592.069,
+        "singular_specialized": 9838.525,
+        "singular_best": 9592.069
+      }
+    },
+    {
+      "case": {
+        "name": "smooth-on-cusp",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "(y+2/3)^2-(x-1/2)^3"
+        ],
+        "point": [
+          "3/2",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          7.965062499999999,
+          11.3434375,
+          8.957458333333333,
+          9.597427083333333,
+          10.0133125,
+          15.592510416666668,
+          8.753427083333333
+        ],
+        "atlas_typed": [
+          2.3273125,
+          2.45015625,
+          4.482541666666667,
+          2.40403125,
+          2.3168854166666666,
+          2.318229166666667,
+          2.3331666666666666
+        ],
+        "singular_generic": [
+          80.04166666666667,
+          80.10416666666667,
+          78.94791666666667,
+          86.9375,
+          108.13541666666667,
+          78.21875,
+          77.38541666666667
+        ],
+        "singular_specialized": [
+          113.57291666666667,
+          94.64583333333333,
+          82.32291666666667,
+          93.26041666666667,
+          80.07291666666667,
+          102.25,
+          84.14583333333333
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 9.597427083333333,
+        "atlas_typed": 2.3331666666666666,
+        "singular_generic": 80.04166666666667,
+        "singular_specialized": 93.26041666666667,
+        "singular_best": 80.04166666666667
+      },
+      "cold_us": {
+        "atlas": [
+          4217.606,
+          5128.668,
+          4536.458,
+          4912.39,
+          4743.46
+        ],
+        "singular_generic": [
+          14144.588,
+          14142.645,
+          9556.301,
+          7852.88,
+          10183.347
+        ],
+        "singular_specialized": [
+          9791.586,
+          9836.962,
+          7686.857,
+          7815.47,
+          9850.668
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4743.46,
+        "singular_generic": 10183.347,
+        "singular_specialized": 9791.586,
+        "singular_best": 9791.586
+      }
+    },
+    {
+      "case": {
+        "name": "fat-point",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x^2",
+          "y^3"
+        ],
+        "point": [],
+        "dimension": 0,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          3.3009270833333333,
+          8.528833333333333,
+          4.091270833333334,
+          9.009010416666667,
+          4.429,
+          7.6475937499999995,
+          4.14659375
+        ],
+        "atlas_typed": [
+          0.5839166666666666,
+          0.30672916666666666,
+          0.4256979166666666,
+          0.30402083333333335,
+          0.30975,
+          0.49927083333333333,
+          0.47350000000000003
+        ],
+        "singular_generic": [
+          50.71875,
+          17.84375,
+          49.739583333333336,
+          47.322916666666664,
+          14.71875,
+          15.958333333333334,
+          17.510416666666668
+        ],
+        "singular_specialized": [
+          27.177083333333332,
+          26.833333333333332,
+          58.541666666666664,
+          37.333333333333336,
+          48.8125,
+          24.90625,
+          26.072916666666668
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 4.429,
+        "atlas_typed": 0.4256979166666666,
+        "singular_generic": 17.84375,
+        "singular_specialized": 27.177083333333332,
+        "singular_best": 17.84375
+      },
+      "cold_us": {
+        "atlas": [
+          5054.398,
+          5122.867,
+          5197.909,
+          4964.909,
+          4998.171
+        ],
+        "singular_generic": [
+          9572.802,
+          6861.686,
+          7618.627,
+          8782.458,
+          10385.679
+        ],
+        "singular_specialized": [
+          7872.528,
+          9064.461,
+          8899.991,
+          13229.648,
+          10589.024
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 5054.398,
+        "singular_generic": 8782.458,
+        "singular_specialized": 9064.461,
+        "singular_best": 8782.458
+      }
+    },
+    {
+      "case": {
+        "name": "fat-point",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x^2",
+          "y^3"
+        ],
+        "point": [],
+        "dimension": 0,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        0,
+        2,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          6.961177083333333,
+          8.824395833333334,
+          6.397197916666666,
+          7.254020833333333,
+          6.221979166666666,
+          9.036781249999999,
+          7.489572916666667
+        ],
+        "atlas_typed": [
+          0.30182291666666666,
+          0.3057916666666667,
+          0.29952083333333335,
+          0.30432291666666667,
+          0.30391666666666667,
+          0.29931250000000004,
+          0.30244791666666665
+        ],
+        "singular_generic": [
+          43.479166666666664,
+          11.885416666666666,
+          43.302083333333336,
+          11.927083333333334,
+          18.229166666666668,
+          49.854166666666664,
+          27.979166666666668
+        ],
+        "singular_specialized": [
+          30.010416666666668,
+          19.25,
+          41.78125,
+          19.979166666666668,
+          59.364583333333336,
+          27.427083333333332,
+          39.65625
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 7.254020833333333,
+        "atlas_typed": 0.30244791666666665,
+        "singular_generic": 27.979166666666668,
+        "singular_specialized": 30.010416666666668,
+        "singular_best": 27.979166666666668
+      },
+      "cold_us": {
+        "atlas": [
+          3774.948,
+          4785.72,
+          4380.824,
+          4506.602,
+          4540.066
+        ],
+        "singular_generic": [
+          5793.876,
+          5967.756,
+          6984.748,
+          6538.615,
+          5851.435
+        ],
+        "singular_specialized": [
+          8436.354,
+          9390.528,
+          5091.659,
+          6632.312,
+          6449.216
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4506.602,
+        "singular_generic": 5967.756,
+        "singular_specialized": 6632.312,
+        "singular_best": 5967.756
+      }
+    },
+    {
+      "case": {
+        "name": "plane-and-line",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "x*y",
+          "x*z"
+        ],
+        "point": [],
+        "dimension": 2,
+        "embedding": 3,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        2
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          3.55515625,
+          8.620989583333333,
+          7.328760416666667,
+          8.730677083333333,
+          8.550020833333333,
+          6.442385416666667,
+          8.445239583333334
+        ],
+        "atlas_typed": [
+          0.3731041666666666,
+          0.37676041666666665,
+          0.37926041666666666,
+          0.3966875,
+          0.5066875000000001,
+          0.38135416666666666,
+          0.37634375
+        ],
+        "singular_generic": [
+          23.927083333333332,
+          14.34375,
+          13.302083333333334,
+          13.114583333333334,
+          14.083333333333334,
+          13.0625,
+          13.895833333333334
+        ],
+        "singular_specialized": [
+          30.3125,
+          21.291666666666668,
+          34.28125,
+          19.041666666666668,
+          19.697916666666668,
+          20.208333333333332,
+          19.6875
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 8.445239583333334,
+        "atlas_typed": 0.37926041666666666,
+        "singular_generic": 13.895833333333334,
+        "singular_specialized": 20.208333333333332,
+        "singular_best": 13.895833333333334
+      },
+      "cold_us": {
+        "atlas": [
+          4132.786,
+          4741.106,
+          4864.229,
+          4404.399,
+          4605.159
+        ],
+        "singular_generic": [
+          6676.475,
+          6893.275,
+          6785.792,
+          7836.299,
+          10057.409
+        ],
+        "singular_specialized": [
+          6863.62,
+          6882.475,
+          7416.205,
+          12751.985,
+          9893.549
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4605.159,
+        "singular_generic": 6893.275,
+        "singular_specialized": 7416.205,
+        "singular_best": 6893.275
+      }
+    },
+    {
+      "case": {
+        "name": "plane-and-line",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "x*y",
+          "x*z"
+        ],
+        "point": [],
+        "dimension": 2,
+        "embedding": 3,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        2,
+        3,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          4.5780312499999996,
+          9.043875,
+          5.03796875,
+          7.402020833333334,
+          8.873239583333334,
+          4.379854166666667,
+          7.613145833333333
+        ],
+        "atlas_typed": [
+          0.37853125,
+          0.3836354166666667,
+          0.37195833333333334,
+          0.37790625000000005,
+          0.3827083333333334,
+          0.7299270833333332,
+          0.37581250000000005
+        ],
+        "singular_generic": [
+          49.96875,
+          29.25,
+          19.895833333333332,
+          22.020833333333332,
+          54.760416666666664,
+          39.489583333333336,
+          50.229166666666664
+        ],
+        "singular_specialized": [
+          59.229166666666664,
+          61.5625,
+          63.833333333333336,
+          63.46875,
+          64.22916666666667,
+          60.104166666666664,
+          38.71875
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 7.402020833333334,
+        "atlas_typed": 0.37853125,
+        "singular_generic": 39.489583333333336,
+        "singular_specialized": 61.5625,
+        "singular_best": 39.489583333333336
+      },
+      "cold_us": {
+        "atlas": [
+          4048.185,
+          4826.437,
+          4714.114,
+          5570.153,
+          4781.091
+        ],
+        "singular_generic": [
+          9453.768,
+          9798.379,
+          9569.106,
+          10382.544,
+          9947.11
+        ],
+        "singular_specialized": [
+          9877.308,
+          8033.192,
+          6994.327,
+          9727.084,
+          9047.8
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4781.091,
+        "singular_generic": 9798.379,
+        "singular_specialized": 9047.8,
+        "singular_best": 9047.8
+      }
+    },
+    {
+      "case": {
+        "name": "on-line-only",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "x*y",
+          "x*z"
+        ],
+        "point": [
+          "1",
+          "0",
+          "0"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          4.0147812499999995,
+          4.440479166666667,
+          6.411708333333333,
+          9.237885416666666,
+          9.241010416666667,
+          6.84378125,
+          8.871354166666666
+        ],
+        "atlas_typed": [
+          0.44698958333333333,
+          0.46660416666666665,
+          0.48894791666666665,
+          0.4438645833333333,
+          0.47152083333333333,
+          0.44835416666666666,
+          0.5010520833333333
+        ],
+        "singular_generic": [
+          396.40625,
+          420.8541666666667,
+          428.5833333333333,
+          404.7708333333333,
+          405.0729166666667,
+          376.3854166666667,
+          364.34375
+        ],
+        "singular_specialized": [
+          421.8020833333333,
+          397.9270833333333,
+          417.8958333333333,
+          400.125,
+          404.3020833333333,
+          373.6458333333333,
+          372.78125
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 6.84378125,
+        "atlas_typed": 0.46660416666666665,
+        "singular_generic": 404.7708333333333,
+        "singular_specialized": 400.125,
+        "singular_best": 400.125
+      },
+      "cold_us": {
+        "atlas": [
+          3987.11,
+          4580.021,
+          4323.516,
+          4644.573,
+          5167.983
+        ],
+        "singular_generic": [
+          9823.457,
+          9975.684,
+          7507.257,
+          9315.947,
+          9993.017
+        ],
+        "singular_specialized": [
+          9944.034,
+          6916.719,
+          9394.645,
+          9967.61,
+          8998.637
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4580.021,
+        "singular_generic": 9823.457,
+        "singular_specialized": 9394.645,
+        "singular_best": 9394.645
+      }
+    },
+    {
+      "case": {
+        "name": "on-line-only",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "x*y",
+          "x*z"
+        ],
+        "point": [
+          "1",
+          "0",
+          "0"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        1,
+        2,
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          4.86378125,
+          10.920229166666667,
+          9.042729166666666,
+          9.115052083333333,
+          10.1473125,
+          9.160552083333334,
+          8.907572916666666
+        ],
+        "atlas_typed": [
+          0.44333333333333336,
+          0.45628124999999997,
+          0.44626041666666666,
+          0.4432291666666666,
+          0.45326041666666667,
+          0.4486666666666667,
+          0.43321875
+        ],
+        "singular_generic": [
+          379.5,
+          378.2916666666667,
+          379.4166666666667,
+          411.8125,
+          367.96875,
+          390.2916666666667,
+          379.4270833333333
+        ],
+        "singular_specialized": [
+          25.59375,
+          46.375,
+          25.458333333333332,
+          36.125,
+          36.208333333333336,
+          15.1875,
+          25.447916666666668
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 9.115052083333333,
+        "atlas_typed": 0.44626041666666666,
+        "singular_generic": 379.4270833333333,
+        "singular_specialized": 25.59375,
+        "singular_best": 25.59375
+      },
+      "cold_us": {
+        "atlas": [
+          3699.787,
+          4576.985,
+          4724.664,
+          4542.951,
+          5209.471
+        ],
+        "singular_generic": [
+          6775.834,
+          9339.612,
+          8540.611,
+          9350.753,
+          9311.017
+        ],
+        "singular_specialized": [
+          7546.801,
+          7645.438,
+          8442.555,
+          7495.023,
+          12750.241
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4576.985,
+        "singular_generic": 9311.017,
+        "singular_specialized": 7645.438,
+        "singular_best": 7645.438
+      }
+    },
+    {
+      "case": {
+        "name": "embedded-point",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x*y",
+          "y^2"
+        ],
+        "point": [],
+        "dimension": 1,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          3.305729166666667,
+          8.607635416666666,
+          4.09221875,
+          8.36853125,
+          4.146270833333333,
+          7.070666666666667,
+          6.783354166666666
+        ],
+        "atlas_typed": [
+          0.31246875,
+          0.3256145833333333,
+          0.31403125,
+          0.3189375,
+          0.31371875,
+          0.3163229166666667,
+          0.31496874999999996
+        ],
+        "singular_generic": [
+          8.46875,
+          40.125,
+          9.0,
+          8.479166666666666,
+          35.322916666666664,
+          35.75,
+          46.28125
+        ],
+        "singular_specialized": [
+          43.916666666666664,
+          23.625,
+          44.197916666666664,
+          33.46875,
+          52.604166666666664,
+          53.395833333333336,
+          32.5
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 6.783354166666666,
+        "atlas_typed": 0.31496874999999996,
+        "singular_generic": 35.322916666666664,
+        "singular_specialized": 43.916666666666664,
+        "singular_best": 35.322916666666664
+      },
+      "cold_us": {
+        "atlas": [
+          4086.909,
+          4808.313,
+          4654.171,
+          4699.447,
+          5036.535
+        ],
+        "singular_generic": [
+          8724.087,
+          6964.159,
+          8278.224,
+          13320.169,
+          12887.201
+        ],
+        "singular_specialized": [
+          8928.334,
+          9051.296,
+          7031.176,
+          9978.63,
+          12984.814
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4699.447,
+        "singular_generic": 8724.087,
+        "singular_specialized": 9051.296,
+        "singular_best": 8724.087
+      }
+    },
+    {
+      "case": {
+        "name": "embedded-point",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x*y",
+          "y^2"
+        ],
+        "point": [],
+        "dimension": 1,
+        "embedding": 2,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        2,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          4.204614583333333,
+          4.596510416666667,
+          7.855166666666666,
+          6.382281249999999,
+          8.356958333333333,
+          8.482604166666667,
+          6.849197916666667
+        ],
+        "atlas_typed": [
+          0.3114270833333333,
+          0.3203020833333333,
+          0.3187291666666667,
+          0.31423958333333335,
+          0.3138229166666667,
+          0.3202916666666667,
+          0.31653125
+        ],
+        "singular_generic": [
+          43.354166666666664,
+          11.833333333333334,
+          11.875,
+          32.916666666666664,
+          34.5,
+          43.25,
+          43.447916666666664
+        ],
+        "singular_specialized": [
+          19.208333333333332,
+          19.239583333333332,
+          40.145833333333336,
+          62.197916666666664,
+          51.21875,
+          50.447916666666664,
+          50.78125
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 6.849197916666667,
+        "atlas_typed": 0.31653125,
+        "singular_generic": 34.5,
+        "singular_specialized": 50.447916666666664,
+        "singular_best": 34.5
+      },
+      "cold_us": {
+        "atlas": [
+          4071.87,
+          4876.893,
+          4560.374,
+          4455.215,
+          4619.777
+        ],
+        "singular_generic": [
+          7344.329,
+          9032.371,
+          8301.238,
+          8459.327,
+          7171.14
+        ],
+        "singular_specialized": [
+          8913.656,
+          13052.924,
+          8965.093,
+          8623.748,
+          7019.104
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4560.374,
+        "singular_generic": 8301.238,
+        "singular_specialized": 8913.656,
+        "singular_best": 8301.238
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-complete-intersection",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "(x-1/2)*(y+2/3)+(z-1/3)^2",
+          "(x-1/2)*(y+2/3)+(z-1/3)^2+(x-1/2)^2"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 3,
+        "order": "lex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          26.32122916666667,
+          32.11969791666667,
+          34.11711458333333,
+          31.805666666666667,
+          30.438708333333334,
+          29.020510416666667,
+          32.2151875
+        ],
+        "atlas_typed": [
+          16.54128125,
+          16.691041666666667,
+          16.884947916666665,
+          16.746145833333333,
+          16.884322916666665,
+          16.576041666666665,
+          16.6946875
+        ],
+        "singular_generic": [
+          439.0625,
+          434.9583333333333,
+          437.0104166666667,
+          433.65625,
+          434.6041666666667,
+          441.71875,
+          312.1458333333333
+        ],
+        "singular_specialized": [
+          412.0729166666667,
+          431.71875,
+          442.9166666666667,
+          430.65625,
+          422.75,
+          367.3645833333333,
+          350.21875
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 31.805666666666667,
+        "atlas_typed": 16.6946875,
+        "singular_generic": 434.9583333333333,
+        "singular_specialized": 422.75,
+        "singular_best": 422.75
+      },
+      "cold_us": {
+        "atlas": [
+          3910.144,
+          4527.591,
+          4531.419,
+          4478.179,
+          4519.927
+        ],
+        "singular_generic": [
+          7072.915,
+          7763.251,
+          6110.195,
+          6285.586,
+          7103.052
+        ],
+        "singular_specialized": [
+          7346.623,
+          6220.323,
+          7198.312,
+          7269.898,
+          7134.842
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4519.927,
+        "singular_generic": 7072.915,
+        "singular_specialized": 7198.312,
+        "singular_best": 7072.915
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-complete-intersection",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "(x-1/2)*(y+2/3)+(z-1/3)^2",
+          "(x-1/2)*(y+2/3)+(z-1/3)^2+(x-1/2)^2"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 3,
+        "order": "lex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        3,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          29.653781249999998,
+          31.29240625,
+          34.02852083333333,
+          36.492968749999996,
+          36.56497916666667,
+          30.168302083333334,
+          33.744125000000004
+        ],
+        "atlas_typed": [
+          16.946,
+          17.173416666666665,
+          17.197520833333332,
+          17.523552083333332,
+          17.04953125,
+          17.02365625,
+          16.7041875
+        ],
+        "singular_generic": [
+          222.01041666666666,
+          466.6666666666667,
+          456.15625,
+          466.375,
+          499.3645833333333,
+          456.8229166666667,
+          471.53125
+        ],
+        "singular_specialized": [
+          441.0729166666667,
+          440.5833333333333,
+          448.0729166666667,
+          453.7916666666667,
+          548.2083333333334,
+          455.8333333333333,
+          442.4166666666667
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 33.744125000000004,
+        "atlas_typed": 17.04953125,
+        "singular_generic": 466.375,
+        "singular_specialized": 448.0729166666667,
+        "singular_best": 448.0729166666667
+      },
+      "cold_us": {
+        "atlas": [
+          4356.237,
+          4962.995,
+          4598.335,
+          4616.5,
+          4919.684
+        ],
+        "singular_generic": [
+          8311.286,
+          9979.061,
+          7260.94,
+          9342.948,
+          8834.657
+        ],
+        "singular_specialized": [
+          7945.906,
+          9940.909,
+          8883.96,
+          9999.57,
+          10066.707
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4616.5,
+        "singular_generic": 8834.657,
+        "singular_specialized": 9940.909,
+        "singular_best": 8834.657
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-oblique-line",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "2*(x-1/2)+3*(y+2/3)+(z-1/3)+(x-1/2)^2",
+          "(x-1/2)-2*(y+2/3)+3*(z-1/3)",
+          "2*((x-1/2)-2*(y+2/3)+3*(z-1/3))"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          25.694739583333334,
+          43.8045,
+          31.822885416666665,
+          33.57609375,
+          34.90089583333333,
+          36.68541666666667,
+          33.843583333333335
+        ],
+        "atlas_typed": [
+          19.45564583333333,
+          19.145166666666665,
+          19.384989583333333,
+          19.773020833333334,
+          19.5135625,
+          21.21136458333333,
+          20.066385416666666
+        ],
+        "singular_generic": [
+          392.0729166666667,
+          400.71875,
+          396.6875,
+          412.625,
+          411.59375,
+          416.5833333333333,
+          424.3645833333333
+        ],
+        "singular_specialized": [
+          387.1041666666667,
+          419.7083333333333,
+          411.0625,
+          449.21875,
+          402.34375,
+          436.6770833333333,
+          425.2708333333333
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 33.843583333333335,
+        "atlas_typed": 19.5135625,
+        "singular_generic": 411.59375,
+        "singular_specialized": 419.7083333333333,
+        "singular_best": 411.59375
+      },
+      "cold_us": {
+        "atlas": [
+          4124.429,
+          4378.8,
+          5400.643,
+          4990.036,
+          5554.934
+        ],
+        "singular_generic": [
+          7945.054,
+          7904.959,
+          9410.285,
+          9889.471,
+          9950.076
+        ],
+        "singular_specialized": [
+          9023.734,
+          6941.116,
+          12855.38,
+          9935.208,
+          10381.662
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4990.036,
+        "singular_generic": 9410.285,
+        "singular_specialized": 9935.208,
+        "singular_best": 9410.285
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-oblique-line",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "ideal": [
+          "2*(x-1/2)+3*(y+2/3)+(z-1/3)+(x-1/2)^2",
+          "(x-1/2)-2*(y+2/3)+3*(z-1/3)",
+          "2*((x-1/2)-2*(y+2/3)+3*(z-1/3))"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3"
+        ],
+        "dimension": 1,
+        "embedding": 1,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        1,
+        1,
+        2,
+        1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          31.42025,
+          31.5849375,
+          36.09680208333334,
+          33.67785416666667,
+          32.744427083333335,
+          35.653677083333335,
+          38.31860416666667
+        ],
+        "atlas_typed": [
+          19.645802083333333,
+          19.8995,
+          19.34878125,
+          22.3874375,
+          20.038729166666666,
+          19.5755625,
+          22.77932291666667
+        ],
+        "singular_generic": [
+          459.90625,
+          430.0104166666667,
+          423.5,
+          446.1041666666667,
+          452.625,
+          467.78125,
+          471.7708333333333
+        ],
+        "singular_specialized": [
+          425.15625,
+          439.3125,
+          450.15625,
+          435.5,
+          438.4895833333333,
+          418.34375,
+          442.0833333333333
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 33.67785416666667,
+        "atlas_typed": 19.8995,
+        "singular_generic": 452.625,
+        "singular_specialized": 438.4895833333333,
+        "singular_best": 438.4895833333333
+      },
+      "cold_us": {
+        "atlas": [
+          4486.945,
+          5370.826,
+          5104.703,
+          4924.252,
+          4837.138
+        ],
+        "singular_generic": [
+          10984.422,
+          9932.443,
+          9631.574,
+          8967.909,
+          9906.654
+        ],
+        "singular_specialized": [
+          9854.846,
+          10098.356,
+          14575.383,
+          9976.436,
+          9938.554
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4924.252,
+        "singular_generic": 9906.654,
+        "singular_specialized": 9976.436,
+        "singular_best": 9906.654
+      }
+    },
+    {
+      "case": {
+        "name": "outside-support",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x*y",
+          "y^2"
+        ],
+        "point": [
+          "1/2",
+          "1"
+        ],
+        "dimension": -1,
+        "embedding": -1,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        -1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          5.558427083333334,
+          9.447239583333333,
+          12.275822916666668,
+          10.258770833333333,
+          9.1864375,
+          9.432833333333333,
+          11.43809375
+        ],
+        "atlas_typed": [
+          2.26240625,
+          2.2137604166666667,
+          2.251958333333333,
+          2.1986354166666664,
+          2.1793333333333336,
+          2.2016666666666667,
+          2.210114583333333
+        ],
+        "singular_generic": [
+          414.9270833333333,
+          423.90625,
+          411.2916666666667,
+          421.5208333333333,
+          279.875,
+          213.71875,
+          354.9791666666667
+        ],
+        "singular_specialized": [
+          43.979166666666664,
+          12.53125,
+          12.854166666666666,
+          12.385416666666666,
+          12.46875,
+          16.364583333333332,
+          19.34375
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 9.447239583333333,
+        "atlas_typed": 2.210114583333333,
+        "singular_generic": 411.2916666666667,
+        "singular_specialized": 12.854166666666666,
+        "singular_best": 12.854166666666666
+      },
+      "cold_us": {
+        "atlas": [
+          3810.296,
+          4785.771,
+          4451.308,
+          3956.111,
+          4864.229
+        ],
+        "singular_generic": [
+          5863.658,
+          8342.626,
+          6125.273,
+          6698.958,
+          7011.609
+        ],
+        "singular_specialized": [
+          6243.497,
+          6553.483,
+          8968.009,
+          5807.943,
+          8088.997
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4451.308,
+        "singular_generic": 6698.958,
+        "singular_specialized": 6553.483,
+        "singular_best": 6553.483
+      }
+    },
+    {
+      "case": {
+        "name": "outside-support",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "ideal": [
+          "x*y",
+          "y^2"
+        ],
+        "point": [
+          "1/2",
+          "1"
+        ],
+        "dimension": -1,
+        "embedding": -1,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        -1
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          6.040802083333333,
+          8.414770833333334,
+          8.1376875,
+          8.618062499999999,
+          9.237677083333333,
+          9.088645833333333,
+          9.5973125
+        ],
+        "atlas_typed": [
+          3.1831041666666664,
+          2.20928125,
+          2.2805625,
+          2.1771354166666668,
+          2.18684375,
+          2.6651458333333333,
+          2.1768229166666666
+        ],
+        "singular_generic": [
+          204.70833333333334,
+          213.52083333333334,
+          199.52083333333334,
+          208.51041666666666,
+          201.61458333333334,
+          193.75,
+          206.97916666666666
+        ],
+        "singular_specialized": [
+          12.5,
+          14.21875,
+          12.510416666666666,
+          14.177083333333334,
+          14.8125,
+          15.541666666666666,
+          16.104166666666668
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 8.618062499999999,
+        "atlas_typed": 2.20928125,
+        "singular_generic": 204.70833333333334,
+        "singular_specialized": 14.21875,
+        "singular_best": 14.21875
+      },
+      "cold_us": {
+        "atlas": [
+          4391.565,
+          4005.815,
+          4352.06,
+          4107.757,
+          4299.04
+        ],
+        "singular_generic": [
+          6522.213,
+          6875.492,
+          6824.946,
+          6332.185,
+          6810.619
+        ],
+        "singular_specialized": [
+          6731.199,
+          6554.104,
+          6003.704,
+          6601.173,
+          5813.694
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4299.04,
+        "singular_generic": 6810.619,
+        "singular_specialized": 6554.104,
+        "singular_best": 6554.104
+      }
+    },
+    {
+      "case": {
+        "name": "rank-one-matrix-vertex",
+        "variables": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "ideal": [
+          "a*e-b*d",
+          "a*f-c*d",
+          "b*f-c*e"
+        ],
+        "point": [],
+        "dimension": 4,
+        "embedding": 6,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        4
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          11.836020833333334,
+          15.819083333333333,
+          14.417677083333333,
+          16.117250000000002,
+          18.26036458333333,
+          17.08490625,
+          14.695916666666667
+        ],
+        "atlas_typed": [
+          6.515760416666667,
+          6.510437499999999,
+          6.635677083333333,
+          6.624822916666666,
+          6.5679375,
+          6.672822916666667,
+          6.569927083333333
+        ],
+        "singular_generic": [
+          212.63541666666666,
+          201.19791666666666,
+          205.875,
+          203.04166666666666,
+          206.85416666666666,
+          206.27083333333334,
+          205.94791666666666
+        ],
+        "singular_specialized": [
+          208.66666666666666,
+          199.11458333333334,
+          201.5,
+          203.33333333333334,
+          203.30208333333334,
+          201.8125,
+          198.11458333333334
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 15.819083333333333,
+        "atlas_typed": 6.569927083333333,
+        "singular_generic": 205.94791666666666,
+        "singular_specialized": 201.8125,
+        "singular_best": 201.8125
+      },
+      "cold_us": {
+        "atlas": [
+          4407.044,
+          4093.501,
+          4325.009,
+          4461.887,
+          4529.005
+        ],
+        "singular_generic": [
+          5885.289,
+          6224.38,
+          6073.966,
+          6697.946,
+          7562.681
+        ],
+        "singular_specialized": [
+          6839.174,
+          6146.543,
+          6809.186,
+          7413.489,
+          7349.99
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4407.044,
+        "singular_generic": 6224.38,
+        "singular_specialized": 6839.174,
+        "singular_best": 6224.38
+      }
+    },
+    {
+      "case": {
+        "name": "rank-one-matrix-vertex",
+        "variables": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "ideal": [
+          "a*e-b*d",
+          "a*f-c*d",
+          "b*f-c*e"
+        ],
+        "point": [],
+        "dimension": 4,
+        "embedding": 6,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        4,
+        6,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          14.423322916666665,
+          18.313166666666667,
+          17.18990625,
+          18.226864583333334,
+          21.544072916666668,
+          20.33396875,
+          17.942260416666667
+        ],
+        "atlas_typed": [
+          6.864020833333334,
+          6.709041666666667,
+          6.540187499999999,
+          6.707375,
+          6.67146875,
+          6.621697916666666,
+          6.5453020833333335
+        ],
+        "singular_generic": [
+          205.5625,
+          206.34375,
+          210.90625,
+          214.33333333333334,
+          213.97916666666666,
+          207.27083333333334,
+          212.69791666666666
+        ],
+        "singular_specialized": [
+          213.22916666666666,
+          212.09375,
+          205.94791666666666,
+          209.02083333333334,
+          208.73958333333334,
+          209.34375,
+          208.96875
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 18.226864583333334,
+        "atlas_typed": 6.67146875,
+        "singular_generic": 210.90625,
+        "singular_specialized": 209.02083333333334,
+        "singular_best": 209.02083333333334
+      },
+      "cold_us": {
+        "atlas": [
+          3701.82,
+          4464.422,
+          4309.47,
+          3956.341,
+          4657.587
+        ],
+        "singular_generic": [
+          5761.054,
+          6699.499,
+          5438.955,
+          6542.262,
+          7130.765
+        ],
+        "singular_specialized": [
+          6064.478,
+          6275.838,
+          6394.192,
+          7207.69,
+          7208.141
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4309.47,
+        "singular_generic": 6542.262,
+        "singular_specialized": 6394.192,
+        "singular_best": 6394.192
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-nonlinear-matrix-vertex",
+        "variables": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "ideal": [
+          "((a-1/2)+(b+2/3)^2)*e-(b+2/3)*(d+(b+2/3)*(c-1/3))",
+          "((a-1/2)+(b+2/3)^2)*f-(c-1/3)*(d+(b+2/3)*(c-1/3))",
+          "(b+2/3)*f-(c-1/3)*e"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3",
+          "0",
+          "0",
+          "0"
+        ],
+        "dimension": 4,
+        "embedding": 6,
+        "order": "grevlex"
+      },
+      "operation": "local-dimension",
+      "expected": [
+        4
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          43.537125,
+          57.34291666666667,
+          54.730687499999995,
+          61.15439583333333,
+          85.423625,
+          52.49520833333333,
+          55.79770833333333
+        ],
+        "atlas_typed": [
+          34.96298958333333,
+          34.87229166666666,
+          34.44784375,
+          36.75116666666667,
+          38.62073958333333,
+          34.81813541666667,
+          34.638416666666664
+        ],
+        "singular_generic": [
+          221.23958333333334,
+          238.63541666666666,
+          218.03125,
+          229.40625,
+          221.8125,
+          219.40625,
+          217.25
+        ],
+        "singular_specialized": [
+          238.75,
+          223.64583333333334,
+          215.40625,
+          217.79166666666666,
+          214.80208333333334,
+          216.91666666666666,
+          218.34375
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 55.79770833333333,
+        "atlas_typed": 34.87229166666666,
+        "singular_generic": 221.23958333333334,
+        "singular_specialized": 217.79166666666666,
+        "singular_best": 217.79166666666666
+      },
+      "cold_us": {
+        "atlas": [
+          4382.397,
+          4631.579,
+          4839.742,
+          4864.038,
+          4828.821
+        ],
+        "singular_generic": [
+          7587.298,
+          7464.425,
+          6589.16,
+          7261.001,
+          7105.567
+        ],
+        "singular_specialized": [
+          7360.87,
+          7179.467,
+          9881.656,
+          6222.667,
+          7822.813
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4828.821,
+        "singular_generic": 7261.001,
+        "singular_specialized": 7360.87,
+        "singular_best": 7261.001
+      }
+    },
+    {
+      "case": {
+        "name": "shifted-nonlinear-matrix-vertex",
+        "variables": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "ideal": [
+          "((a-1/2)+(b+2/3)^2)*e-(b+2/3)*(d+(b+2/3)*(c-1/3))",
+          "((a-1/2)+(b+2/3)^2)*f-(c-1/3)*(d+(b+2/3)*(c-1/3))",
+          "(b+2/3)*f-(c-1/3)*e"
+        ],
+        "point": [
+          "1/2",
+          "-2/3",
+          "1/3",
+          "0",
+          "0",
+          "0"
+        ],
+        "dimension": 4,
+        "embedding": 6,
+        "order": "grevlex"
+      },
+      "operation": "local-smoothness",
+      "expected": [
+        4,
+        6,
+        0,
+        0
+      ],
+      "warm_us": {
+        "atlas_handler": [
+          52.263104166666665,
+          54.60628125,
+          56.62280208333333,
+          56.087312499999996,
+          59.5883125,
+          56.56280208333334,
+          52.390114583333336
+        ],
+        "atlas_typed": [
+          34.6364375,
+          34.76334375,
+          56.14909375,
+          36.94047916666667,
+          38.00666666666667,
+          34.92834375,
+          36.421375000000005
+        ],
+        "singular_generic": [
+          224.73958333333334,
+          228.45833333333334,
+          223.15625,
+          246.6875,
+          238.42708333333334,
+          223.45833333333334,
+          228.57291666666666
+        ],
+        "singular_specialized": [
+          224.85416666666666,
+          225.67708333333334,
+          225.03125,
+          229.27083333333334,
+          221.0,
+          222.94791666666666,
+          222.9375
+        ]
+      },
+      "warm_median_us": {
+        "atlas_handler": 56.087312499999996,
+        "atlas_typed": 36.421375000000005,
+        "singular_generic": 228.45833333333334,
+        "singular_specialized": 224.85416666666666,
+        "singular_best": 224.85416666666666
+      },
+      "cold_us": {
+        "atlas": [
+          4736.718,
+          5083.643,
+          9388.174,
+          4783.827,
+          4405.061
+        ],
+        "singular_generic": [
+          6435.31,
+          6925.847,
+          8053.008,
+          6360.869,
+          6008.873
+        ],
+        "singular_specialized": [
+          7330.582,
+          7291.559,
+          10812.196,
+          6842.199,
+          5963.086
+        ]
+      },
+      "cold_median_us": {
+        "atlas": 4783.827,
+        "singular_generic": 6435.31,
+        "singular_specialized": 7291.559,
+        "singular_best": 6435.31
+      }
+    }
+  ]
+}

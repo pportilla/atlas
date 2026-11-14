@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from engine.chart_batch import _pack, transform_atlas, transform_batch
+from engine.chart_batch import _cpu_functions, _pack, transform_atlas, transform_batch
 from engine.gpu_devices import available_devices
 from engine.native_backend import gpu_devices
 
@@ -38,6 +38,27 @@ def projections(exps, rays, cones):
 
 
 class ChartBatchTests(unittest.TestCase):
+    def test_rendered_charts_preserve_coefficients_and_graded_order(self):
+        from fractions import Fraction
+        from engine.polynomial import format_poly
+
+        # Both cones permute the two tied leading monomials. The larger
+        # power also exercises the arbitrary-precision chart table.
+        rays, cones = [(1, 0), (0, 1)], [(0, 1), (1, 0)]
+        names = ("zz", "alpha")
+        coefficients = [Fraction(-1), Fraction(2, 3), Fraction(-10**4500, 7), Fraction(1)]
+        for power in (7, 2**70, 10**4500):
+            exponents = [(power, 0), (0, power), (1, 1), (0, 0)]
+            values = list(zip(*exponents))
+            expected = [format_poly({tuple(e[i] for i in cone): c for e, c in zip(exponents, coefficients)},
+                                    names) for cone in cones]
+            policies = ("cpu", "auto", "gpu") if power.bit_length() < 1000 else ("cpu",)
+            for policy in policies:
+                with self.subTest(bits=power.bit_length(), policy=policy):
+                    equations, _ = transform_atlas(exponents, rays, cones, [0, 0], values, policy,
+                                                   equations=(names, coefficients))
+                    self.assertEqual(equations, expected)
+
     def test_wide_cpu_auto_and_absent_device_reuse_valuations(self):
         exps, rays, cones = [(2**90, 5), (3, 7)], [(11, 2**75), (0, 1)], [(1, 0)]
         values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
@@ -76,6 +97,26 @@ class ChartBatchTests(unittest.TestCase):
         self.assertEqual(list(charts), expected)
         self.assertEqual(stats["backend"], "cpu")
         self.assertIn("exact check", stats["fallback_reason"])
+
+    def test_wide_recombination_with_a_packed_device_callback(self):
+        magnitude = 16383 + (16383 << 70)
+        exps = [(magnitude,)*8, tuple(magnitude-(i+1) for i in range(8))]
+        rays = [(magnitude,)*8, tuple(magnitude if i%2 else 0 for i in range(8))]
+        cones = [tuple(i%2 for i in range(8))]
+        values = [[sum(a*b for a,b in zip(e,r)) for e in exps] for r in rays]
+        orders, expected = projections(exps, rays, cones)
+
+        def launch(inputs, out, nt, nr, nc, dimension, index, stats):
+            _cpu_functions()[0](*inputs, nt, nc, dimension, out)
+            stats["backend"] = "packed test device"
+            return True
+
+        with patch.dict(os.environ, RESOLUTION_GPU_BACKEND="triton"), \
+             patch("engine.chart_batch.triton_device", return_value={"index": 0}), \
+             patch("engine.chart_batch._accelerate", side_effect=launch):
+            charts, stats = transform_atlas(exps, rays, cones, orders, values, "gpu")
+        self.assertEqual(list(charts), expected)
+        self.assertEqual((stats["backend"], stats["limb_batches"]), ("packed test device", 4))
 
     def test_oversized_chart_count_still_uses_exact_known_valuations(self):
         exps, rays, cones = [(2,0), (0,3)], [(1,0), (0,1)], [(1,0), (0,1)]

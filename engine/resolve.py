@@ -101,7 +101,8 @@ def _resolve(request, proofs):
             raise
         return inconclusive(request,{'description':str(error)},(perf_counter()-start)*1000)
     try:
-        result = _resolve_polynomial(p,request,start)
+        verified = []
+        result = _resolve_polynomial(p,request,start,verified=verified)
     except NonReducedError:
         if mode=='intrinsic':
             raise
@@ -116,7 +117,9 @@ def _resolve(request, proofs):
         if record["status"] != "resolved":
             return
         intrinsic = record["mode"] == "intrinsic"
-        certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_monodromy)
+        certified = next((value for producer, value in verified if producer is record), None)
+        if certified is None:
+            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_monodromy)
         if certified is not None:
             record["atlas"], output = certified
             record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
@@ -139,6 +142,9 @@ def _resolve(request, proofs):
                                        factor_fibre=factor_fibre)
             record["atlas"] = atlas.to_json(charts)
             record["dual_complex"] = atlas.record_complex(record, charts, output["dual_complex"])
+        if "chart_sections" in record["dual_complex"].get("finite_sheet_certificate", {}):
+            from .atlas_finite import geometric_chart_records
+            record["charts"] = geometric_chart_records(record)
         record.setdefault("certificate", {})["atlas_verification"] = (
             "Strict transform on the owned origin fibre" if intrinsic and "strata" not in output
             else "Embedded normal crossings on the owned origin fibre")
@@ -170,7 +176,7 @@ def _resolve(request, proofs):
     return result
 
 
-def _resolve_polynomial(p, request, start):
+def _resolve_polynomial(p, request, start, *, verified=None):
     variables = request['variables']
     mode = request.get('mode','embedded')
     compute = request.get('compute')
@@ -179,9 +185,12 @@ def _resolve_polynomial(p, request, start):
     r = None
     # Keep the optimized engines in their tested representation and dimensions.
     # The unbounded ideal search works over Q in any finite ambient dimension.
+    from .quotient_monomials import degree_bounds
+    order, degree = degree_bounds(len(variables), p)
     native_range = (2 <= len(variables) <= 8 and len(p)<=4096
-                    and max(map(sum,p))<=128)
-    singular = min(map(sum,p))>1
+                    and degree<=128)
+    singular = order>1
+    parallel_search = singular and exhaustive and 3 <= len(variables) <= 8
     if singular and mode=='embedded' and 3<=len(variables)<=8:  # plane curves keep their own engine
         # Smooth components through the origin with independent differentials
         # there (multiplicities allowed): the divisor has normal crossings at
@@ -234,16 +243,23 @@ def _resolve_polynomial(p, request, start):
         if r is None and len(p)==2 and 2 <= len(variables) <= 8 and 'plane_limit' not in diagnostic:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
-        if r is None and (native_range or exhaustive and singular and 2 <= len(variables) <= 8):
+        if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
             from .newton_backend import resolve_newton
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
-                               defer_outputs=True)
+                               defer_outputs=True, verified=verified, integrals=request.get("monodromy", False))
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
-    if r is None and singular and exhaustive and 3 <= len(variables) <= 8:
+    if r is None and parallel_search and mode == "embedded" and len(p) <= 3 and len(variables) <= 4:
+        from .newton_trials import bounded_first_trial
+        from .native_library import Unavailable
+        try:
+            r = bounded_first_trial(p, variables, verified=verified, integrals=request.get("monodromy", False))
+        except (LimitError, Unavailable, OSError):
+            pass  # The isolated exhaustive workers still test all three methods.
+    if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
-        r = exhaustive_search(p, variables, mode)
+        r = exhaustive_search(p, variables, mode, compute=compute)
     elif r is None and native_range and singular and len(variables) == 3:
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True)

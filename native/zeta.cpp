@@ -1,8 +1,10 @@
 // Exact univariate reduction of the Denef--Loeser sum.
+#include <gmpxx.h>
 #include "groebner.hpp"
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_poly_factor.h>
 #include <flint/fmpz_poly_q.h>
+#include <map>
 #include <memory>
 #include <sstream>
 
@@ -50,16 +52,29 @@ void append_integer(std::string& out, const fmpz* a) {
     flint_free(text);
 }
 
+// Every component contributes a positive linear factor; cancellation can
+// remove roots or lower their orders, but cannot introduce a new root.
+mpq_class root(const fmpz_poly_struct& factor) {
+    mpz_class nu, order;
+    fmpz_get_mpz(nu.get_mpz_t(), factor.coeffs);
+    fmpz_get_mpz(order.get_mpz_t(), factor.coeffs + 1);
+    mpq_class value(-nu, order);
+    value.canonicalize();
+    return value;
+}
+using Poles = std::map<mpq_class, slong>;
+
 // The signed content, then the primitive factors and their exponents. The
 // coefficient lists are ascending, for building the factored display and
 // reading the rational roots of the (split) denominator.
-void append_factors(std::string& out, const fmpz_poly_t p) {
+void append_factors(std::string& out, const fmpz_poly_t p, Poles* poles = nullptr) {
     fmpz_poly_factor_t f;
     fmpz_poly_factor_init(f);
     fmpz_poly_factor(f, p);
     append_integer(out, &f->c);
     out += " " + std::to_string(f->num) + "\n";
     for (slong j = 0; j < f->num; ++j) {
+        if (poles) (*poles)[root(f->p[j])] = f->exp[j];
         out += std::to_string(f->exp[j]);
         for (slong i = 0; i < f->p[j].length; ++i) {
             out += ' ';
@@ -121,7 +136,15 @@ std::string zeta(std::istream& in) {
     }
     out += '\n';
     append_factors(out, numerator);
-    append_factors(out, denominator);
+    Poles poles;
+    append_factors(out, denominator, &poles);
+    std::map<mpq_class, std::vector<size_t>> components;
+    for (size_t i = 0; i < n; ++i) components[root(*factors[i].p)].push_back(i);
+    for (const auto& [value, exponent] : poles) {
+        out += value.get_str() + " " + std::to_string(exponent);
+        for (const auto i : components.at(value)) out += " " + std::to_string(i);
+        out += '\n';
+    }
     return out;
 }
 }  // namespace

@@ -10,10 +10,17 @@ endif
 
 .PHONY: all clean
 all: $(LIBRARY)
+ifeq ($(shell uname -s),Linux)
+all: build/resolve_supervisor
+endif
 
-$(LIBRARY): ordinary.cpp chart_batch.cpp
+build/resolve_supervisor: resolve_supervisor.cpp
 	mkdir -p build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC $(SHARED) $^ -o $@ $(LDFLAGS) -lgmpxx -lgmp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
+
+$(LIBRARY): ordinary.cpp chart_batch.cpp chart_equation.hpp
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC $(SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) -lgmpxx -lgmp
 
 clean:
 	$(RM) -r build

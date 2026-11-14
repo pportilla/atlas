@@ -1,0 +1,2022 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": 5,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "configuration": "pre-optimization native library and Python CLI",
+  "units": "wall-clock milliseconds per computation",
+  "repeats": 3,
+  "cold_repeats": 3,
+  "warm_batch_size": 5,
+  "scope": "Warm Atlas sparse native request including parsing rows and serializing the answer. Singular starts with a loaded ring and parsed inputs. Each procedure verifies primality, computes the contraction and checks the supplied fraction. All Singular variants use zero/unit shortcuts, height-one valuation via polynomial gcd, factorization of principal inputs, removal of invertible variables from monomial ideals, and double saturation of zero-dimensional ideals at maximal primes. Singular libraries are loaded only when required. One discarded warm-up precedes each warm trial. Fresh CLI times include parsing, startup and complete answer output. Execution order rotates and Singular seeds are 17 + trial index.",
+  "methods": [
+    "GTZ",
+    "SY",
+    "locPrime"
+  ],
+  "cases": [
+    {
+      "name": "zero_at_generic_point",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [],
+      "prime": [],
+      "numerator": "x",
+      "denominator": "y",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.041560599999999996,
+            0.042620599999999995,
+            0.0399836
+          ],
+          "median_ms": 0.041560599999999996
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.0678,
+            0.0664,
+            0.0684
+          ],
+          "median_ms": 0.0678
+        },
+        "SY": {
+          "samples_ms": [
+            0.0708,
+            0.0684,
+            0.0692
+          ],
+          "median_ms": 0.0692
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.0648,
+            0.0766,
+            0.0624
+          ],
+          "median_ms": 0.0648
+        },
+        "worst_paired_speedup": 1.557932079792401,
+        "median_speedup_vs_faster_reference": 1.5591690206589897,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            257.32953,
+            261.420898,
+            279.609382
+          ],
+          "median_ms": 261.420898
+        },
+        "GTZ": {
+          "samples_ms": [
+            10.693953,
+            10.976437,
+            10.889262
+          ],
+          "median_ms": 10.889262
+        },
+        "SY": {
+          "samples_ms": [
+            11.08927,
+            10.918358,
+            10.809401
+          ],
+          "median_ms": 10.918358
+        },
+        "locPrime": {
+          "samples_ms": [
+            10.873412,
+            10.7873,
+            11.360112
+          ],
+          "median_ms": 10.873412
+        },
+        "worst_paired_speedup": 0.03865893527134937,
+        "median_speedup_vs_faster_reference": 0.04159350718778419,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "nonzero_at_generic_point",
+      "variables": [
+        "u",
+        "v"
+      ],
+      "generators": [
+        "u^2+v^3"
+      ],
+      "prime": [],
+      "numerator": "0",
+      "denominator": "u+v",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.049107,
+            0.0635382,
+            0.0604904
+          ],
+          "median_ms": 0.0604904
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.1052,
+            0.10900000000000001,
+            0.11140000000000001
+          ],
+          "median_ms": 0.10900000000000001
+        },
+        "SY": {
+          "samples_ms": [
+            0.095,
+            0.122,
+            0.1348
+          ],
+          "median_ms": 0.122
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.11639999999999999,
+            0.1162,
+            0.1152
+          ],
+          "median_ms": 0.1162
+        },
+        "worst_paired_speedup": 1.7155034294330027,
+        "median_speedup_vs_faster_reference": 1.8019388200441726,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            274.888546,
+            286.301928,
+            280.427169
+          ],
+          "median_ms": 280.427169
+        },
+        "GTZ": {
+          "samples_ms": [
+            11.386332,
+            11.674637,
+            11.431568
+          ],
+          "median_ms": 11.431568
+        },
+        "SY": {
+          "samples_ms": [
+            12.618512,
+            11.693102,
+            10.954826
+          ],
+          "median_ms": 11.693102
+        },
+        "locPrime": {
+          "samples_ms": [
+            11.880096,
+            11.9461,
+            11.601278
+          ],
+          "median_ms": 11.880096
+        },
+        "worst_paired_speedup": 0.03906478120171017,
+        "median_speedup_vs_faster_reference": 0.040764837589613155,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "unit_outside_prime",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x*y",
+        "y+1"
+      ],
+      "prime": [
+        "x",
+        "y"
+      ],
+      "numerator": "x+2",
+      "denominator": "1+y",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.12560359999999998,
+            0.12280640000000001,
+            0.14912399999999998
+          ],
+          "median_ms": 0.12560359999999998
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.1358,
+            0.14179999999999998,
+            0.1338
+          ],
+          "median_ms": 0.1358
+        },
+        "SY": {
+          "samples_ms": [
+            0.1414,
+            0.1326,
+            0.1452
+          ],
+          "median_ms": 0.1414
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.1338,
+            0.13240000000000002,
+            0.1406
+          ],
+          "median_ms": 0.1338
+        },
+        "worst_paired_speedup": 0.8972398809044824,
+        "median_speedup_vs_faster_reference": 1.065256091385916,
+        "wins_vs_all": 2
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            276.186289,
+            255.202098,
+            250.031229
+          ],
+          "median_ms": 255.202098
+        },
+        "GTZ": {
+          "samples_ms": [
+            10.307763,
+            10.777491,
+            10.783401
+          ],
+          "median_ms": 10.777491
+        },
+        "SY": {
+          "samples_ms": [
+            10.448709,
+            11.143173,
+            10.732936
+          ],
+          "median_ms": 10.732936
+        },
+        "locPrime": {
+          "samples_ms": [
+            11.000081,
+            11.069783,
+            10.620474
+          ],
+          "median_ms": 11.000081
+        },
+        "worst_paired_speedup": 0.03732177667950779,
+        "median_speedup_vs_faster_reference": 0.04205661350009748,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "principal_curve",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y^2-x^3)^3*(y+x+1)^2"
+      ],
+      "prime": [
+        "y^2-x^3"
+      ],
+      "numerator": "y^2-x^3",
+      "denominator": "x",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.33064119999999997,
+            0.3091986,
+            0.3026204
+          ],
+          "median_ms": 0.3091986
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.36560000000000004,
+            0.5549999999999999,
+            0.33940000000000003
+          ],
+          "median_ms": 0.36560000000000004
+        },
+        "SY": {
+          "samples_ms": [
+            0.3578,
+            0.3916,
+            0.36
+          ],
+          "median_ms": 0.36
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.3532,
+            0.3708,
+            0.3694
+          ],
+          "median_ms": 0.3694
+        },
+        "worst_paired_speedup": 1.068227432032064,
+        "median_speedup_vs_faster_reference": 1.164300226456394,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            267.580415,
+            225.810256,
+            212.088006
+          ],
+          "median_ms": 225.810256
+        },
+        "GTZ": {
+          "samples_ms": [
+            10.866159,
+            10.890725,
+            8.966205
+          ],
+          "median_ms": 10.866159
+        },
+        "SY": {
+          "samples_ms": [
+            11.190191,
+            10.679936,
+            11.64959
+          ],
+          "median_ms": 11.190191
+        },
+        "locPrime": {
+          "samples_ms": [
+            10.912266,
+            10.431687,
+            15.254427
+          ],
+          "median_ms": 10.912266
+        },
+        "worst_paired_speedup": 0.04060894740745506,
+        "median_speedup_vs_faster_reference": 0.04812075054730906,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "embedded_discarded",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^3",
+        "x^2*y"
+      ],
+      "prime": [
+        "x"
+      ],
+      "numerator": "x^2",
+      "denominator": "y",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.067183,
+            0.0902386,
+            0.0843876
+          ],
+          "median_ms": 0.0843876
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.1694,
+            0.15660000000000002,
+            0.1982
+          ],
+          "median_ms": 0.1694
+        },
+        "SY": {
+          "samples_ms": [
+            0.1756,
+            0.18280000000000002,
+            0.1944
+          ],
+          "median_ms": 0.18280000000000002
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.1724,
+            0.1844,
+            0.1618
+          ],
+          "median_ms": 0.1724
+        },
+        "worst_paired_speedup": 1.7353992637297122,
+        "median_speedup_vs_faster_reference": 2.007403931383284,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            243.318375,
+            259.719309,
+            259.620894
+          ],
+          "median_ms": 259.620894
+        },
+        "GTZ": {
+          "samples_ms": [
+            10.32723,
+            9.285089,
+            10.377935
+          ],
+          "median_ms": 10.32723
+        },
+        "SY": {
+          "samples_ms": [
+            8.193975,
+            10.277966,
+            10.94591
+          ],
+          "median_ms": 10.277966
+        },
+        "locPrime": {
+          "samples_ms": [
+            9.409974,
+            10.128443,
+            10.633949
+          ],
+          "median_ms": 10.128443
+        },
+        "worst_paired_speedup": 0.03367594001069586,
+        "median_speedup_vs_faster_reference": 0.03901243403005923,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "embedded_retained",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^3",
+        "x^2*y"
+      ],
+      "prime": [
+        "x",
+        "y"
+      ],
+      "numerator": "x^2",
+      "denominator": "1-x",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0819268,
+            0.0786548,
+            0.0720202
+          ],
+          "median_ms": 0.0786548
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.13720000000000002,
+            0.1238,
+            0.1244
+          ],
+          "median_ms": 0.1244
+        },
+        "SY": {
+          "samples_ms": [
+            0.1278,
+            0.1332,
+            0.1244
+          ],
+          "median_ms": 0.1278
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.128,
+            0.1288,
+            0.12840000000000001
+          ],
+          "median_ms": 0.12840000000000001
+        },
+        "worst_paired_speedup": 1.5599291074471358,
+        "median_speedup_vs_faster_reference": 1.581594511714479,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            201.344109,
+            206.914463,
+            180.56723
+          ],
+          "median_ms": 201.344109
+        },
+        "GTZ": {
+          "samples_ms": [
+            8.970083,
+            8.464416,
+            7.944253
+          ],
+          "median_ms": 8.464416
+        },
+        "SY": {
+          "samples_ms": [
+            8.592229,
+            9.748434,
+            10.997737
+          ],
+          "median_ms": 9.748434
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.060172,
+            10.275551,
+            8.446934
+          ],
+          "median_ms": 8.446934
+        },
+        "worst_paired_speedup": 0.04003182432320381,
+        "median_speedup_vs_faster_reference": 0.04195272482494137,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "three_axes",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "x*z",
+        "y*z"
+      ],
+      "prime": [
+        "x",
+        "y"
+      ],
+      "numerator": "x+y",
+      "denominator": "z",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0683694,
+            0.1377244,
+            0.1030268
+          ],
+          "median_ms": 0.1030268
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.1356,
+            0.242,
+            0.259
+          ],
+          "median_ms": 0.242
+        },
+        "SY": {
+          "samples_ms": [
+            0.23620000000000002,
+            0.24,
+            0.24
+          ],
+          "median_ms": 0.24
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.23879999999999998,
+            0.2424,
+            0.24020000000000002
+          ],
+          "median_ms": 0.24020000000000002
+        },
+        "worst_paired_speedup": 1.7426106049472714,
+        "median_speedup_vs_faster_reference": 2.329490967398774,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            204.620606,
+            211.222871,
+            211.731472
+          ],
+          "median_ms": 211.222871
+        },
+        "GTZ": {
+          "samples_ms": [
+            10.046489,
+            11.014399,
+            8.017101
+          ],
+          "median_ms": 10.046489
+        },
+        "SY": {
+          "samples_ms": [
+            10.96786,
+            10.137441,
+            8.360771
+          ],
+          "median_ms": 10.137441
+        },
+        "locPrime": {
+          "samples_ms": [
+            10.234023,
+            10.899521,
+            7.895891
+          ],
+          "median_ms": 10.234023
+        },
+        "worst_paired_speedup": 0.03729200446875465,
+        "median_speedup_vs_faster_reference": 0.047563452539190226,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "higher_monomial",
+      "variables": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "generators": [
+        "a^3*c^2",
+        "a*b*d",
+        "b^2*c*d^2",
+        "a^4*b"
+      ],
+      "prime": [
+        "a",
+        "b",
+        "c"
+      ],
+      "numerator": "a*b",
+      "denominator": "d",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.3287376,
+            0.24724339999999997,
+            0.1610606
+          ],
+          "median_ms": 0.24724339999999997
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.2616,
+            0.2408,
+            0.13540000000000002
+          ],
+          "median_ms": 0.2408
+        },
+        "SY": {
+          "samples_ms": [
+            0.2524,
+            0.26280000000000003,
+            0.1394
+          ],
+          "median_ms": 0.2524
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.2468,
+            0.15960000000000002,
+            0.142
+          ],
+          "median_ms": 0.15960000000000002
+        },
+        "worst_paired_speedup": 0.6455177367727513,
+        "median_speedup_vs_faster_reference": 0.6455177367727513,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            187.352892,
+            187.140681,
+            182.101582
+          ],
+          "median_ms": 187.140681
+        },
+        "GTZ": {
+          "samples_ms": [
+            8.323029,
+            7.831079,
+            9.525443
+          ],
+          "median_ms": 8.323029
+        },
+        "SY": {
+          "samples_ms": [
+            8.646681,
+            9.330655,
+            8.628667
+          ],
+          "median_ms": 8.646681
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.469536,
+            9.00537,
+            9.161525
+          ],
+          "median_ms": 9.00537
+        },
+        "worst_paired_speedup": 0.04184594690023598,
+        "median_speedup_vs_faster_reference": 0.04447471792624288,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "split_rational_points",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^2*(x-1)^3",
+        "y-x"
+      ],
+      "prime": [
+        "x",
+        "y"
+      ],
+      "numerator": "x^2",
+      "denominator": "x-1",
+      "order": "lex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.13224819999999998,
+            0.230003,
+            0.2719462
+          ],
+          "median_ms": 0.230003
+        },
+        "GTZ": {
+          "samples_ms": [
+            1.2007999999999999,
+            1.1926,
+            1.1254
+          ],
+          "median_ms": 1.1926
+        },
+        "SY": {
+          "samples_ms": [
+            1.1902,
+            1.1454,
+            1.4908
+          ],
+          "median_ms": 1.1902
+        },
+        "locPrime": {
+          "samples_ms": [
+            1.1824,
+            1.1796,
+            1.1084
+          ],
+          "median_ms": 1.1796
+        },
+        "worst_paired_speedup": 4.075806170485191,
+        "median_speedup_vs_faster_reference": 5.128628757016212,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            162.469487,
+            165.922165,
+            166.659129
+          ],
+          "median_ms": 165.922165
+        },
+        "GTZ": {
+          "samples_ms": [
+            21.164994,
+            20.656381,
+            21.102496
+          ],
+          "median_ms": 21.102496
+        },
+        "SY": {
+          "samples_ms": [
+            21.553087,
+            23.294911,
+            20.818198
+          ],
+          "median_ms": 21.553087
+        },
+        "locPrime": {
+          "samples_ms": [
+            20.556854,
+            20.717277,
+            21.029056
+          ],
+          "median_ms": 20.717277
+        },
+        "worst_paired_speedup": 0.12449440374647955,
+        "median_speedup_vs_faster_reference": 0.12486141920821729,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "conjugate_point",
+      "variables": [
+        "u",
+        "v"
+      ],
+      "generators": [
+        "(u^2+1)^2*(u-1)",
+        "v-u"
+      ],
+      "prime": [
+        "u^2+1",
+        "v-u"
+      ],
+      "numerator": "u^2+1",
+      "denominator": "u-1",
+      "order": "lex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.1566482,
+            0.172348,
+            0.1562654
+          ],
+          "median_ms": 0.1566482
+        },
+        "GTZ": {
+          "samples_ms": [
+            3.0368,
+            3.0260000000000002,
+            2.8244
+          ],
+          "median_ms": 3.0260000000000002
+        },
+        "SY": {
+          "samples_ms": [
+            3.2887999999999997,
+            3.2950000000000004,
+            3.189
+          ],
+          "median_ms": 3.2887999999999997
+        },
+        "locPrime": {
+          "samples_ms": [
+            2.9594,
+            2.9384,
+            2.9824
+          ],
+          "median_ms": 2.9594
+        },
+        "worst_paired_speedup": 17.049225984635736,
+        "median_speedup_vs_faster_reference": 18.892014079957512,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            170.092842,
+            166.687753,
+            172.130205
+          ],
+          "median_ms": 170.092842
+        },
+        "GTZ": {
+          "samples_ms": [
+            22.404337,
+            23.364394,
+            22.887481
+          ],
+          "median_ms": 22.887481
+        },
+        "SY": {
+          "samples_ms": [
+            23.542159,
+            23.65366,
+            22.552407
+          ],
+          "median_ms": 23.542159
+        },
+        "locPrime": {
+          "samples_ms": [
+            23.598656,
+            22.970308,
+            21.977831
+          ],
+          "median_ms": 22.970308
+        },
+        "worst_paired_speedup": 0.12768143162322965,
+        "median_speedup_vs_faster_reference": 0.13455875468292783,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "movable_prime",
+      "variables": [
+        "u",
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(x^2-u)*(x+3)",
+        "(y-u)*(x+3)"
+      ],
+      "prime": [
+        "y-u",
+        "x^2-u"
+      ],
+      "numerator": "y-x^2",
+      "denominator": "x+3",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.1435032,
+            0.17009760000000002,
+            0.1472884
+          ],
+          "median_ms": 0.1472884
+        },
+        "GTZ": {
+          "samples_ms": [
+            12.9084,
+            12.996,
+            12.8786
+          ],
+          "median_ms": 12.9084
+        },
+        "SY": {
+          "samples_ms": [
+            7.893600000000001,
+            8.1446,
+            8.0678
+          ],
+          "median_ms": 8.0678
+        },
+        "locPrime": {
+          "samples_ms": [
+            7.2408,
+            7.3742,
+            7.4946
+          ],
+          "median_ms": 7.3742
+        },
+        "worst_paired_speedup": 43.35275747570806,
+        "median_speedup_vs_faster_reference": 50.0664003410995,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            170.230492,
+            173.466062,
+            157.722279
+          ],
+          "median_ms": 170.230492
+        },
+        "GTZ": {
+          "samples_ms": [
+            34.548974,
+            33.65849,
+            34.063585
+          ],
+          "median_ms": 34.063585
+        },
+        "SY": {
+          "samples_ms": [
+            31.050057,
+            28.640671,
+            28.797717
+          ],
+          "median_ms": 28.797717
+        },
+        "locPrime": {
+          "samples_ms": [
+            56.294946,
+            58.807107,
+            57.239923
+          ],
+          "median_ms": 57.239923
+        },
+        "worst_paired_speedup": 0.16510821004283824,
+        "median_speedup_vs_faster_reference": 0.16916897003387618,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "nonlinear_height_two",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(z-x*y)*(x+1)",
+        "(y^2-x^3)*(x+1)"
+      ],
+      "prime": [
+        "z-x*y",
+        "y^2-x^3"
+      ],
+      "numerator": "z^2-x^5",
+      "denominator": "x+1",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.2435206,
+            0.24757820000000003,
+            0.23893979999999998
+          ],
+          "median_ms": 0.2435206
+        },
+        "GTZ": {
+          "samples_ms": [
+            16.4608,
+            18.1256,
+            18.352600000000002
+          ],
+          "median_ms": 18.1256
+        },
+        "SY": {
+          "samples_ms": [
+            9.5228,
+            9.295399999999999,
+            8.842400000000001
+          ],
+          "median_ms": 9.295399999999999
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.481,
+            8.915000000000001,
+            8.159
+          ],
+          "median_ms": 8.481
+        },
+        "worst_paired_speedup": 34.1466762757816,
+        "median_speedup_vs_faster_reference": 34.82662247054253,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            168.598366,
+            164.298895,
+            184.246367
+          ],
+          "median_ms": 168.598366
+        },
+        "GTZ": {
+          "samples_ms": [
+            38.386931,
+            37.561721,
+            38.840088
+          ],
+          "median_ms": 38.386931
+        },
+        "SY": {
+          "samples_ms": [
+            33.932277,
+            29.372745,
+            30.066707
+          ],
+          "median_ms": 30.066707
+        },
+        "locPrime": {
+          "samples_ms": [
+            55.076782,
+            57.887277,
+            64.579673
+          ],
+          "median_ms": 57.887277
+        },
+        "worst_paired_speedup": 0.16318751620215124,
+        "median_speedup_vs_faster_reference": 0.17833332382355355,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "space_curve_prime",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(y^2-x*z)*(x-y+1)",
+        "(y*z-x^3)*(x-y+1)",
+        "(z^2-x^2*y)*(x-y+1)"
+      ],
+      "prime": [
+        "y^2-x*z",
+        "y*z-x^3",
+        "z^2-x^2*y"
+      ],
+      "numerator": "x*z-y^2",
+      "denominator": "x-y+1",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.556324,
+            0.5406603999999999,
+            0.6067596
+          ],
+          "median_ms": 0.556324
+        },
+        "GTZ": {
+          "samples_ms": [
+            17.5036,
+            18.5732,
+            17.3014
+          ],
+          "median_ms": 17.5036
+        },
+        "SY": {
+          "samples_ms": [
+            10.1502,
+            10.4324,
+            10.2432
+          ],
+          "median_ms": 10.2432
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.3214,
+            8.3612,
+            8.3096
+          ],
+          "median_ms": 8.3214
+        },
+        "worst_paired_speedup": 13.695044956849468,
+        "median_speedup_vs_faster_reference": 14.957830329088804,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            171.841048,
+            169.72687,
+            178.093402
+          ],
+          "median_ms": 171.841048
+        },
+        "GTZ": {
+          "samples_ms": [
+            39.314275,
+            40.135688,
+            39.886076
+          ],
+          "median_ms": 39.886076
+        },
+        "SY": {
+          "samples_ms": [
+            32.626098,
+            36.60965,
+            33.530207
+          ],
+          "median_ms": 33.530207
+        },
+        "locPrime": {
+          "samples_ms": [
+            67.788321,
+            59.236459,
+            63.026485
+          ],
+          "median_ms": 63.026485
+        },
+        "worst_paired_speedup": 0.1882731568011711,
+        "median_speedup_vs_faster_reference": 0.19512338518792086,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "intersecting_curves",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "z*x",
+        "z*y",
+        "z^2"
+      ],
+      "prime": [
+        "x",
+        "y",
+        "z"
+      ],
+      "numerator": "z",
+      "denominator": "x+1",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.1547226,
+            0.145343,
+            0.1424314
+          ],
+          "median_ms": 0.145343
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.13620000000000002,
+            0.1296,
+            0.1332
+          ],
+          "median_ms": 0.1332
+        },
+        "SY": {
+          "samples_ms": [
+            0.13779999999999998,
+            0.1402,
+            0.1298
+          ],
+          "median_ms": 0.13779999999999998
+        },
+        "locPrime": {
+          "samples_ms": [
+            0.13799999999999998,
+            0.1366,
+            0.13879999999999998
+          ],
+          "median_ms": 0.13799999999999998
+        },
+        "worst_paired_speedup": 0.8802851037922064,
+        "median_speedup_vs_faster_reference": 0.9164528047446386,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            171.588682,
+            377.705185,
+            250.456964
+          ],
+          "median_ms": 250.456964
+        },
+        "GTZ": {
+          "samples_ms": [
+            8.22309,
+            13.534174,
+            7.345621
+          ],
+          "median_ms": 8.22309
+        },
+        "SY": {
+          "samples_ms": [
+            8.31854,
+            17.781816,
+            17.000999
+          ],
+          "median_ms": 17.000999
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.442755,
+            16.213681,
+            17.512978
+          ],
+          "median_ms": 16.213681
+        },
+        "worst_paired_speedup": 0.02932887503978528,
+        "median_speedup_vs_faster_reference": 0.03283234719718155,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "finite_thick_fiber",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(x^2+1)^2",
+        "(y^2+1)^2"
+      ],
+      "prime": [
+        "x^2+1",
+        "y-x"
+      ],
+      "numerator": "(y-x)^2",
+      "denominator": "x+y",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.5733182,
+            0.6031063999999999,
+            0.5973976000000001
+          ],
+          "median_ms": 0.5973976000000001
+        },
+        "GTZ": {
+          "samples_ms": [
+            2.321,
+            2.3734,
+            2.404
+          ],
+          "median_ms": 2.3734
+        },
+        "SY": {
+          "samples_ms": [
+            1.8972000000000002,
+            2.7732,
+            2.1079999999999997
+          ],
+          "median_ms": 2.1079999999999997
+        },
+        "locPrime": {
+          "samples_ms": [
+            2.3228,
+            2.4872,
+            2.3556
+          ],
+          "median_ms": 2.3556
+        },
+        "worst_paired_speedup": 3.3091571137982365,
+        "median_speedup_vs_faster_reference": 3.5286382134779237,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            174.933837,
+            165.291824,
+            165.519955
+          ],
+          "median_ms": 165.519955
+        },
+        "GTZ": {
+          "samples_ms": [
+            25.463863,
+            22.711388,
+            22.784898
+          ],
+          "median_ms": 22.784898
+        },
+        "SY": {
+          "samples_ms": [
+            24.741508,
+            23.861593,
+            22.658999
+          ],
+          "median_ms": 23.861593
+        },
+        "locPrime": {
+          "samples_ms": [
+            22.859328,
+            22.265345,
+            22.812679
+          ],
+          "median_ms": 22.812679
+        },
+        "worst_paired_speedup": 0.13067413595918553,
+        "median_speedup_vs_faster_reference": 0.13765650190032977,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "surface_and_embedded",
+      "variables": [
+        "a",
+        "b",
+        "c"
+      ],
+      "generators": [
+        "a^2*(b-a)^2",
+        "a*(b-a)*c",
+        "a*(b-a)^3"
+      ],
+      "prime": [
+        "b-a",
+        "c"
+      ],
+      "numerator": "b-a",
+      "denominator": "a",
+      "order": "lex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            1.0667351999999999,
+            1.143354,
+            1.6690804
+          ],
+          "median_ms": 1.143354
+        },
+        "GTZ": {
+          "samples_ms": [
+            13.8458,
+            13.780199999999999,
+            13.6614
+          ],
+          "median_ms": 13.780199999999999
+        },
+        "SY": {
+          "samples_ms": [
+            16.6034,
+            16.845599999999997,
+            17.569399999999998
+          ],
+          "median_ms": 16.845599999999997
+        },
+        "locPrime": {
+          "samples_ms": [
+            12.234399999999999,
+            12.933600000000002,
+            12.1364
+          ],
+          "median_ms": 12.234399999999999
+        },
+        "worst_paired_speedup": 7.271309398876172,
+        "median_speedup_vs_faster_reference": 10.70044798024059,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            160.053387,
+            162.263236,
+            160.692296
+          ],
+          "median_ms": 160.692296
+        },
+        "GTZ": {
+          "samples_ms": [
+            33.477738,
+            33.745464,
+            34.215293
+          ],
+          "median_ms": 33.745464
+        },
+        "SY": {
+          "samples_ms": [
+            35.750376,
+            37.071324,
+            35.323969
+          ],
+          "median_ms": 35.750376
+        },
+        "locPrime": {
+          "samples_ms": [
+            61.576193,
+            62.78567,
+            63.401825
+          ],
+          "median_ms": 62.78567
+        },
+        "worst_paired_speedup": 0.20796740427388,
+        "median_speedup_vs_faster_reference": 0.21000050929635108,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "hidden_primary_unit",
+      "variables": [
+        "a",
+        "b",
+        "c"
+      ],
+      "generators": [
+        "(b^2-a^3)^2*(a+1)+(b^2-a^3)*c*(b+1)",
+        "(b^2-a^3)^2*(a+1)-(a-1)*(b^2-a^3)*c*(b+1)"
+      ],
+      "prime": [
+        "(b^2-a^3)",
+        "c"
+      ],
+      "numerator": "(b^2-a^3)",
+      "denominator": "a",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            85.8644372,
+            87.4801966,
+            92.4119928
+          ],
+          "median_ms": 87.4801966
+        },
+        "GTZ": {
+          "samples_ms": [
+            27.1224,
+            23.9542,
+            24.424
+          ],
+          "median_ms": 24.424
+        },
+        "SY": {
+          "samples_ms": [
+            31.5526,
+            30.7322,
+            31.5974
+          ],
+          "median_ms": 31.5526
+        },
+        "locPrime": {
+          "samples_ms": [
+            15.177600000000002,
+            15.014,
+            15.921000000000001
+          ],
+          "median_ms": 15.177600000000002
+        },
+        "worst_paired_speedup": 0.17162741492970077,
+        "median_speedup_vs_faster_reference": 0.17349755247349322,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            284.226003,
+            269.397411,
+            264.245058
+          ],
+          "median_ms": 269.397411
+        },
+        "GTZ": {
+          "samples_ms": [
+            47.247667,
+            48.283686,
+            47.771277
+          ],
+          "median_ms": 47.771277
+        },
+        "SY": {
+          "samples_ms": [
+            58.480359,
+            60.977711,
+            56.062517
+          ],
+          "median_ms": 58.480359
+        },
+        "locPrime": {
+          "samples_ms": [
+            66.60393,
+            68.286032,
+            69.012936
+          ],
+          "median_ms": 68.286032
+        },
+        "worst_paired_speedup": 0.166232739092489,
+        "median_speedup_vs_faster_reference": 0.1773264146179935,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "two_thick_field_orbits",
+      "variables": [
+        "a",
+        "b",
+        "c"
+      ],
+      "generators": [
+        "(a^2+1)^2",
+        "(b^2+1)^2",
+        "(c^2+1)^2"
+      ],
+      "prime": [
+        "b-a",
+        "c+a",
+        "a^2+1"
+      ],
+      "numerator": "c+b",
+      "denominator": "a",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            111.1624706,
+            116.79601600000001,
+            124.04639259999999
+          ],
+          "median_ms": 116.79601600000001
+        },
+        "GTZ": {
+          "samples_ms": [
+            4.8068,
+            4.7936,
+            4.8642
+          ],
+          "median_ms": 4.8068
+        },
+        "SY": {
+          "samples_ms": [
+            4.465,
+            4.6354,
+            4.485799999999999
+          ],
+          "median_ms": 4.485799999999999
+        },
+        "locPrime": {
+          "samples_ms": [
+            4.8786000000000005,
+            5.1498,
+            5.0746
+          ],
+          "median_ms": 5.0746
+        },
+        "worst_paired_speedup": 0.0361622769189662,
+        "median_speedup_vs_faster_reference": 0.03840713196929593,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            345.04273,
+            535.584602,
+            617.528121
+          ],
+          "median_ms": 535.584602
+        },
+        "GTZ": {
+          "samples_ms": [
+            26.119443,
+            26.305605,
+            53.751727
+          ],
+          "median_ms": 26.305605
+        },
+        "SY": {
+          "samples_ms": [
+            26.253526,
+            25.971343,
+            41.918419
+          ],
+          "median_ms": 26.253526
+        },
+        "locPrime": {
+          "samples_ms": [
+            26.311676,
+            27.158859,
+            45.937981
+          ],
+          "median_ms": 27.158859
+        },
+        "worst_paired_speedup": 0.048491578927058104,
+        "median_speedup_vs_faster_reference": 0.049018448069573145,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "height_one_no_fraction",
+      "variables": [
+        "a",
+        "b",
+        "c"
+      ],
+      "generators": [
+        "(b^2-a^3)^3*(b-c)",
+        "(b^2-a^3)^2*(c-a)",
+        "(b^2-a^3)*(a^2+b^2+c^2)"
+      ],
+      "prime": [
+        "(b^2-a^3)"
+      ],
+      "numerator": null,
+      "denominator": "1",
+      "order": "grevlex",
+      "preoptimization_native_timeout_seconds": 120,
+      "conditions": "Outer wall-clock timeout before first warm round completed. No timing or win inferred."
+    },
+    {
+      "name": "dense_linear_change",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(x+2*y+z)^2*((x-3*z)+1)+(y-z)^2*((x-3*z)-2)",
+        "(x+2*y+z)^2*((x-3*z)+1)*((x-3*z)+2)+(y-z)^2*((x-3*z)-2)*((x-3*z)+3)"
+      ],
+      "prime": [
+        "(x+2*y+z)",
+        "(y-z)"
+      ],
+      "numerator": "(x+2*y+z)*(y-z)",
+      "denominator": "(x-3*z)",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            11.5605374,
+            7.185957,
+            6.7665058
+          ],
+          "median_ms": 7.185957
+        },
+        "GTZ": {
+          "samples_ms": [
+            32.397000000000006,
+            26.3728,
+            22.5768
+          ],
+          "median_ms": 26.3728
+        },
+        "SY": {
+          "samples_ms": [
+            34.818,
+            24.3328,
+            24.9274
+          ],
+          "median_ms": 24.9274
+        },
+        "locPrime": {
+          "samples_ms": [
+            8.212,
+            7.1378,
+            5.215
+          ],
+          "median_ms": 7.1378
+        },
+        "worst_paired_speedup": 0.710347600276783,
+        "median_speedup_vs_faster_reference": 0.9932984569765725,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            326.050995,
+            327.900894,
+            151.645377
+          ],
+          "median_ms": 326.050995
+        },
+        "GTZ": {
+          "samples_ms": [
+            58.211019,
+            60.05682,
+            30.482814
+          ],
+          "median_ms": 58.211019
+        },
+        "SY": {
+          "samples_ms": [
+            59.878292,
+            60.808993,
+            30.75553
+          ],
+          "median_ms": 59.878292
+        },
+        "locPrime": {
+          "samples_ms": [
+            98.010462,
+            96.168879,
+            49.735803
+          ],
+          "median_ms": 96.168879
+        },
+        "worst_paired_speedup": 0.17853348062931076,
+        "median_speedup_vs_faster_reference": 0.17853348062931076,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "complex_curve_family",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "generators": [
+        "(x^2+1)^2-(y-z)^2",
+        "x^2*y+y-z^2",
+        "x*y*w+z"
+      ],
+      "prime": [
+        "x^2+1",
+        "y",
+        "z",
+        "w"
+      ],
+      "numerator": "(x-y)*w",
+      "denominator": "x-1",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            2188.477278,
+            2388.9865849999996,
+            1391.1053298000002
+          ],
+          "median_ms": 2188.477278
+        },
+        "GTZ": {
+          "samples_ms": [
+            48.6716,
+            60.4652,
+            87.03659999999999
+          ],
+          "median_ms": 60.4652
+        },
+        "SY": {
+          "samples_ms": [
+            22.106,
+            23.9934,
+            32.9324
+          ],
+          "median_ms": 23.9934
+        },
+        "locPrime": {
+          "samples_ms": [
+            21.693199999999997,
+            18.0268,
+            26.2926
+          ],
+          "median_ms": 21.693199999999997
+        },
+        "worst_paired_speedup": 0.007545793732449947,
+        "median_speedup_vs_faster_reference": 0.009912462979659047,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            1743.674709,
+            1971.129074,
+            1445.784035
+          ],
+          "median_ms": 1743.674709
+        },
+        "GTZ": {
+          "samples_ms": [
+            77.564537,
+            110.858788,
+            62.580802
+          ],
+          "median_ms": 77.564537
+        },
+        "SY": {
+          "samples_ms": [
+            65.257224,
+            48.300218,
+            43.591473
+          ],
+          "median_ms": 48.300218
+        },
+        "locPrime": {
+          "samples_ms": [
+            92.951044,
+            76.299926,
+            68.826784
+          ],
+          "median_ms": 76.299926
+        },
+        "worst_paired_speedup": 0.024503833177187462,
+        "median_speedup_vs_faster_reference": 0.02770024578018927,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    },
+    {
+      "name": "artinian_translation",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "((x-1)^3)*((x+2)^2)",
+        "((x-1)^3)*(y^2+z)",
+        "((x-1)^3)*(z^2)",
+        "(y^3)*((x+2)^2)",
+        "(y^3)*(y^2+z)",
+        "(y^3)*(z^2)",
+        "(z^2)*((x+2)^2)",
+        "(z^2)*(y^2+z)",
+        "(z^2)*(z^2)"
+      ],
+      "prime": [
+        "x-1",
+        "y",
+        "z"
+      ],
+      "numerator": "x-1",
+      "denominator": "x+2",
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.5783216,
+            0.5886652,
+            0.5292068000000001
+          ],
+          "median_ms": 0.5783216
+        },
+        "GTZ": {
+          "samples_ms": [
+            1.0821999999999998,
+            1.1544,
+            1.2574
+          ],
+          "median_ms": 1.1544
+        },
+        "SY": {
+          "samples_ms": [
+            1.1268,
+            1.1378,
+            1.2522
+          ],
+          "median_ms": 1.1378
+        },
+        "locPrime": {
+          "samples_ms": [
+            1.1218,
+            1.6207999999999998,
+            1.8312000000000002
+          ],
+          "median_ms": 1.6207999999999998
+        },
+        "worst_paired_speedup": 1.8712771578996874,
+        "median_speedup_vs_faster_reference": 1.96741743694166,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            177.930314,
+            185.333973,
+            170.925728
+          ],
+          "median_ms": 177.930314
+        },
+        "GTZ": {
+          "samples_ms": [
+            22.652276,
+            24.932068,
+            21.368168
+          ],
+          "median_ms": 22.652276
+        },
+        "SY": {
+          "samples_ms": [
+            24.107508,
+            22.464482,
+            24.304752
+          ],
+          "median_ms": 24.107508
+        },
+        "locPrime": {
+          "samples_ms": [
+            24.383911,
+            21.864386,
+            22.501241
+          ],
+          "median_ms": 22.501241
+        },
+        "worst_paired_speedup": 0.11797289857915041,
+        "median_speedup_vs_faster_reference": 0.12646097505341333,
+        "wins_vs_all": 0
+      },
+      "verified": true
+    }
+  ],
+  "locprime_source_sha256": "cd02a5f31c5c4fab4b9c8915487250212dbf09febff3d00304cf94992ec79961",
+  "locprime_compatibility": "Replace sat( by sat_with_exp( for the Singular 4.4 list-returning API",
+  "locprime_sha256": "04ab52e74c52e83fd6eec78ec81f2a5552d50361737b888a6f80b5bcd5e186f4",
+  "locprime_source": "https://github.com/IshiharaYuki/localprime/blob/5624175785c7982358d9d31f89d29345bad1680b/locprime.lib",
+  "atlas_library_sha256": "ed2fd33172721f151e82160f35aa75a85026dd4ce61a315aedf1d1dcca4355ca",
+  "atlas_launcher_sha256": "f404011dfabb9721f4c2d3d41e9d98648eaec362ed1cab759375c0e687f6ca20"
+}

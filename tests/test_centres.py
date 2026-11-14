@@ -55,6 +55,17 @@ class OpenFrame(unittest.TestCase):
             self.assertEqual(frame.derivative(row, y), 0)
         self.assertEqual(frame.derivative(z, y), w/6)
 
+    def test_implicit_jets_and_divisor_orders_over_the_owned_open_set(self):
+        from engine.centres import _remove_coordinate_powers
+        x, y = sp.symbols("x y")
+        frame = Frame((x,y), (x,), (y-x**2,), (x+1,))
+        self.assertEqual(frame.jet(y**2,3), (y**2,4*x*y,12*y))
+        self.assertEqual(_remove_coordinate_powers(frame, y**3*(1+x), (x,)), ([6], 1+x))
+        # The other component of x*y=0 is excluded after localizing at y.
+        frame = Frame((x,y), (y,), (x*y,), (y,))
+        self.assertEqual(frame.jet(x*y + y**2,2), (x*y + y**2,2*y**2))
+        self.assertEqual(_remove_coordinate_powers(frame, y**3, (y,)), ([0], y**3))
+
     def test_elimination_clears_the_linear_coefficient(self):
         x, y, z = sp.symbols("x y z")
         frame = Frame((x, y, z), (x, y, z))

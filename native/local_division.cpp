@@ -1,4 +1,6 @@
 #include "local_division.hpp"
+#include "local_io.hpp"
+#include "local_point_basis.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -37,7 +39,8 @@ void accumulate(Polynomial& p, Powers powers, const mpq_class& coefficient) {
     }
 }
 
-std::optional<Exponent> finite_cutoff(const std::vector<Powers>& heads, std::size_t width) {
+}
+std::optional<mpz_class> finite_cutoff(const std::vector<Powers>& heads, std::size_t width) {
     // If x_i^b_i belongs to the initial ideal for each i, all graded
     // pieces of degree >= N vanish. Nakayama gives m^N=0 locally.
     Powers bounds(width, 0);
@@ -56,6 +59,7 @@ std::optional<Exponent> finite_cutoff(const std::vector<Powers>& heads, std::siz
     return cutoff;
 }
 
+namespace {
 struct Reducer {
     Polynomial row;
     Powers head;
@@ -140,7 +144,8 @@ mpq_class center_coefficient(mpq_class c, const Powers& m, const std::vector<mpq
 
 }
 
-NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size_t width, bool lex) {
+NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size_t width, bool lex,
+                       std::optional<mpz_class> known_cutoff) {
     Powers zero(width, 0);
     NormalForm result{{{zero, 1}}, {}, false};
     if (centered.empty()) return result;
@@ -162,12 +167,12 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
     };
     if (std::all_of(reducers.begin(), reducers.end(), [](const Reducer& r) { return r.row.size() == 1; })) {
         for (const auto& [m, c] : centered)
-            if (!reducible(m)) result.remainder.emplace(m, c);
+            if ((!known_cutoff || degree(m) < *known_cutoff) && !reducible(m)) result.remainder.emplace(m, c);
         return result;
     }
     const bool homogeneous = std::all_of(reducers.begin(), reducers.end(),
                                           [](const Reducer& r) { return !r.ecart; });
-    const auto cutoff = finite_cutoff(heads, width);
+    const auto cutoff = known_cutoff ? std::move(known_cutoff) : finite_cutoff(heads, width);
     const bool full = homogeneous || cutoff.has_value();
     Polynomial pending;
     for (const auto& [m, c] : centered) {
@@ -212,55 +217,23 @@ NormalForm normal_form(const Basis& basis, const Polynomial& centered, std::size
     return result;
 }
 
-std::optional<Polynomial> finite_query_jet(const Basis& basis, const Polynomial& original,
-                                           const std::vector<mpq_class>& point, bool lex) {
-    if (std::none_of(point.begin(), point.end(), [](const mpq_class& q) { return q != 0; }))
-        return std::nullopt;
-    std::vector<Powers> heads;
-    for (const auto& g : basis) {
-        if (g.empty()) continue;
-        auto head = local_head(g, lex);
-        if (degree(head) == 0) return Polynomial{};
-        heads.push_back(std::move(head));
-    }
-    auto cutoff = finite_cutoff(heads, point.size());
-    if (!cutoff) return std::nullopt;
-    mpz_class full = 0, retained = 0;
-    for (const auto& [m, c] : original) {
-        mpz_class box = 1, truncated_box = 1;
-        Exponent fixed_degree = 0;
-        unsigned long axes = 0;
-        for (std::size_t i = 0; i < m.size(); ++i) {
-            if (point[i] == 0) fixed_degree += m[i];
-            else if (m[i]) {
-                box *= mpz_class(m[i]) + 1;
-                ++axes;
-            }
-        }
-        full += box;
-        if (fixed_degree >= *cutoff) continue;
-        Exponent room = *cutoff - 1 - fixed_degree;
-        for (std::size_t i = 0; i < m.size(); ++i)
-            if (point[i] != 0) truncated_box *= mpz_class(std::min(m[i], room)) + 1;
-        mpz_class simplex, top = mpz_class(room) + axes;
-        mpz_bin_ui(simplex.get_mpz_t(), top.get_mpz_t(), axes);
-        retained += std::min(simplex, truncated_box);
-    }
-    if (full < 128 || 4 * retained > full) return std::nullopt;
-
+Polynomial point_jet_below(const mpz_class& cutoff, const Polynomial& original, const std::vector<mpq_class>& point) {
+    for (const auto& [e,c] : original)
+        for (size_t i=0; i<e.size(); ++i)
+            if (point[i] != 0 && abs(point[i]) != 1 && e[i] > 4096)
+                return grouped_point_jet(original,point,cutoff);
     struct Term { Powers powers; mpq_class coefficient; Exponent room; };
     Polynomial jet;
     for (const auto& [m, c] : original) {
         Powers base = m;
         for (std::size_t i = 0; i < m.size(); ++i) if (point[i] != 0) base[i] = 0;
         Exponent fixed = degree(base);
-        if (fixed >= *cutoff) continue;
-        std::vector<Term> terms{{std::move(base), center_coefficient(c, m, point), *cutoff - 1 - fixed}};
+        if (fixed >= cutoff) continue;
+        std::vector<Term> terms{{std::move(base), center_coefficient(c, m, point), cutoff - 1 - fixed}};
         for (std::size_t i = 0; i < m.size(); ++i) {
             if (point[i] == 0 || !m[i]) continue;
             auto size = terms.size();
             for (std::size_t j = 0; j < size; ++j) {
-                // Copy before extending the vector; each new term descends from this one.
                 Term term = terms[j];
                 Exponent bound = std::min(m[i], term.room);
                 for (Exponent k = 1; k <= bound; ++k) {
@@ -274,6 +247,75 @@ std::optional<Polynomial> finite_query_jet(const Basis& basis, const Polynomial&
         for (auto& term : terms) accumulate(jet, std::move(term.powers), term.coefficient);
     }
     return jet;
+}
+
+namespace {
+std::optional<Polynomial> query_jet_below(const Exponent& cutoff, const Polynomial& original,
+                                          const std::vector<mpq_class>& point) {
+    mpz_class full = 0, retained = 0;
+    for (const auto& [m, c] : original) {
+        mpz_class box = 1, truncated_box = 1;
+        Exponent fixed_degree = 0;
+        unsigned long axes = 0;
+        for (std::size_t i = 0; i < m.size(); ++i) {
+            if (point[i] == 0) fixed_degree += m[i];
+            else if (m[i]) {
+                box *= mpz_class(m[i]) + 1;
+                ++axes;
+            }
+        }
+        full += box;
+        if (fixed_degree >= cutoff) continue;
+        Exponent room = cutoff - 1 - fixed_degree;
+        for (std::size_t i = 0; i < m.size(); ++i)
+            if (point[i] != 0) truncated_box *= mpz_class(std::min(m[i], room)) + 1;
+        mpz_class simplex, top = mpz_class(room) + axes;
+        mpz_bin_ui(simplex.get_mpz_t(), top.get_mpz_t(), axes);
+        retained += std::min(simplex, truncated_box);
+    }
+    if (full < 128 || 4 * retained > full) return std::nullopt;
+    return point_jet_below(cutoff, original, point);
+}
+}
+
+
+
+std::optional<Polynomial> finite_query_jet(const Basis& basis, const Polynomial& original,
+                                           const std::vector<mpq_class>& point, bool lex) {
+    if (std::none_of(point.begin(), point.end(), [](const mpq_class& q) { return q != 0; }))
+        return std::nullopt;
+    std::vector<Powers> heads;
+    for (const auto& g : basis) {
+        if (g.empty()) continue;
+        auto head = local_head(g, lex);
+        if (degree(head) == 0) return Polynomial{};
+        heads.push_back(std::move(head));
+    }
+    auto cutoff = finite_cutoff(heads, point.size());
+    return cutoff ? query_jet_below(*cutoff, original, point) : std::nullopt;
+}
+
+std::optional<Polynomial> homogeneous_normal_form(const Basis& centered, const Polynomial& original,
+    const std::vector<mpq_class>& point, bool lex, bool prefer_modular, const LocalStage& stage) {
+    auto basis = homogeneous_reducer(centered, point.size(), lex, prefer_modular);
+    if (!basis) return std::nullopt;
+    if (stage) stage("homogeneous_native_standard_basis", "local_standard_basis");
+    std::optional<Polynomial> shifted;
+    if (std::any_of(point.begin(), point.end(), [](const mpq_class& q) { return q != 0; })) {
+        if (const auto& cutoff = basis->finite_cutoff())
+            shifted = query_jet_below(*cutoff, original, point);
+        if (!shifted) shifted = std::move(translate({original}, point).front());
+    }
+    const auto& query = shifted ? *shifted : original;
+    if (stage) stage("center_query_at_point", nullptr);
+    auto remainder = basis->reduce(query);
+    if (remainder) {
+        if (stage) stage("homogeneous_native_normal_form", "local_normal_form");
+    } else {
+        remainder = normal_form(basis->materialize(), query, point.size(), lex).remainder;
+        if (stage) stage("local_normal_form", "local_normal_form");
+    }
+    return remainder;
 }
 
 }

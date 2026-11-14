@@ -7,7 +7,6 @@ in addition to the geometric algorithms. Every candidate is checked.
 import atexit
 from functools import lru_cache
 from itertools import combinations, product
-from math import prod
 import json
 import os
 from pathlib import Path
@@ -34,7 +33,7 @@ from .native_library import current_replay_scope, replay_scope
 def expression(poly, variables):
     if np.native_ring(variables):
         return np.from_terms(variables, poly)
-    return sp.Add(*(sp.Rational(c.numerator,c.denominator)*prod(x**d for x,d in zip(variables,e))
+    return sp.Add(*(sp.Rational(c.numerator,c.denominator)*sp.Mul(*(x**d for x,d in zip(variables,e)))
                     for e,c in poly.items()))
 
 
@@ -65,7 +64,8 @@ def _cover(variables, ambient, pivot, pieces, domain):
         if not radical_subset(variables,(pivot,),(*ambient,*piece),domain=domain):
             return False
     # Products generate the ideal defining the union set-theoretically.
-    union=tuple(prod(fs) for fs in product(*pieces))
+    api = chart_expressions(variables)
+    union = tuple(api.Mul(*fs) for fs in product(*pieces))
     return radical_subset(variables,union,(*ambient,pivot),domain=domain)
 
 
@@ -82,23 +82,18 @@ def _on_overlap(source, target, ideal, domain):
 
 def _glue(charts, ideals, original, domain):
     """Identify irreducible affine pieces using their nonempty intersections on overlaps."""
-    keys=sorted(ideals)
-    parent={key:key for key in keys}
-    def root(key):
-        while parent[key]!=key:
-            parent[key]=parent[parent[key]]
-            key=parent[key]
-        return key
-    for a,b in combinations(keys,2):
-        if a[0]==b[0] or root(a)==root(b):
-            continue
-        source,target=charts[a[0]],charts[b[0]]
-        variables, moved = _on_overlap(source,target,ideals[b],domain)
-        if not empty_locus(variables, (*ideals[a],*moved), domain=domain):
-            parent[root(b)]=root(a)
-    groups={}
-    for key in keys:
-        groups.setdefault(root(key),[]).append(key)
+    from .incidence import component_classes
+    keys = sorted(ideals)
+
+    def compare(i, j):
+        a, b = keys[j], keys[i]
+        variables, moved = _on_overlap(charts[a[0]], charts[b[0]], ideals[b], domain)
+        return int(not empty_locus(variables, (*ideals[a], *moved), domain=domain))
+
+    classes = component_classes([(ci, None) for ci, _ in keys], compare)
+    groups = {}
+    for group, key in zip(classes, keys):
+        groups.setdefault(group, []).append(key)
     # Only strata whose closure meets the special fiber survive localization
     # at the origin. Each irreducible localization is still irreducible.
     return [{ci:ideals[(ci,i)] for ci,i in keys_in_group}
@@ -109,13 +104,17 @@ def _glue(charts, ideals, original, domain):
 
 def _component_atlas(charts, original, pieces, mode, domain, effort, generator):
     from .geometric_components import geometric_components
+    from .incidence import stratum_dimension
     n=len(original)
     boundary_count=len(pieces[0])
     strata={}
     vertices=[]
     cells=[]
     chart_divisors=[[] for _ in charts]
-    for k in range(1,min(boundary_count,n-(mode=='intrinsic'))+1):
+    carrier_dimension = stratum_dimension(n, int(mode == 'intrinsic'))
+    for k in range(1, min(boundary_count, carrier_dimension) + 1):
+        dimension = stratum_dimension(carrier_dimension, k)
+        cell_dimension = stratum_dimension(k, 1)
         for subset in combinations(range(boundary_count),k):
             locals_={}
             for ci,chart in enumerate(charts):
@@ -128,7 +127,7 @@ def _component_atlas(charts, original, pieces, mode, domain, effort, generator):
                     if empty_locus(chart.variables,equations,domain=domain):
                         continue
                 components=geometric_components(chart.variables,tuple(equations),
-                          n-k-(mode=='intrinsic'),domain=domain,effort=effort)
+                          dimension,domain=domain,effort=effort)
                 if components is None:
                     return None
                 locals_.update({(ci,index):ideal for index,ideal in enumerate(components)})
@@ -137,7 +136,7 @@ def _component_atlas(charts, original, pieces, mode, domain, effort, generator):
             for group in groups:
                 if k==1:
                     ident=f'E{len(vertices)+1}'
-                    vertices.append({'id':ident,'dimension':n-k-(mode=='intrinsic')})
+                    vertices.append({'id':ident,'dimension':dimension})
                     for ci,ideal in group.items():
                         display=[_text(e,domain,generator) for e in ideal]
                         chart_divisors[ci].append({'id':ident,'equation':', '.join(display),'ideal':display})
@@ -150,9 +149,9 @@ def _component_atlas(charts, original, pieces, mode, domain, effort, generator):
                             raise ArithmeticError('Stratum incidence is ambiguous.')
                         return matches[0]
                     ident=f'C{len(cells)+1}'
-                    cells.append({'id':ident,'dimension':k-1,
+                    cells.append({'id':ident,'dimension':cell_dimension,
                                   'vertices':[parent_id((j,)) for j in subset],
-                                  'faces':[parent_id(s) for s in combinations(subset,k-1)]})
+                                  'faces':[parent_id(s) for s in combinations(subset,cell_dimension)]})
                 strata[subset].append((ident,group))
     return {'status':'complete','convention':('Ambient exceptional divisor' if mode=='embedded'
             else 'Reduced exceptional boundary on the smooth strict transform')+
@@ -176,8 +175,11 @@ def _charts(variables,f,candidate):
     for group in candidate.boundary:
         for g in group:
             terms = _term_rows(g, (*variables,*candidate.projective), domain)
-            if len({sum(e[len(variables):]) for e,_ in terms}) > 1:
-                return False
+            if terms:
+                from .quotient_monomials import degree_bounds
+                low, high = degree_bounds(len(candidate.projective), (e[len(variables):] for e,_ in terms))
+                if low != high:
+                    return False
     # The blowup must preserve the smooth locus of the original hypersurface.
     from .affine_kernel import frame_derivative
     gradient = (tuple(f.diff(x) for x in variables) if CHECK
@@ -295,8 +297,8 @@ def _term_rows(expr, variables, domain):
     from .field_polynomial import _parameter, lift, modulus
 
     def reference():
-        terms = sp.Poly(expr, *variables, domain=domain).rep.to_dict()
-        return tuple(sorted((e, (v,) if domain == QQ else tuple(v.to_list())) for e,v in terms.items()))
+        from tests.resolution_search_oracle import coefficient_rows
+        return coefficient_rows(expr,variables,domain)
 
     if gb._MODE == "sympy":
         return reference()
@@ -340,7 +342,7 @@ def _unpack_poly(terms, variables, primitive=None):
         scalar = sp.S.Zero
         for q in coefficients:
             scalar = (scalar*primitive if primitive is not None else 0) + _unpack_rational(q)
-        result.append(scalar * prod(v**e for v,e in zip(variables,exponents)))
+        result.append(scalar * sp.Mul(*(v**e for v,e in zip(variables,exponents))))
     return sp.Add(*result)
 
 
@@ -616,12 +618,13 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4):
             raise NonReducedError('The germ has a repeated component through the origin. Resolution of the underlying reduced hypersurface requires its square-free equation.')
         else:
             active_factors.append(factor)
-    active = prod(active_factors, start=api.S.One)
+    active = api.Mul(*active_factors)
     # All removed factors are nonzero at the origin. The factorization
     # gives f/active directly, including the original scalar and powers.
-    unit = frame_function(variables, prod(unit_factors))
-    if CHECK and unit != sp.cancel(f/active):
-        raise AssertionError("The removed unit differs from the exact quotient.")
+    unit = frame_function(variables, api.Mul(*unit_factors))
+    if CHECK:
+        from tests.resolution_search_oracle import check_removed_unit
+        check_removed_unit(unit, f, active)
     deadline=monotonic()+seconds
     schedule=(scheduled_candidates(variables,active) if exhaustive else
               ((c,1.25) for c in priority_candidates(variables,active)))

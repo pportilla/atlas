@@ -263,22 +263,21 @@ std::string equation(const Terms& terms, int chart=-1, int order=0) {
     return out.str();
 }
 
-std::string compute(const char* input, Accelerator gpu) {
+bool read_terms(const char* input, int& n, int& order, Terms& terms) {
     std::istringstream stream(input);
-    int n=0, count=0;
+    int count=0;
     if (!(stream >> n >> count) || n < 1 || n > 32 || count < 1 || count > 8192)
-        return "defer";
-    Terms terms;
-    int order = std::numeric_limits<int>::max();
+        return false;
+    order = std::numeric_limits<int>::max();
     for (int i=0; i<count; ++i) {
         std::string coefficient;
-        if (!(stream >> coefficient) || coefficient.size() > 16384) return "defer";
+        if (!(stream >> coefficient) || coefficient.size() > 16384) return false;
         mpq_class value;
-        if (value.set_str(coefficient,10) != 0 || value.get_den() == 0) return "defer";
+        if (value.set_str(coefficient,10) != 0 || value.get_den() == 0) return false;
         value.canonicalize();
-        if (!value) return "defer";
+        if (!value) return false;
         Powers exp(n);
-        for (int& e:exp) if (!(stream >> e) || e<0 || e>10000) return "defer";
+        for (int& e:exp) if (!(stream >> e) || e<0 || e>10000) return false;
         const int degree = std::accumulate(exp.begin(), exp.end(), 0);
         order = std::min(order,degree);
         terms.push_back({exp,value,degree});
@@ -286,13 +285,24 @@ std::string compute(const char* input, Accelerator gpu) {
     // The input contract is canonical sparse form with distinct monomials.
     // Check this here too, since duplicate terms could invalidate the rank test.
     std::sort(terms.begin(), terms.end(), [](auto& a,auto& b){return a.powers>b.powers;});
-    if (std::adjacent_find(terms.begin(),terms.end(),[](auto& a,auto& b){return a.powers==b.powers;})!=terms.end())
-        return "defer";
-    if (order < 1) return "defer";
-    if (order == 1) return "smooth\n" + equation(terms);
-    if (n < 2) return "defer";
+    return order >= 1 && std::adjacent_find(terms.begin(),terms.end(),
+        [](auto& a,auto& b){return a.powers==b.powers;}) == terms.end()
+        && (stream >> std::ws).eof();
+}
+
+Terms tangent_form(const Terms& terms, int order) {
     Terms tangent;
     for (const auto& t : terms) if (t.degree == order) tangent.push_back(t);
+    return tangent;
+}
+
+std::string compute(const char* input, Accelerator gpu) {
+    int n, order;
+    Terms terms;
+    if (!read_terms(input, n, order, terms)) return "defer";
+    if (order == 1) return "smooth\n" + equation(terms);
+    if (n < 2) return "defer";
+    const Terms tangent = tangent_form(terms, order);
     std::string reason;
     const auto cert = jacobian_certificate(tangent,n,order,gpu,reason);
     if (cert.empty()) return "defer\n" + std::to_string(order) + "\n" + reason + "\n" + equation(tangent);
@@ -300,9 +310,34 @@ std::string compute(const char* input, Accelerator gpu) {
     report << "ordinary\n" << order << '\n' << cert << '\n' << equation(tangent);
     for (int k=0; k<n; ++k)
         report << '\n' << equation(terms,k,order) << '\n' << equation(tangent,k,order);
+    if (n == 2) {
+        bool zero = true, infinity = true;
+        for (const auto& term : tangent) {
+            if (term.powers[1] == 0) zero = false;
+            if (term.powers[0] == 0) infinity = false;
+        }
+        report << '\n' << zero << ' ' << order - zero - infinity << ' ' << infinity;
+    }
     return report.str();
 }
 } // namespace
+
+// A positive result certifies the smooth projective tangent section over
+// Qbar. An unsupported input or inconclusive rank test leaves chart checks
+// to the caller. No producer metadata or previously supplied minor is used.
+extern "C" int resolution_smooth_tangent(const char* input) noexcept {
+    if (!input) return 0;
+    try {
+        int n, order;
+        Terms terms;
+        if (!read_terms(input, n, order, terms) || n < 2) return 0;
+        if (order == 1) return 1;
+        std::string reason;
+        return !jacobian_certificate(tangent_form(terms, order), n, order, {nullptr,0,0}, reason).empty();
+    } catch (...) {
+        return 0;
+    }
+}
 
 extern "C" void* resolution_ordinary(const char* input, RankKernel kernel, int device, int minimum_columns) noexcept {
     if (!input) return nullptr;

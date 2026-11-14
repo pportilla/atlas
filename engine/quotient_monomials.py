@@ -14,6 +14,11 @@ def decode_row(line):
     return tuple(map(integer_from_decimal, line.split()))
 
 
+def degree_bounds(width, terms):
+    result, = affine_request(["monomial_degree_bounds", str(width), *map(encode_row, terms)])
+    return decode_row(result)
+
+
 def quotient_monomials(width, leading, *, include_basis):
     """Return the finite vector space dimension and requested standard monomials."""
     width = index(width)

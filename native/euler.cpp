@@ -16,6 +16,7 @@
 //
 // A condition is kept as the primitive squarefree polynomial with the same
 // zeros, so that equal conditions are equal polynomials.
+#include "euler_lattice.hpp"
 #include "groebner.hpp"
 
 #include <flint/fmpz_mpoly.h>
@@ -111,6 +112,7 @@ struct Euler::State {
     fmpz_mpoly_ctx_t ctx;
     Ring R;
     int n;
+    bool use_lattice = true;
     std::vector<MP> conditions;          // [0] is the constant 1
     std::vector<Set> support;            // the variables of each condition
     std::map<std::string, int> numbers;  // a condition -> its number
@@ -413,6 +415,20 @@ struct Euler::State {
     // polynomials of z vanish and those of u do not.
     Z open_part(const Set& z, const Set& u) {
         if (has(z, 0) || !disjoint(z, u)) return {};
+        // Keep a coordinate hyperplane separate from higher-degree holes.
+        // Its closed part fixes that coordinate to zero in the remaining
+        // equations, whereas multiplying the holes raises their degrees.
+        if (u.size() > 1 && u.size() <= 5) {
+            for (int id : u) {
+                if (support[id].size() != 1 || fmpz_mpoly_length(conditions[id].p, ctx) != 1) continue;
+                Set rest = u;
+                rest.erase(std::lower_bound(rest.begin(), rest.end(), id));
+                auto value = open_part(z, rest);
+                const auto hyperplane = open_part(with(z, id), rest);
+                fmpz_sub(&value.v, &value.v, &hyperplane.v);
+                return value;
+            }
+        }
         Z value = closed(z);
         if (!u.empty()) {
             const auto excluded = closed(with(z, forbidden(u)));
@@ -463,6 +479,34 @@ struct Euler::State {
         values.emplace(equations, value);
         return value;
     }
+    bool lattice_projection(const Set& names, const Set& ids, Z& value) const {
+        if (!use_lattice || names.size() < 2 || names.size() > 5) return false;
+        local::Basis equations;
+        std::vector<Z> exponents(n);
+        std::vector<fmpz*> pointers;
+        for (Z& a : exponents) pointers.push_back(&a.v);
+        for (int id : ids) {
+            const MP& f = conditions[id];
+            local::Polynomial equation;
+            for (slong i = 0; i < fmpz_mpoly_length(f.p, ctx); ++i) {
+                fmpz_mpoly_get_term_exp_fmpz(pointers.data(), f.p, i, ctx);
+                local::Powers powers(names.size());
+                for (size_t j = 0; j < names.size(); ++j)
+                    fmpz_get_mpz(powers[j].get_mpz_t(), &exponents[names[j]].v);
+                Z coefficient;
+                fmpz_mpoly_get_term_coeff_fmpz(&coefficient.v, f.p, i, ctx);
+                mpz_class integer;
+                fmpz_get_mpz(integer.get_mpz_t(), &coefficient.v);
+                equation.emplace(std::move(powers), integer);
+            }
+            equations.push_back(std::move(equation));
+        }
+        if (!torus_lattice_compresses(names.size(), equations)) return false;
+        const auto result = coordinate_torus_euler(names.size(), equations);
+        fmpz_set_mpz(&value.v, result.get_mpz_t());
+        return true;
+    }
+
     Z projected(const Set& names, const Set& equations) {
         if (names.size() == 1) {
             MP g(conditions[static_cast<size_t>(equations[0])]);
@@ -497,6 +541,43 @@ struct Euler::State {
                 }
             }
         }
+        // Project A*v^2+B*v+C on the base. Two projective roots are
+        // counted with a loss of one on the discriminant and one more
+        // at infinity on A=0. The exceptional zero polynomial is added
+        // back once for its entire affine-line fibre.
+        if (equations.size() == 1) {
+            const MP& polynomial = conditions[equations.front()];
+            for (int v : names) {
+                Z degree;
+                fmpz_mpoly_degree_fmpz(&degree.v, polynomial.p, v, ctx);
+                if (!fmpz_equal_si(&degree.v, 2)) continue;
+                const Uni fibre = split(polynomial, v);
+                MP a = fibre.lead(), b(ctx), c = constant_term(fibre);
+                for (size_t i = 0; i < fibre.len; ++i)
+                    if (fmpz_is_one(&fibre.at(i).first.v)) b = fibre.at(i).second;
+                MP d = product(a, c);
+                fmpz_mpoly_scalar_mul_si(d.p, d.p, 4, ctx);
+                auto linear_square = product(b, b);
+                fmpz_mpoly_sub(d.p, linear_square.p, d.p, ctx);
+                const int ai = condition(a), di = condition(d);
+                Z result;
+                fmpz_set_ui(&result.v, 2);
+                auto value = closed(ai < 0 ? Set{} : Set{ai});
+                fmpz_sub(&result.v, &result.v, &value.v);
+                value = closed(di < 0 ? Set{} : Set{di});
+                fmpz_sub(&result.v, &result.v, &value.v);
+                if (!a.constant() && (b.zero() || !b.constant()) && (c.zero() || !c.constant())) {
+                    Set all;
+                    for (int id : {ai, condition(b), condition(c)})
+                        if (id >= 0) all = with(all, id);
+                    value = closed(all);
+                    fmpz_add(&result.v, &result.v, &value.v);
+                }
+                return result;
+            }
+        }
+        Z torus_sum;
+        if (lattice_projection(names, equations, torus_sum)) return torus_sum;
         // The projection along the variable of least degree.
         int variable = names[0];
         Z least_max, least_sum;
@@ -583,7 +664,7 @@ Z Euler::characteristic(const std::vector<Poly>& equations, const std::vector<st
 
 // External FLINT presentation. It avoids the variable and degree limits of
 // packed Groebner monomials when an Euler integral needs no such basis.
-Z Euler::from_text(const std::string& input) {
+Z Euler::from_text(const std::string& input, bool use_lattice) {
     std::istringstream in(input);
     std::string header;
     if (!std::getline(in, header)) throw std::invalid_argument("Expected coordinate names.");
@@ -594,6 +675,7 @@ Z Euler::from_text(const std::string& input) {
     std::vector<const char*> printed;
     for (const auto& name : names) printed.push_back(name.c_str());
     State state(static_cast<int>(names.size()));
+    state.use_lattice = use_lattice;
     struct Reader {
         fmpq_mpoly_ctx_t ctx;
         fmpq_mpoly_t f;

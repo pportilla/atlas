@@ -53,7 +53,7 @@ class TritonDiscovery(unittest.TestCase):
         self.target = SimpleNamespace(backend="xpu", arch={"arch": "pvc"})
         driver = SimpleNamespace(active=SimpleNamespace(get_current_target=lambda: self.target))
         modules = {"torch": self.torch, "triton": MagicMock(), "triton.runtime": SimpleNamespace(driver=driver),
-                   "engine.triton_probe": SimpleNamespace(square_modulo=self.kernel)}
+                   "engine.triton_ir": SimpleNamespace(launch_kernel=self.kernel)}
         for context in (patch.dict(sys.modules, modules), patch.dict(os.environ, TRITON_INTERPRET="0")):
             context.start()
             self.addCleanup(context.stop)
@@ -70,12 +70,12 @@ class TritonDiscovery(unittest.TestCase):
         self.torch.xpu.device.assert_called_once_with(0)
         self.torch.xpu.get_device_name.assert_called_once_with(0)
         self.assertEqual(self.torch.full.call_args.kwargs["device"], "xpu:0")
-        self.kernel.__getitem__.return_value.assert_called_once_with(self.tensor)
+        self.kernel.assert_called_once_with("trace_probe", (), (1,), self.tensor)
 
     def test_xpu_bad_integer_result_is_unavailable(self):
         self.tensor.item.return_value = 0
         self.assertIsNone(gpu_devices.triton_device(2))
-        self.kernel.__getitem__.return_value.assert_called_once_with(self.tensor)
+        self.kernel.assert_called_once_with("trace_probe", (), (1,), self.tensor)
 
     def test_cuda_and_hip_keep_indices_and_device_scope(self):
         self.torch.cuda.get_device_name.return_value = "test GPU"

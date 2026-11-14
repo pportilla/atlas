@@ -22,17 +22,17 @@ selects one sheet. Distinct conjugate centres on this sheet are still distinct
 blowups. If no given coefficient generates a common field, the chart-local
 number-field calculation handles the larger cover.
 """
-from collections import Counter, defaultdict
-from fractions import Fraction
+from collections import defaultdict
 from functools import lru_cache
 import re
 
 from . import native_library
-from .chart_kernel import crossings_rows, strata_rows
+from .chart_kernel import InconsistentSheets, crossings_rows, strata_rows, strata_totals
 from .incidence import dual_cells
 from .monomial_atlas import _row, _same_locus
 from .point_atlas import _same_ideal
-from .polynomial import format_poly, parse_expression, sparse_row
+from .polynomial import InputError, format_poly, integer_from_decimal, integer_text, parse_expression, rational_text, sparse_row
+from .rational_point import coordinate_fraction
 from .strata import InvalidChart, records
 
 
@@ -45,7 +45,7 @@ def _root(exact):
     match = re.fullmatch(r"PolynomialRootIndexed\(List\((-?\d+(?:, -?\d+)*)\), (\d+)\)", exact)
     if match is None:
         raise InvalidChart("A plane coefficient needs an exact indexed root.")
-    coeffs = tuple(map(int, match[1].split(", ")))
+    coeffs = tuple(map(integer_from_decimal, match[1].split(", ")))
     index = int(match[2])
     degree = len(coeffs) - 1
     if degree <= 1 or not coeffs[-1] or not 1 <= index <= degree:
@@ -54,7 +54,7 @@ def _root(exact):
     factor = native_library.affine_request(["factor", "T", polynomial])
     if len(factor) != 3 or factor[1] != "1":
         raise InvalidChart("The marked coefficient must have an irreducible defining polynomial.")
-    return degree, polynomial, f"flintroot {degree} {' '.join(map(str, coeffs))} {index-1}"
+    return degree, polynomial, f"flintroot {degree} {' '.join(map(integer_text, coeffs))} {index-1}"
 
 
 @lru_cache(maxsize=2048)
@@ -64,7 +64,7 @@ def _field_value(generator, expr, theta):
         raise native_library.Unavailable("The native kernel lacks marked coefficient arithmetic.")
     if values == "outside":
         return None
-    return format_poly({(i,): Fraction(q) for i, q in enumerate(values.split())}, (theta,))
+    return format_poly({(i,): coordinate_fraction(q) for i, q in enumerate(values.split())}, (theta,))
 
 
 def _field(record, items, witnesses, saved):
@@ -117,8 +117,8 @@ def _point(data, field, coefficients):
     for value in data:
         if isinstance(value, str) and _RATIONAL.fullmatch(value):
             try:
-                result.append(str(Fraction(value)))
-            except ZeroDivisionError as exc:
+                result.append(rational_text(coordinate_fraction(value)))
+            except InputError as exc:
                 raise InvalidChart("Invalid rational coordinate.") from exc
         elif field:
             t = field["generator"]
@@ -134,13 +134,17 @@ def _point(data, field, coefficients):
 @lru_cache(maxsize=512)
 def _inverse(value, theta, embedding):
     if _RATIONAL.fullmatch(value):
-        return str(1 / Fraction(value))
+        rational = coordinate_fraction(value)
+        if not rational:
+            raise ZeroDivisionError("A zero slope has no inverse.")
+        row, = native_library.affine_request(["function", "u", f"1/({value})"])
+        return format_poly(sparse_row(row), ("u",))
     root = _root(embedding)[2]
     # Evaluate the same marked polynomial and invert its value in QQbar.
     terms = parse_expression(value, (theta,))
     code = "q 0"
     for (power,), coefficient in terms.items():
-        code += f" {root} pow {power} q {coefficient} * +"
+        code += f" {root} pow {integer_text(power)} q {rational_text(coefficient)} * +"
     return _field_value(root, code + " pow -1", theta)
 
 
@@ -205,10 +209,10 @@ def _plane_strata(n, base, ideals, removed):
     # The cover removes distinct points. Over a marked field each point is
     # a section, and distinct sections stay disjoint on every conjugate sheet.
     # Subtract each point in its own divisor stratum on the specified base.
-    counts = Counter(strata_rows(n, base, ideals, ()))
+    rows = [(subset, 1, count) for subset, count in strata_rows(n, base, ideals, ()).items()]
     for point in removed:
-        counts.subtract(strata_rows(n, [*base, *point], ideals, ()))
-    return {subset: chi for subset, chi in counts.items() if chi}
+        rows.extend((subset, 1, count, -1) for subset, count in strata_rows(n, [*base, *point], ideals, ()).items())
+    return strata_totals(rows)
 
 
 def _crosses(n, ambient, ideals, owned, removed):
@@ -314,7 +318,7 @@ def _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals):
     degree = field["degree"] if field else 1
     f = format_poly(polynomial, record["variables"])
     charts, frames = [], []
-    numbers, strata, points, edges = {}, Counter(), Counter(), Counter()
+    numbers, contributions = {}, []
     embedded = True
     for i, (item, (parent, center)) in enumerate(zip(items, centres)):
         c = _chart(record, item, i, parent, center, removed[i], frames, f, saved, field, coefficients)
@@ -338,33 +342,35 @@ def _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals):
             embedded = False
         if integrals or complex:
             for subset, total in _plane_strata(n, [*ambient, *owned], ideals, cuts).items():
-                chi, remainder = divmod(total, degree)
-                if remainder:
-                    raise ArithmeticError("Conjugate plane strata disagree about the Euler characteristic.")
                 key = tuple(labels[k] for k in subset)
                 exceptional = tuple(label for label in key if label.startswith("E"))
-                strata[frozenset(key)] += chi
+                contributions.append((("stratum", frozenset(key)), degree, total))
                 if complex and intrinsic and "strict" in key:
-                    if len(exceptional) != 1 and chi:
+                    if len(exceptional) != 1 and total:
                         return None  # the general verifier handles coincident divisor labels on the curve
                     if exceptional:
-                        points[exceptional[0]] += chi
+                        contributions.append((("point", exceptional[0]), degree, total))
                 elif complex and not intrinsic and len(exceptional) == 2:
-                    edges[frozenset(exceptional)] += chi
+                    contributions.append((("edge", frozenset(exceptional)), degree, total))
+    try:
+        counts = strata_totals(contributions)
+    except InconsistentSheets as exc:
+        raise ArithmeticError("Conjugate plane strata disagree about the Euler characteristic.") from exc
     out = {"cells": None, "reason": None}
     if integrals and embedded:
-        rows, listed = records(dict(data=numbers, strata={key: chi for key, chi in strata.items() if chi}))
+        rows, listed = records(dict(data=numbers, strata={key: chi for (kind, key), chi in counts.items() if kind == "stratum"}))
         out.update(numerical_data=rows, strata=listed)
     if complex:
         vertices, cells = [], []
         labels = [name for name in numbers if name.startswith("E")]
         for name in labels:
-            count = points[name] if intrinsic else 1
+            count = counts.get(("point", name), 0) if intrinsic else 1
             vertices.extend(dict(id=f"{name}.{j+1}" if count > 1 else name, dimension=0 if intrinsic else 1)
                             for j in range(count))
         if not intrinsic:
-            counts = {frozenset((name,)): 1 for name in labels}
-            cells, reason = dual_cells({**counts, **edges}, labels.index)
+            edges = {key: chi for (kind, key), chi in counts.items() if kind == "edge"}
+            vertices_by_label = {frozenset((name,)): 1 for name in labels}
+            cells, reason = dual_cells({**vertices_by_label, **edges}, labels.index)
             if reason:
                 raise ArithmeticError(reason)
         convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else

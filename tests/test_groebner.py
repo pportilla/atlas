@@ -296,6 +296,23 @@ class ModularRouteTests(unittest.TestCase):
         self.assertEqual(len(exact.split("\n")) - 1, 6)
         self.assertGreater(counts[0], 50)  # primes: the coefficients have thousands of bits
 
+    def test_removable_content_keeps_the_exact_strategy(self):
+        # The centered dense quartics are the eager-degree case. In lex order,
+        # reducing y²+z² by B*y-z gives the single term (B²+1)*z² in the
+        # lazy head loop. Its primitive coefficient is one.
+        b = (1 << 100) + 7
+        cases = [
+            (3, 0, ["1 4 0 0;3 2 1 1;2 0 3 1;1 1 1 2;2 0 0 4",
+                    "1 0 4 0;-2 3 1 0;1 2 0 2;3 0 1 3",
+                    "1 0 0 4;2 1 3 0;1 0 2 2;3 3 0 1"]),
+            (2, 1, [f"{b} 1 0;-1 0 1", "1 2 0;1 0 2"]),
+        ]
+        for variables, order, rows in cases:
+            with self.subTest(order=order):
+                modular, exact, _, route = self.bases(variables, order, rows)
+                self.assertEqual(exact, modular)
+                self.assertEqual(route, 0)
+
     def test_monomial_deletions_stay_within_the_direct_work_budget(self):
         # 820 terms disappear under x. Only the 41 powers of y remain.
         dense = ";".join(f"1 {i} {j}" for i in range(41) for j in range(41 - i))

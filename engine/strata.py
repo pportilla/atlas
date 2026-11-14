@@ -41,6 +41,9 @@ def resolution_strata(record, polynomial=None, *, computed=None):
         raise InputError("The resolution needs its ordered list of variables.")
     if polynomial is None:
         polynomial = parse(record.get("polynomial"), variables, bounded=False)
+    if computed is None and record.get("engine") == "toric-graph":
+        from .toric_graph import graph_strata
+        return graph_strata(record, polynomial)
     if computed is None and record.get("mode") == "intrinsic" and "embedded_companion" in record:
         # Both sets of charts refer to the same original polynomial. The
         # companion must pass the ordinary embedded verification on re-read.
@@ -76,7 +79,7 @@ def resolution_strata(record, polynomial=None, *, computed=None):
         raise InputError("Incomplete chart or divisor data in the resolution record.") from exc
     data, strata = found["numerical_data"], found["strata"]
     if CHECK:
-        from .strata_reference import IDENTITY_METHOD, resolution_strata as reference
+        from tests.strata_oracle import IDENTITY_METHOD, resolution_strata as reference, _same_integrals, _zeta_integrals
         old = reference(record, polynomial)
         if old is not None and not _same_integrals(data, strata, *old[:2]):
             # Blowing up a crossing changes the strata. If the reference
@@ -86,28 +89,6 @@ def resolution_strata(record, polynomial=None, *, computed=None):
             if _zeta_integrals(data, strata) != _zeta_integrals(*old[:2]):
                 raise AssertionError("The atlas and the identity give different zeta functions.")
     return data, strata, "Euler characteristics on the disjoint parts of the resolution atlas"
-
-
-def _zeta_integrals(data, strata):
-    from .topological import _acampo, _reference
-    numbers = {r["component"]: (r["multiplicity"], r["nu"]) for r in data}
-    value = _reference(numbers, strata)
-    if value is None:
-        raise AssertionError("The topological zeta integral fails Z(0) = 1.")
-    return _acampo(data, strata), value[0]
-
-
-def _same_integrals(data, strata, old_data, old_strata):
-    # The reference algorithms can group disjoint branches of equal weight.
-    # Relabel by numerical data before comparing the sums of their strata.
-    def group(numbers, rows):
-        by_name = {r["component"]: (r["multiplicity"], r["nu"]) for r in numbers}
-        totals = {}
-        for row in rows:
-            key = tuple(sorted(by_name[c] for c in row["components"]))
-            totals[key] = totals.get(key, 0) + row["euler_characteristic"]
-        return {k:v for k,v in totals.items() if v}
-    return group(data, strata) == group(old_data, old_strata)
 
 
 def records(answer):
@@ -132,70 +113,22 @@ def records(answer):
 def _vertex_aliases(found, old):
     """Match named branches to an independently computed graph. Preserve the
     parent divisor, loops and every edge multiplicity under the relabelling."""
-    from collections import Counter
-    if any(c.get("dimension", len(c["vertices"])-1) != 1 for g in (found, old) for c in g["cells"]):
-        return None
-    names = {v["id"] for v in found["vertices"]}
-    candidates = {}
-    for v in old["vertices"]:
-        name = v["id"]
-        if name in names:
-            candidates[name] = [name]
-            continue
-        parents = v.get("ambient_components") or ([v["ambient_divisor"]] if "ambient_divisor" in v else [])
-        if not parents and name.endswith(("u", "v")):
-            parents = [name[:-1]]
-        candidates[name] = sorted(k for k in names if any(k == p or
-                                  (k.startswith(p + ".") and k[len(p)+1:].isdigit()) for p in parents))
-    if len(candidates) != len(names) or not all(candidates.values()):
-        return None
-    if not old["cells"] and not found["cells"]:
-        # Intrinsic curves have only points. Within each disjoint group of
-        # indistinguishable points the order has no incidence information.
-        parts = {}
-        for k, values in candidates.items():
-            parts.setdefault(tuple(values), []).append(k)
-        pairs = {a: b for values, keys in parts.items() if len(values) == len(keys)
-                 for a, b in zip(values, keys)}
-        return pairs if len(pairs) == len(names) and len(set(pairs.values())) == len(names) else None
-    def adjacency(g):
-        a = {v["id"]: Counter() for v in g["vertices"]}
-        for cell in g["cells"]:
-            u, v = cell["vertices"]
-            a[u][v] += 1
-            a[v][u] += 1
-        return a
-    source, target = adjacency(old), adjacency(found)
-    chosen = {}
-    def match():
-        if len(chosen) == len(names):
-            return {b: a for a, b in chosen.items()}
-        key = min((k for k in candidates if k not in chosen),
-                  key=lambda k: (len(candidates[k]), -sum(n in chosen for n in source[k])))
-        for v in candidates[key]:
-            if (v in chosen.values() or sorted(source[key].values()) != sorted(target[v].values()) or
-                    source[key][key] != target[v][v] or
-                    any(source[key][k] != target[v][w] for k, w in chosen.items())):
-                continue
-            chosen[key] = v
-            answer = match()
-            if answer is not None:
-                return answer
-            del chosen[key]
-        return None
-    return match()
+    from .incidence import incidence
+    # Only the vertex, parent and endpoint labels participate in matching.
+    def graph(value):
+        return {"vertices": [{k: v[k] for k in ("id", "ambient_components", "ambient_divisor") if k in v}
+                             for v in value["vertices"]],
+                "cells": [{k: c[k] for k in ("dimension", "vertices") if k in c} for c in value["cells"]]}
+    return incidence("aliases", old=graph(old), found=graph(found))
 
 
 def annotate_complex(old, found):
     """Preserve compatible names and annotations on a computed complex."""
-    from collections import Counter
     if old["status"] != "complete" or found["status"] != "complete":
         return found
     if CHECK:
-        def dimensions(g):
-            return len(g["vertices"]), Counter(len(c["vertices"])-1 for c in g["cells"])
-        if dimensions(found) != dimensions(old):
-            raise AssertionError("The atlas and the reference have different cell counts.")
+        from tests.strata_oracle import check_complex_counts
+        check_complex_counts(old, found)
     old_vertices = {v["id"]: v for v in old["vertices"]}
     aliases = {}
     if set(old_vertices) != {v["id"] for v in found["vertices"]}:
@@ -207,9 +140,9 @@ def annotate_complex(old, found):
     proved = {aliases.get(v["id"], v["id"]): v for v in found["vertices"]}
     found = {**found, "vertices": [{**old_vertex, **proved[name], "id": name}
                                     for name, old_vertex in old_vertices.items()]}
-    if CHECK and Counter(frozenset(c["vertices"]) for c in old["cells"]) != Counter(
-            frozenset(c["vertices"]) for c in found["cells"]):
-        raise AssertionError("The atlas and the reference have different cell incidences.")
+    if CHECK:
+        from tests.strata_oracle import check_cell_incidences
+        check_cell_incidences(old, found)
     old_cells = {}
     for cell in old["cells"]:
         old_cells.setdefault(frozenset(cell["vertices"]), []).append(cell)

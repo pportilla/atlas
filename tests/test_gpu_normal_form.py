@@ -52,6 +52,13 @@ class MonomialNormalFormTests(unittest.TestCase):
                 self.assertIsNone(normal_form(("a", "b", "c"), basis, row+"*"+chunks[0]))
             launch.assert_called_once()
 
+    def test_device_bounds_reject_unrepresentable_inputs_before_launch(self):
+        from engine.gpu_normal_form import monomial_witnesses
+        with replay_scope("gpu", backend="opencl"), patch("engine.gpu_normal_form._opencl_witnesses") as launch:
+            for powers in ((32767, 1), (-1, 0), (2**70, 0)):
+                self.assertIsNone(monomial_witnesses(2, [powers] * 64, [(1, 0)]))
+            launch.assert_not_called()
+
     @unittest.skipIf(_MODE == "sympy" or _kernel() is None, "Requires the compiled Atlas reducer")
     def test_rejected_result_retries_exact_cpu(self):
         from engine.algebra import dispatch

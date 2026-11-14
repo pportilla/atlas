@@ -1,0 +1,4015 @@
+{
+  "date_utc": "2026-11-14T10:03:23.902740+00:00",
+  "command": [
+    "benchmarks/shifted_local_standard.py",
+    "--atlas-root",
+    "/tmp/atlas-local-dimension-cpu-91x7_9gw",
+    "--baseline-root",
+    "/tmp/atlas-local-dimension-cpu-98cc5zqu",
+    "--cpu",
+    "5",
+    "--seconds",
+    "3",
+    "--memory-mib",
+    "768",
+    "--repeats",
+    "3",
+    "--resume",
+    "/tmp/atlas-shifted-local-standard-mixed.json",
+    "--output",
+    "/tmp/atlas-shifted-local-standard-mixed-verified.json"
+  ],
+  "affinity": [
+    5
+  ],
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "seconds": 3.0,
+  "address_space_mib": 768,
+  "repeats": 3,
+  "sha256": {
+    "atlas": "d9262581916e43906a24ccc10f4fb922af4e6dc25c49500258bfaae953ce8862",
+    "native/build/local_algebra": "436117dab2528472c259e4ac744a1bca4acd25503485e5bf569fdc4ac0c48079",
+    "native/build/libgroebner.so": "b70b8e650d7becd556a7cf831f510ab92bf3e6aa8a384a2332b308f40934c811",
+    "native/local_cli.cpp": "2549fa409b4da04a5f0239bf539600d26c5944d3be764204ff4c9b938a54ddd9",
+    "native/local_operations.cpp": "486afe0ea600bb14ab6c879134a6798dd870beb317c945db47b330b4dc275b86",
+    "native/local_basis.cpp": "b1454eff426e897558e20a747737e84b1941490f945699ce79875fff001506d8",
+    "native/local_division.cpp": "392e00adb768c7ef6a02350d68a93dd2fdd740e2337165619cae62092f264bbe",
+    "engine/local_standard.py": "0296f972ad9e8db3a3cabcd85df8f641e30aecba7550f72aec2a593b1794762c",
+    "native/local_io.cpp": "609c08fbe4a66599fd74c9f6ae4b929d0bb97a7543d702309041ef6fb2e3283d",
+    "native/local_point_basis.cpp": "149461b6c4c8acf59a1b7964e3b3bd7214de3189c196c65417297e4afea9b9ea",
+    "native/local_point_normal_form.cpp": "7c8571b43b3a8f0213e701a134762174b966a294a847f0f8076bf9f9760ccee2",
+    "native/local_power_coordinates.cpp": "b735b301899378cfee0a21a2da26bda4bf7d96dc5a54563dab773aabe4059607",
+    "native/local_parameter_basis.cpp": "8a024b22b1bd17e618114a79eb8622f61c947feafbac89f753de5e681bd485cc",
+    "native/point_geometry.cpp": "9eaf3dfd86a900cd7c3b1dee2ec299cfc7975f6ce20d3eb2dd2823840bc81488"
+  },
+  "baseline_sha256": {
+    "atlas": "a2bace539eaf7a8e059fd7e23f666630245137699f558e4510b2c74616925099",
+    "native/build/local_algebra": "5992ae8d5f7931e93852755b0592ab4890ab7319f4b0ac9e21dbfc72c7d06269",
+    "native/build/libgroebner.so": "ed9dd44b5474c2096c7f8ecf133d33a9753295e0ff307bdf1512b062ff10c882",
+    "native/local_cli.cpp": "b3fa2423f032418ac531120de7c1083a70ad9a95b0261c5228869be25adfeefe",
+    "native/local_operations.cpp": "da0f1e3ab86e27bdc4defe168c69ae23f02c974134e2ccb2bccf36d9079caa34",
+    "native/local_basis.cpp": "d9cd74b61838f52804c61d09c6d267aa0fe4b28fc4041a81f0ba1eeb2b5818dc",
+    "engine/local_standard.py": "271a07555a823f54c21bc69ac56869dfee2951d16e98434671b9a5dfa22c8f1d",
+    "native/point_geometry.cpp": "8402e0aefd8e507c4f66bef8ef0cab74bfd8b15672d3bd514a6d67884f77937b"
+  },
+  "harness_sha256": "21bcd0520f044e69ed41ec9dfc8852585553ddac0fd0778072027d8288879371",
+  "cases": [
+    {
+      "name": "ordinary-weak",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "1/2",
+        "-2"
+      ],
+      "ideal": [
+        "(x-1/2)-(x-1/2)^2-(y+2)^2"
+      ],
+      "query": "(x-1/2)+(x-1/2)^3-(y+2)^2",
+      "member": false,
+      "order": "grevlex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "ordinary-unit",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "1/2",
+        "-2"
+      ],
+      "ideal": [
+        "(x-1/2)*(1-(y+2))-(y+2)^2"
+      ],
+      "query": "(x-1/2)",
+      "member": false,
+      "order": "lex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "ordinary-finite",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "1/2",
+        "-2"
+      ],
+      "ideal": [
+        "(x-1/2)+(y+2)^2",
+        "(x-1/2)+(y+2)^3"
+      ],
+      "query": "(y+2)^2",
+      "member": true,
+      "order": "grevlex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "unit-ideal",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "2",
+        "0"
+      ],
+      "ideal": [
+        "x^7-1",
+        "y^2"
+      ],
+      "query": "x+y",
+      "member": true,
+      "order": "grevlex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "tie-lex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1/2",
+        "-2",
+        "0"
+      ],
+      "ideal": [
+        "(x-1/2)*z+(y+2)^2"
+      ],
+      "query": "(x-1/2)*z",
+      "member": false,
+      "order": "lex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "tie-grevlex",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1/2",
+        "-2",
+        "0"
+      ],
+      "ideal": [
+        "(x-1/2)*z+(y+2)^2"
+      ],
+      "query": "(x-1/2)*z",
+      "member": false,
+      "order": "grevlex",
+      "strides": [],
+      "model": []
+    },
+    {
+      "name": "axes-7",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "ideal": [
+        "(x^7-1)*(y^7-1)",
+        "(x^7-1)*z",
+        "(y^7-1)*z"
+      ],
+      "query": "x*y+z",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        7,
+        7,
+        1
+      ],
+      "model": [
+        "h0*h1",
+        "h0*h2",
+        "h1*h2"
+      ]
+    },
+    {
+      "name": "axes-1001",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "ideal": [
+        "(x^1001-1)*(y^1001-1)",
+        "(x^1001-1)*z",
+        "(y^1001-1)*z"
+      ],
+      "query": "x*y+z",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        1001,
+        1001,
+        1
+      ],
+      "model": [
+        "h0*h1",
+        "h0*h2",
+        "h1*h2"
+      ]
+    },
+    {
+      "name": "squares-17",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "ideal": [
+        "((x^17-1)+y)^2",
+        "((x^17-1)+z)^2",
+        "(y+z)^2"
+      ],
+      "query": "x-1+y*z",
+      "member": false,
+      "order": "lex",
+      "strides": [
+        17,
+        1,
+        1
+      ],
+      "model": [
+        "(17*h0+h1)^2",
+        "(17*h0+h2)^2",
+        "(h1+h2)^2"
+      ]
+    },
+    {
+      "name": "squares-1000001",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "ideal": [
+        "((x^1000001-1)+y)^2",
+        "((x^1000001-1)+z)^2",
+        "(y+z)^2"
+      ],
+      "query": "x-1+y*z",
+      "member": false,
+      "order": "lex",
+      "strides": [
+        1000001,
+        1,
+        1
+      ],
+      "model": [
+        "(1000001*h0+h1)^2",
+        "(1000001*h0+h2)^2",
+        "(h1+h2)^2"
+      ]
+    },
+    {
+      "name": "slice-37",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "ideal": [
+        "x-1",
+        "y^2+z^3",
+        "y*z+(x^37-1)*z^2"
+      ],
+      "query": "x+y*z+z^5",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        37,
+        1,
+        1
+      ],
+      "model": [
+        "h0",
+        "h1^2+h2^3",
+        "h1*h2"
+      ]
+    },
+    {
+      "name": "slice-1000001",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "0",
+        "0"
+      ],
+      "ideal": [
+        "x-1",
+        "y^2+z^3",
+        "y*z+(x^1000001-1)*z^2"
+      ],
+      "query": "x+y*z+z^5",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        1000001,
+        1,
+        1
+      ],
+      "model": [
+        "h0",
+        "h1^2+h2^3",
+        "h1*h2"
+      ]
+    },
+    {
+      "name": "bigint-principal",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "-1",
+        "0"
+      ],
+      "ideal": [
+        "x^18446744073709551623+1+y"
+      ],
+      "query": "y",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        18446744073709551623,
+        1
+      ],
+      "model": [
+        "18446744073709551623*h0+h1"
+      ]
+    },
+    {
+      "name": "bigint-unit",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "point": [
+        "0",
+        "-1"
+      ],
+      "ideal": [
+        "x*(y^18446744073709551623+2)-(y+1)^2"
+      ],
+      "query": "x",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        1,
+        18446744073709551623
+      ],
+      "model": [
+        "h0"
+      ]
+    },
+    {
+      "name": "primitive-oblique-7",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "ideal": [
+        "(x^7*y^7+x+y-3+z)*(x-y+z)",
+        "(x^7*y^7+x+y-3+z)*(z+x-1)",
+        "(x-y+z)*(z+x-1)"
+      ],
+      "query": "1+z",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        7,
+        7,
+        1
+      ],
+      "model": [
+        "(8*h0+8*h1+h2)*(h0-h1+h2)",
+        "(8*h0+8*h1+h2)*(h2+h0)",
+        "(h0-h1+h2)*(h2+h0)"
+      ]
+    },
+    {
+      "name": "primitive-oblique-1001",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "point": [
+        "1",
+        "1",
+        "0"
+      ],
+      "ideal": [
+        "(x^1001*y^1001+x+y-3+z)*(x-y+z)",
+        "(x^1001*y^1001+x+y-3+z)*(z+x-1)",
+        "(x-y+z)*(z+x-1)"
+      ],
+      "query": "1+z",
+      "member": false,
+      "order": "grevlex",
+      "strides": [
+        1001,
+        1001,
+        1
+      ],
+      "model": [
+        "(1002*h0+1002*h1+h2)*(h0-h1+h2)",
+        "(1002*h0+1002*h1+h2)*(h2+h0)",
+        "(h0-h1+h2)*(h2+h0)"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "case": "ordinary-weak",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.522414012579247
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.134891988243908
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.103031995939091
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.103712996467948
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.513699005357921
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.070810999721289
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 7.718286011368036
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.082786011276767
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.245282020652667
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.218240982387215
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.49358199047856
+          },
+          {
+            "status": "ok",
+            "milliseconds": 15.236894018016756
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.431506012333557
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.990801008418202
+          },
+          {
+            "status": "ok",
+            "milliseconds": 13.384601013967767
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "-x^2-y^2+2*x-4*y-19/4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "-x^2-y^2+2*x-4*y-19/4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "-x^2-y^2+2*x-4*y-19/4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "-x^2-y^2+2*x-4*y-19/4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "-x^2-y^2+2*x-4*y-19/4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 7.103031995939091,
+        "atlas": 7.103712996467948,
+        "singular": 8.245282020652667,
+        "singular-global-first": 8.49358199047856,
+        "singular-unit-factors": 9.431506012333557
+      }
+    },
+    {
+      "case": "ordinary-weak",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.926909001776949
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.357743015745655
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.609598989598453
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.130743993911892
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.106639008270577
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.215734989382327
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 11.771189019782469
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.019014989258721
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.332886995049194
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.036697981879115
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.637493010610342
+          },
+          {
+            "status": "ok",
+            "milliseconds": 12.054194987285882
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.609259995864704
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.412940009497106
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.902455010684207
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "-x+3/2",
+              "remainder": "2*x^3*y^2+2*x*y^4+8*x^3*y-3*x^2*y^2+16*x*y^3+8*x^3-12*x^2*y+99/2*x*y^2-12*x^2+70*x*y-1/4*y^2+38*x-y-1",
+              "reduction": "weak"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "-x+3/2",
+              "remainder": "2*x^3*y^2+2*x*y^4+8*x^3*y-3*x^2*y^2+16*x*y^3+8*x^3-12*x^2*y+99/2*x*y^2-12*x^2+70*x*y-1/4*y^2+38*x-y-1",
+              "reduction": "weak"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "-x+3/2",
+              "remainder": "2*x^3*y^2+2*x*y^4+8*x^3*y-3*x^2*y^2+16*x*y^3+8*x^3-12*x^2*y+99/2*x*y^2-12*x^2+70*x*y-1/4*y^2+38*x-y-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "-x+3/2",
+              "remainder": "2*x^3*y^2+2*x*y^4+8*x^3*y-3*x^2*y^2+16*x*y^3+8*x^3-12*x^2*y+99/2*x*y^2-12*x^2+70*x*y-1/4*y^2+38*x-y-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "-x+3/2",
+              "remainder": "2*x^3*y^2+2*x*y^4+8*x^3*y-3*x^2*y^2+16*x*y^3+8*x^3-12*x^2*y+99/2*x*y^2-12*x^2+70*x*y-1/4*y^2+38*x-y-1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.926909001776949,
+        "atlas": 7.106639008270577,
+        "singular": 8.332886995049194,
+        "singular-global-first": 8.637493010610342,
+        "singular-unit-factors": 8.902455010684207
+      }
+    },
+    {
+      "case": "ordinary-unit",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 8.066734997555614
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.652519979979843
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.40606598649174
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.595353003125638
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.82938500540331
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.740116998320445
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 9.723377006594092
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.927713002776727
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.814088010694832
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.336073020473123
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.478042000206187
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.297650987515226
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.661168995080516
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.037238992983475
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.874541013734415
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "-x*y-y^2-x-7/2*y-7/2"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "-x*y-y^2-x-7/2*y-7/2"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "-x*y-y^2-x-7/2*y-7/2"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "-x*y-y^2-x-7/2*y-7/2"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "-x*y-y^2-x-7/2*y-7/2"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 8.066734997555614,
+        "atlas": 7.595353003125638,
+        "singular": 8.927713002776727,
+        "singular-global-first": 8.336073020473123,
+        "singular-unit-factors": 8.037238992983475
+      }
+    },
+    {
+      "case": "ordinary-unit",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.85595499817282
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.267562013817951
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.584079994354397
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.624787987675518
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.887353985803202
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.075127981603146
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.102972991764545
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.086081012152135
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.712865015491843
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 11.743656999897212
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.073477995116264
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.342435990925878
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 10.361394000938162
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.079488983843476
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.128251986112446
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "-y-1",
+              "remainder": "y^2+4*y+4",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "-y-1",
+              "remainder": "y^2+4*y+4",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "-y-1",
+              "remainder": "y^2+4*y+4"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "-y-1",
+              "remainder": "y^2+4*y+4"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "-y-1",
+              "remainder": "y^2+4*y+4"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.584079994354397,
+        "atlas": 6.624787987675518,
+        "singular": 8.086081012152135,
+        "singular-global-first": 9.073477995116264,
+        "singular-unit-factors": 9.128251986112446
+      }
+    },
+    {
+      "case": "ordinary-finite",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.030965014360845
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.793195992941037
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.04901001881808
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.108682009857148
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.574483006261289
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.686223990982398
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 9.381720999954268
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.28499799920246
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.379777999129146
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.622294990345836
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.699284019414335
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.467022009426728
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.817394002107903
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.914969006786123
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.288434008136392
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x+4*y+7/2",
+                "-y^3-5*y^2-8*y-4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x+4*y+7/2",
+                "-y^3-5*y^2-8*y-4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "x-1/2",
+                "y^2+4*y+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "x-1/2",
+                "y^2+4*y+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "x-1/2",
+                "y^2+4*y+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.793195992941037,
+        "atlas": 6.686223990982398,
+        "singular": 9.379777999129146,
+        "singular-global-first": 8.622294990345836,
+        "singular-unit-factors": 8.817394002107903
+      }
+    },
+    {
+      "case": "ordinary-finite",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.1477249837480485
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.396876007784158
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.6729690006468445
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.347093003569171
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.608838011743501
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.653813004959375
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 12.690308009041473
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.37980699725449
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.024554990697652
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.872206992236897
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.156935993814841
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.873931994661689
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 10.490097018191591
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.479355998337269
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.3898169870954
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0",
+              "reduction": "standard"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0",
+              "reduction": "standard"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.396876007784158,
+        "atlas": 6.608838011743501,
+        "singular": 8.37980699725449,
+        "singular-global-first": 9.156935993814841,
+        "singular-unit-factors": 9.479355998337269
+      }
+    },
+    {
+      "case": "unit-ideal",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.9309769896790385
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.5701850107871
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.345991994952783
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.788556987885386
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.149680983275175
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.967453995253891
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.764473983319476
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.75445401086472
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.474956004647538
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 15.196095977444202
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.680423994315788
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.300186997279525
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 11.435514985350892
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.548244000645354
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.224203007761389
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.9309769896790385,
+        "atlas": 6.788556987885386,
+        "singular": 8.474956004647538,
+        "singular-global-first": 9.300186997279525,
+        "singular-unit-factors": 9.224203007761389
+      }
+    },
+    {
+      "case": "unit-ideal",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 5.674740998074412
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.622624001465738
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.56089698895812
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.010186993284151
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.161261979490519
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.813052004668862
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.76907299971208
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.176232018740848
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.176020986866206
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.819798997137696
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.249970996985212
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.9885980123654
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.560418005799875
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.995930995093659
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.864842016715556
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0",
+              "reduction": "standard"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0",
+              "reduction": "standard"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "0"
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.56089698895812,
+        "atlas": 7.010186993284151,
+        "singular": 8.176232018740848,
+        "singular-global-first": 8.819798997137696,
+        "singular-unit-factors": 7.995930995093659
+      }
+    },
+    {
+      "case": "tie-lex",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 5.8940849849022925
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.8327810149639845
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.787615013308823
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.28536699898541
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.514230004744604
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.4813559874892235
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 7.70103299873881
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.036578015889972
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.09235398285091
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.181842014892027
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.747492014663294
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.362445009173825
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.367103000637144
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.240133000072092
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.280868991278112
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "x*z+y^2+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x*z+y^2+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.787615013308823,
+        "atlas": 7.28536699898541,
+        "singular": 8.036578015889972,
+        "singular-global-first": 8.747492014663294,
+        "singular-unit-factors": 8.280868991278112
+      }
+    },
+    {
+      "case": "tie-lex",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.2712889921385795
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.833802995970473
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.903595000039786
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.9431599986273795
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.994968018261716
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.085878994781524
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 9.236635989509523
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.677630994701758
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.699280995642766
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 9.435813000891358
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.828004996757954
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.989118021214381
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.852841012412682
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.43415901181288
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.022982015972957
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "-y^2-4*y-4",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "-y^2-4*y-4",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "-y^2-4*y-4"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "-y^2-4*y-4"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "-y^2-4*y-4"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.833802995970473,
+        "atlas": 6.9431599986273795,
+        "singular": 9.236635989509523,
+        "singular-global-first": 8.828004996757954,
+        "singular-unit-factors": 8.43415901181288
+      }
+    },
+    {
+      "case": "tie-grevlex",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.073846016079187
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.64197001606226
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.15079200360924
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.3813390044961125
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.9337209968362
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.569303019205108
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 7.367471989709884
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.03808999969624
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.040894997771829
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.768290979787707
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.93804301833734
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.899967993376777
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 7.291618007002398
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.6552660029847175
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.091661012964323
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "x*z+y^2+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x*z+y^2+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "y^2+x*z+4*y-1/2*z+4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.15079200360924,
+        "atlas": 6.569303019205108,
+        "singular": 7.040894997771829,
+        "singular-global-first": 8.768290979787707,
+        "singular-unit-factors": 7.291618007002398
+      }
+    },
+    {
+      "case": "tie-grevlex",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.087802001275122
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.5552659798413515
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.544597010361031
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.456119008362293
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.917311024153605
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.380064995028079
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 6.980350008234382
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.748463005758822
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.017521002329886
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 7.584902981761843
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.729538007173687
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.72569898981601
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.438688004389405
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.518679009284824
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.7802930027246475
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x*z-1/2*z",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x*z-1/2*z",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x*z-1/2*z"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x*z-1/2*z"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x*z-1/2*z"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.544597010361031,
+        "atlas": 6.456119008362293,
+        "singular": 8.017521002329886,
+        "singular-global-first": 7.72569898981601,
+        "singular-unit-factors": 8.438688004389405
+      }
+    },
+    {
+      "case": "axes-7",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 5.6799510202836245
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.393751991912723
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.6158410045318305
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.6128449980169535
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.243617011932656
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.847397987963632
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 9.068418992683291
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.36853398848325
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.808135007508099
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 7.450959994457662
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.01065901760012
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.571177004138008
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 8.890743018127978
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.734047005418688
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.758451014524326
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "1/49*x^7*y^7-1/49*x^7-1/49*y^7+1/49",
+                "1/7*x^7*z-1/7*z",
+                "1/7*y^7*z-1/7*z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.6158410045318305,
+        "atlas": 6.243617011932656,
+        "singular": 7.808135007508099,
+        "singular-global-first": 7.571177004138008,
+        "singular-unit-factors": 8.734047005418688
+      }
+    },
+    {
+      "case": "axes-7",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 5.962053983239457
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.743683014065027
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.639344996074215
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.824216008884832
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.801801995607093
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.265578995225951
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.469736989354715
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.661077998112887
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.619339001597837
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 7.717725005932152
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.453744998201728
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.395776996621862
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.21798197668977
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.028362983372062
+          },
+          {
+            "status": "ok",
+            "milliseconds": 15.42917700135149
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 6.639344996074215,
+        "atlas": 6.801801995607093,
+        "singular": 8.619339001597837,
+        "singular-global-first": 7.717725005932152,
+        "singular-unit-factors": 9.21798197668977
+      }
+    },
+    {
+      "case": "axes-1001",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"computation_failed\",\n    \"message\": \"std::bad_alloc\"\n  }\n}"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.037036994006485
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.46678899647668
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.582267000339925
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 719.0807409933768
+          },
+          {
+            "status": "ok",
+            "milliseconds": 695.8957159949932
+          },
+          {
+            "status": "ok",
+            "milliseconds": 694.6557119954377
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "x*y-x-y+1",
+                "x*z-z",
+                "y*z-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "atlas": 6.582267000339925,
+        "singular-unit-factors": 695.8957159949932
+      }
+    },
+    {
+      "case": "axes-1001",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"computation_failed\",\n    \"message\": \"std::bad_alloc\"\n  }\n}"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.721332018263638
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.053528999676928
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.007511991309002
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 714.1984580084682
+          },
+          {
+            "status": "ok",
+            "milliseconds": 745.9064589929767
+          },
+          {
+            "status": "ok",
+            "milliseconds": 732.9992009908892
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "x+y+z-1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "atlas": 7.721332018263638,
+        "singular-unit-factors": 732.9992009908892
+      }
+    },
+    {
+      "case": "squares-17",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 10.089088988024741
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.421526017831638
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.96673699025996
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 14.200253004673868
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.353026998927817
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.83879598788917
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 12.569017999339849
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.93565801763907
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.60214900644496
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 11.939708987483755
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.175353021826595
+          },
+          {
+            "status": "ok",
+            "milliseconds": 15.077502990607172
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "1/17*x^17*y-1/17*x^17*z-1/17*y*z-1/17*z^2-1/17*y+1/17*z",
+                "1/17*x^17*z^2+1/51*z^3-1/17*z^2",
+                "1/289*x^34+2/289*x^17*z-2/289*x^17+1/289*z^2-2/289*z+1/289",
+                "y*z^2+1/3*z^3",
+                "y^2+2*y*z+z^2",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "41616*x^4+1360*x^3*z-161840*x^3-3808*x^2*z+236113*x^2+3570*x*z+z^2-153170*x-1122*z+37281",
+                "1360*x^3*y-1360*x^3*z-3808*x^2*y+3808*x^2*z+3570*x*y+y^2-3570*x*z-z^2-1122*y+1122*z",
+                "y^2+2*y*z+z^2",
+                "4624*x^3*y-4624*x^3*z-272*x^2*y*z+272*x^2*z^2-13872*x^2*y+13872*x^2*z+544*x*y*z-3*y^2*z-476*x*z^2+2*y*z^2+z^3+13872*x*y-13872*x*z-272*y*z+204*z^2-4624*y+4624*z",
+                "2312*x^3*y+68*x^2*y^2-2312*x^3*z-68*x^2*z^2-6936*x^2*y-136*x*y^2+6936*x^2*z+136*x*z^2+3*y*z^2+z^3+6936*x*y+68*y^2-6936*x*z-68*z^2-2312*y+2312*z",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "41616*x^4+1360*x^3*z-161840*x^3-3808*x^2*z+236113*x^2+3570*x*z+z^2-153170*x-1122*z+37281",
+                "680*x^3*y-680*x^3*z-1904*x^2*y+1904*x^2*z+1785*x*y-1785*x*z-y*z-z^2-561*y+561*z",
+                "y^2+2*y*z+z^2",
+                "272*x^2*z^2-510*x*z^2+y*z^2+z^3+238*z^2",
+                "3*y*z^2+z^3",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "41616*x^4+1360*x^3*z-161840*x^3-3808*x^2*z+236113*x^2+3570*x*z+z^2-153170*x-1122*z+37281",
+                "1360*x^3*y-1360*x^3*z-3808*x^2*y+3808*x^2*z+3570*x*y+y^2-3570*x*z-z^2-1122*y+1122*z",
+                "y^2+2*y*z+z^2",
+                "4624*x^3*y-4624*x^3*z-272*x^2*y*z+272*x^2*z^2-13872*x^2*y+13872*x^2*z+544*x*y*z-3*y^2*z-476*x*z^2+2*y*z^2+z^3+13872*x*y-13872*x*z-272*y*z+204*z^2-4624*y+4624*z",
+                "2312*x^3*y+68*x^2*y^2-2312*x^3*z-68*x^2*z^2-6936*x^2*y-136*x*y^2+6936*x^2*z+136*x*z^2+3*y*z^2+z^3+6936*x*y+68*y^2-6936*x*z-68*z^2-2312*y+2312*z",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "atlas": 9.421526017831638,
+        "singular": 10.353026998927817,
+        "singular-global-first": 10.60214900644496,
+        "singular-unit-factors": 11.939708987483755
+      }
+    },
+    {
+      "case": "squares-17",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.87771599041298
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.801733008818701
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.390086004510522
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 9.38152099843137
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.606827021343634
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.884631988825276
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 9.825139975873753
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.046729003079236
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.068972002249211
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.398774011060596
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.100670013343915
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.171685997396708
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y*z+x-1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y*z+x-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y*z+x-1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y*z+x-1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "atlas": 7.801733008818701,
+        "singular": 9.606827021343634,
+        "singular-global-first": 10.046729003079236,
+        "singular-unit-factors": 10.100670013343915
+      }
+    },
+    {
+      "case": "squares-1000001",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"worker_unavailable\",\n    \"message\": \"Algebra worker stopped before returning an exact result.\"\n  }\n}\n GNU MP: Cannot reallocate memory (old_size=16 new_size=30632)"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.756467995932326
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.658184997737408
+          },
+          {
+            "status": "ok",
+            "milliseconds": 12.122874992201105
+          }
+        ],
+        "singular": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753111k/2011k Malloc 751027k/0k Valloc 4096k/2011k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753113k/2009k Malloc 751027k/0k Valloc 4096k/2009k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753113k/2009k Malloc 751027k/0k Valloc 4096k/2009k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "1/1000001*x^1000001*y-1/1000001*x^1000001*z-1/1000001*y*z-1/1000001*z^2-1/1000001*y+1/1000001*z",
+                "1/1000001*x^1000001*z^2+1/3000003*z^3-1/1000001*z^2",
+                "1/1000002000001*x^2000002+2/1000002000001*x^1000001*z-2/1000002000001*x^1000001+1/1000002000001*z^2-2/1000002000001*z+1/1000002000001",
+                "y*z^2+1/3*z^3",
+                "y^2+2*y*z+z^2",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 10.658184997737408
+      }
+    },
+    {
+      "case": "squares-1000001",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"worker_unavailable\",\n    \"message\": \"Algebra worker stopped before returning an exact result.\"\n  }\n}\n GNU MP: Cannot reallocate memory (old_size=16 new_size=30632)"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.375107001280412
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.132758008083329
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.877506006276235
+          }
+        ],
+        "singular": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753111k/2011k Malloc 751027k/0k Valloc 4096k/2011k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753113k/2009k Malloc 751027k/0k Valloc 4096k/2009k Pages 546/478 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "allocation_failure",
+            "message": "// ** possible OVERFLOW in map, max exponent is 524287\n   ? exponent 2000002 is too large, max. is 1048575\n\nSingular error: no more memory\nSystem 755123k:755154k Appl 753113k/2009k Malloc 751027k/0k Valloc 4096k/2009k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y*z+x-1",
+              "reduction": "standard"
+            },
+            "independent_checks": 7
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 7.132758008083329
+      }
+    },
+    {
+      "case": "slice-37",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.6502859990578145
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.819686987204477
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.0534980040974915
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.617424020078033
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.799769005738199
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.77511200774461
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.241586008807644
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.915308000519872
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.101642983499914
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 8.351672993740067
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.741108973277733
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.245192002505064
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 11.150806007208303
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.741201017983258
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.740458986721933
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "y*z",
+                "z^3+y^2",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "z^4",
+                "y*z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "666*x^2*z^2-1295*x*z^2+y*z+629*z^2",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "y*z",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "666*x^2*z^2-1295*x*z^2+y*z+629*z^2",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 7.0534980040974915,
+        "atlas": 6.77511200774461,
+        "singular": 8.241586008807644,
+        "singular-global-first": 8.245192002505064,
+        "singular-unit-factors": 8.741201017983258
+      }
+    },
+    {
+      "case": "slice-37",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 6.681884988211095
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.475266000255942
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.396216999040917
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.110506005119532
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.732952024322003
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.266119016800076
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.390367001993582
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.466709997970611
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.7243779853452
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 9.328730986453593
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.132148010190576
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.404633990721777
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.61631498648785
+          },
+          {
+            "status": "ok",
+            "milliseconds": 9.15677598095499
+          },
+          {
+            "status": "ok",
+            "milliseconds": 13.361015997361392
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 7.396216999040917,
+        "atlas": 6.732952024322003,
+        "singular": 8.390367001993582,
+        "singular-global-first": 8.404633990721777,
+        "singular-unit-factors": 9.61631498648785
+      }
+    },
+    {
+      "case": "slice-1000001",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"worker_unavailable\",\n    \"message\": \"Algebra worker stopped before returning an exact result.\"\n  }\n}\n GNU MP: Cannot reallocate memory (old_size=16 new_size=30632)"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.199683994054794
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.574424002086744
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.472030003555119
+          }
+        ],
+        "singular": [
+          {
+            "status": "allocation_failure",
+            "message": "Singular error: no more memory\nSystem 755123k:755154k Appl 753112k/2010k Malloc 751027k/0k Valloc 4096k/2010k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 82.64265101752244
+          },
+          {
+            "status": "ok",
+            "milliseconds": 83.80928699625656
+          },
+          {
+            "status": "ok",
+            "milliseconds": 83.85416099918075
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "allocation_failure",
+            "message": "Singular error: no more memory\nSystem 755123k:755154k Appl 753114k/2008k Malloc 751027k/0k Valloc 4096k/2008k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "z^4",
+                "y*z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "x-1",
+                "z^3+y^2",
+                "y*z",
+                "z^4"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 7.472030003555119,
+        "singular-global-first": 83.80928699625656
+      }
+    },
+    {
+      "case": "slice-1000001",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"worker_unavailable\",\n    \"message\": \"Algebra worker stopped before returning an exact result.\"\n  }\n}\n GNU MP: Cannot reallocate memory (old_size=16 new_size=30632)"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.785240984754637
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.424499006243423
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.745316000888124
+          }
+        ],
+        "singular": [
+          {
+            "status": "allocation_failure",
+            "message": "Singular error: no more memory\nSystem 755123k:755154k Appl 753112k/2010k Malloc 751027k/0k Valloc 4096k/2010k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 80.24369401391596
+          },
+          {
+            "status": "ok",
+            "milliseconds": 80.61509599792771
+          },
+          {
+            "status": "ok",
+            "milliseconds": 80.00568399438635
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "allocation_failure",
+            "message": "Singular error: no more memory\nSystem 755123k:755154k Appl 753114k/2008k Malloc 751027k/0k Valloc 4096k/2008k Pages 545/479 Regions 2:2 Internal: 368\n\nhalt 14"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 6.745316000888124,
+        "singular-global-first": 80.24369401391596
+      }
+    },
+    {
+      "case": "bigint-principal",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "pullback_overflow",
+            "message": "The polynomial pullback exceeds FLINT's limits."
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.9315369764808565
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.991461006691679
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.591373996343464
+          }
+        ],
+        "singular": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "1/18446744073709551623*x^18446744073709551623+1/18446744073709551623*y+1/18446744073709551623"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 6.9315369764808565
+      }
+    },
+    {
+      "case": "bigint-principal",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "pullback_overflow",
+            "message": "The polynomial pullback exceeds FLINT's limits."
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.489121984690428
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.624288002261892
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.837920984253287
+          }
+        ],
+        "singular": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "y",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 7.489121984690428
+      }
+    },
+    {
+      "case": "bigint-unit",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "pullback_overflow",
+            "message": "The polynomial pullback exceeds FLINT's limits."
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.823934003477916
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.876945000840351
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.362601008731872
+          }
+        ],
+        "singular": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "x*y^18446744073709551623-y^2+2*x-2*y-1"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 6.823934003477916
+      }
+    },
+    {
+      "case": "bigint-unit",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "pullback_overflow",
+            "message": "The polynomial pullback exceeds FLINT's limits."
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 7.637532980879769
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.714326998917386
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.21096501708962
+          }
+        ],
+        "singular": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "unsupported_exponent",
+            "message": "? `poly` ^ `bigint` failed"
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "y^18446744073709551623+2",
+              "remainder": "y^2+2*y+1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 6.714326998917386
+      }
+    },
+    {
+      "case": "primitive-oblique-7",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 8.278635999886319
+          },
+          {
+            "status": "ok",
+            "milliseconds": 16.563753015361726
+          },
+          {
+            "status": "ok",
+            "milliseconds": 14.710227987961844
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 8.21743899723515
+          },
+          {
+            "status": "ok",
+            "milliseconds": 8.16216500243172
+          },
+          {
+            "status": "ok",
+            "milliseconds": 13.016545010032132
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 8.866607007803395
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.32271099393256
+          },
+          {
+            "status": "ok",
+            "milliseconds": 14.90820199251175
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 10.594624996883795
+          },
+          {
+            "status": "ok",
+            "milliseconds": 10.554919979767874
+          },
+          {
+            "status": "ok",
+            "milliseconds": 17.596616002265364
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 9.927794017130509
+          },
+          {
+            "status": "ok",
+            "milliseconds": 13.09768800274469
+          },
+          {
+            "status": "ok",
+            "milliseconds": 12.04720200621523
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "generators": [
+                "1/16*x*y^14-7/16*x*y^13*z+21/16*x*y^12*z^2-35/16*x*y^11*z^3+35/16*x*y^10*z^4-21/16*x*y^9*z^5+7/16*x*y^8*z^6-1/16*x*y^7*z^7+1/16*y^14*z-7/16*y^13*z^2+21/16*y^12*z^3-35/16*y^11*z^4+35/16*y^10*z^5-21/16*y^9*z^6+7/16*y^8*z^7-1/16*y^7*z^8-1/16*y^14+7/16*y^13*z-21/16*y^12*z^2+35/16*y^11*z^3-35/16*y^10*z^4+21/16*y^9*z^5-7/16*y^8*z^6+1/16*y^7*z^7+1/8*x*y+1/8*y*z-3/16*x-1/8*y-3/16*z+3/16",
+                "1/16*x*y^14-7/16*x*y^13*z+21/16*x*y^12*z^2-35/16*x*y^11*z^3+35/16*x*y^10*z^4-21/16*x*y^9*z^5+7/16*x*y^8*z^6+1/16*x*y^7*z^7+1/16*y^14*z-7/16*y^13*z^2+21/16*y^12*z^3-35/16*y^11*z^4+35/16*y^10*z^5-21/16*y^9*z^6+5/16*y^8*z^7+1/16*y^7*z^8-7/8*x*y^7*z^6-1/16*y^14+7/16*y^13*z-21/16*y^12*z^2+35/16*y^11*z^3-35/16*y^10*z^4+21/16*y^9*z^5+7/16*y^8*z^6-13/16*y^7*z^7+21/8*x*y^7*z^5-21/8*y^8*z^5+21/8*y^7*z^6-35/8*x*y^7*z^4+35/8*y^8*z^4-35/8*y^7*z^5+35/8*x*y^7*z^3-35/8*y^8*z^3+35/8*y^7*z^4-21/8*x*y^7*z^2+21/8*y^8*z^2-21/8*y^7*z^3+7/8*x*y^7*z-7/8*y^8*z+7/8*y^7*z^2-1/8*x*y^7+1/8*y^8-1/8*y^7*z+1/8*y^2+1/16*x-3/8*y+1/16*z+3/16",
+                "x^2-x*y+2*x*z-y*z+z^2-x+y-z"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "-1/16*x^8*y^7+1/8*x^7*y^8-1/16*x^7*y^7*z-1/16*x^7*y^7+7/16*x^2-7/16*x*y+7/8*x*z+1/8*y^2-7/16*y*z+7/16*z^2-3/8*x+1/16*y-3/8*z+3/16",
+                "1/16*x^8*y^7+1/16*x^7*y^7*z-1/16*x^7*y^7-7/16*x^2+9/16*x*y-7/8*x*z+9/16*y*z-7/16*z^2+1/4*x-9/16*y+1/4*z+3/16",
+                "1/16*x^8*y^7+1/16*x^7*y^7*z-1/16*x^7*y^7+9/16*x^2-7/16*x*y+9/8*x*z-7/16*y*z+9/16*z^2-3/4*x+7/16*y-3/4*z+3/16"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "generators": [
+                "x^2-x*y+2*x*z-y*z+z^2-x+y-z",
+                "x^8*y^7+x^7*y^7*z-x^7*y^7-7*x^2+9*x*y-14*x*z+9*y*z-7*z^2+4*x-9*y+4*z+3",
+                "-x^8*y^7+2*x^7*y^8-x^7*y^7*z-x^7*y^7+7*x^2-7*x*y+2*y^2+14*x*z-7*y*z+7*z^2-6*x+y-6*z+3"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "generators": [
+                "x^2-x*y+2*x*z-y*z+z^2-x+y-z",
+                "x*y^14-7*x*y^13*z+y^14*z+21*x*y^12*z^2-7*y^13*z^2-35*x*y^11*z^3+21*y^12*z^3+35*x*y^10*z^4-35*y^11*z^4-21*x*y^9*z^5+35*y^10*z^5+7*x*y^8*z^6-21*y^9*z^6-x*y^7*z^7+7*y^8*z^7-y^7*z^8-y^14+7*y^13*z-21*y^12*z^2+35*y^11*z^3-35*y^10*z^4+21*y^9*z^5-7*y^8*z^6+y^7*z^7+2*x*y+2*y*z-3*x-2*y-3*z+3",
+                "x*y^14-7*x*y^13*z+y^14*z+21*x*y^12*z^2-7*y^13*z^2-35*x*y^11*z^3+21*y^12*z^3+35*x*y^10*z^4-35*y^11*z^4-21*x*y^9*z^5+35*y^10*z^5+7*x*y^8*z^6-21*y^9*z^6+x*y^7*z^7+5*y^8*z^7+y^7*z^8-y^14+7*y^13*z-21*y^12*z^2+35*y^11*z^3-35*y^10*z^4+21*y^9*z^5-14*x*y^7*z^6+7*y^8*z^6-13*y^7*z^7+42*x*y^7*z^5-42*y^8*z^5+42*y^7*z^6-70*x*y^7*z^4+70*y^8*z^4-70*y^7*z^5+70*x*y^7*z^3-70*y^8*z^3+70*y^7*z^4-42*x*y^7*z^2+42*y^8*z^2-42*y^7*z^3+14*x*y^7*z-14*y^8*z+14*y^7*z^2-2*x*y^7+2*y^8-2*y^7*z+2*y^2+x-6*y+z+3"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "generators": [
+                "x^2-x*y+2*x*z-y*z+z^2-x+y-z",
+                "x^8*y^7+x^7*y^7*z-x^7*y^7-7*x^2+9*x*y-14*x*z+9*y*z-7*z^2+4*x-9*y+4*z+3",
+                "-x^8*y^7+2*x^7*y^8-x^7*y^7*z-x^7*y^7+7*x^2-7*x*y+2*y^2+14*x*z-7*y*z+7*z^2-6*x+y-6*z+3"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 14.710227987961844,
+        "atlas": 8.21743899723515,
+        "singular": 10.32271099393256,
+        "singular-global-first": 10.594624996883795,
+        "singular-unit-factors": 12.04720200621523
+      }
+    },
+    {
+      "case": "primitive-oblique-7",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "ok",
+            "milliseconds": 14.232774003176019
+          },
+          {
+            "status": "ok",
+            "milliseconds": 18.9374010078609
+          },
+          {
+            "status": "ok",
+            "milliseconds": 19.449119019554928
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 9.58132799132727
+          },
+          {
+            "status": "ok",
+            "milliseconds": 12.232793000293896
+          },
+          {
+            "status": "ok",
+            "milliseconds": 11.611827998422086
+          }
+        ],
+        "singular": [
+          {
+            "status": "ok",
+            "milliseconds": 12.734099989756942
+          },
+          {
+            "status": "ok",
+            "milliseconds": 14.511813002172858
+          },
+          {
+            "status": "ok",
+            "milliseconds": 15.086508996319026
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "ok",
+            "milliseconds": 10.224194003967568
+          },
+          {
+            "status": "ok",
+            "milliseconds": 13.350716995773837
+          },
+          {
+            "status": "ok",
+            "milliseconds": 16.84961302089505
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "ok",
+            "milliseconds": 11.458318011136726
+          },
+          {
+            "status": "ok",
+            "milliseconds": 17.636161006521434
+          },
+          {
+            "status": "ok",
+            "milliseconds": 16.6703239956405
+          }
+        ]
+      },
+      "certificates": {
+        "before": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-global-first": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1"
+            },
+            "independent_checks": 5
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1"
+            },
+            "independent_checks": 5
+          }
+        ]
+      },
+      "medians_ms": {
+        "before": 18.9374010078609,
+        "atlas": 11.611827998422086,
+        "singular": 14.511813002172858,
+        "singular-global-first": 13.350716995773837,
+        "singular-unit-factors": 16.6703239956405
+      }
+    },
+    {
+      "case": "primitive-oblique-1001",
+      "operation": "local-standard-basis",
+      "samples": {
+        "before": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 8.105909015284851
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.904466998297721
+          },
+          {
+            "status": "ok",
+            "milliseconds": 7.689460995607078
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "generators": [
+                "-1/2004*x^1002*y^1001+1/1002*x^1001*y^1002-1/2004*x^1001*y^1001*z-1/2004*x^1001*y^1001+1001/2004*x^2-1001/2004*x*y+1001/1002*x*z+1/1002*y^2-1001/2004*y*z+1001/2004*z^2-250/501*x+995/2004*y-250/501*z+1/668",
+                "1/2004*x^1002*y^1001+1/2004*x^1001*y^1001*z-1/2004*x^1001*y^1001-1001/2004*x^2+1003/2004*x*y-1001/1002*x*z+1003/2004*y*z-1001/2004*z^2+499/1002*x-1003/2004*y+499/1002*z+1/668",
+                "1/2004*x^1002*y^1001+1/2004*x^1001*y^1001*z-1/2004*x^1001*y^1001+1003/2004*x^2-1001/2004*x*y+1003/1002*x*z-1001/2004*y*z+1003/2004*z^2-503/1002*x+1001/2004*y-503/1002*z+1/668"
+              ]
+            },
+            "independent_checks": 4
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 7.904466998297721
+      }
+    },
+    {
+      "case": "primitive-oblique-1001",
+      "operation": "local-normal-form",
+      "samples": {
+        "before": [
+          {
+            "status": "allocation_failure",
+            "message": "{\n  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"worker_unavailable\",\n    \"message\": \"Algebra worker stopped before returning an exact result.\"\n  }\n}\n GNU MP: Cannot reallocate memory (old_size=16 new_size=232)"
+          }
+        ],
+        "atlas": [
+          {
+            "status": "ok",
+            "milliseconds": 6.437723990529776
+          },
+          {
+            "status": "ok",
+            "milliseconds": 6.822180992458016
+          },
+          {
+            "status": "ok",
+            "milliseconds": 5.350769002689049
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-global-first": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ],
+        "singular-unit-factors": [
+          {
+            "status": "timeout",
+            "lower_bound_seconds": 3.0
+          }
+        ]
+      },
+      "certificates": {
+        "before": [],
+        "atlas": [
+          {
+            "output": {
+              "unit": "1",
+              "remainder": "z+1",
+              "reduction": "standard"
+            },
+            "independent_checks": 6
+          }
+        ],
+        "singular": [],
+        "singular-global-first": [],
+        "singular-unit-factors": []
+      },
+      "medians_ms": {
+        "atlas": 6.437723990529776
+      }
+    }
+  ],
+  "resumed_harness_sha256": "08743213a8149cac0cb5551c0148742d33b057d054abdd8ab9bd50c56c61bec3"
+}

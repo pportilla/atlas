@@ -6,12 +6,11 @@ with the exceptional coordinate hyperplanes, then glued across the toric
 chart cover. All claims are over the algebraic closure of Q.
 """
 
-from collections import Counter, defaultdict
 from fractions import Fraction
-from itertools import combinations
 
-from .polynomial import LimitError
-from .binomial_kernel import _encode, pairings, primitive_character
+from .incidence import incidence
+from .polynomial import LimitError, rational_text
+from .binomial_kernel import _encode, pairings, primitive_character, run, signed_powers
 
 
 def _monomial(coordinates, powers):
@@ -20,11 +19,12 @@ def _monomial(coordinates, powers):
 
 
 def _equation(coordinates, values, coefficient):
-    left = _monomial(coordinates, (max(0,q) for q in values))
-    right = _monomial(coordinates, (max(0,-q) for q in values))
-    c = abs(coefficient)
-    term = right if c == 1 else str(c) if right == "1" else f"{c}*{right}"
-    return left + ("-" if coefficient > 0 else "+") + term
+    plus, minus = signed_powers(tuple(values))
+    left, right = _monomial(coordinates, plus), _monomial(coordinates, minus)
+    text = rational_text(coefficient)
+    absolute = text.lstrip("-")
+    term = right if absolute == "1" else absolute if right == "1" else f"{absolute}*{right}"
+    return left + ("+" if text.startswith("-") else "-") + term
 
 
 def binomial_branch_equations(rays, cone, delta, coefficient, *, values=None):
@@ -41,11 +41,11 @@ def binomial_branch_equations(rays, cone, delta, coefficient, *, values=None):
         return []
     if values is None:
         values = tuple(q for q, in pairings([rays[i] for i in cone],(direction,)))
-    if min(values)<0<max(values):
+    if run(f"separated {len(values)} 1", values) == ["0"]:
         raise ValueError("A split terminal binomial chart must have a unit monomial.")
     coordinates = [f"u{i+1}" for i in range(len(delta))]
-    left = _monomial(coordinates, (max(0, q) for q in values))
-    right = _monomial(coordinates, (max(0, -q) for q in values))
+    plus, minus = signed_powers(tuple(values))
+    left, right = _monomial(coordinates, plus), _monomial(coordinates, minus)
     suffix = "" if right == "1" else f"*{right}"
     branches = []
     for j in range(1, d+1):
@@ -67,14 +67,12 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
         raise ValueError("A torus binomial must have two nonzero coefficients.")
     exceptional = frozenset(range(len(delta),len(rays)) if exceptional_rays is None else exceptional_rays)
     cones = tuple(tuple(c) for c in cones)
-    pairs = sum(2**len(exceptional.intersection(c))-1 for c in cones)
-    if pairs*(degree if mode=="intrinsic" else 1)>1_000_000:
+    if not _within_budget(cones, exceptional, len(delta), degree if mode == "intrinsic" else 1):
         raise LimitError("The split binomial exceeds the geometric intersection-stratum budget.")
     signs = tuple(q for q, in pairings(rays,(direction,)))
-    for cone in cones:
-        values = [signs[i] for i in cone]
-        if min(values)<0<max(values):
-            raise ValueError("Nonterminal split binomial: both monomials are nonconstant in a chart.")
+    weights = [tuple(signs[i] for i in cone) for cone in cones]
+    if run(f"separated {len(delta)} {len(cones)}", *weights) == ["0"]:
+        raise ValueError("Nonterminal split binomial: both monomials are nonconstant in a chart.")
 
     # On a sign-separated cone the strict equation is a d-th power of
     # a primitive character equal to c. Every variable in that character is
@@ -82,10 +80,11 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
     # disjoint geometric branches everywhere, not just on the dense torus.
     dual, chart_divisors = _primitive_complex(rays,cones,direction,1,mode,
                                               exceptional_rays=exceptional,orders=orders)
+    value, degree_text = rational_text(coefficient), _encode(degree)
     dual["root_families"]={"alpha1":{
-        "degree":degree,"power_value":str(coefficient),"polynomial":f"T^{degree}-({coefficient})",
+        "degree":degree,"power_value":value,"polynomial":f"T^{degree_text}-({value})",
         "direction":list(direction),
-        "definition":f"alpha1_j is root j of T^{degree} = {coefficient}, ordered by real part then imaginary part, starting at 1.",
+        "definition":f"alpha1_j is root j of T^{degree_text} = {value}, ordered by real part then imaginary part, starting at 1.",
     }}
     if mode=="embedded":
         return dual,chart_divisors
@@ -112,6 +111,11 @@ def binomial_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=
                                  "ideal":ideal,"ambient_ideal":list(ideal),"equation":", ".join(ideal)})
         chart_divisors[ci]=expanded
     return dual,chart_divisors
+
+
+def _within_budget(cones, exceptional, n, copies):
+    status = run(f"terminal_sections {n} {len(cones)} {len(exceptional)}", (copies,), sorted(exceptional), *cones)
+    return status == ["ok"]
 
 
 def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_rays=None, orders=None):
@@ -151,40 +155,27 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
         raise ValueError("Exceptional ray index is outside the fan.")
     if orders is not None and len(orders)!=len(rays):
         raise ValueError("Divisor orders must be indexed by ray.")
-    if sum(2**len(exceptional.intersection(c))-1 for c in cones) > 1_000_000:
+    if not _within_budget(cones, exceptional, n, 1):
         raise LimitError("The binomial fan exceeds the intersection-stratum budget.")
 
     coords = [f"u{i+1}" for i in range(n)]
     from . import binomial_kernel
-    from .native_library import CHECK
     rows = binomial_kernel.run(f"incidence {n} {len(rays)} {len(cones)} {len(exceptional)} {int(mode=='intrinsic')}",
                                delta, sorted(exceptional), *rays, *cones)
-    if rows is None:
-        data = _incidence_reference(n,rays,cones,delta,mode,exceptional)
-    else:
-        data = binomial_kernel.incidence(rows)
-        if CHECK and data != _incidence_reference(n,rays,cones,delta,mode,exceptional):
-            raise AssertionError("The binomial orbit incidences differ from their reference.")
-    pairings, pieces, charts = data
-    counts = Counter(subset[0] for subset, *_ in pieces if len(subset)==1)
-    local_numbers = Counter()
-    names, vertices, cells = [], [], []
-    ray_number = {r:i+1 for i,r in enumerate(sorted(exceptional))}
-    for subset, zeros, ends, faces in pieces:
-        if len(subset)==1:
-            ray, = subset
-            local_numbers[ray] += 1
-            ident = f"E{ray_number[ray]}" + (f".{local_numbers[ray]}" if counts[ray]>1 else "")
-            vertex = {"id":ident, "ray_index":ray, "ray":list(rays[ray]),
-                      "dimension":n-1-int(mode=="intrinsic"), "generic_zero_rays":list(zeros)}
+    pairings, pieces, charts = binomial_kernel.incidence(rows)
+    layout = incidence("binomial_layout", width=n, intrinsic=mode=="intrinsic",
+                       exceptional=sorted(exceptional), pieces=pieces)
+    names = [record["id"] for record in layout]
+    vertices, cells = [], []
+    for record in layout:
+        if "ray_index" in record:
+            ray = record["ray_index"]
+            record["ray"] = list(rays[ray])
             if orders is not None:
-                vertex["ambient_order"] = orders[ray]
-            vertices.append(vertex)
+                record["ambient_order"] = orders[ray]
+            vertices.append(record)
         else:
-            ident = f"C{len(cells)+1}"
-            cells.append({"id":ident, "dimension":len(subset)-1, "vertices":[names[i] for i in ends],
-                          "faces":[names[i] for i in faces], "generic_zero_rays":list(zeros)})
-        names.append(ident)
+            cells.append(record)
     chart_divisors = []
     for cone, visible in zip(cones,charts):
         divisors = []
@@ -206,58 +197,3 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
             " in the algebraic germ over Qbar; cells are geometric strata whose closures meet the origin fiber.",
             "vertices":vertices,"cells":cells}
     return dual,chart_divisors
-
-
-def _incidence_reference(n,rays,cones,delta,mode,exceptional):
-    pairings = tuple(sum(a*b for a,b in zip(r,delta)) for r in rays)
-    ray_support = [sum(1<<i for i,v in enumerate(r) if v) for r in rays]
-    full_support = (1<<n)-1
-    # On a chart with one unit monomial, precisely the zero-pairing rays
-    # may vanish on the strict transform. With two nonconstant terms the
-    # toric chart origin lies on it. In either case the monomial map sends
-    # a point to the base origin iff its zero rays cover every base coordinate.
-    strata = defaultdict(dict)  # subset -> generic zero-ray set -> hits origin
-    chart_pieces = []
-    witnesses = {}
-    for ci, cone in enumerate(cones):
-        positives = tuple(i for i in cone if pairings[i]>0)
-        negatives = tuple(i for i in cone if pairings[i]<0)
-        allowed_zero = cone if mode=="embedded" or (positives and negatives) else [
-            i for i in cone if pairings[i]==0]
-        support = 0
-        for ray in allowed_zero:
-            support |= ray_support[ray]
-        meets_origin = support == full_support
-        indices = sorted(exceptional.intersection(cone))
-        pieces = {}
-        for size in range(1,len(indices)+1):
-            for subset in combinations(indices,size):
-                zeros = subset
-                if mode=="intrinsic":
-                    kill_plus = any(pairings[i]>0 for i in subset)
-                    kill_minus = any(pairings[i]<0 for i in subset)
-                    if kill_plus and kill_minus:
-                        raise ValueError("Nonterminal chart: both binomial terms vanish on an exceptional intersection.")
-                    if kill_plus or kill_minus:
-                        surviving = negatives if kill_plus else positives
-                        if not surviving:
-                            continue  # the remaining equation on this coordinate flat is a unit
-                        if len(surviving)!=1 or abs(pairings[surviving[0]])!=1:
-                            raise ValueError("Nonterminal chart: the surviving monomial is not a single linear coordinate.")
-                        zeros = tuple(sorted((*subset,surviving[0])))
-                pieces[subset] = zeros
-                strata[subset][zeros] = strata[subset].get(zeros,False) or meets_origin
-                witnesses.setdefault((subset,zeros),ci)
-        chart_pieces.append(pieces)
-
-    ids = {}
-    pieces = []
-    for subset in sorted(strata, key=lambda t:(len(t),t)):
-        for zeros in sorted(z for z,hits in strata[subset].items() if hits):
-            local = chart_pieces[witnesses[(subset,zeros)]]
-            vertices = [ids[(i,),local[(i,)]] for i in subset] if len(subset)>1 else []
-            faces = [ids[face,local[face]] for face in combinations(subset,len(subset)-1)] if len(subset)>1 else []
-            ids[subset,zeros] = len(pieces)
-            pieces.append((subset,zeros,vertices,faces))
-    charts = [{s[0]:ids[s,z] for s,z in chart.items() if len(s)==1 and (s,z) in ids} for chart in chart_pieces]
-    return pairings, pieces, charts

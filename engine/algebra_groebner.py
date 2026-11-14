@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from . import groebner as gb
 from . import native_polynomial as np
 from .polynomial import format_poly
-from .reference import sp
+from .quotient_monomials import degree_bounds
 
 
 def _operand(value, variables):
@@ -44,35 +44,6 @@ class ReducedBasis:
         return self._basis.contains(polynomial)
 
 
-class _SymbolicBasis:
-    """Independent sparse QQ basis and division in optional diagnostic modes."""
-    def __init__(self, generators, variables, order, trusted):
-        from sympy.polys.groebnertools import groebner
-        from sympy.polys.rings import ring
-        self.variables = variables
-        symbols = tuple(sp.Dummy(variable.name) for variable in variables)
-        self.ring, *_ = ring(symbols, sp.QQ, order=gb._reference_order(order))
-        rows = [self._symbolic(f) for f in generators if f]
-        self.divisors = rows if trusted else groebner(rows, self.ring)
-        self.exprs = [self._native(f) for f in self.divisors]
-
-    def _symbolic(self, polynomial):
-        return self.ring.from_dict(np.terms(self.variables, polynomial))
-
-    def _native(self, polynomial):
-        return np.from_terms(self.variables, {e: sp.QQ.to_sympy(c) for e, c in polynomial.items()})
-
-    def reduce(self, polynomial):
-        quotients, remainder = self._symbolic(polynomial).div(self.divisors)
-        return [self._native(q) for q in quotients], self._native(remainder)
-
-    def remainder(self, polynomial):
-        return self._native(self._symbolic(polynomial).rem(self.divisors))
-
-    def contains(self, polynomial):
-        return not self._symbolic(polynomial).rem(self.divisors)
-
-
 class _CheckedRationalBasis(gb._Checked):
     def remainder(self, polynomial):
         answer = self._native.remainder(polynomial)
@@ -83,8 +54,8 @@ class _CheckedRationalBasis(gb._Checked):
 
 def _restore_native(generators, variables, order):
     """Load verified rows without forming new critical pairs in either representation."""
-    if (len(variables) > gb._MAX_VARIABLES or
-            any(sum(m) > gb._MAX_DEGREE for f in generators for m in np.terms(variables, f))):
+    support = (m for f in generators for m in np.terms(variables, f))
+    if len(variables) > gb._MAX_VARIABLES or (any(generators) and degree_bounds(len(variables), support)[1] > gb._MAX_DEGREE):
         from .wide_basis import wide_basis_from_rows
         basis = wide_basis_from_rows([np.row(variables, f) for f in generators], variables, order)
         if basis is not None:
@@ -106,6 +77,8 @@ def _make_basis(generators, variables, order, *, trusted):
     generators = tuple(_operand(f, variables) for f in generators)
     if not variables:
         return ReducedBasis((), order, (np.S.One,) if any(generators) else (), None)
+    if gb._MODE in ("sympy", "check"):
+        from tests.groebner_oracle import _SymbolicBasis
     if gb._MODE == "sympy":
         basis = _SymbolicBasis(generators, variables, order, trusted)
     elif gb._MODE == "check":

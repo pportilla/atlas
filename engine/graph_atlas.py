@@ -26,8 +26,8 @@ def _orders(coords, base, ambient, prime, f):
     answer = kernel.graph_orders(coords, len(base), ambient, prime, f)
     if answer is None or CHECK:
         from .blowup_ideal import ideal_subset, empty_locus
-        from .monodromy_graph import _jacobian_order
-        from .nonreduced import _valuation
+        from tests.graph_monodromy_oracle import _jacobian_order
+        from tests.nonreduced_oracle import _valuation
         from .reference import QQ
         if (ideal_subset(coords, (f,), ambient) or ideal_subset(coords, prime, ambient)
                 or empty_locus(coords, (*ambient, *prime))):
@@ -52,7 +52,7 @@ def graph_charts(record, polynomial):
     field = record.get("coefficient_field", {})
     coefficient_field = ()
     if field.get("generator"):
-        from .monodromy_graph import _field_coefficients
+        from tests.graph_monodromy_oracle import _field_coefficients
         coeffs = _field_coefficients(field)
         theta = sp.Symbol(field["generator"])
         relation = sp.Add(*(sp.Rational(c)*theta**i for i, c in enumerate(reversed(coeffs))))

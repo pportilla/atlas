@@ -14,8 +14,14 @@ from functools import cached_property, lru_cache
 from .reference import QQ, sp
 from .candidate_field import FieldPolynomial, NativeField
 from . import native_polynomial as np
+from .polynomial import sparse_row
 
 from . import groebner as gb
+
+
+def _oracle(name, *args):
+    from tests import field_polynomial_oracle
+    return getattr(field_polynomial_oracle, name)(*args)
 
 
 def _in_theta(coefficients, theta):
@@ -37,21 +43,14 @@ def _coefficient(value, domain, theta):
     if value == generator or value == domain.ext:
         return theta
     if gb._MODE == "sympy":
-        return _in_theta(domain.convert(value).to_list(), theta)
+        return _in_theta(_oracle("coefficient", value, domain), theta)
     from .field_coefficient import coefficients
     result = coefficients(value, domain)
-    if result is None:  # Only a diagnostic run may defer to the symbolic adapter.
-        return _in_theta(domain.convert(value).to_list(), theta)
+    if result is None:
+        return _in_theta(_oracle("coefficient", value, domain), theta)
     converted = _in_theta(tuple(reversed(result)), theta)
-    if gb.CHECK:
-        try:
-            expected = domain.convert(value)
-        except sp.polys.polyerrors.CoercionFailed:
-            # Some SymPy versions recognize the real/imaginary form
-            # of a principal complex radical only after expansion.
-            expected = domain.convert(sp.expand_complex(value))
-        if converted != _in_theta(expected.to_list(), theta):
-            raise AssertionError("The marked algebraic coefficient differs from its reference.")
+    if gb.CHECK and converted != _in_theta(_oracle("coefficient", value, domain), theta):
+        raise AssertionError("The marked algebraic coefficient differs from its reference.")
     return converted
 
 
@@ -93,11 +92,8 @@ def _field_terms(row, domain):
     # QQ terms have exponent vectors (a,j). Group the theta coefficients
     # into field elements exactly, without symbolic substitutions of roots.
     groups = {}
-    for term in row.split(";") if row else ():
-        c, *exponent, j = term.split()
-        numerator, _, denominator = c.partition("/")
-        monomial = tuple(map(int, exponent))
-        groups.setdefault(monomial, {})[int(j)] = sp.QQ(int(numerator), int(denominator or 1))
+    for powers, c in sparse_row(row).items():
+        groups.setdefault(powers[:-1], {})[powers[-1]] = sp.QQ(c.numerator, c.denominator)
     return tuple((m,domain([terms.get(j, 0) for j in range(max(terms), -1, -1)]))
                  for m,terms in groups.items())
 
@@ -116,11 +112,11 @@ def polynomial(expression, variables, domain):
     once modulo the marked relation and supply the field elements directly.
     """
     if gb._MODE == "sympy":
-        return sp.Poly(expression, *variables, domain=domain)
+        return _oracle("polynomial", expression, variables, domain)
     if not hasattr(gb._kernel(),"atlas_coefficient_block_abi"):
         if gb._MODE == "native":
             raise ArithmeticError("Rebuild the native number-field kernel with make groebner.")
-        return sp.Poly(expression,*variables,domain=domain)
+        return _oracle("polynomial", expression, variables, domain)
     from .affine_kernel import pullbacks
     variables = tuple(variables)
     theta = _parameter(domain)
@@ -137,18 +133,11 @@ def _scalar_expression(value, domain):
     if len(coefficients) <= 1:
         return sp.Rational(coefficients[0]) if coefficients else sp.S.Zero
     from .field_coefficient import generator_expression
-    generator = domain.ext.as_expr() if gb._MODE == "sympy" else generator_expression(domain.ext)
-    scale, root = generator.as_coeff_Mul()
-    if isinstance(root, sp.CRootOf) and scale.is_Rational:
-        # The public root constructor sometimes extracts a rational scale s.
-        # Apply (s*r)^j = s^j*r^j coefficient by coefficient.
-        return sp.Add(*(sp.Rational(c) * scale**j * root**j
-                        for j,c in enumerate(reversed(coefficients)) if c))
     if gb._MODE == "sympy":
-        return domain.to_sympy(value)
+        return _oracle("scalar", value, domain)
     from .field_display import scalar
-    result = scalar(tuple(coefficients), generator)
-    if gb.CHECK and result != domain.to_sympy(value):
+    result = scalar(tuple(coefficients), generator_expression(domain.ext))
+    if gb.CHECK and result != _oracle("scalar", value, domain):
         from .field_coefficient import coefficients as coordinates
         # A complete integer factorization may shorten a historical
         # bounded-search radical. Verify its marked power-basis value.
@@ -229,9 +218,7 @@ class FieldBasis:
                 return [wide.remainder(expr)]
             if isinstance(self.domain, NativeField) or gb._MODE == "native":
                 raise ArithmeticError("Rebuild the wide native coefficient-field kernel with make groebner.")
-            reference = sp.groebner(self.exprs, *self.gens, order=gb._reference_order(self.order), domain=self.domain)
-            qs, r = reference.reduce(expr)
-            return [*qs,r] if quotients else [r]
+            return _oracle("division", self, expr, quotients)
         try:
             rows = ctypes.string_at(answer).decode("ascii").splitlines()
         finally:

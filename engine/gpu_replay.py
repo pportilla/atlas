@@ -29,15 +29,14 @@ Each instruction is one small kernel over (primes) x (terms):
   inverse    per prime: the inverse of work[i_1] mod p, by Fermat      (6)
   scale      per prime and term: pool[dst + t] = work[i_t] * inverse   (6)
 
-`replay_reference` runs them with NumPy, and is what the tests compare with
-the kernel's own replay (atlas_groebner_replay_compare). `triton_kernels`
-holds the same parts written in Triton (https://triton-lang.org); they need
-PyTorch with CUDA and the `triton` package, neither of which the tests can
-assume: on a machine without them the Triton parts are not exercised.
+The production kernels are emitted as Triton IR by native/triton_kernels.cpp.
+The NumPy and Triton interpreter implementations used for comparison live in tests.
 
 `use(library, backend)` hands a backend to the kernel as its batch replay.
 """
 import ctypes
+from functools import lru_cache
+import os
 
 import numpy as np
 
@@ -75,44 +74,8 @@ def instructions(code):
 
 
 def replay_reference(code, pool_size, work_size, primes, pools, status):
-    """Run the program for all the primes. `pools` (primes x pool_size,
-    uint32) is updated in place and `status` (uint32) receives 1 for the
-    primes that agree with the program."""
-    primes = np.asarray(primes, dtype=np.uint64)
-    p = primes[:, None]
-    square = p*p
-    work = np.zeros((len(primes), work_size), dtype=np.uint64)
-    status[:] = 1
-
-    def axpy(factor, source, index):
-        # factor < p and pool < p: the product is below p^2, the sum below 2 p^2 < 2^63.
-        w = work[:, index] + factor*pools[:, source:source + len(index)].astype(np.uint64)
-        work[:, index] = np.where(w >= square, w - square, w)
-
-    for op, scalars, start, end in instructions(code):
-        index = np.asarray(code[start:end], dtype=np.intp)
-        if op == 1:
-            work[:, :scalars[0]] = 0
-        elif op == 2:
-            axpy(np.ones_like(p), scalars[0], index)
-        elif op == 3:
-            axpy(p - np.uint64(1), scalars[0], index)
-        elif op == 4:
-            column, source = scalars
-            f = work[:, column] % primes
-            work[:, column] = 0
-            axpy(np.where(f == 0, np.uint64(0), primes - f)[:, None], source, index)
-        elif op == 5:
-            status[((work[:, index] % p) != 0).any(axis=1)] = 0
-        else:
-            target = scalars[0]
-            base = work[:, index[0]] % primes
-            status[base == 0] = 0
-            inverse = np.array([pow(int(b), int(q) - 2, int(q)) if b else 0 for b, q in zip(base, primes)],
-                               dtype=np.uint64)[:, None]
-            pools[:, target] = 1
-            pools[:, target + 1:target + len(index)] = ((work[:, index[1:]] % p)*inverse % p).astype(np.uint32)
-    return 0
+    from tests.gpu_replay_oracle import replay_reference as reference
+    return reference(code, pool_size, work_size, primes, pools, status)
 
 
 def triton_kernels():
@@ -125,13 +88,32 @@ def triton_kernels():
     factors below 2^31 and a sum is below 2 p^2 < 2^63, so the signed 64-bit
     arithmetic never overflows and % is the mathematical remainder.
     """
+    return _triton_kernels(os.environ.get("TRITON_INTERPRET") == "1")
+
+
+@lru_cache(maxsize=2)
+def _triton_kernels(interpreted):
     import triton
-    from .triton_replay_kernels import axpy, check, inverse, pivot, scale
+    names = ("pivot", "axpy", "check", "inverse", "scale")
+    if interpreted:
+        from tests import triton_replay_oracle
+        kernels = {name: getattr(triton_replay_oracle, name) for name in names}
+    else:
+        kernels = {name: _ReplayKernel(name) for name in names}
+    return {**kernels, "cdiv": triton.cdiv}
 
-    return {"pivot": pivot, "axpy": axpy, "check": check, "inverse": inverse, "scale": scale, "cdiv": triton.cdiv}
 
+class _ReplayKernel:
+    def __init__(self, name):
+        self.name = "replay_" + name
 
-_compiled = None
+    def __getitem__(self, grid):
+        from .triton_ir import launch_kernel
+
+        def run(*args, BLOCK, opcode=None):
+            parameters = (BLOCK,) if opcode is None else (BLOCK, opcode)
+            return launch_kernel(self.name, parameters, grid, *args)
+        return run
 
 
 def replay_triton(code, pool_size, work_size, primes, pools, status, block=256, device="cuda"):
@@ -146,10 +128,7 @@ def replay_triton(code, pool_size, work_size, primes, pools, status, block=256, 
 
 def _launch_replay(code, pool_size, work_size, primes, pools, status, block, device):
     import torch
-    global _compiled
-    if _compiled is None:
-        _compiled = triton_kernels()
-    k = _compiled
+    k = triton_kernels()
     items = len(primes)
     # Primes are below 2^31: every 32-bit value fits in int32.
     prime = torch.as_tensor(np.asarray(primes, dtype=np.int32), device=device)
@@ -169,9 +148,8 @@ def _launch_replay(code, pool_size, work_size, primes, pools, status, block, dev
         if op == 1:
             work.view(items, work_size)[:, :scalars[0]] = 0
         elif op in (2, 3):
-            factor.copy_(torch.ones_like(prime) if op == 2 else prime - 1)
             k["axpy"][by_terms(count)](work, pool, index, factor, prime, work_size, pool_size, scalars[0], count,
-                                       BLOCK=block)
+                                       BLOCK=block, opcode=op)
         elif op == 4:
             k["pivot"][by_primes](work, factor, prime, work_size, scalars[0], items, BLOCK=block)
             k["axpy"][by_terms(count)](work, pool, index, factor, prime, work_size, pool_size, scalars[1], count,

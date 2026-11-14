@@ -6,7 +6,8 @@ import sympy as sp
 from engine import atlas
 from engine.newton_backend import resolve_newton
 from engine.newton_repair import _point_count, _rational, records, strata
-from engine.nonreduced import _strict_parts, nonreduced_resolution
+from engine.weighted_record import nonreduced_resolution
+from tests.nonreduced_oracle import _strict_parts
 from engine.origin_backend import _resolve
 from engine.polynomial import parse
 from engine.resolve import resolve

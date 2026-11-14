@@ -67,6 +67,14 @@ def _kernel():
             if hasattr(library, "atlas_groebner_certification_counts"):
                 library.atlas_groebner_certification_counts.argtypes = [ctypes.POINTER(ctypes.c_uint64)]
                 library.atlas_groebner_certification_counts.restype = None
+            if hasattr(library, "atlas_groebner_activity_counts"):
+                library.atlas_groebner_activity_counts.argtypes = [ctypes.POINTER(ctypes.c_uint64)]
+                library.atlas_groebner_activity_counts.restype = None
+            if hasattr(library, "atlas_groebner_swap_cpu_scope"):
+                library.atlas_groebner_swap_cpu_scope.argtypes = [
+                    ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_int),
+                    ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_uint64)]
+                library.atlas_groebner_swap_cpu_scope.restype = None
         # Standalone library users can opt in through the environment even
         # after the library has loaded. Old binaries use the same permanent
         # dispatcher so concurrent Atlas requests never swap a global hook.
@@ -167,6 +175,11 @@ _HostCounts = namedtuple("_HostCounts", "batches primes layers pairs bases attem
 
 
 def _cpu_counts(library):
+    snapshot = getattr(library, "atlas_groebner_activity_counts", None)
+    if snapshot is not None:
+        counts = (ctypes.c_uint64 * 8)()
+        snapshot(counts)
+        return _HostCounts(*counts)
     batches, primes = ctypes.c_uint64(), ctypes.c_uint64()
     library.atlas_groebner_cpu_replays(ctypes.byref(batches), ctypes.byref(primes))
     layers, pairs = ctypes.c_uint64(), ctypes.c_uint64()
@@ -226,10 +239,13 @@ class _ReplayScope:
             found["batches"] += batches
             found["primes"] += primes
 
-    def collect_cpu(self):
+    def collect_cpu(self, now=None):
         if self.start is not None:
             start = self.start
-            now = _cpu_counts(self.library)
+            if now is None:
+                now = _cpu_counts(self.library)
+            if start == now:
+                return
             self.count("cpu", now.batches - start.batches, now.primes - start.primes)
             if now.layers > start.layers:
                 self.count_trace("cpu", now.layers - start.layers, now.pairs - start.pairs)
@@ -434,6 +450,20 @@ def replay_scope(compute=None, backend=None, index=None):
         elif not hasattr(library, "atlas_groebner_swap_batch"):
             with _legacy_replay_scope(library):
                 yield scope
+        elif scope.compute == "cpu" and hasattr(library, "atlas_groebner_swap_cpu_scope"):
+            scope.library = library
+            batch, trace, active = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_int(1)
+            counts = (ctypes.c_uint64 * 8)()
+            args = (ctypes.byref(batch), ctypes.byref(active), ctypes.byref(trace), counts)
+            swap = library.atlas_groebner_swap_cpu_scope
+            swap(*args)
+            try:
+                scope.start = _HostCounts(*counts)
+                yield scope
+            finally:
+                swap(*args)
+                scope.collect_cpu(_HostCounts(*counts))
+                scope.start = None
         else:
             scope.library = library
             scope.start = _cpu_counts(library)

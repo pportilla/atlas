@@ -277,9 +277,15 @@ protected:
             if (d.sugar < sugar) return true;
         return false;
     }
-    void guard(const Poly& f, size_t head = 0) const {
-        if (bit_limit_ && head < f.size() && fmpz_bits(&f.c[head].v) > bit_limit_) throw Swell();
+    bool over_bit_limit(const Poly& f, size_t head = 0) const {
+        return bit_limit_ && head < f.size() && fmpz_bits(&f.c[head].v) > bit_limit_;
+    }
+    void guard_work() const {
         if (work_limit_ > 0 && work_ > work_limit_) throw Swell();
+    }
+    void guard(const Poly& f, size_t head = 0) const {
+        guard_work();
+        if (over_bit_limit(f, head)) throw Swell();
     }
     const u64* lead(int g) const { return G[g].p.m.data(); }
     long degree(const Poly& f) const {
@@ -361,7 +367,7 @@ std::string frame_locus(const Ring& R, const std::vector<Poly>& equations,
 class Euler {
 public:
     explicit Euler(const Ring& R);
-    static Z from_text(const std::string& input);
+    static Z from_text(const std::string& input, bool use_lattice = true);
     ~Euler();
     Euler(const Euler&) = delete;
     Euler& operator=(const Euler&) = delete;

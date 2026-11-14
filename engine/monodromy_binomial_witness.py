@@ -1,8 +1,8 @@
 """Monodromy on coordinate strata of a binomial hypersurface over C."""
-from itertools import combinations
-from math import gcd, lcm
+from .monodromy import _request
+from .point_geometry import encode_terms
 
-from .polynomial import parse
+from .polynomial import integer_from_decimal, integer_text, parse
 
 
 def nearby_binomial_witnesses(polynomial, variables, missing_orders):
@@ -23,29 +23,9 @@ def nearby_binomial_witnesses(polynomial, variables, missing_orders):
     if not missing_orders or len(variables) < 3:
         return {}
     terms = parse(polynomial, list(variables), bounded=False)
-    if len(terms) != 2:
-        return {}
-    first, second = sorted(terms, reverse=True)
-    left = [(v, a) for v, a, b in zip(variables, first, second) if a and not b]
-    right = [(v, b) for v, a, b in zip(variables, first, second) if b and not a]
-    witnesses = {}
-    for x, a in left:
-        for y, b in right:
-            period, copies = lcm(a, b), gcd(a, b)
-            for q in missing_orders:
-                if q <= 1 or q in witnesses or period % q:
-                    continue
-                exponent = copies - int(a % q == 0) - int(b % q == 0)
-                if exponent:
-                    witnesses[q] = {"model": "X^a + Y^b", "coordinates": (x, y), "powers": (a, b),
-                                    "cyclotomic_exponent": exponent}
-    if len(variables) >= 4:
-        for product_side, power_side in ((left, right), (right, left)):
-            linear = [v for v, a in product_side if a == 1]
-            for x, y in combinations(linear, 2):
-                for z, m in power_side:
-                    for q in missing_orders:
-                        if q > 1 and q not in witnesses and m % q == 0:
-                            witnesses[q] = {"model": "X*Y + Z^m", "coordinates": (x, y, z),
-                                            "powers": (1, 1, m), "cyclotomic_exponent": -1}
-    return witnesses
+    rows = _request("binomial", terms=encode_terms(terms), width=len(variables),
+                    orders=list(map(integer_text, missing_orders)))
+    return {integer_from_decimal(row["order"]): {
+                "model": row["model"], "coordinates": tuple(variables[i] for i in row["axes"]),
+                "powers": tuple(map(integer_from_decimal, row["powers"])),
+                "cyclotomic_exponent": integer_from_decimal(row["exponent"])} for row in rows}

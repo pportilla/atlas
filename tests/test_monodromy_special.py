@@ -6,7 +6,7 @@ import unittest
 import sympy as sp
 
 from engine.chain_backend import resolve_chain
-from engine.monodromy_special import special_contributions
+from tests.special_monodromy_oracle import special_contributions
 
 
 def chain_result(k,mode):

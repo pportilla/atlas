@@ -1,8 +1,10 @@
 """Factor the original effective divisor and reconstruct its chart pullbacks over Qbar."""
 import re
-from functools import cmp_to_key, lru_cache
+from functools import lru_cache
 
 from . import native_library
+from .kernel_json import kernel_json
+from .point_geometry import point_operation
 from .polynomial import format_poly, integer_from_decimal, integer_text, parse_expression, rational_text, sparse_row, InputError
 
 
@@ -12,13 +14,13 @@ def _product(parts):
 
 @lru_cache(maxsize=256)
 def _factor(source, names):
-    from .affine_kernel import _factor_order
+    from .affine_kernel import archived_factor_order
     rows = native_library.affine_request(["factor", " ".join(names), source])
     zero = (0,)*len(names)
     scalar = sparse_row(rows[0])[zero]
     parts = [(sparse_row(row),integer_from_decimal(m)) for m,row in zip(rows[1::2],rows[2::2])]
-    order = cmp_to_key(lambda a,b: _factor_order(a,b,len(names)))
-    parts.sort(key=lambda p:(max(e[0] for e in p[0]), p[1], order(p[0])))
+    if len(parts) > 1:
+        parts = [parts[i] for i in archived_factor_order(parts, len(names))]
     factors = [(format_poly(poly,names), m) for poly,m in parts if zero not in poly]
     units = [(format_poly(poly,names), m) for poly,m in parts if zero in poly]
     if scalar != 1:
@@ -43,6 +45,11 @@ def verify_factors(polynomial, names, records):
     return parts
 
 
+def _weighted_orders(components, rows):
+    values = kernel_json("atlas_identity_divisor", "weighted_orders", width=len(components), rows=rows)
+    return {c["id"]: integer_from_decimal(v) for c, v in zip(components, values)}
+
+
 def _write_free(record, chart, weighted, unit, base, uniform):
     from .marked_field import record_field, display
     names = tuple(chart["coordinates"])
@@ -65,7 +72,7 @@ def _write_free(record, chart, weighted, unit, base, uniform):
     args = [" ".join(coords)," ".join((*base,*mark)), *map(replace,texts), *mark, mod]
     boundary = chart.get("ambient_components",chart.get("exceptional", ()))
     axis = [names.index(c["equation"]) for c in boundary]
-    local = dict.fromkeys([c["id"] for c in boundary],0)
+    valuations = []
     strict, total = [],[]
     pulled = native_library.affine_request(["pullbacks", *args, unit, *(s for s,_ in weighted)])
     scalar = format_poly(sparse_row(pulled[0]), coords)
@@ -74,10 +81,10 @@ def _write_free(record, chart, weighted, unit, base, uniform):
         total.append((scalar,1))
     for (f,m), row in zip(weighted,pulled[1:]):
         result = native_library.affine_request(["chart", *args, f, " ".join(map(str,axis))])
-        for c,n in zip(boundary,result[:-1]):
-            local[c["id"]] += m*integer_from_decimal(n.split()[0])
+        valuations.append([integer_text(m), [n.split()[0] for n in result[:-1]]])
         strict.append((format_poly(sparse_row(result[-1]),coords),m))
         total.append((format_poly(sparse_row(row),coords),m))
+    local = _weighted_orders(boundary, valuations)
     original = chart["strict_transform"]
     chart["reduced_strict_transform"] = original
     if "strict_transform_on_exceptional" in chart:
@@ -110,15 +117,15 @@ def _write_local(saved, chart, factors, unit, base):
                 *(saved["map"][v] for v in base),"0",unit,*(f for f,_ in factors)])
     header = f"strict_parts {len(coords)} {len(ambient)} {len(divisors)}"+"".join(f" {len(d)}" for d in divisors)
     parts = iter(native_library.ideal_request(header,[*ambient,*(g for d in divisors for g in d),*pulled[1:]]))
-    weights = {c["id"]:0 for c in exceptional}
+    valuations = []
     components = []
     for i,(_,m) in enumerate(factors,1):
         *orders,size = map(integer_from_decimal,next(parts).split())
         ideal = [format_poly(sparse_row(next(parts)),coords) for _ in range(size)]
-        for c,n in zip(exceptional,orders):
-            weights[c["id"]] += m*n
+        valuations.append([integer_text(m), list(map(integer_text, orders))])
         if ideal != ["1"]:
             components.append(dict(id="strict" if len(factors)==1 else f"S{i}", multiplicity=m, nu=1, ideal=ideal))
+    weights = _weighted_orders(exceptional, valuations)
     saved["components"] = [{**c,"multiplicity":weights[c["id"]]} for c in exceptional]+components
     scalar = format_poly(sparse_row(pulled[0]),coords)
     terms = [(format_poly(sparse_row(row),coords),m) for row,(_,m) in zip(pulled[1:],factors)]
@@ -133,7 +140,7 @@ def _write_local(saved, chart, factors, unit, base):
 
 def nonreduced_resolution(poly, names, mode, resolve_support):
     if native_library._MODE == "sympy":
-        from .nonreduced import nonreduced_resolution as reference
+        from tests.nonreduced_oracle import nonreduced_resolution as reference
         return reference(poly,names,mode,resolve_support)
     names = tuple(names)
     factors,unit = _factor(format_poly(poly,names),names)
@@ -179,7 +186,7 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
         if step.get("exceptional_id") in weights: step["total_multiplicity"] = weights[step["exceptional_id"]]
         for key in ("strict_multiplicity","multiplicity"):
             if key in step: step["reduced_support_"+key] = step.pop(key)
-    record["multiplicity"] = min(map(sum,poly))
+    record["multiplicity"] = integer_from_decimal(point_operation("order", [0] * len(names), poly))
     record["summary"] = "Embedded resolution of the divisor with multiplicities. "+record["summary"]
     record.setdefault("notes",[]).append("The geometric dual complex and smoothness certificate refer to the reduced support. The strict-transform equations and exceptional orders include the original multiplicities.")
     return record

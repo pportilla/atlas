@@ -1,9 +1,10 @@
 """Adapter for the independent C++/GMP A-series surface resolution."""
 import ctypes
 from functools import lru_cache
-from itertools import combinations
 from pathlib import Path
 import sys
+
+from .polynomial import integer_text, rational_text
 
 _COORDS = ("a", "b", "c")
 _LIBRARY = Path(__file__).resolve().parents[1] / "native" / "build" / (
@@ -22,7 +23,7 @@ def _load():
 
 
 def _read_atlas(lines, variables, unit, mode):
-    atlas = {}
+    atlas, centers, cells, vertices = {}, {}, [], {}
     for line in lines:
         kind, *args = line.split("\t")
         if kind == "chart":
@@ -31,6 +32,11 @@ def _read_atlas(lines, variables, unit, mode):
                      "parent": parent, "step": step, "final": leaf == "1",
                      "exceptional": [], "ambient_components": []}
             atlas[name] = chart
+        elif kind == "center":
+            centers[name] = args
+        elif kind == "cell":
+            dimension, *corners = args
+            cells.append({"dimension": int(dimension), "vertices": corners})
         elif kind == "map":
             chart["map"][variables[len(chart["map"])]] = args[0]
         elif kind == "ray":
@@ -48,13 +54,18 @@ def _read_atlas(lines, variables, unit, mode):
             chart["ambient_components"].append(component)
             if mode == "embedded":
                 chart["exceptional"].append(component)
+                if chart["final"]:
+                    vertices.setdefault(label, {"id": label, "label": label, "multiplicity": int(order)})
         elif kind == "curve":
-            label, *eqs = args
+            label, genus, intersection, *eqs = args
             chart["exceptional"].append({"id": label, "equation": ", ".join(eqs), "ideal": eqs})
-    return atlas
+            if chart["final"]:
+                vertices.setdefault(label, {"id": label, "label": label, "genus": int(genus),
+                                             "self_intersection": int(intersection)})
+    return atlas, centers, vertices, cells
 
 
-def _steps(atlas, variables):
+def _steps(atlas, centers, variables):
     steps = {}
     for chart in atlas.values():
         if not chart["parent"]:
@@ -73,51 +84,20 @@ def _steps(atlas, variables):
         chart_id = chart["parent"]
         if any(c["chart"] == chart_id for c in step["center_charts"]):
             continue
-        generators = set()
-        for expr in chart["map_to_parent"].values():
-            if "*" in expr:
-                generators.update(expr.split("*"))
         parent = atlas[chart_id]
         step["center_charts"].append({
-            "chart": chart_id, "coordinates": list(_COORDS), "ideal": sorted(generators),
+            "chart": chart_id, "coordinates": list(_COORDS), "ideal": centers[chart["id"]],
             "strict_transform": parent["strict_transform"], "map": parent["map"],
         })
     return list(steps.values())
 
 
-def _complex(charts, k, mode):
-    vertices = {}
-    simplices = set()
-    for chart in charts:
-        ids = []
-        for component in chart["exceptional"]:
-            label = component["id"]
-            ids.append(label)
-            vertex = vertices.setdefault(label, {"id": label, "label": label})
-            if mode == "embedded":
-                vertex["multiplicity"] = component["multiplicity"]
-            else:
-                vertex.update({"genus": 0, "self_intersection": -2})
-        if mode == "embedded":
-            # Each set of exceptional rays in one maximal cone gives a single
-            # irreducible toric stratum. Its closure contains exactly its faces.
-            for size in range(2, len(ids)+1):
-                simplices.update(tuple(sorted(face)) for face in combinations(ids, size))
-    if mode == "intrinsic":
-        both_sides = range(1, (k+1)//2)
-        chain = [f"E{i}u" for i in both_sides]
-        if k % 2 == 0:
-            chain.append(f"E{k//2}")
-        chain.extend(f"E{i}v" for i in reversed(both_sides))
-        if set(chain) != set(vertices):
-            raise RuntimeError("Curve labels in the affine charts do not cover the exceptional chain.")
-        simplices.update(tuple(sorted(pair)) for pair in zip(chain, chain[1:]))
+def _complex(vertices, cells, mode):
     convention = ("Reduced ambient exceptional divisor over the origin."
                   if mode == "embedded" else "Reduced exceptional curves on the resolved surface over the origin.")
     return {"status": "complete", "convention": convention+" Components are geometric.",
             "vertices": list(vertices.values()),
-            "cells": [{"dimension": len(s)-1, "vertices": list(s)}
-                      for s in sorted(simplices, key=lambda s: (len(s), s))]}
+            "cells": cells}
 
 
 def resolve_chain(terms, variables, mode="embedded"):
@@ -131,7 +111,8 @@ def resolve_chain(terms, variables, mode="embedded"):
     for exp, coeff in entries:
         if len(exp) != 3:
             raise ValueError("monomial dimension differs from the number of variables")
-        payload.append(f"{coeff} {' '.join(map(str, exp))}")
+        value = coeff if isinstance(coeff, str) else rational_text(coeff)
+        payload.append(f"{value} {' '.join(map(integer_text, exp))}")
     lib = _load()
     pointer = lib.chain_resolve("\n".join(payload).encode("ascii"), mode == "intrinsic")
     if not pointer:
@@ -142,25 +123,24 @@ def resolve_chain(terms, variables, mode="embedded"):
         lib.chain_free(pointer)
     if lines == ["defer"]:
         return None
-    _, exponent, unit, discriminant = lines[0].split("\t")
-    k = int(exponent)
-    atlas = _read_atlas(lines[1:], variables, unit, mode)
+    _, exponent, unit, discriminant, rank = lines[0].split("\t")
+    atlas, centers, vertices, cells = _read_atlas(lines[1:], variables, unit, mode)
     charts = [c for c in atlas.values() if c["final"]]
-    steps = _steps(atlas, variables)
+    steps = _steps(atlas, centers, variables)
     field = {"name": "Q"} if discriminant == "0" else {
         "name": "Q(theta)", "generator": "theta", "minimal_polynomial": f"theta^2-({discriminant})",
         "description": f"theta is either root of theta^2 = {discriminant}.",
     }
     return {
         "status": "resolved", "engine": "native-a-series", "multiplicity": 2,
-        "summary": f"A{ k-1 } surface singularity resolved in {len(steps)} blowup"
+        "summary": f"A{rank} surface singularity resolved in {len(steps)} blowup"
                    + ("." if len(steps) == 1 else "s."),
         "coefficient_field": field, "steps": steps, "charts": charts,
-        "dual_complex": _complex(charts, k, mode),
+        "dual_complex": _complex(vertices, cells, mode),
         "certificate": {
             "method": "split binary quadratic and monomial point blowups",
             "normalized_chart": {"id": "N", "coordinates": list(_COORDS),
-                                 "map": atlas["N"]["map"], "equation": f"a*b+c^{k}", "unit": unit},
+                                 "map": atlas["N"]["map"], "equation": f"a*b+c^{exponent}", "unit": unit},
             "description": "At each point blowup the z chart lowers the exponent by two. "
                            "Each side chart has a strict equation linear in a direction coordinate.",
         },

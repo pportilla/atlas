@@ -18,6 +18,8 @@ def _expanded_row(variables, f):
     # Exact cancellation of a non-polynomial quotient is not polynomial input.
     if np.native_ring(variables):
         return np.row(variables, f)
+    if isinstance(f, sp.Poly) and f.domain in (sp.ZZ, sp.QQ) and set(f.gens).issubset(variables):
+        return gb._line(variables, f)
     if any(p.is_Pow and p.exp.is_negative for p in sp.preorder_traversal(sp.sympify(f))):
         raise sp.PolynomialError("Expected a polynomial in the specified coordinates.")
     ring = _ring(variables)

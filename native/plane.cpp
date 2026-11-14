@@ -120,12 +120,7 @@ struct Root {
     bool simple;
 };
 
-vector<Root> ordered_roots(const vector<pair<Exp,Num>>& terms) {
-    if(terms.empty()) throw invalid_argument("The zero polynomial does not define a finite root family.");
-    if(terms.size()==1) {
-        Exp power=terms[0].first;
-        return power ? vector<Root>{{Num(0),power==1}} : vector<Root>{};
-    }
+vector<Root> algebraic_roots(const vector<pair<Exp,Num>>& terms) {
     gr_ctx_t ctx; gr_ctx_init_complex_qqbar(ctx);
     gr_poly_t p; gr_poly_init(p,ctx);
     int status=0;
@@ -144,6 +139,40 @@ vector<Root> ordered_roots(const vector<pair<Exp,Num>>& terms) {
     }
     fmpz_vec_clear(mult); gr_vec_clear(roots,ctx); gr_poly_clear(p,ctx); gr_ctx_clear(ctx);
     if(status) throw Fail("The exact algebraic root computation did not finish.");
+    return out;
+}
+
+vector<Root> ordered_roots(const vector<pair<Exp,Num>>& terms) {
+    if(terms.empty()) throw invalid_argument("The zero polynomial does not define a finite root family.");
+    vector<Root> out;
+    if(terms.size()==1){
+        Exp power=terms[0].first;
+        if(power) out.push_back({Num(0),power==1});
+        return out;
+    }
+    if(terms.size()==2){
+        const auto* low=&terms.front();
+        const auto* high=&terms.back();
+        if(low->first>high->first) swap(low,high);
+        Exp width=high->first-low->first;
+        // After removing the zero root, these binomials are T^width ± 1.
+        // The negative target uses odd numerators with denominator 2*width.
+        if(width>0 && high->first<WORD_MAX && width<=WORD_MAX/2){
+            bool negative_target=qqbar_equal(low->second.n,high->second.n);
+            Num opposite;
+            qqbar_neg(opposite.n,low->second.n);
+            if(negative_target || qqbar_equal(opposite.n,high->second.n)){
+                if(low->first) out.push_back({Num(0),low->first==1});
+                for(Exp k=0;k<width;++k){
+                    Num root;
+                    qqbar_root_of_unity(root.n,negative_target ? 2*k+1 : k,
+                                       negative_target ? 2*width : width);
+                    out.push_back({move(root),true});
+                }
+            }
+        }
+    }
+    if(out.empty()) out=algebraic_roots(terms);
     sort(out.begin(),out.end(),[](const Root& a,const Root& b){
         int s=qqbar_cmp_re(a.value.n,b.value.n);
         return s<0 || (!s && qqbar_cmp_im(a.value.n,b.value.n)<0);
@@ -155,6 +184,60 @@ vector<Root> directions(const Poly& f,Exp m) {
     vector<pair<Exp,Num>> terms;
     for(const auto& [k,c]:f) if(add_powers(k.first,k.second)==m) terms.emplace_back(k.second,c);
     return ordered_roots(terms);
+}
+
+// PolynomialRootIndexed uses FLINT's conjugate order, independently of the
+// real/imaginary order in which the blowup visits its tangent directions.
+vector<string> indexed_labels(const vector<Num>& values) {
+    map<string,vector<size_t>> families;
+    vector<string> labels(values.size());
+    for(size_t i=0;i<values.size();++i){
+        if(qqbar_is_rational(values[i].n)){
+            fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q,values[i].n);
+            labels[i]=taken(fmpq_get_str(nullptr,10,q)); fmpq_clear(q);
+        }else{
+            families[taken(fmpz_poly_get_str(QQBAR_POLY(values[i].n)))].push_back(i);
+        }
+    }
+    for(const auto& group:families){
+        const auto& members=group.second;
+        const auto& first=values[members.front()];
+        slong degree=qqbar_degree(first.n);
+        string prefix="PolynomialRootIndexed(List(";
+        for(slong i=0;i<=degree;++i){
+            if(i) prefix+=", ";
+            prefix+=taken(fmpz_get_str(nullptr,10,QQBAR_COEFFS(first.n)+i));
+        }
+        prefix+="), ";
+        if(members.size()==static_cast<size_t>(degree)){
+            auto order=members;
+            sort(order.begin(),order.end(),[&](size_t a,size_t b){
+                return qqbar_cmp_root_order(values[a].n,values[b].n)<0;
+            });
+            auto repeated=adjacent_find(order.begin(),order.end(),[&](size_t a,size_t b){
+                return qqbar_equal(values[a].n,values[b].n);
+            });
+            // Distinct roots of one minimal polynomial exhaust the family
+            // when their count is its degree. FLINT uses this same ordering.
+            if(repeated==order.end()){
+                for(size_t j=0;j<order.size();++j) labels[order[j]]=prefix+to_string(j+1)+")";
+                continue;
+            }
+        }
+        auto conjugates=_qqbar_vec_init(degree);
+        qqbar_conjugates(conjugates,first.n);
+        for(size_t i:members){
+            slong j=0;
+            while(j<degree && !qqbar_equal(values[i].n,conjugates+j)) ++j;
+            if(j==degree){
+                _qqbar_vec_clear(conjugates,degree);
+                throw Fail("An algebraic coefficient is absent from its FLINT conjugates.");
+            }
+            labels[i]=prefix+to_string(j+1)+")";
+        }
+        _qqbar_vec_clear(conjugates,degree);
+    }
+    return labels;
 }
 
 J ordered_root_labels(const J& rows) {
@@ -173,17 +256,10 @@ J ordered_root_labels(const J& rows) {
         Num c; qqbar_set_fmpq(c.n,q); fmpq_clear(q);
         if(!c.zero()) terms.emplace_back(row[0].asInt64(),c);
     }
+    vector<Num> values;
+    for(auto& entry:ordered_roots(terms)) values.push_back(move(entry.value));
     J result=arr();
-    for(const auto& entry:ordered_roots(terms)) {
-        const Num& root=entry.value;
-        if(qqbar_is_rational(root.n)) {
-            fmpq_t q; fmpq_init(q); qqbar_get_fmpq(q,root.n);
-            result.append(taken(fmpq_get_str(nullptr,10,q))); fmpq_clear(q);
-        } else {
-            fexpr_t expr; fexpr_init(expr); qqbar_get_fexpr_root_indexed(expr,root.n);
-            result.append(taken(fexpr_get_str(expr))); fexpr_clear(expr);
-        }
-    }
+    for(const auto& label:indexed_labels(values)) result.append(label);
     return result;
 }
 
@@ -222,8 +298,7 @@ struct Resolver {
         for(;i<algebraics.size();++i) if(qqbar_equal(x.n,algebraics[i].n)) break;
         string id="a"+to_string(i+1);
         if(i==algebraics.size()){
-            algebraics.push_back(x);fexpr_t expr;fexpr_init(expr);qqbar_get_fexpr_root_indexed(expr,x.n);
-            numbers[id]["exact"]=taken(fexpr_get_str(expr));fexpr_clear(expr);
+            algebraics.push_back(x);
             numbers[id]["approximation"]=taken(qqbar_get_str_nd(x.n,10));
         }
         return id;
@@ -394,6 +469,8 @@ struct Resolver {
         J r;r["status"]="resolved";r["engine"]="C++ / FLINT plane point blowups";
         r["summary"]=to_string(steps.size())+(steps.size()==1?" point blowup; ":" point blowups; ")+to_string(branches.size())+(branches.size()==1?" geometric branch":" geometric branches")+" above the origin.";
         r["charts"]=move(charts);r["steps"]=move(steps);r["dual_complex"]=move(d);
+        const auto labels=indexed_labels(algebraics);
+        for(size_t i=0;i<labels.size();++i) numbers["a"+to_string(i+1)]["exact"]=labels[i];
         r["branches"]=move(branches);r["algebraic_numbers"]=move(numbers);
         r["notes"]=arr({"Each chart excludes the listed points, which later blowups replace. A child inherits the parent base domain, excluding the other strict-transform points on the fiber and any listed coordinate divisors. Multiplicities refer to the total transform in the ambient plane."});
         return r;

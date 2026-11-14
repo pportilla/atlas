@@ -1,25 +1,31 @@
-"""Run constructive blowups and the general certificate search for the same germ."""
+"""Coordinate independent exhaustive resolution methods for the same germ."""
 import json
+import os
 from pathlib import Path
 import queue
+import signal
 import subprocess
 import sys
 import threading
 
 from .native_library import current_replay_scope
-from .polynomial import NonReducedError, integer_from_decimal, rational_text
+from .polynomial import LimitError, NonReducedError, integer_from_decimal, rational_text
 
 
-def search(poly, variables, mode):
-    """A slow centre calculation can continue while ideal certificates are tried.
+NEWTON_GRACE_SECONDS = 2
 
-    Both children stay in the outer job's process group for UI cancellation.
-    The verifier's own workers monitor their parent and exit when it is reaped.
+
+def search(poly, variables, mode, *, compute=None):
+    """Give Newton a short head start, then accept the first verified resolution.
+
+    Each method has its own process group. Its inherited pipe closes if
+    the outer job is killed, so cancellation also reaches native descendants.
     """
     scope = current_replay_scope()
     payload = json.dumps({
         "terms": [[list(e), rational_text(c)] for e, c in poly.items()],
-        "variables": variables, "mode": mode, "replay": scope.settings() if scope else {},
+        "variables": variables, "mode": mode, "compute": compute,
+        "replay": scope.settings() if scope else {"compute": compute},
     })
     replies = queue.SimpleQueue()
     children, readers = [], []
@@ -37,37 +43,62 @@ def search(poly, variables, mode):
         replies.put((method, reply))
 
     errors = []
+
+    def start(method):
+        read_fd, write_fd = os.pipe()
+        try:
+            child = subprocess.Popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
+                                     cwd=Path(__file__).resolve().parents[1],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                     start_new_session=True, pass_fds=(read_fd,))
+        except OSError as error:
+            os.close(write_fd)
+            errors.append(f"{method}: {error}")
+            return
+        finally:
+            os.close(read_fd)
+        children.append((child, write_fd))
+        reader = threading.Thread(target=collect, args=(method, child), daemon=True)
+        reader.start()
+        readers.append(reader)
+
     try:
-        for method in ("origin", "certificates"):
+        start("newton")
+        head_start = bool(children)
+        if not head_start:
+            start("origin")
+            start("certificates")
+        received = 0
+        while received < len(children):
             try:
-                child = subprocess.Popen([sys.executable, "-m", "engine.exhaustive_resolution", method],
-                                         cwd=Path(__file__).resolve().parents[1],
-                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-            except OSError as error:
-                errors.append(f"{method}: {error}")
-                continue
-            children.append(child)
-            reader = threading.Thread(target=collect, args=(method, child), daemon=True)
-            reader.start()
-            readers.append(reader)
-        for _ in children:
-            method, reply = replies.get()
-            if "nonreduced" in reply:
-                raise NonReducedError(reply["nonreduced"])
-            if reply.get("record") is not None:
-                if scope is not None:
-                    scope.merge(reply.get("replay"))
-                return reply["record"]
-            if "error" in reply:
-                errors.append(f"{method}: {reply['error']}")
+                method, reply = replies.get(timeout=NEWTON_GRACE_SECONDS if head_start else None)
+            except queue.Empty:
+                pass
+            else:
+                received += 1
+                if "nonreduced" in reply:
+                    raise NonReducedError(reply["nonreduced"])
+                if reply.get("record") is not None:
+                    if scope is not None:
+                        scope.merge(reply.get("replay"))
+                    return reply["record"]
+                if "error" in reply:
+                    errors.append(f"{method}: {reply['error']}")
+            if head_start:
+                head_start = False
+                start("origin")
+                start("certificates")
         if errors:
             raise RuntimeError("Exhaustive resolution could not finish. " + " / ".join(errors))
         return None
     finally:
-        for child in children:
-            if child.poll() is None:
-                child.kill()
-        for child in children:
+        for child, write_fd in children:
+            os.close(write_fd)
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        for child, _ in children:
             child.wait()
         for reader in readers:
             reader.join()
@@ -81,7 +112,14 @@ def _run(method, payload):
     terms = {tuple(e): Fraction(c) for e, c in payload["terms"]}
     with replay_scope(**payload["replay"]) as replay, face_search(True):
         try:
-            if method == "origin":
+            if method == "newton":
+                from .newton_backend import resolve_newton
+                try:
+                    record = resolve_newton(terms, payload["variables"], payload["mode"],
+                                            compute=payload["compute"], seconds=1200, defer_outputs=True)
+                except (LimitError, subprocess.TimeoutExpired):
+                    record = None
+            elif method == "origin":
                 from .origin_backend import _resolve
                 record = _resolve(terms, payload["variables"], payload["mode"], None, defer_outputs=True)
             elif method == "certificates":
@@ -94,7 +132,18 @@ def _run(method, payload):
         return {"record": record, "replay": replay.report()}
 
 
+def _watch_coordinator(read_fd):
+    # The coordinator exclusively owns the write end. Its exit (including
+    # SIGKILL during UI cancellation) closes this pipe, even if the worker
+    # is inside a synchronous native calculation or waiting on a compiler.
+    with os.fdopen(read_fd, "rb") as parent:
+        parent.read()
+    os.killpg(os.getpgrp(), signal.SIGKILL)
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        threading.Thread(target=_watch_coordinator, args=(int(sys.argv[2]),), daemon=True).start()
     if hasattr(sys, "set_int_max_str_digits"):
         sys.set_int_max_str_digits(0)
     print(json.dumps(_run(sys.argv[1], json.load(sys.stdin)), separators=(",", ":")))

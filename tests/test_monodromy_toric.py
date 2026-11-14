@@ -6,9 +6,10 @@ from pathlib import Path
 import unittest
 
 from engine.binomial_backend import resolve_binomial
-from engine.monodromy_toric import _volume, toric_contributions
+from engine.monodromy_toric import _volume
+from tests.toric_monodromy_oracle import toric_contributions
 from engine.newton_backend import resolve_newton
-from engine.nonreduced import nonreduced_resolution
+from engine.weighted_record import nonreduced_resolution
 from engine.polynomial import parse
 from engine.toric_backend import resolve_toric
 

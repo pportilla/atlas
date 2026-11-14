@@ -1,10 +1,19 @@
-// Fresh-process CPU frontend for the two point-local Atlas commands.
+// Fresh-process CPU frontend for local and global ideal operations.
 #include "local_io.hpp"
 #include "local_division.hpp"
+#include "local_dimension.hpp"
+#include "local_point_basis.hpp"
+#include "local_point_normal_form.hpp"
+#include "primary_decomposition.hpp"
+#include "normalization.hpp"
+#include "localization.hpp"
+#include "ideal_powers.hpp"
 #include <json/json.h>
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cctype>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -12,6 +21,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <sys/wait.h>
 #include <unistd.h>
 
 namespace {
@@ -21,11 +31,24 @@ using Clock = std::chrono::steady_clock;
 
 struct Request {
     std::string operation, order = "grevlex", compute = "auto";
-    Strings names, generators;
+    Strings names, generators, primes;
     std::vector<mpq_class> point;
-    std::optional<std::string> query;
+    std::optional<std::string> query, numerator, denominator, exponent;
     bool json = false;
+    bool point_given = false;
 };
+
+bool power_query(const std::string& op) {
+    return op == "ideal-power" || op == "symbolic-power";
+}
+
+bool global_ideal_query(const std::string& op) {
+    return op == "primary-decomposition" || op == "normalization" || op == "localization" || op == "localize" || power_query(op);
+}
+
+bool dimension_query(const std::string& operation) {
+    return operation == "local-dimension" || operation == "local-smoothness";
+}
 
 bool needs_device_dispatch() {
     // Explicit device settings and custom profiles use the shared dispatch policy.
@@ -97,7 +120,7 @@ mpq_class coordinate(const std::string& s) {
 bool is_option(const std::string& s) {
     static const std::set<std::string> flags = {
         "--field", "--vars", "--order", "--compute", "--gpu", "--gen", "--poly",
-        "--point", "--json", "--help", "-h", "--"
+        "--prime", "--numerator", "--denominator", "--exponent", "--point", "--json", "--help", "-h", "--"
     };
     return flags.count(s.substr(0, s.find('=')));
 }
@@ -105,6 +128,7 @@ bool is_option(const std::string& s) {
 Request arguments(int argc, char** argv) {
     Request r;
     r.operation = argv[3];
+    if (r.operation == "localize") r.operation = "localization";
     std::optional<Strings> point;
     bool vars = false;
     for (int i = 4; i < argc; ++i) {
@@ -113,7 +137,9 @@ Request arguments(int argc, char** argv) {
         const auto eq = arg.find('=');
         auto flag = arg.substr(0, eq);
         if (flag != "--gen" && flag != "--poly" && flag != "--vars" && flag != "--point" &&
-            flag != "--field" && flag != "--order" && flag != "--compute")
+            flag != "--field" && flag != "--order" && flag != "--compute" &&
+            !(power_query(r.operation) && flag == "--exponent") &&
+            !(r.operation == "localization" && (flag == "--prime" || flag == "--numerator" || flag == "--denominator")))
             throw std::invalid_argument("Use the general command parser.");
         if (eq == arg.npos && (++i == argc || is_option(argv[i])))
             throw std::invalid_argument("Missing argument.");
@@ -122,6 +148,10 @@ Request arguments(int argc, char** argv) {
         if (std::any_of(value.begin(), value.end(), [](unsigned char c){ return c >= 128; }))
             throw std::invalid_argument("Use the Unicode command parser.");
         if (flag == "--gen") r.generators.push_back(value);
+        else if (flag == "--exponent") r.exponent = value;
+        else if (flag == "--prime") r.primes.push_back(value);
+        else if (flag == "--numerator") r.numerator = value;
+        else if (flag == "--denominator") r.denominator = value;
         else if (flag == "--poly") r.query = value;
         else if (flag == "--vars") { r.names = comma_list(value); vars = true; }
         else if (flag == "--point") point = comma_list(value);
@@ -129,7 +159,8 @@ Request arguments(int argc, char** argv) {
         else if (flag == "--compute") r.compute = value;
         else if (value != "QQ") throw std::invalid_argument("Unsupported field.");
     }
-    if (!vars || r.names.empty() || (r.order != "lex" && r.order != "grevlex") ||
+    if (!vars || (r.names.empty() && !power_query(r.operation)) ||
+        (power_query(r.operation) && !r.exponent) || (r.order != "lex" && r.order != "grevlex") ||
         (r.compute != "auto" && r.compute != "cpu") ||
         (r.operation == "local-normal-form") != r.query.has_value())
         throw std::invalid_argument("Use the general algebra handler.");
@@ -138,6 +169,11 @@ Request arguments(int argc, char** argv) {
         if (name.empty() || name.size()>24 || !std::isalpha(name.front()) ||
             !std::all_of(name.begin(), name.end(), [](char c){ return std::isalnum(c) || c=='_'; }) ||
             !distinct.insert(name).second) throw std::invalid_argument("Invalid variables.");
+    if (global_ideal_query(r.operation)) {
+        if (point) throw std::invalid_argument("Unexpected point.");
+        return r;
+    }
+    r.point_given = point.has_value();
     if (!point) point = Strings(r.names.size(), "0");
     if (point->size() != r.names.size()) throw std::invalid_argument("Invalid point.");
     for (const auto& s : *point) r.point.push_back(coordinate(s));
@@ -172,15 +208,24 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
         else { args.push_back(flag); args.push_back(s); }
     };
     for (const auto& g : r.generators) operand("--gen",g);
+    for (const auto& g : r.primes) operand("--prime",g);
+    if (r.numerator) operand("--numerator",*r.numerator);
+    if (r.denominator) operand("--denominator",*r.denominator);
     if (r.query) operand("--poly",*r.query);
-    args.insert(args.end(), {"--point", join(point, ","), "--json"});
+    if (r.exponent) operand("--exponent",*r.exponent);
+    if (!point.empty()) args.insert(args.end(), {"--point", join(point, ",")});
+    args.push_back("--json");
     for (auto& arg : args) arg = shell_quote(arg);
     Json::Value request;
     request["operation"] = r.operation;
     request["ring"] = ring;
     request["compute"] = r.compute;
     request["operands"]["ideal"] = array(r.generators);
-    request["operands"]["point"] = array(point);
+    if (r.operation == "localization") request["operands"]["prime"] = array(r.primes);
+    if (r.numerator) request["operands"]["numerator"] = *r.numerator;
+    if (r.denominator) request["operands"]["denominator"] = *r.denominator;
+    if (!point.empty()) request["operands"]["point"] = array(point);
+    if (r.exponent) request["operands"]["exponent"] = *r.exponent;
     if (r.query) request["operands"]["polynomial"] = *r.query;
     Json::Value out;
     out["command"] = join(args, " ");
@@ -190,27 +235,24 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
     return out;
 }
 
-Json::Value calculate(const Request& r) {
-    auto start = Clock::now(), checkpoint = start;
-    Json::Value stages(Json::arrayValue);
-    auto stage = [&](const char* name, const char* label = nullptr) {
+struct Stages {
+    Clock::time_point start = Clock::now(), checkpoint = start;
+    Json::Value values{Json::arrayValue};
+
+    void operator()(const char* name, const char* label = nullptr) {
         const auto now = Clock::now();
         Json::Value s;
         s["operation"] = name;
         s["backend"] = "cpu";
         s["elapsed_ns"] = Json::Int64(std::chrono::duration_cast<std::chrono::nanoseconds>(now-checkpoint).count());
         if (label) s["label"] = label;
-        stages.append(s);
+        values.append(s);
         checkpoint = now;
-    };
-    Strings point;
-    for (const auto& q : r.point) point.push_back(q.get_str());
-    const bool lex = r.order == "lex";
-    Basis input;
-    for (const auto& source : r.generators) {
-        auto f = parse_expression(r.names, source);
-        if (!f.empty()) input.push_back(std::move(f));
     }
+};
+
+Json::Value local_result(const Request& r, const Basis& input, Stages& stage) {
+    const bool lex = r.order == "lex";
     Polynomial query;
     if (r.query) query = parse_expression(r.names, *r.query);
     stage("parse_local_input");
@@ -230,17 +272,32 @@ Json::Value calculate(const Request& r) {
             output = {std::move(nf.unit), std::move(nf.remainder)};
             stage("local_normal_form");
         } else output = std::move(basis);
+    } else if (shifted && (use_sparse_point_basis(input, r.point) ||
+                           (r.query && use_sparse_point_basis({query}, r.point)))) {
+        if (r.query) {
+            auto nf = normal_form_at_point(input, query, r.names, r.point, lex, false, false);
+            weak = nf.weak;
+            output = {std::move(nf.unit), std::move(nf.remainder)};
+            stage("local_point_normal_form", "local_normal_form");
+        } else {
+            output = standard_basis_at_point(input, r.names, r.point, lex);
+            stage("local_point_basis", "local_standard_basis");
+        }
     } else if (shifted && has_point_unit(input, r.point)) {
         output = r.query ? Basis{one, {}} : Basis{one};
         stage("inspect_point_ideal");
     } else {
         Basis centered = translate(input, r.point);
         stage("center_at_point");
-        auto finite = r.query ? finite_standard_basis(centered, r.names, lex) : std::nullopt;
-        Basis basis = finite ? std::move(*finite) : standard_basis(centered, r.names, lex);
-        stage(finite ? "finite_jet_standard_basis" : "local_standard_basis", "local_standard_basis");
-        if (r.query) {
-            if (basis == Basis{one}) output = {one, {}};
+        auto remainder = r.query ? homogeneous_normal_form(centered, query, r.point, lex, false, std::ref(stage))
+                                 : std::nullopt;
+        if (remainder) output = {one, std::move(*remainder)};
+        else {
+            auto finite = r.query ? finite_standard_basis(centered, r.names, lex) : std::nullopt;
+            Basis basis = finite ? std::move(*finite) : standard_basis(centered, r.names, lex);
+            stage(finite ? "finite_jet_standard_basis" : "local_standard_basis", "local_standard_basis");
+            if (!r.query) output = std::move(basis);
+            else if (basis == Basis{one}) output = {one, {}};
             else {
                 auto jet = finite_query_jet(basis, query, r.point, lex);
                 Polynomial f = jet ? std::move(*jet) : translate({query}, r.point).front();
@@ -250,28 +307,104 @@ Json::Value calculate(const Request& r) {
                 output = {std::move(nf.unit), std::move(nf.remainder)};
                 stage("local_normal_form");
             }
-        } else output = std::move(basis);
+        }
         auto back = r.point;
         for (auto& q : back) q = -q;
-        output = translate(output, back);
+        output = translate_unbounded(output, back);
         stage("restore_point_coordinates");
     }
     Strings polynomials;
     for (const auto& f : output) polynomials.push_back(format_polynomial(f, r.names));
-    Json::Value doc, ring;
-    ring["variables"] = array(r.names);
-    ring["field"] = "QQ";
-    ring["order"] = r.order;
-    auto& result = doc["result"];
-    result["ring"] = ring;
-    result["point"] = array(point);
+    Json::Value result;
     result["scope"] = "point";
-    result["type"] = r.operation;
     if (r.query) {
         result["unit"] = polynomials.at(0);
         result["remainder"] = polynomials.at(1);
         result["reduction"] = weak ? "weak" : "standard";
     } else result["generators"] = array(polynomials);
+    return result;
+}
+
+Json::Value decomposition_result(const Request& r, const Basis& input, Stages& stage) {
+    stage("parse_input");
+    const auto components = atlas::primary::decompose(input, r.names.size(), r.order == "lex");
+    stage("primary_decomposition");
+    stage.values[stage.values.size()-1]["generators"] = Json::UInt64(r.generators.size());
+    auto ideal = [&](const Basis& rows) {
+        Json::Value generators(Json::arrayValue);
+        for (const auto& f : rows) generators.append(format_polynomial(f, r.names));
+        return generators;
+    };
+    Json::Value result;
+    result["components"] = Json::Value(Json::arrayValue);
+    for (const auto& component : components) {
+        Json::Value pair;
+        pair["primary"] = ideal(component.primary);
+        pair["prime"] = ideal(component.prime);
+        result["components"].append(std::move(pair));
+    }
+    return result;
+}
+
+Json::Value calculate(const Request& r) {
+    Stages stages;
+    Basis input;
+    for (const auto& source : r.generators) {
+        auto f = parse_expression(r.names, source);
+        if (!f.empty() || global_ideal_query(r.operation)) input.push_back(std::move(f));
+    }
+    Json::Value doc, ring;
+    ring["variables"] = array(r.names);
+    ring["field"] = "QQ";
+    ring["order"] = r.order;
+    auto& result = doc["result"];
+    if (dimension_query(r.operation)) {
+        const bool smoothness = r.operation == "local-smoothness";
+        stages("parse_local_input");
+        auto d = dimension_at_point(input, r.names, r.point, r.order == "lex", smoothness);
+        stages(smoothness ? "local_smoothness" : "local_dimension");
+        result["local_dimension"] = d.dimension;
+        result["scope"] = r.point_given ? "point" : "origin";
+        if (smoothness) {
+            result["type"] = "boolean";
+            result["value"] = d.smooth;
+            result["jacobian_rank"] = d.jacobian_rank;
+            result["embedding_dimension"] = d.embedding_dimension;
+        } else {
+            result["type"] = "integer";
+            result["value"] = d.dimension;
+        }
+    } else if (power_query(r.operation)) {
+        const auto exponent = atlas::ideal_powers::parse_exponent(*r.exponent);
+        const bool symbolic = r.operation == "symbolic-power";
+        stages("parse_input");
+        result = atlas::ideal_powers::compute(input,r.names,r.order == "lex",exponent,symbolic);
+        stages(symbolic ? "symbolic_power" : "ideal_power");
+    } else if (r.operation == "localization") {
+        Basis prime;
+        for (const auto& source : r.primes) prime.push_back(parse_expression(r.names, source));
+        std::optional<atlas::localization::Fraction> fraction;
+        if (r.numerator || r.denominator)
+            fraction = atlas::localization::Fraction{parse_expression(r.names, r.numerator.value_or("1")),
+                                                     parse_expression(r.names, r.denominator.value_or("1"))};
+        stages("parse_input");
+        result = atlas::localization::compute(input, prime, r.names, r.order == "lex", fraction);
+        stages("localization");
+    } else if (r.operation == "normalization") {
+        stages("parse_input");
+        result = atlas::normalization::compute(input, r.names, r.order == "lex");
+        stages("normalization");
+        stages.values[stages.values.size()-1]["generators"] = Json::UInt64(r.generators.size());
+    } else {
+        result = r.operation == "primary-decomposition" ? decomposition_result(r, input, stages)
+                                                        : local_result(r, input, stages);
+        result["type"] = r.operation;
+    }
+    result["ring"] = ring;
+    Strings point;
+    if (!dimension_query(r.operation) || r.point_given)
+        for (const auto& q : r.point) point.push_back(q.get_str());
+    if (!point.empty()) result["point"] = array(point);
     doc["status"] = "ok";
     doc["operation"] = r.operation;
     doc["replay"] = replay(r,ring,point);
@@ -281,47 +414,177 @@ Json::Value calculate(const Request& r) {
     ex["implementation"] = "native-cli";
     ex["requested"] = r.compute;
     ex["fallback_reasons"] = Json::Value(Json::arrayValue);
-    ex["stages"] = std::move(stages);
-    ex["elapsed_ms"] = std::chrono::duration<double,std::milli>(Clock::now()-start).count();
+    ex["stages"] = std::move(stages.values);
+    ex["elapsed_ms"] = std::chrono::duration<double,std::milli>(Clock::now()-stages.start).count();
     return doc;
 }
 
 void show(const Request& r, const Json::Value& result) {
     Strings point;
     for (const auto& q : r.point) point.push_back(q.get_str());
-    std::cout << "QQ[" << join(r.names,", ") << "]   " << r.order << "\nScope: point\nPoint: ("
-              << join(point,", ") << ")\n";
-    if (r.query)
+    std::cout << (r.names.empty() ? "QQ" : "QQ[" + join(r.names,", ") + "]") << "   " << r.order << '\n';
+    if (dimension_query(r.operation) && !r.point_given) std::cout << "Scope: origin\n";
+    else if (!point.empty()) std::cout << "Scope: point\nPoint: (" << join(point,", ") << ")\n";
+    auto generators = [](const Json::Value& gens, const char* zero) {
+        Strings polys;
+        for (const auto& g : gens) polys.push_back(g.asString());
+        return polys.empty() ? std::string(zero) : join(polys, ", ");
+    };
+    if (power_query(r.operation)) {
+        std::cout << "Generators: " << generators(result["generators"], "(zero ideal)") << '\n';
+    } else if (r.operation == "localization") {
+        std::cout << "Prime ideal: (" << generators(result["prime"], "0") << ")\n"
+                  << "Contracted ideal: (" << generators(result["generators"], "0") << ")\n";
+        if (result.isMember("element")) {
+            const auto& element = result["element"];
+            std::cout << "Fraction: (" << element["numerator"].asString() << ")/(" << element["denominator"].asString() << ")\n"
+                      << "In the localized ideal: " << (element["member"].asBool() ? "yes" : "no") << '\n'
+                      << "Unit in the local ring: " << (element["unit"].asBool() ? "yes" : "no") << '\n';
+        }
+    } else if (r.operation == "normalization") {
+        if (!result["input_reduced"].asBool())
+            std::cout << "The input has nilpotents. Showing the normalization of its reduction.\n";
+        const auto& components = result["components"];
+        if (components.empty()) std::cout << "The zero algebra has no components.\n";
+        for (Json::ArrayIndex i = 0; i < components.size(); ++i) {
+            const auto& c = components[i];
+            const auto& names = c["ring"]["variables"];
+            std::cout << "Component " << i+1 << ", prime ideal (" << generators(c["prime"], "0") << ")\n"
+                      << "Normalized algebra: QQ[" << generators(names, "") << "]/(" << generators(c["relations"], "0") << ")\n";
+            for (Json::ArrayIndex j = 0; j < c["images"].size(); ++j)
+                std::cout << "  " << r.names[j] << " -> " << c["images"][j].asString() << '\n';
+            for (Json::ArrayIndex j = 0; j < names.size(); ++j)
+                std::cout << "  " << names[j].asString() << " = (" << c["fractions"][j]["numerator"].asString()
+                          << ")/(" << c["fractions"][j]["denominator"].asString() << ")\n";
+        }
+    } else if (r.operation == "primary-decomposition") {
+        const auto& components = result["components"];
+        if (components.empty()) std::cout << "The unit ideal has no primary components.\n";
+        for (Json::ArrayIndex i = 0; i < components.size(); ++i) {
+            std::cout << "Primary component " << i+1 << ": (" << generators(components[i]["primary"], "0") << ")\n";
+            std::cout << "Associated prime: (" << generators(components[i]["prime"], "0") << ")\n";
+        }
+    } else if (dimension_query(r.operation)) {
+        std::cout << "Local dimension: " << result["local_dimension"].asInt() << '\n';
+        if (r.operation == "local-smoothness")
+            std::cout << "Embedding dimension: " << result["embedding_dimension"].asInt()
+                      << "\nJacobian rank: " << result["jacobian_rank"].asInt()
+                      << "\nSmooth at point: " << (result["value"].asBool() ? "yes" : "no") << '\n';
+    } else if (r.query)
         std::cout << "Reduction: " << result["reduction"].asString() << "\nRemainder: "
                   << result["remainder"].asString() << "\nUnit: " << result["unit"].asString() << '\n';
-    else {
-        Strings polys;
-        for (const auto& s : result["generators"]) polys.push_back(s.asString());
-        std::cout << "Generators: " << (polys.empty() ? "(zero ideal)" : join(polys,", ")) << '\n';
-    }
+    else std::cout << "Generators: " << generators(result["generators"], "(zero ideal)") << '\n';
     std::cout << "Device: CPU (requested " << r.compute << ")\n";
+}
+
+int shared_frontend(char** argv) {
+    char python[] = "python3";
+    argv[0] = python;
+    execvp(python,argv);
+    std::perror("python3");
+    return 127;
+}
+
+volatile std::sig_atomic_t interrupted = 0;
+volatile std::sig_atomic_t active_child = 0;
+void interrupt(int) {
+    const int saved_errno = errno;
+    interrupted = 1;
+    if (active_child) kill(active_child, SIGKILL);
+    errno = saved_errno;
+}
+
+int cli_error(const Request& r, const char* code, const char* message) {
+    if (r.json) {
+        Json::Value failure;
+        failure["status"] = "error";
+        failure["error"]["code"] = code;
+        failure["error"]["message"] = message;
+        std::cout << json_text(failure) << '\n' << std::flush;
+    } else std::cerr << message << '\n';
+    return 2;
+}
+
+int run_isolated(const Request& r, char** argv) {
+    // The public CLI has no deadline. Keep the kernel in a separate process
+    // so Ctrl-C and a kernel terminated by OS resource limits have the
+    // same exit status and diagnostics as the shared worker.
+    struct sigaction action{}, previous{};
+    action.sa_handler = interrupt;
+    sigemptyset(&action.sa_mask);
+    if (sigaction(SIGINT, &action, &previous)) return shared_frontend(argv);
+    const auto child = fork();
+    if (child <= 0) {
+        sigaction(SIGINT, &previous, nullptr);
+        if (child < 0) return shared_frontend(argv);
+        try {
+            const auto record = calculate(r);
+            if (r.json) std::cout << json_text(record) << '\n';
+            else show(r,record["result"]);
+            std::cout.flush();
+            _exit(0);
+        } catch (const atlas::ideal_powers::InvalidInput& error) {
+            _exit(cli_error(r, "invalid_request", error.what()));
+        } catch (const atlas::localization::InvalidInput& error) {
+            _exit(cli_error(r, "invalid_request", error.what()));
+        } catch (const std::exception&) {
+            // Let the original command parser and worker classify a failed
+            // parse or computation. Replacement happens in the parent.
+            _exit(1);
+        }
+    }
+    active_child = child;
+    if (interrupted) kill(child, SIGKILL);
+    int status = 0;
+    pid_t waited;
+    do { waited = waitpid(child,&status,0); } while (waited < 0 && errno == EINTR);
+    active_child = 0;
+    sigaction(SIGINT, &previous, nullptr);
+    if (waited < 0) return shared_frontend(argv);
+    if (interrupted || (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT)) {
+        std::cerr << "Algebra calculation interrupted.\n";
+        return 130;
+    }
+    if (WIFEXITED(status)) {
+        const int code = WEXITSTATUS(status);
+        return code == 0 || code == 2 ? code : shared_frontend(argv);
+    }
+    return cli_error(r, "worker_unavailable", "Algebra worker stopped before returning an exact result.");
 }
 }
 
 int main(int argc, char** argv) {
     if (argc < 4 || std::string(argv[2]) != "algebra" ||
-        (std::string(argv[3]) != "local-normal-form" && std::string(argv[3]) != "local-standard-basis"))
+        (std::string(argv[3]) != "local-normal-form" && std::string(argv[3]) != "local-standard-basis" &&
+         !global_ideal_query(argv[3]) && !dimension_query(argv[3])))
         return 2;
     try {
         auto request = arguments(argc,argv);
         if (request.compute == "auto" && needs_device_dispatch())
             throw std::invalid_argument("Use the configured device policy.");
-        auto result = calculate(request);
+        if (request.compute == "auto" && dimension_query(request.operation) &&
+            std::min(request.names.size(), request.generators.size()) >= 256)
+            throw std::invalid_argument("Use the shared Jacobian device selector.");
+        if (global_ideal_query(request.operation)) return run_isolated(request,argv);
+        Json::Value result;
+        try {
+            result = calculate(request);
+        } catch (const PointOutsideScheme& error) {
+            if (request.json) {
+                Json::Value failure;
+                failure["status"] = "error";
+                failure["error"]["code"] = "invalid_request";
+                failure["error"]["message"] = error.what();
+                std::cout << json_text(failure) << '\n';
+            } else std::cerr << error.what() << '\n';
+            return 2;
+        }
         if (request.json) std::cout << json_text(result) << '\n';
         else show(request,result["result"]);
         return 0;
     } catch (const std::exception&) {
         // Preserve argparse diagnostics, device execution, wide arithmetic and
         // the public worker's error records when this frontend cannot handle a request.
-        char python[] = "python3";
-        argv[0] = python;
-        execvp(python,argv);
-        std::perror("python3");
-        return 127;
+        return shared_frontend(argv);
     }
 }

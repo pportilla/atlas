@@ -309,3 +309,21 @@ class PointAtlas(unittest.TestCase):
         self.assertIsNone(point_outputs(record, p, intrinsic=True))
         with self.assertRaises(InvalidChart):
             point_outputs(record, p)
+
+    def test_saved_point_atlas_with_inconclusive_tangent_rank(self):
+        from unittest.mock import patch
+        from engine.chart_kernel import crossings_rows
+        from engine.native_backend import smooth_projective_tangent
+        names = list("xyz")
+        equation = "x^3+y^3+z^3+x*y*z"
+        polynomial = parse(equation, names)
+        result = resolve(dict(polynomial=equation, variables=names))
+        saved = dict(variables=names, atlas=result["atlas"])
+        expected = point_outputs(saved, polynomial)
+        # Scaling by both test primes erases every gradient row in both
+        # modular tests. The same smooth rational strict ideals still agree.
+        scaled = {powers: 1000000007*1000000009*c for powers, c in polynomial.items()}
+        self.assertFalse(smooth_projective_tangent(3, scaled))
+        with patch("engine.point_atlas.crossings_rows", wraps=crossings_rows) as local_tests:
+            self.assertEqual(point_outputs(saved, scaled), expected)
+            self.assertEqual(local_tests.call_count, len(names))

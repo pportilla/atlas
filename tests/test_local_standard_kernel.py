@@ -223,6 +223,37 @@ class LocalStandardKernel(unittest.TestCase):
                                 point=["2", "0"])
         self.assertEqual(result["remainder"], "1")
 
+    def test_large_jet_coefficients_cancel_across_distinct_rational_coordinates(self):
+        n = 2**64+7
+        a, b = "(x-2)", "(y-1/4)"
+        result = self.calculate("local-normal-form", [f"{a}^2", f"{b}^2"],
+                                f"x^{2*n}*y^{n}", point=["2","1/4"])
+        # x^(2n) and y^n cannot be written out individually at the point.
+        expected = f"(1+{n}*{a})*(1+{4*n}*{b})"
+        self.assertEqual(native(result["remainder"], ("x","y")), native(expected, ("x","y")))
+        self.assertEqual((result["unit"],result["reduction"]), ("1","standard"))
+
+    def test_coordinate_power_remainder_groups_reciprocal_coordinates_before_projection(self):
+        n = 2**65 + 1
+        names, point = ("x", "y", "z"), ["-2", "1/2", "0"]
+        for u_bound, v_bound in [(1, 1), (1, 2), (2, 33)]:
+            with self.subTest(bounds=(u_bound, v_bound)):
+                ideal = [f"(x+2)^{u_bound}", f"(y-1/2)^{v_bound}", f"z^{n}"]
+                query = f"(x*y)^{n} + x^{n}*z^{n}"
+                result = self.calculate("local-normal-form", ideal, query, point=point, names=names)
+                u_series = "+".join(f"{comb(n, k)}*(-(x+2)/2)^{k}" for k in range(u_bound))
+                v_series = "+".join(f"{comb(n, k)}*(2*y-1)^{k}" for k in range(v_bound))
+                expected = native(f"-({u_series})*({v_series})", names)
+                self.assertEqual(native(result["remainder"], names), expected)
+                self.assertEqual((result["unit"], result["reduction"]), ("1", "standard"))
+
+    def test_large_query_transfers_to_a_free_axis_without_dense_expansion(self):
+        n = 2**64+7
+        result = self.calculate("local-normal-form", ["x-y", "z^2"], f"x^{n}",
+                                names=("x","y","z"), point=["1","1","0"])
+        self.assertEqual((result["unit"],result["reduction"],result["remainder"]),
+                         ("1","standard",f"y^{n}"))
+
     def test_query_centering_uses_ordinary_translation_when_cheaper_or_unbounded(self):
         cases = [
             (["(x-1)^2", "y"], "x^3", "3*x-2"),

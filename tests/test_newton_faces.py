@@ -1,9 +1,43 @@
 import os
+import signal
 import unittest
 from fractions import Fraction
 from engine.newton_faces import certify_face, edge_polynomial, face_search
 
 class NewtonFaceTests(unittest.TestCase):
+    def test_native_face_timeout_restarts_and_scope_closes(self):
+        from engine.newton_faces import _WORKER
+
+        face = {(0,): 1, (1,): 2, (2,): 1}
+        expected = certify_face(face)
+        with face_search(False):
+            self.assertEqual(certify_face(face), expected)
+            worker = _WORKER.get()
+            stopped = worker.proc
+            self.assertEqual(certify_face(face), expected)
+            self.assertIs(worker.proc, stopped)
+            os.kill(stopped.pid, signal.SIGSTOP)
+            answer = certify_face(face, timeout=0.03)
+            self.assertEqual(answer["status"], "undetermined")
+            self.assertIn("time budget", answer["reason"])
+            self.assertIsNone(worker.proc)
+            self.assertIsNotNone(stopped.returncode)
+            self.assertEqual(certify_face(face), expected)
+            restarted = worker.proc
+        self.assertIsNotNone(restarted.returncode)
+
+    def test_native_face_worker_recovers_from_invalid_input(self):
+        from engine.newton_faces import _WORKER
+
+        with face_search(False):
+            worker = _WORKER.get()
+            self.assertEqual(worker.query("1 2 1 0 1 1", 2), "nondegenerate 0\n")
+            invalid = worker.proc
+            self.assertEqual(worker.query("1 2 1 0 bad 1", 2), "")
+            self.assertIsNone(worker.proc)
+            self.assertIsNotNone(invalid.returncode)
+            self.assertEqual(worker.query("1 3 1 0 2 1 1 2", 2), "degenerate 1\n")
+
     def test_primitive_input_budget_and_signed_laurent_translation(self):
         face = {(-9,4):Fraction(-1,5), (-8,3):Fraction(-2,5), (-7,2):Fraction(-1,5)}
         cert = certify_face(face)

@@ -1,9 +1,14 @@
 // Compute the normal fan of conv(support) + R^n_{>=0}, then a compatible
 // unimodular subdivision. The process is entirely in exact lattices.
+#ifndef ATLAS_SMALL_NEWTON_FAN
 #include <libnormaliz/libnormaliz.h>
+#endif
+#include <gmpxx.h>
+#include <flint/fmpz.h>
 #include <flint/fmpz_mat.h>
 #include <json/json.h>
 #include <algorithm>
+#include <sstream>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -63,6 +68,9 @@ class Fan {
     int newton_ray_count = 0, newton_vertices = 0;
 
     int id(const Ray& r) {
+#ifdef ATLAS_SMALL_NEWTON_FAN
+        if (*std::max_element(r.begin(), r.end()) > 64) throw std::length_error("small ray budget");
+#endif
         if(!exhaustive && *std::max_element(r.begin(),r.end())>max_coordinate)
             throw std::runtime_error("Newton fan exceeded its ray-coordinate budget.");
         auto [it, fresh]=index.emplace(r,static_cast<int>(rays.size()));
@@ -77,11 +85,17 @@ class Fan {
             fmpz_set_mpz(fmpz_mat_entry(m.a,row,col), rays[c[col]][row].get_mpz_t());
     }
     Z add_cell(Face c) {
+#ifdef ATLAS_SMALL_NEWTON_FAN
+        if (cells.size() >= 64) throw std::length_error("small fan budget");
+#endif
         if(cells.size()>=max_cone_records) throw std::runtime_error("Newton fan exceeded its cone budget.");
         Matrix m(n); matrix(m,c); fmpz_t det; fmpz_init(det); fmpz_mat_det(det,m.a);
         Z d=integer(det); fmpz_clear(det);
         if(!d) throw std::logic_error("Triangulation produced a zero-volume cone.");
         if(d<0) {std::swap(c[n-2],c[n-1]); d=-d;}
+#ifdef ATLAS_SMALL_NEWTON_FAN
+        if (d > 8) throw std::length_error("small index budget");
+#endif
         const int k=static_cast<int>(cells.size());
         for(int i:c) incident[i].insert(k);
         cells.push_back({std::move(c),d,true});
@@ -203,6 +217,7 @@ public:
     Fan(int dimension,bool exhaustive):n(dimension),exhaustive(exhaustive) {
         for(int j=0;j<n;++j) {Ray e(n);e[j]=1;id(e);}
     }
+#ifndef ATLAS_SMALL_NEWTON_FAN
     void build(const Rays& support) {
         // The positive-height section of this pointed cone is the Newton
         // polyhedron. Its nonhorizontal generating rays give precisely its
@@ -232,6 +247,69 @@ public:
             Z order=dot(r,vertices.front()); for(const auto& m:vertices) order=std::min(order,dot(r,m));
             normals.emplace(r,order);
         }
+        refine(vertices, normals);
+    }
+#else
+    void build_small(const Rays& support) {
+        // The normal cone at m is cut out by v >= 0 and (e - m).v >= 0.
+        // An extreme ray is the signed cofactor vector of n-1 independent
+        // active rows. At most 6 rows occur here in dimensions <= 4.
+        Rays vertices;
+        std::map<Ray,Z> normals;
+        for (const auto& m : support) {
+            Rays inequalities(n, Ray(n));
+            for (int j = 0; j < n; ++j) inequalities[j][j] = 1;
+            for (const auto& e : support) if (e != m) {
+                Ray h(n);
+                for (int j = 0; j < n; ++j) h[j] = e[j] - m[j];
+                inequalities.push_back(std::move(h));
+            }
+            std::set<Ray> rays_here;
+            std::vector<bool> active(inequalities.size());
+            std::fill(active.end() - (n - 1), active.end(), true);
+            Matrix minor(n-1);
+            do {
+                Ray ray(n);
+                for (int skip=0; skip<n; ++skip) {
+                    int row=0;
+                    for(size_t i=0;i<active.size();++i) if(active[i]) {
+                        int col=0;
+                        for(int j=0;j<n;++j) if(j!=skip)
+                            fmpz_set_mpz(fmpz_mat_entry(minor.a,row,col++), inequalities[i][j].get_mpz_t());
+                        ++row;
+                    }
+                    fmpz_t det; fmpz_init(det); fmpz_mat_det(det,minor.a);
+                    ray[skip]=integer(det); fmpz_clear(det);
+                    if(skip%2) ray[skip]=-ray[skip];
+                }
+                const auto first=std::find_if(ray.begin(),ray.end(),[](const Z& z){return z!=0;});
+                if(first==ray.end()) continue;
+                if(*first<0) for(auto& z:ray) z=-z;
+                if(std::any_of(inequalities.begin(),inequalities.end(),[&](const Ray& h){return dot(h,ray)<0;}))
+                    continue;
+                Z divisor=0;
+                for(const auto& z:ray) mpz_gcd(divisor.get_mpz_t(),divisor.get_mpz_t(),z.get_mpz_t());
+                for(auto& z:ray) z/=divisor;
+                rays_here.insert(std::move(ray));
+            } while(std::next_permutation(active.begin(),active.end()));
+            // Only full-dimensional normal cones belong to vertices. The
+            // lower-dimensional cones of redundant support points add no rays.
+            fmpz_mat_t matrix; fmpz_mat_init(matrix,rays_here.size(),n);
+            int i=0;
+            for(const auto& ray:rays_here) {
+                for(int j=0;j<n;++j) fmpz_set_mpz(fmpz_mat_entry(matrix,i,j),ray[j].get_mpz_t());
+                ++i;
+            }
+            const auto rank=fmpz_mat_rank(matrix); fmpz_mat_clear(matrix);
+            if(rank!=n) continue;
+            vertices.push_back(m);
+            for(const auto& ray:rays_here) normals.emplace(ray,dot(ray,m));
+        }
+        newton_vertices=vertices.size();
+        refine(vertices,normals);
+    }
+#endif
+    void refine(const Rays& vertices, const std::map<Ray,Z>& normals) {
         for(const auto& [r,order]:normals) id(r);
         newton_ray_count=rays.size();
         for(const auto& m:vertices) {
@@ -278,6 +356,50 @@ public:
     }
 };
 
+JsonValue trial_supports(const Rays& support, int n) {
+    JsonValue result(Json::arrayValue);
+    std::set<Rays> seen;
+    auto propose = [&](Rays terms) {
+        std::sort(terms.begin(), terms.end());
+        terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
+        if (!seen.insert(terms).second) return;
+        JsonValue item(Json::arrayValue);
+        for (const Ray& e : terms) item.append(array(e));
+        result.append(item);
+    };
+    Z lo = -1, hi = 0;
+    for (const Ray& e : support) {
+        const Z d = std::accumulate(e.begin(), e.end(), Z(0));
+        if (lo < 0 || d < lo) lo = d;
+        hi = std::max(hi, d);
+    }
+    if (hi > 32 || support.size() > 64) return result;
+    std::vector<unsigned> centres;
+    for (unsigned mask = 1; mask < (1u << n); ++mask) {
+        bool minimal = std::none_of(centres.begin(), centres.end(), [&](unsigned c){return (mask & c) == c;});
+        if (!minimal) continue;
+        bool singular = std::all_of(support.begin(), support.end(), [&](const Ray& e){
+            Z d = 0; for (int j=0; j<n; ++j) if (mask & (1u<<j)) d += e[j];
+            return d >= 2;
+        });
+        if (singular) centres.push_back(mask);
+    }
+    auto unit = [&](int i, const Z& a){Ray e(n); e[i]=a; return e;};
+    for (int i=0; i<n; ++i) for (int j=i+1; j<n; ++j) {
+        unsigned pair = (1u<<i)|(1u<<j);
+        if (std::none_of(centres.begin(),centres.end(),[&](unsigned c){return (pair&c)==c;})) continue;
+        for (int reverse=0; reverse<2; ++reverse) for(int d : {2,3})
+            propose({unit(reverse?j:i,d),unit(reverse?i:j,1)});
+    }
+    for (const Z& d : std::vector<Z>{hi+1,hi,hi+2,lo+1}) {
+        Rays terms=support;
+        for (int i=0; i<n; ++i) terms.push_back(unit(i,d));
+        propose(std::move(terms));
+    }
+    return result;
+}
+
+#ifndef ATLAS_SMALL_NEWTON_FAN
 JsonValue compute(const JsonValue& obj) {
     const auto& terms=obj["exponents"];
     const bool exhaustive=obj.get("exhaustive",false).asBool();
@@ -286,10 +408,16 @@ JsonValue compute(const JsonValue& obj) {
         throw std::invalid_argument("Expected 1–4096 exponent vectors.");
     const int n=terms[0].size();
     if(n<2 || n>8) throw std::invalid_argument("Newton fan dimension must be 2–8.");
+    // An axial support point a*e_j already generates a*e_j + the orthant.
+    // Only the lowest such power can be needed for the Newton polyhedron.
+    Ray axial(n);
     Rays support;
+    support.reserve(terms.size());
     for(const auto& row:terms) {
         if(!row.isArray() || static_cast<int>(row.size())!=n) throw std::invalid_argument("Inconsistent exponent dimension.");
         Ray e;
+        e.reserve(n);
+        int axis = -1;  // -1 for zero so far, n for a mixed monomial.
         Z total;
         for(const auto& entry:row) {
             if(!(entry.isInt64() || entry.isUInt64() || (exhaustive && entry.isString())))
@@ -298,10 +426,29 @@ JsonValue compute(const JsonValue& obj) {
             if(digits.empty() || digits.find_first_not_of("0123456789")!=std::string::npos)
                 throw std::invalid_argument("Expected nonnegative integer exponents.");
             e.emplace_back(digits,10);
+            if (axis != n && e.back() != 0)
+                axis = axis < 0 ? static_cast<int>(e.size()) - 1 : n;
             if(!exhaustive) total+=e.back();
         }
         if(!exhaustive && total>128) throw std::invalid_argument("Total degree exceeds 128.");
-        support.push_back(e);
+        if (axis >= 0 && axis < n && (!axial[axis] || e[axis] < axial[axis]))
+            axial[axis] = e[axis];
+        support.push_back(std::move(e));
+    }
+    if (obj["operation"] == "trials")
+        return trial_supports(support, n);
+    if (std::any_of(axial.begin(), axial.end(), [](const Z& a) { return a != 0; })) {
+        support.erase(std::remove_if(support.begin(), support.end(), [&](const Ray& e) {
+            for (int j = 0; j < n; ++j) {
+                if (!axial[j] || e[j] < axial[j]) continue;
+                if (e[j] > axial[j]) return true;
+                // Equality on the axis still dominates a mixed monomial.
+                for (int k = 0; k < n; ++k)
+                    if (k != j && e[k] != 0) return true;
+                return false;
+            }
+            return false;
+        }), support.end());
     }
     std::sort(support.begin(),support.end());support.erase(std::unique(support.begin(),support.end()),support.end());
     Fan fan(n,exhaustive); fan.build(support); return fan.report();
@@ -314,3 +461,36 @@ int main() {
     Json::StreamWriterBuilder writer; writer["indentation"]="";
     std::cout<<Json::writeString(writer,output)<<"\n"; return rc;
 }
+#else
+} // namespace
+
+// Null means the isolated full fan engine must handle the input. Thread-local
+// storage holds this short result until the caller copies it.
+extern "C" const char* atlas_small_newton_fan(const char* bytes, bool trials) noexcept {
+    try {
+        std::istringstream input(bytes);
+        int n, count;
+        if (!(input >> n >> count) || n<2 || n>4 || count<1 || count>3) return nullptr;
+        Rays support(count,Ray(n));
+        for(auto& e:support) for(auto& x:e) {
+            int value;
+            if (!(input >> value) || value<0 || value>3) return nullptr;
+            x=value;
+        }
+        JsonValue result;
+        if (trials) {
+            result=trial_supports(support,n);
+        } else {
+            std::sort(support.begin(),support.end());
+            support.erase(std::unique(support.begin(),support.end()),support.end());
+            Fan fan(n,false);
+            fan.build_small(support);
+            result=fan.report();
+        }
+        Json::StreamWriterBuilder writer; writer["indentation"]="";
+        static thread_local std::string json;
+        json=Json::writeString(writer,result);
+        return json.c_str();
+    } catch (...) { return nullptr; }
+}
+#endif

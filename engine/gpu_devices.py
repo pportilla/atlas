@@ -55,7 +55,7 @@ def _probe_triton(index, device):
     try:
         import torch
         from triton.runtime import driver
-        from .triton_probe import square_modulo
+        from .triton_ir import launch_kernel
 
         kind, ordinal = device.split(":")
         with torch_device_context(device):
@@ -65,8 +65,8 @@ def _probe_triton(index, device):
                 return None
             name = getattr(torch, kind).get_device_name(int(ordinal))
             probe = torch.full((1,), 2_000_000_001, dtype=torch.int64, device=device)
-            square_modulo[(1,)](probe)
-            if probe.item() != pow(2_000_000_001, 2, 1_000_000_007):
+            launch_kernel("trace_probe", (), (1,), probe)
+            if probe.item() != 169:
                 return None
         arch = target.arch
         if isinstance(arch, dict):

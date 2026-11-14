@@ -21,6 +21,8 @@ from .chart_kernel import crossings_rows
 from .fan_geometry import split_cone
 from .monomial_atlas import _row, _same_locus, _unit
 from .monodromy_blowups import projective_complement_euler
+from .native_backend import smooth_projective_tangent
+from .point_geometry import support_profile
 from .polynomial import InputError, format_poly, parse_expression, sparse_row
 from .strata import InvalidChart, records
 
@@ -49,7 +51,7 @@ def _field(charts, base, raw, saved):
     if not isinstance(source, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", source):
         raise InputError("Invalid coefficient parameter.")
     terms = parse_expression(declared, (source,))
-    if type(degree) is not int or degree < 1 or max((e[0] for e in terms), default=-1) != degree:
+    if type(degree) is not int or degree < 1 or support_profile(terms)[1] != degree:
         raise InputError("The coefficient relation has the wrong degree.")
     relation = format_poly(terms, (name,))
     factors = native_library.affine_request(["factor", name, relation])
@@ -137,6 +139,7 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
     marked = (field["generator"],) if field else ()
     results, numbers = [], {}
     common = None
+    smooth_section = None
     for i, item in enumerate(charts):
         coords = tuple(item["coordinates"]) if saved else (*item["coordinates"], *marked)
         if (len(coords) != count_vars or len(set(coords)) != len(coords)
@@ -197,13 +200,21 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
         if numbers.setdefault("E1", (order, nu)) != (order, nu):
             raise InvalidChart("The radial orders disagree between point blowup charts.")
         numbers["strict"] = (1,1)
-        ambient_rows = [_row(g, coords) for g in ambient]
-        ideals = [(_row(c["ideal"][0], coords),) for c in components]
-        owned = [_row(g, coords) for g in (radial, *region)]
-        if crossings_rows(count_vars, n, ambient_rows, ideals, owned, ()):
-            if intrinsic:
-                return None
-            raise InvalidChart("Normal crossings fail on the owned point blowup chart.")
+        if smooth_section is None:
+            # On the exceptional divisor the verified strict pullback is
+            # the dehomogenized tangent form after the common linear change.
+            # Smoothness over Qbar survives this change on every marked
+            # sheet. A nonzero angular derivative gives transversality to
+            # the radial coordinate on every standard projective open.
+            smooth_section = smooth_projective_tangent(n, polynomial)
+        if not smooth_section:
+            ambient_rows = [_row(g, coords) for g in ambient]
+            ideals = [(_row(c["ideal"][0], coords),) for c in components]
+            owned = [_row(g, coords) for g in (radial, *region)]
+            if crossings_rows(count_vars, n, ambient_rows, ideals, owned, ()):
+                if intrinsic:
+                    return None
+                raise InvalidChart("Normal crossings fail on the owned point blowup chart.")
         if not saved:
             results.append(dict(coordinates=list(coords), ambient_ideal=ambient, components=components,
                                 fibre=mapping, region=region, removed=[], map=dict(zip(base, mapping)),

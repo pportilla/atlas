@@ -45,6 +45,42 @@ def run_prompt(source):
 
 
 class CliSessionTests(unittest.TestCase):
+    @unittest.skipIf(sys.version_info < (3, 14), "Eager help formatting applies to Python 3.14 and newer")
+    def test_resolve_does_not_prepare_terminal_help_while_parsing_a_job(self):
+        import argparse
+        from engine.resolve_cli import _ResolutionParser
+
+        with patch.object(argparse.HelpFormatter, "__init__", side_effect=AssertionError("formatted help")):
+            args = _ResolutionParser().parse_args(["x+y", "--vars", "x,y", "--quick", "--json"])
+        self.assertEqual((args.polynomial, args.vars, args.search, args.json), ("x+y", "x,y", "quick", True))
+
+    def test_resolve_command_uses_the_same_parser_and_skips_unrelated_imports(self):
+        from engine.app import make_parser, run_command
+        parser = make_parser()
+        for argv in (["resolve", "--help"], ["resolve", "x+y", "--vars", "x,y", "extra"],
+                     ["resolve", "x+y", "--vars", "x,y", "--quick", "--exhaustive"]):
+            with self.subTest(argv=argv):
+                out, err = io.StringIO(), io.StringIO()
+                with patch.object(sys, "stdout", out), patch.object(sys, "stderr", err), self.assertRaises(SystemExit) as stop:
+                    run_command(parser, argv)
+                direct = subprocess.run([str(ROOT / "atlas"), *argv], capture_output=True, text=True, timeout=10)
+                self.assertEqual((direct.returncode, direct.stdout, direct.stderr),
+                                 (stop.exception.code, out.getvalue(), err.getvalue()))
+
+        probe = dedent("""
+            import runpy, sys
+            class Guard:
+                def find_spec(self, name, path=None, target=None):
+                    if name in ("engine.algebra_cli", "http.server"):
+                        raise AssertionError(name)
+            sys.meta_path.insert(0, Guard())
+            sys.argv = ["atlas", "resolve", "--quick", "--vars", "x,y", "--json", "-x+y"]
+            runpy.run_path("atlas", run_name="__main__")
+        """)
+        direct = subprocess.run([sys.executable, "-c", probe], cwd=ROOT,
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+
     def test_standalone_script_roundtrips_large_decimals(self):
         env = os.environ.copy()
         env.pop("PYTHONINTMAXSTRDIGITS", None)

@@ -22,7 +22,7 @@ struct FanFraction {
 };
 }
 
-std::string fan_cover(std::istream& in) {
+std::string fan_cover(std::istream& in, bool emit_ownership) {
     long n, ray_count;
     if (!(in >> n >> ray_count) || n < 1 || n > 8 || ray_count < 0)
         throw std::invalid_argument("Invalid fan dimensions.");
@@ -64,6 +64,13 @@ std::string fan_cover(std::istream& in) {
             facet.erase(facet.begin()+i);
             boundary[facet] += (i % 2 ? -1 : 1) * fmpz_sgn(&determinant.v);
         }
+        if (!emit_ownership) {
+            // The verification uses maximal cone uniqueness, determinants,
+            // oriented facets and volume. Only the chart ownership output
+            // needs to enumerate the shared lower-dimensional faces.
+            seen.insert(std::move(sorted));
+            continue;
+        }
         // A face is shared with an earlier cone iff its sorted ray set has
         // already occurred. Its complement is the open overlap's unit set.
         std::vector<Face> faces(full+1);
@@ -94,6 +101,10 @@ std::string fan_cover(std::istream& in) {
         if (!on_boundary) return "invalid\n";
     }
     return result;
+}
+
+std::string fan_cover(std::istream& in) {
+    return fan_cover(in, true);
 }
 }
 extern "C" int atlas_fan_cover_abi() noexcept { return 1; }

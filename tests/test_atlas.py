@@ -9,7 +9,7 @@ from engine.newton_backend import resolve_newton
 from engine.monodromy import monodromy_zeta
 from engine.polynomial import InputError, parse
 from engine.resolve import resolve
-from engine.strata_reference import resolution_strata as reference_strata
+from tests.strata_oracle import resolution_strata as reference_strata
 from engine.topological import topological_zeta
 
 NAMES = ["x", "y", "z"]
@@ -98,7 +98,11 @@ class OneMachineForEveryEngine(unittest.TestCase):
     def test_sheared_fan_agrees_with_the_ordinary_blowup(self):
         text = "x^3+x*y^2+z^3"
         poly = parse(text, NAMES)
-        sheared = resolve_newton(poly, NAMES, "embedded")
+        # Exercise the sheared fan even when a different certified monomial
+        # modification can resolve the same equation in the original axes.
+        from unittest.mock import patch
+        with patch("engine.newton_trials.resolve_trials", return_value=None):
+            sheared = resolve_newton(poly, NAMES, "embedded")
         self.assertNotEqual(sp.Matrix(sheared["certificate"]["linear_map_to_input"]), sp.eye(3))
         sheared.update(variables=NAMES)
         ordinary = resolve({"variables": NAMES, "polynomial": text})

@@ -119,7 +119,7 @@ def render_welcome(columns, *, color, interactive):
     paragraph(contact)
     lines.append("")
     paragraph(GREETING, "1")
-    paragraph("Type help for commands or quit to leave." if interactive
+    paragraph("Type help for topics, help NAME for an example, or quit to leave." if interactive
               else "Run ./atlas --help for all commands.")
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"
 

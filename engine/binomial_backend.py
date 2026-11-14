@@ -1,7 +1,7 @@
 """Resolve a binomial by blowups of smooth coordinate strata."""
 from .binomial_complex import binomial_branch_equations, binomial_complex
 from .binomial_fan import build_binomial_fan
-from .binomial_kernel import pairings, primitive_character
+from .binomial_kernel import character, minimum_faces, pairings
 from .chart_batch import transform_atlas
 from .toric_backend import monomial
 from .polynomial import format_poly
@@ -13,8 +13,7 @@ def resolve_binomial(poly, variables, mode, compute=None):
     left, right = sorted(poly, reverse=True)
     if any(a and b for a, b in zip(left, right)):
         return None
-    delta = [a-b for a,b in zip(left,right)]
-    degree, direction = primitive_character(delta)
+    delta, degree, direction, coefficient = character(left, right, poly[left], poly[right])
 
     fan = build_binomial_fan([left, right], variables=variables)
     if fan is None:
@@ -22,8 +21,7 @@ def resolve_binomial(poly, variables, mode, compute=None):
     rays, cones = fan["rays"], fan["cones"]
     values = pairings(rays,(left,right))
     signs = tuple(v for v, in pairings(rays,(direction,))) if degree > 1 else ()
-    orders = [min(row) for row in values]
-    coefficient = -poly[right] / poly[left]
+    orders, _ = minimum_faces(values)
     dual, divisors = binomial_complex(rays,cones,delta,coefficient,mode,orders=orders)
     transforms,batch = transform_atlas([left,right], rays, cones, orders, values, compute)
     coords = [f"u{i+1}" for i in range(len(variables))]

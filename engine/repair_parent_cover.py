@@ -1,6 +1,6 @@
 """Certify the unrepaired parent cover from its maps and owned regions."""
 from functools import lru_cache
-from itertools import combinations
+from .binomial_kernel import run
 
 from .affine_kernel import frame_locus, sparse_terms
 from .blowup_ideal import radical_subset
@@ -55,20 +55,18 @@ def _parent_cover(parents):
         maps = tuple(f for _, f in chart.coordinates)
         if not (radical_subset(coords, maps, chart.fibre) and radical_subset(coords, chart.fibre, maps)):
             return False
-        for size in range(1, len(names)+1):
-            for face in combinations(range(len(names)), size):
-                rays = frozenset(cone[i] for i in face)
-                if not all(any(ray[j] for ray in rays) for j in range(len(names))):
-                    continue
-                owners.setdefault(rays, 0)
-                zeros = tuple(coords[i] for i in face)
-                units = tuple(v for v in coords if v not in zeros)
-                if any(not frame_locus(coords, zeros, (*units,g)) for g in chart.region):
-                    # A valid fan partition owns all of this orbit or none of it.
-                    if not frame_locus(coords, (*zeros,*chart.region), units):
-                        return False
-                    continue
-                owners[rays] += 1
+        for row in run(f"origin_orbits {len(names)}", *cone):
+            face = tuple(map(int, row.split()))
+            rays = frozenset(cone[i] for i in face)
+            owners.setdefault(rays, 0)
+            zeros = tuple(coords[i] for i in face)
+            units = tuple(v for v in coords if v not in zeros)
+            if any(not frame_locus(coords, zeros, (*units,g)) for g in chart.region):
+                # A valid fan partition owns all of this orbit or none of it.
+                if not frame_locus(coords, (*zeros,*chart.region), units):
+                    return False
+                continue
+            owners[rays] += 1
     return all(count == 1 for count in owners.values())
 
 

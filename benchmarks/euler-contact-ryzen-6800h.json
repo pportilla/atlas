@@ -1,0 +1,125 @@
+{
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "solvers": {
+    "Singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "Atlas": "819a59eec366c16fd4e829d4fc5870341142c01c"
+  },
+  "method": "Each solver starts in a new process for each input. Wall time includes process startup. Calculation CPU time excludes input parsing and library loading. Singular uses chern.lib::EulerAff with the trial number as the seed.",
+  "timeout_seconds": 15.0,
+  "cases": {
+    "quadratic_affine_fibres": [
+      "x,y",
+      "x*y^2+y+1",
+      0
+    ],
+    "contact_quadratic": [
+      "z,t,u,h",
+      "(2*(z*t-u^2)^6+3*z^6+5*t^6+7*u^6+1)*h^2-((z*t-u^2)^3+u^3+1)*h+1",
+      -622
+    ]
+  },
+  "runs": [
+    {
+      "trial": 1,
+      "case": "quadratic_affine_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.1002,
+      "calculation_cpu_ms": 1.775
+    },
+    {
+      "trial": 1,
+      "case": "quadratic_affine_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.0297,
+      "calculation_cpu_ms": 8.0
+    },
+    {
+      "trial": 1,
+      "case": "contact_quadratic",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -622,
+      "wall_seconds": 0.6035,
+      "calculation_cpu_ms": 535.818
+    },
+    {
+      "trial": 1,
+      "case": "contact_quadratic",
+      "solver": "Singular",
+      "status": "timeout",
+      "wall_seconds": 15.026
+    },
+    {
+      "trial": 2,
+      "case": "quadratic_affine_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.0265,
+      "calculation_cpu_ms": 8.0
+    },
+    {
+      "trial": 2,
+      "case": "quadratic_affine_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.0567,
+      "calculation_cpu_ms": 1.393
+    },
+    {
+      "trial": 2,
+      "case": "contact_quadratic",
+      "solver": "Singular",
+      "status": "timeout",
+      "wall_seconds": 15.025
+    },
+    {
+      "trial": 2,
+      "case": "contact_quadratic",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -622,
+      "wall_seconds": 0.5241,
+      "calculation_cpu_ms": 462.622
+    },
+    {
+      "trial": 3,
+      "case": "quadratic_affine_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.0623,
+      "calculation_cpu_ms": 1.36
+    },
+    {
+      "trial": 3,
+      "case": "quadratic_affine_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 0,
+      "wall_seconds": 0.0284,
+      "calculation_cpu_ms": 7.0
+    },
+    {
+      "trial": 3,
+      "case": "contact_quadratic",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -622,
+      "wall_seconds": 0.5203,
+      "calculation_cpu_ms": 461.601
+    },
+    {
+      "trial": 3,
+      "case": "contact_quadratic",
+      "solver": "Singular",
+      "status": "timeout",
+      "wall_seconds": 15.026
+    }
+  ]
+}

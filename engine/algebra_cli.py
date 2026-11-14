@@ -9,7 +9,7 @@ from .polynomial import integer_text
 from .series_display import format_hilbert_series
 
 
-_DESCRIPTIONS = {
+OPERATION_DESCRIPTIONS = {
     "gcd": "compute the monic greatest common divisor of two polynomials",
     "resultant": "compute the resultant of two polynomials in one variable over QQ",
     "factor": "factor a polynomial over QQ into monic irreducible factors",
@@ -19,6 +19,11 @@ _DESCRIPTIONS = {
     "membership": "test whether a polynomial belongs to an ideal",
     "eliminate": "eliminate variables from an ideal",
     "radical": "compute the radical of a polynomial ideal over QQ",
+    "ideal-power": "compute an ordinary power of a polynomial ideal over QQ",
+    "symbolic-power": "compute a symbolic power of a prime or radical ideal over QQ",
+    "localization": "localize an ideal at a prime and optionally test a fraction",
+    "normalization": "normalize an affine algebra over QQ and return its component maps",
+    "primary-decomposition": "compute primary components and associated primes of an ideal over QQ",
     "intersection": "intersect two ideals",
     "quotient": "compute the quotient of two ideals",
     "saturation": "saturate an ideal by a polynomial",
@@ -28,6 +33,8 @@ _DESCRIPTIONS = {
     "tangent-cone": "compute the homogeneous ideal of the tangent cone at a rational point",
     "zariski-tangent-space": "compute the linear equations and a basis of tangent directions at a rational point",
     "embedding-dimension": "compute the dimension of the Zariski tangent space at a rational point",
+    "local-dimension": "compute the Krull dimension of the local ring at a rational point",
+    "local-smoothness": "test smoothness at a rational point and show its local and embedding dimensions",
     "tangent-cone-hilbert-series": "compute the graded Hilbert series of the tangent cone at a rational point",
     "hilbert-samuel-function": "compute local quotient lengths and graded dimensions at the requested degrees",
     "hilbert-samuel-multiplicity": "compute the Hilbert–Samuel multiplicity of the local quotient",
@@ -48,7 +55,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--poly", "--other-poly", "--point", "--degrees")
+                if (tokens and tokens[-1] in ("--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -67,8 +74,11 @@ def register_parser(subparsers):
 
     command = subparsers.add_parser("algebra", help="compute with polynomials and ideals over QQ")
     operations = command.add_subparsers(dest="operation", required=True, parser_class=_OperandParser)
+    command.command_names = operations.choices
     for name, keys in OPERATION_OPERANDS.items():
-        parser = operations.add_parser(name, help=_DESCRIPTIONS[name], description=_DESCRIPTIONS[name])
+        parser = operations.add_parser(name, aliases=["localize"] if name == "localization" else [],
+                                       help=OPERATION_DESCRIPTIONS[name], description=OPERATION_DESCRIPTIONS[name])
+        parser.set_defaults(operation=name)
         parser.add_argument("--vars", type=_comma_list, required=True, metavar="x,y",
                             help="ordered variables, highest priority first")
         parser.add_argument("--field", metavar="QQ", help="coefficient field (default: QQ)")
@@ -78,12 +88,19 @@ def register_parser(subparsers):
         if "ideal" in keys:
             parser.add_argument("--gen", dest="ideal", action="append", default=[], metavar="POLY",
                                 help="ideal generator (repeatable; omit for the zero ideal)")
+        if "exponent" in keys:
+            parser.add_argument("--exponent", required=True, metavar="N", help="nonnegative integer exponent")
         if "polynomial" in keys:
             parser.add_argument("--poly", dest="polynomial", metavar="POLY", required=True,
                                 help="polynomial operand")
         if "other_polynomial" in keys:
             parser.add_argument("--other-poly", dest="other_polynomial", metavar="POLY", required=True,
                                 help="second polynomial operand")
+        if "prime" in keys:
+            parser.add_argument("--prime", action="append", default=[], metavar="POLY",
+                                help="generator of the prime ideal (repeatable; omit for zero)")
+            parser.add_argument("--numerator", metavar="POLY", help="fraction numerator (default: 1 if queried)")
+            parser.add_argument("--denominator", metavar="POLY", help="denominator outside the prime (default: 1)")
         if "other_ideal" in keys:
             parser.add_argument("--other-gen", dest="other_ideal", action="append", default=[],
                                 metavar="POLY", help="second ideal generator (repeatable; omit for zero)")
@@ -115,6 +132,31 @@ def _show_direction_equations(result, equations, label, empty):
     print(label, ", ".join(directions) or empty)
 
 
+def localization_lines(result):
+    yield "Prime ideal: (" + (", ".join(result["prime"]) or "0") + ")"
+    yield "Contracted ideal: (" + (", ".join(result["generators"]) or "0") + ")"
+    if "element" in result:
+        element = result["element"]
+        yield f"Fraction: ({element['numerator']})/({element['denominator']})"
+        yield "In the localized ideal: " + ("yes" if element["member"] else "no")
+        yield "Unit in the local ring: " + ("yes" if element["unit"] else "no")
+
+
+def normalization_lines(result):
+    if not result["input_reduced"]:
+        yield "The input has nilpotents. Showing the normalization of its reduction."
+    if not result["components"]:
+        yield "The zero algebra has no components."
+    for index, component in enumerate(result["components"], start=1):
+        yield f"Component {index}, prime ideal (" + (", ".join(component["prime"]) or "0") + ")"
+        target = component["ring"]["variables"]
+        yield "Normalized algebra: QQ[" + ", ".join(target) + "]/(" + (", ".join(component["relations"]) or "0") + ")"
+        for var, image in zip(result["ring"]["variables"], component["images"]):
+            yield f"  {var} -> {image}"
+        for var, fraction in zip(target, component["fractions"]):
+            yield f"  {var} = ({fraction['numerator']})/({fraction['denominator']})"
+
+
 def _show(record):
     result = record["result"]
     ring = result["ring"]
@@ -141,8 +183,24 @@ def _show(record):
         print("Ambient dimension:", result["ambient_dimension"])
         print("Jacobian rank:", result["jacobian_rank"])
         print("Embedding dimension:", result["dimension"] if space else result["value"])
+    elif record["operation"] in ("local-dimension", "local-smoothness"):
+        print("Local dimension:", result["local_dimension"])
+        if record["operation"] == "local-smoothness":
+            print("Embedding dimension:", result["embedding_dimension"])
+            print("Jacobian rank:", result["jacobian_rank"])
+            print("Smooth at point:", "yes" if result["value"] else "no")
     elif result["type"] in ("basis", "ideal", "local-standard-basis"):
         print("Generators:", ", ".join(result["generators"]) or "(zero ideal)")
+    elif result["type"] == "localization":
+        print("\n".join(localization_lines(result)))
+    elif result["type"] == "normalization":
+        print("\n".join(normalization_lines(result)))
+    elif result["type"] == "primary-decomposition":
+        if not result["components"]:
+            print("The unit ideal has no primary components.")
+        for index, component in enumerate(result["components"], start=1):
+            print(f"Primary component {index}: (" + (", ".join(component["primary"]) or "0") + ")")
+            print("Associated prime: (" + (", ".join(component["prime"]) or "0") + ")")
     elif result["type"] == "local-normal-form":
         print("Reduction:", result["reduction"])
         print("Remainder:", result["remainder"])
@@ -204,7 +262,7 @@ def run(args):
         "ring": ring,
         "operands": {key: getattr(args, key) for key in OPERATION_OPERANDS[args.operation]},
     }
-    for key in ("point", "degrees"):
+    for key in ("point", "degrees", "numerator", "denominator"):
         value = getattr(args, key, None)
         if value is not None:
             request["operands"][key] = value

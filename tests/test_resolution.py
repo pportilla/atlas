@@ -30,6 +30,31 @@ class ParserTests(unittest.TestCase):
 
 
 class CurveTests(unittest.TestCase):
+    def test_mixed_conjugate_families_keep_their_flint_indices(self):
+        from engine.plane_backend import ordered_roots
+
+        roots = ordered_roots("(2*T-3)*(T^3-2)*(T^2+1)^2*(T^2-2)")
+        sqrt2 = "PolynomialRootIndexed(List(-2, 0, 1), {})"
+        cbrt2 = "PolynomialRootIndexed(List(-2, 0, 0, 1), {})"
+        imaginary = "PolynomialRootIndexed(List(1, 0, 1), {})"
+        self.assertEqual(roots, (sqrt2.format(2), cbrt2.format(3), cbrt2.format(2),
+                                 imaginary.format(2), imaginary.format(1), cbrt2.format(1),
+                                 sqrt2.format(1), "3/2"))
+
+    def test_composite_binomial_tangents_with_repeated_zero(self):
+        from engine.plane_backend import ordered_roots
+
+        cyclotomic12 = "PolynomialRootIndexed(List(1, 0, -1, 0, 1), {})"
+        imaginary = "PolynomialRootIndexed(List(1, 0, 1), {})"
+        self.assertEqual(ordered_roots("3*T^8+3*T^2"),
+                         (cyclotomic12.format(4), cyclotomic12.format(3), imaginary.format(2),
+                          "0", imaginary.format(1), cyclotomic12.format(2), cyclotomic12.format(1)))
+        cyclotomic3 = "PolynomialRootIndexed(List(1, 1, 1), {})"
+        cyclotomic6 = "PolynomialRootIndexed(List(1, -1, 1), {})"
+        self.assertEqual(ordered_roots("3*T^8-3*T^2"),
+                         ("-1", cyclotomic3.format(2), cyclotomic3.format(1), "0",
+                          cyclotomic6.format(2), cyclotomic6.format(1), "1"))
+
     def test_cusp_and_maps(self):
         for mode in ['embedded','intrinsic']:
             f='beta^2-alpha^3';result=plane(f,mode,['alpha','beta'])
@@ -86,22 +111,17 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(len(q['charts']),4)
         with self.assertRaises(InputError):resolve({'compute':'tpu'})
 
-    def test_unresolved_is_not_certified(self):
-        r=resolve({'polynomial':'x^2*y^2+z^4+w^5','variables':list('xyzw'),'search':'quick'})
-        self.assertEqual(r['status'],'inconclusive')
-        self.assertTrue(r['can_search'])
-        self.assertEqual(r['dual_complex']['status'],'unavailable')
-        self.assertEqual(r['charts'],[])
-
     def test_search_offer_after_parser_budget(self):
         data={'variables':['x','y'],'polynomial':'x+y^160'}
         limited=resolve(dict(data,search='quick'))
         self.assertEqual(limited['status'],'inconclusive')
         self.assertTrue(limited['can_search'])
+        self.assertEqual(limited['dual_complex']['status'],'unavailable')
+        self.assertEqual(limited['charts'],[])
         self.assertEqual(resolve(data)['status'],'resolved')
 
     def test_cli_exit_codes(self):
-        for src,vs,code in [('y^2-x^3','x,y',0),('x^2*y^2+z^4+w^5','x,y,z,w',3),('1+x','x,y',2)]:
+        for src,vs,code in [('y^2-x^3','x,y',0),('x+y^160','x,y',3),('1+x','x,y',2)]:
             flags=['--quick'] if code==3 else []
             result=subprocess.run([str(ROOT/'atlas'),'resolve',src,'--vars',vs,'--json',*flags],capture_output=True,text=True)
             self.assertEqual(result.returncode,code,result.stderr)

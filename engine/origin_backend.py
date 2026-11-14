@@ -54,25 +54,21 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
     from . import native_library
-    from .atlas import to_json
-    from .local_blowups import GiveUp, acampo_over, cells, dual_cells
-    from .strata import records
-    if native_library._MODE == "native" and native_library._kernel() is not None:
+    from .local_blowups import GiveUp, acampo_over
+    if native_library._MODE == "native":
         from . import native_polynomial
         symbols = tuple(map(native_polynomial.Symbol, names))
         polynomial = native_polynomial.from_terms
     else:
-        import sympy as sp
+        from .reference import sp
         from .atlas import _polynomial
         symbols = tuple(map(sp.Symbol, names))
         polynomial = lambda ring, terms: _polynomial(terms, ring)
     equation = polynomial(symbols, poly)
     if tangent_only:
-        from .repeated_tangent import _power_support
-        degree = min(map(sum, poly))
-        cone = {e: c for e, c in poly.items() if sum(e) == degree}
+        from .repeated_tangent import tangent_power_support
         try:
-            _power_support(symbols, polynomial(symbols, cone))
+            tangent_power_support(symbols, equation)
         except GiveUp:
             return None
     # The rule is for a reduced equation: a repeated factor is left to the
@@ -91,6 +87,15 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
                                                     count_strata=not defer_outputs)
     except GiveUp:
         return None
+    return _record(names, charts, centres, data, strata, defer_outputs=defer_outputs)
+
+
+def _record(names, charts, centres, data, strata, *, defer_outputs):
+    """Serialize certified charts from any of the successive smooth-centre rules."""
+    from .atlas import to_json
+    from .local_blowups import GiveUp, cells, dual_cells
+    from .strata import records
+
     if not centres:
         return None  # normal crossings at the origin already: other engines describe that case
     rows, listed = records({"data": data, "strata": strata})
@@ -98,7 +103,7 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     found, reason = None, "Incidence is computed from the final charts."
     if not defer_outputs:
         try:
-            found, reason = dual_cells(cells(charts, len(symbols)), births.index)
+            found, reason = dual_cells(cells(charts, len(names)), births.index)
         except GiveUp as error:
             reason = str(error)
     final = []

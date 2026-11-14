@@ -1,15 +1,21 @@
 #pragma once
 
 #include <flint/fmpq_mpoly_factor.h>
+#include "local_basis.hpp"
 
 #include <string>
 #include <vector>
 
 namespace atlas {
 
+std::vector<std::pair<local::Polynomial, mpz_class>> marked_factors(
+    const local::Polynomial& f, const local::Polynomial& modulus, size_t width);
+
 // Return monic factors in the order of ctx and the corresponding rational unit.
 const char* ordered_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t polynomial,
                             const fmpq_mpoly_ctx_t ctx);
+
+void rational_squarefree_part(fmpq_mpoly_t out, const fmpq_mpoly_t f, const fmpq_mpoly_ctx_t ctx);
 
 // A marked field uses one additional, last variable. Its rational lex basis can
 // be requested lazily when the divisor really needs arithmetic modulo the field.

@@ -1,0 +1,2133 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "affinity": [
+    5
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "repeats": 3,
+  "units": "wall-clock milliseconds",
+  "scope": "Warm Atlas affine_request including input row decoding and result serialization, versus warmed Singular primdecGTZ and primdecSY in a loaded ring, excluding source parsing, output printing and process startup. One discarded warm-up before each sample. No cached answers. Engine order rotates on each trial. Singular seeds 17 + trial number.",
+  "cases": [
+    {
+      "name": "principal",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(x-y)^4*(x^2+y^2)^2*(2*x+1)"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.213674,
+          0.129805,
+          0.127691
+        ],
+        "median_ms": 0.129805
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          0.197,
+          0.178,
+          0.177
+        ],
+        "median_ms": 0.178
+      },
+      "primdecSY": {
+        "samples_ms": [
+          0.188,
+          0.176,
+          0.179
+        ],
+        "median_ms": 0.179
+      },
+      "speedup_vs_faster_reference": 1.371287700781942,
+      "wins_vs_both": 2,
+      "worst_paired_speedup": 0.8798449975195859,
+      "verified_components": 3,
+      "result_sha256": "a382ca4340d37472bbe11a74b8863925fe2f6a866c672f295ec215059a052f7e",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            146.433732,
+            163.868268,
+            157.679155
+          ],
+          "median_ms": 157.679155
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            18.931937,
+            18.886191,
+            18.884728
+          ],
+          "median_ms": 18.886191
+        },
+        "primdecSY": {
+          "samples_ms": [
+            18.456298,
+            19.710219,
+            18.768578
+          ],
+          "median_ms": 18.768578
+        },
+        "speedup_vs_faster_reference": 0.11903017871956506,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.1152522769081809
+      }
+    },
+    {
+      "name": "monomial_embedded",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x^4*y",
+        "x^2*y^3",
+        "y^2*z^3"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.037561,
+          0.034916,
+          0.041178
+        ],
+        "median_ms": 0.037561
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          15.714,
+          15.222,
+          14.468
+        ],
+        "median_ms": 15.222
+      },
+      "primdecSY": {
+        "samples_ms": [
+          12.452,
+          13.504,
+          13.808
+        ],
+        "median_ms": 13.504
+      },
+      "speedup_vs_faster_reference": 359.52184446633476,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 331.51407044540883,
+      "verified_components": 4,
+      "result_sha256": "be40b7448fc2dbf5448603ebd7b4281a2f8c2151c8dd1a6cf7da80ee09951e39",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            143.532266,
+            150.484061,
+            134.662465
+          ],
+          "median_ms": 143.532266
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            34.776557,
+            34.872398,
+            32.332586
+          ],
+          "median_ms": 34.776557
+        },
+        "primdecSY": {
+          "samples_ms": [
+            34.092774,
+            34.72008,
+            32.806222
+          ],
+          "median_ms": 34.092774
+        },
+        "speedup_vs_faster_reference": 0.23752689865566534,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.23072264111745366
+      }
+    },
+    {
+      "name": "monomial_primary",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x^3",
+        "y^3",
+        "z^2",
+        "x*y^2",
+        "x^2*z"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.038933,
+          0.027122,
+          0.02592
+        ],
+        "median_ms": 0.027122
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          0.494,
+          0.501,
+          0.482
+        ],
+        "median_ms": 0.494
+      },
+      "primdecSY": {
+        "samples_ms": [
+          1.234,
+          1.199,
+          1.23
+        ],
+        "median_ms": 1.23
+      },
+      "speedup_vs_faster_reference": 18.213996017992773,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 12.688464798499986,
+      "verified_components": 1,
+      "result_sha256": "e16200febb923cf91ab4d4c99d7ef307825e7ff9604f0f217104aa017cfa6c8e",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            142.769113,
+            146.583204,
+            135.394849
+          ],
+          "median_ms": 142.769113
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            19.279154,
+            19.133247,
+            18.341761
+          ],
+          "median_ms": 19.133247
+        },
+        "primdecSY": {
+          "samples_ms": [
+            19.994646,
+            20.251042,
+            19.930395
+          ],
+          "median_ms": 19.994646
+        },
+        "speedup_vs_faster_reference": 0.1340153104404312,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.13052823569063207
+      }
+    },
+    {
+      "name": "singular_manual",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(z^2+1)*(z^3+2)^2",
+        "y-z^2"
+      ],
+      "order": "lex",
+      "atlas": {
+        "samples_ms": [
+          0.238101,
+          0.230045,
+          0.224835
+        ],
+        "median_ms": 0.230045
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          4.35,
+          4.366,
+          4.396
+        ],
+        "median_ms": 4.366
+      },
+      "primdecSY": {
+        "samples_ms": [
+          5.968,
+          5.94,
+          6.006
+        ],
+        "median_ms": 5.968
+      },
+      "speedup_vs_faster_reference": 18.97889543350214,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 18.26955787669938,
+      "verified_components": 2,
+      "result_sha256": "900aa3ab7eb869a6b48d76f35f3b98079c24c094b768105e6ae3441855004667",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            147.212825,
+            138.143166,
+            146.769096
+          ],
+          "median_ms": 146.769096
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            25.050727,
+            23.657101,
+            25.489065
+          ],
+          "median_ms": 25.050727
+        },
+        "primdecSY": {
+          "samples_ms": [
+            26.216932,
+            25.1107,
+            25.801035
+          ],
+          "median_ms": 25.801035
+        },
+        "speedup_vs_faster_reference": 0.17068121070937167,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.17016674328476475
+      }
+    },
+    {
+      "name": "finite_quadratic",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "((x+y)^2+1)^2*((x+y)-1)",
+        "(y-2*x)^2"
+      ],
+      "order": "lex",
+      "atlas": {
+        "samples_ms": [
+          0.574446,
+          0.583634,
+          0.584325
+        ],
+        "median_ms": 0.583634
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          1.937,
+          1.784,
+          1.773
+        ],
+        "median_ms": 1.784
+      },
+      "primdecSY": {
+        "samples_ms": [
+          4.916,
+          4.802,
+          4.922
+        ],
+        "median_ms": 4.916
+      },
+      "speedup_vs_faster_reference": 3.0567101985148226,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 3.0342703118983443,
+      "verified_components": 2,
+      "result_sha256": "13fd8ee4500cdd01d7e00ebf0d6f67b4a5a5fb881b80085174477017d8d85b5a",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            158.281294,
+            147.898161,
+            140.682657
+          ],
+          "median_ms": 147.898161
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            21.800882,
+            22.379356,
+            20.312017
+          ],
+          "median_ms": 21.800882
+        },
+        "primdecSY": {
+          "samples_ms": [
+            26.076065,
+            25.666532,
+            24.347196
+          ],
+          "median_ms": 25.666532
+        },
+        "speedup_vs_faster_reference": 0.1474046861204718,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.137735050359141
+      }
+    },
+    {
+      "name": "mixed_line_point",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^2*(x-1)",
+        "x^2*(y-1)^2"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.387332,
+          0.382683,
+          0.447556
+        ],
+        "median_ms": 0.387332
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          6.336,
+          6.506,
+          6.472
+        ],
+        "median_ms": 6.472
+      },
+      "primdecSY": {
+        "samples_ms": [
+          3.606,
+          3.614,
+          3.682
+        ],
+        "median_ms": 3.614
+      },
+      "speedup_vs_faster_reference": 9.330496834756746,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 8.226903448953873,
+      "verified_components": 2,
+      "result_sha256": "5ae8d47544d871619638a4b532057de8aec9360c0752ab5db597de03662ab9ce",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            149.967393,
+            143.28563,
+            140.55201
+          ],
+          "median_ms": 143.28563
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            25.705545,
+            25.371984,
+            25.190411
+          ],
+          "median_ms": 25.371984
+        },
+        "primdecSY": {
+          "samples_ms": [
+            22.460088,
+            22.55622,
+            24.558136
+          ],
+          "median_ms": 22.55622
+        },
+        "speedup_vs_faster_reference": 0.1574213687722907,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.14976647623660433
+      }
+    },
+    {
+      "name": "embedded_curve",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "x*z+y^2"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.194227,
+          0.187485,
+          0.186723
+        ],
+        "median_ms": 0.187485
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          6.803,
+          6.778,
+          6.778
+        ],
+        "median_ms": 6.778
+      },
+      "primdecSY": {
+        "samples_ms": [
+          4.531,
+          4.542,
+          4.529
+        ],
+        "median_ms": 4.531
+      },
+      "speedup_vs_faster_reference": 24.167266714670504,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 23.328373501109525,
+      "verified_components": 2,
+      "result_sha256": "7de175d17b53002be90b63c9eccef0b410da5ea1fb44fbbbd00930b216021716",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            133.370041,
+            134.190192,
+            138.867375
+          ],
+          "median_ms": 134.190192
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            29.901739,
+            25.848706,
+            28.538652
+          ],
+          "median_ms": 28.538652
+        },
+        "primdecSY": {
+          "samples_ms": [
+            23.791667,
+            24.749888,
+            26.93521
+          ],
+          "median_ms": 24.749888
+        },
+        "speedup_vs_faster_reference": 0.18443887463846836,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.17838839083808936
+      }
+    },
+    {
+      "name": "exceptional_fiber",
+      "variables": [
+        "t",
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(t)*(t*x-1)",
+        "(t)*((y-t^2)^2)",
+        "(y)*(t*x-1)",
+        "(y)*((y-t^2)^2)",
+        "(x^2+1)*(t*x-1)",
+        "(x^2+1)*((y-t^2)^2)"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          0.71361,
+          0.469638,
+          0.464589
+        ],
+        "median_ms": 0.469638
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          7.593,
+          7.252,
+          7.666
+        ],
+        "median_ms": 7.593
+      },
+      "primdecSY": {
+        "samples_ms": [
+          7.356,
+          5.794,
+          5.785
+        ],
+        "median_ms": 5.794
+      },
+      "speedup_vs_faster_reference": 12.337161813992905,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 10.308151511329719,
+      "verified_components": 2,
+      "result_sha256": "288a5a7e06fda3f2bdc90ed3f81ce2f58aa93204d17c8e2a4fdd9d6ef9494a8f",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            149.795308,
+            143.94189,
+            148.773416
+          ],
+          "median_ms": 148.773416
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            26.82404,
+            27.558558,
+            27.607792
+          ],
+          "median_ms": 27.558558
+        },
+        "primdecSY": {
+          "samples_ms": [
+            25.569779,
+            25.190752,
+            25.920952
+          ],
+          "median_ms": 25.569779
+        },
+        "speedup_vs_faster_reference": 0.1718706183368136,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.1706981302778856
+      }
+    },
+    {
+      "name": "katsura_3",
+      "variables": [
+        "u0",
+        "u1",
+        "u2",
+        "u3"
+      ],
+      "generators": [
+        "u0^2+2*u1^2+2*u2^2+2*u3^2-u0",
+        "2*u0*u1+2*u1*u2+2*u2*u3-u1",
+        "2*u0*u2+u1^2+2*u1*u3-u2",
+        "u0+2*u1+2*u2+2*u3-1"
+      ],
+      "order": "grevlex",
+      "atlas": {
+        "samples_ms": [
+          1.303875,
+          1.020369,
+          1.127082
+        ],
+        "median_ms": 1.127082
+      },
+      "primdecGTZ": {
+        "samples_ms": [
+          1.997,
+          1.977,
+          1.938
+        ],
+        "median_ms": 1.977
+      },
+      "primdecSY": {
+        "samples_ms": [
+          11.472,
+          11.659,
+          11.526
+        ],
+        "median_ms": 11.526
+      },
+      "speedup_vs_faster_reference": 1.7540871028017484,
+      "wins_vs_both": 3,
+      "worst_paired_speedup": 1.5315885341769726,
+      "verified_components": 3,
+      "result_sha256": "660a54c01b851c84de83fbd89189b1eeac91b33c80d9919b079c65e4b1bc04ea",
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            137.977212,
+            148.497875,
+            136.161759
+          ],
+          "median_ms": 137.977212
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            20.660045,
+            20.781454,
+            20.649695
+          ],
+          "median_ms": 20.660045
+        },
+        "primdecSY": {
+          "samples_ms": [
+            30.54207,
+            31.846166,
+            33.476779
+          ],
+          "median_ms": 31.846166
+        },
+        "speedup_vs_faster_reference": 0.14973519685265127,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.13994445375060083
+      }
+    }
+  ],
+  "cold_scope": "Fresh atlas CLI/worker returning full JSON, versus fresh Singular interpreter including primdec.lib loading, calculation and printing its complete list. File caches warm; full output captured in both cases. Output formats differ.",
+  "cold_repeats": 3,
+  "atlas_command": "python3 atlas",
+  "atlas_library_sha256": "ad88a101620cb96546eff66b12e47aa0a55bb9e3128ed5ffa522d85c17b59ded",
+  "configuration": "Initial native implementation, before polynomial graph elimination, direct FLINT factorization, and native CLI startup optimizations.",
+  "post_baseline_holdouts": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "cpu_affinity": 2,
+    "timeout_seconds": 30.0,
+    "atlas_library_sha256": "ad88a101620cb96546eff66b12e47aa0a55bb9e3128ed5ffa522d85c17b59ded",
+    "cases": [
+      {
+        "name": "common_factor_holdout",
+        "variables": [
+          "a",
+          "b",
+          "c"
+        ],
+        "generators": [
+          "((a+2*b)^2+(b+3*a)^2)*((a+2*b)^2+2)",
+          "((a+2*b)^2+(b+3*a)^2)*((c+2*b+3)-(b+3*a)^2)^2"
+        ],
+        "order": "lex",
+        "status": "timeout",
+        "elapsed_ms": 30069.060795
+      },
+      {
+        "name": "comaximal_product_holdout",
+        "variables": [
+          "a",
+          "b",
+          "c"
+        ],
+        "generators": [
+          "((a+2*b+1)^3)*((a+2*b+1)^2+3)",
+          "((a+2*b+1)^3)*(((c+3*a+2)-(b+a+1)^2)^2)",
+          "((b+a+1)^2)*((a+2*b+1)^2+3)",
+          "((b+a+1)^2)*(((c+3*a+2)-(b+a+1)^2)^2)"
+        ],
+        "order": "grevlex",
+        "status": "completed",
+        "elapsed_ms": 2278.146026,
+        "components": 2
+      }
+    ],
+    "scope": "Fresh Python native call with a hard 30-second timeout, including process startup, input parsing, and result serialization."
+  },
+  "exploratory_stress": {
+    "method": "One exploratory native affine call including parsing, and one fresh Singular SY command. Unlike the paired benchmark, these scopes differ. The two-second outer command timeout also includes Python startup. CPU 10. Source generation: stress_cases(), seed 12. These measurements preceded both common-factor and comaximal splitting.",
+    "cases": [
+      {
+        "name": "stress_0",
+        "atlas_elapsed_ms": 6.7545719793997705,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 48.45340800238773
+      },
+      {
+        "name": "stress_1",
+        "atlas_elapsed_ms": 193.50894301896915,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 106.73055000370368
+      },
+      {
+        "name": "stress_2",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 108.83088101400062
+      },
+      {
+        "name": "stress_3",
+        "atlas_elapsed_ms": 25.171875982778147,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 73.96905298810452
+      },
+      {
+        "name": "stress_4",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 100.5612849839963
+      },
+      {
+        "name": "stress_5",
+        "atlas_elapsed_ms": 166.1704609869048,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 78.38386102230288
+      },
+      {
+        "name": "stress_6",
+        "atlas_elapsed_ms": 10.833174019353464,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 56.61395800416358
+      },
+      {
+        "name": "stress_7",
+        "atlas_elapsed_ms": 153.52200501365587,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 87.52706900122575
+      },
+      {
+        "name": "stress_8",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 102.36200000508688
+      },
+      {
+        "name": "stress_9",
+        "atlas_elapsed_ms": 21.892615011893213,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 67.39848901634105
+      },
+      {
+        "name": "stress_10",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 110.32051799702458
+      },
+      {
+        "name": "stress_11",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 85.1160699967295
+      },
+      {
+        "name": "stress_12",
+        "atlas_elapsed_ms": 6.957856006920338,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 42.8538300038781
+      },
+      {
+        "name": "stress_13",
+        "atlas_elapsed_ms": 40.44591699494049,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 65.12985000154004
+      },
+      {
+        "name": "stress_14",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 78.27008599997498
+      },
+      {
+        "name": "stress_15",
+        "atlas_elapsed_ms": 12.623679009266198,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 56.22558298637159
+      },
+      {
+        "name": "stress_16",
+        "atlas_elapsed_ms": 887.190219014883,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 79.78417800040916
+      },
+      {
+        "name": "stress_17",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 73.32702897838317
+      },
+      {
+        "name": "stress_18",
+        "atlas_elapsed_ms": 6.514247012091801,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 41.99902300024405
+      },
+      {
+        "name": "stress_19",
+        "atlas_elapsed_ms": 20.108801982132718,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 59.28805400617421
+      },
+      {
+        "name": "stress_20",
+        "atlas_elapsed_ms": null,
+        "atlas_timed_out": true,
+        "singular_sy_elapsed_ms": 95.87714800727554
+      },
+      {
+        "name": "stress_21",
+        "atlas_elapsed_ms": 7.880260003730655,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 55.63538701971993
+      },
+      {
+        "name": "stress_22",
+        "atlas_elapsed_ms": 147.58262498071417,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 65.78231399180368
+      },
+      {
+        "name": "stress_23",
+        "atlas_elapsed_ms": 385.9242989856284,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 60.659978014882654
+      },
+      {
+        "name": "stress_24",
+        "atlas_elapsed_ms": 6.3796829781495035,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 40.365694992942736
+      },
+      {
+        "name": "stress_25",
+        "atlas_elapsed_ms": 71.81535099516623,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 59.353407996241
+      },
+      {
+        "name": "stress_26",
+        "atlas_elapsed_ms": 55.49990100553259,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 63.17229798878543
+      },
+      {
+        "name": "stress_27",
+        "atlas_elapsed_ms": 11.361873999703676,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 58.553084993036464
+      },
+      {
+        "name": "stress_28",
+        "atlas_elapsed_ms": 45.12473297654651,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 64.81748897931539
+      },
+      {
+        "name": "stress_29",
+        "atlas_elapsed_ms": 94.34218500973657,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 80.22722598980181
+      },
+      {
+        "name": "stress_30",
+        "atlas_elapsed_ms": 10.708228015573695,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 39.941762981470674
+      },
+      {
+        "name": "stress_31",
+        "atlas_elapsed_ms": 176.31125601474196,
+        "atlas_timed_out": false,
+        "singular_sy_elapsed_ms": 79.35012801317498
+      }
+    ]
+  },
+  "after_graph_gcd_crt": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "affinity": [
+      5
+    ],
+    "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "repeats": 7,
+    "units": "wall-clock milliseconds",
+    "scope": "Warm Atlas affine_request including input row decoding and result serialization, versus warmed Singular primdecGTZ and primdecSY in a loaded ring, excluding source parsing, output printing and process startup. One discarded warm-up before each sample. No cached answers. Engine order rotates on each trial. Singular seeds 17 + trial number.",
+    "cases": [
+      {
+        "name": "principal",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "generators": [
+          "(x-y)^4*(x^2+y^2)^2*(2*x+1)"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.103666,
+            0.088297,
+            0.087896,
+            0.095831,
+            0.088788,
+            0.092034,
+            0.090973
+          ],
+          "median_ms": 0.090973
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            0.186,
+            0.181,
+            0.186,
+            0.231,
+            0.186,
+            0.212,
+            0.191
+          ],
+          "median_ms": 0.186
+        },
+        "primdecSY": {
+          "samples_ms": [
+            0.198,
+            0.217,
+            0.193,
+            0.203,
+            0.188,
+            0.19,
+            0.233
+          ],
+          "median_ms": 0.198
+        },
+        "speedup_vs_faster_reference": 2.0445626724412738,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 1.7942237570659618,
+        "verified_components": 3,
+        "result_sha256": "a382ca4340d37472bbe11a74b8863925fe2f6a866c672f295ec215059a052f7e",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.691351,
+              5.883155,
+              5.51598,
+              6.002059,
+              5.132224,
+              5.197668,
+              5.796269
+            ],
+            "median_ms": 5.691351
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              19.675853,
+              19.261891,
+              19.511523,
+              18.897973,
+              19.06039,
+              19.143457,
+              19.105656
+            ],
+            "median_ms": 19.143457
+          },
+          "primdecSY": {
+            "samples_ms": [
+              19.728564,
+              19.408448,
+              18.600931,
+              18.531229,
+              18.497055,
+              18.204441,
+              18.576916
+            ],
+            "median_ms": 18.576916
+          },
+          "speedup_vs_faster_reference": 3.264060853038233,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 3.0874786469110016
+        }
+      },
+      {
+        "name": "monomial_embedded",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "generators": [
+          "x^4*y",
+          "x^2*y^3",
+          "y^2*z^3"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.036459,
+            0.034806,
+            0.034916,
+            0.040676,
+            0.056436,
+            0.034615,
+            0.035848
+          ],
+          "median_ms": 0.035848
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            14.077,
+            13.859,
+            13.367,
+            13.326,
+            14.006,
+            13.581,
+            13.953
+          ],
+          "median_ms": 13.859
+        },
+        "primdecSY": {
+          "samples_ms": [
+            14.888,
+            12.13,
+            12.386,
+            12.478,
+            13.898,
+            12.642,
+            12.57
+          ],
+          "median_ms": 12.57
+        },
+        "speedup_vs_faster_reference": 350.6471769694265,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 246.26125168332268,
+        "verified_components": 4,
+        "result_sha256": "be40b7448fc2dbf5448603ebd7b4281a2f8c2151c8dd1a6cf7da80ee09951e39",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.377688,
+              5.873526,
+              5.130231,
+              5.046623,
+              4.909924,
+              5.631989,
+              5.530577
+            ],
+            "median_ms": 5.377688
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              33.902474,
+              33.771647,
+              33.034924,
+              33.814017,
+              32.885251,
+              32.797454,
+              33.493651
+            ],
+            "median_ms": 33.493651
+          },
+          "primdecSY": {
+            "samples_ms": [
+              33.905189,
+              33.00698,
+              32.747741,
+              31.830707,
+              31.536941,
+              31.539476,
+              32.575915
+            ],
+            "median_ms": 32.575915
+          },
+          "speedup_vs_faster_reference": 6.057605982347805,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 5.600059943298895
+        }
+      },
+      {
+        "name": "monomial_primary",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "generators": [
+          "x^3",
+          "y^3",
+          "z^2",
+          "x*y^2",
+          "x^2*z"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.028063,
+            0.028914,
+            0.028774,
+            0.027512,
+            0.028553,
+            0.028724,
+            0.028113
+          ],
+          "median_ms": 0.028553
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            0.515,
+            0.483,
+            0.478,
+            0.493,
+            0.504,
+            0.509,
+            0.508
+          ],
+          "median_ms": 0.504
+        },
+        "primdecSY": {
+          "samples_ms": [
+            1.278,
+            1.308,
+            1.248,
+            1.291,
+            1.277,
+            1.286,
+            1.285
+          ],
+          "median_ms": 1.285
+        },
+        "speedup_vs_faster_reference": 17.651385143417507,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 16.612219364704245,
+        "verified_components": 1,
+        "result_sha256": "e16200febb923cf91ab4d4c99d7ef307825e7ff9604f0f217104aa017cfa6c8e",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.446628,
+              4.962383,
+              5.6697,
+              5.622722,
+              5.260036,
+              5.470824,
+              5.515449
+            ],
+            "median_ms": 5.470824
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              19.862206,
+              19.845063,
+              19.257353,
+              19.949952,
+              19.5415,
+              18.899005,
+              18.810748
+            ],
+            "median_ms": 19.5415
+          },
+          "primdecSY": {
+            "samples_ms": [
+              21.110547,
+              20.17637,
+              19.913985,
+              21.061384,
+              20.970261,
+              21.155732,
+              20.084296
+            ],
+            "median_ms": 20.970261
+          },
+          "speedup_vs_faster_reference": 3.5719482110921494,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 3.396538264811189
+        }
+      },
+      {
+        "name": "singular_manual",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "generators": [
+          "(z^2+1)*(z^3+2)^2",
+          "y-z^2"
+        ],
+        "order": "lex",
+        "atlas": {
+          "samples_ms": [
+            0.267425,
+            0.108275,
+            0.107854,
+            0.112002,
+            0.114737,
+            0.107623,
+            0.106542
+          ],
+          "median_ms": 0.108275
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            4.731,
+            4.968,
+            4.893,
+            4.949,
+            4.597,
+            4.545,
+            4.619
+          ],
+          "median_ms": 4.731
+        },
+        "primdecSY": {
+          "samples_ms": [
+            6.402,
+            6.454,
+            6.265,
+            6.432,
+            6.347,
+            6.341,
+            6.31
+          ],
+          "median_ms": 6.347
+        },
+        "speedup_vs_faster_reference": 43.69429692911568,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 17.690941385435167,
+        "verified_components": 2,
+        "result_sha256": "900aa3ab7eb869a6b48d76f35f3b98079c24c094b768105e6ae3441855004667",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.276487,
+              5.337232,
+              5.041533,
+              5.26729,
+              5.228186,
+              5.321673,
+              5.259155
+            ],
+            "median_ms": 5.26729
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              24.016411,
+              24.198215,
+              25.023044,
+              23.857361,
+              24.705444,
+              23.953963,
+              24.655039
+            ],
+            "median_ms": 24.198215
+          },
+          "primdecSY": {
+            "samples_ms": [
+              26.901467,
+              25.617469,
+              25.775617,
+              26.099229,
+              26.413814,
+              26.672524,
+              30.535968
+            ],
+            "median_ms": 26.413814
+          },
+          "speedup_vs_faster_reference": 4.59405405815894,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 4.501209112247221
+        }
+      },
+      {
+        "name": "finite_quadratic",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "generators": [
+          "((x+y)^2+1)^2*((x+y)-1)",
+          "(y-2*x)^2"
+        ],
+        "order": "lex",
+        "atlas": {
+          "samples_ms": [
+            0.469678,
+            0.420305,
+            0.814651,
+            0.424853,
+            0.448037,
+            0.440423,
+            0.428751
+          ],
+          "median_ms": 0.440423
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            1.735,
+            1.81,
+            1.702,
+            1.775,
+            1.681,
+            1.678,
+            2.18
+          ],
+          "median_ms": 1.735
+        },
+        "primdecSY": {
+          "samples_ms": [
+            4.656,
+            4.754,
+            4.484,
+            4.721,
+            4.74,
+            4.751,
+            4.565
+          ],
+          "median_ms": 4.721
+        },
+        "speedup_vs_faster_reference": 3.9393946274377134,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 2.0892382136645016,
+        "verified_components": 2,
+        "result_sha256": "13fd8ee4500cdd01d7e00ebf0d6f67b4a5a5fb881b80085174477017d8d85b5a",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              6.099844,
+              5.95003,
+              6.004533,
+              7.604809,
+              6.472729,
+              7.632502,
+              6.524006
+            ],
+            "median_ms": 6.472729
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              20.709178,
+              21.064339,
+              20.216115,
+              20.715319,
+              20.650617,
+              22.00568,
+              20.755254
+            ],
+            "median_ms": 20.715319
+          },
+          "primdecSY": {
+            "samples_ms": [
+              26.48042,
+              24.323442,
+              24.675618,
+              24.453878,
+              24.86203,
+              25.830081,
+              24.553527
+            ],
+            "median_ms": 24.675618
+          },
+          "speedup_vs_faster_reference": 3.2003995532641643,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 2.7239762366155413
+        }
+      },
+      {
+        "name": "mixed_line_point",
+        "variables": [
+          "x",
+          "y"
+        ],
+        "generators": [
+          "x^2*(x-1)",
+          "x^2*(y-1)^2"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.133432,
+            0.090051,
+            0.081615,
+            0.108224,
+            0.11065,
+            0.082445,
+            0.083087
+          ],
+          "median_ms": 0.090051
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            6.463,
+            6.452,
+            6.467,
+            6.613,
+            6.455,
+            6.457,
+            6.549
+          ],
+          "median_ms": 6.463
+        },
+        "primdecSY": {
+          "samples_ms": [
+            3.81,
+            3.775,
+            3.749,
+            3.738,
+            3.814,
+            3.747,
+            3.905
+          ],
+          "median_ms": 3.775
+        },
+        "speedup_vs_faster_reference": 41.92068938712507,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 28.553870136099288,
+        "verified_components": 2,
+        "result_sha256": "5cd8578b5d066d840f4a03f9cfcc9a0fc7494b997ab6c9581af9da62a38c75a6",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.263692,
+              5.32583,
+              5.183842,
+              5.245749,
+              5.672256,
+              5.937216,
+              5.522392
+            ],
+            "median_ms": 5.32583
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              26.495229,
+              26.458378,
+              26.417542,
+              26.440304,
+              28.173892,
+              27.770951,
+              28.225259
+            ],
+            "median_ms": 26.495229
+          },
+          "primdecSY": {
+            "samples_ms": [
+              25.907547,
+              23.372263,
+              22.712546,
+              24.082045,
+              25.005552,
+              24.834368,
+              23.309634
+            ],
+            "median_ms": 24.082045
+          },
+          "speedup_vs_faster_reference": 4.521744967451083,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 4.182830471385915
+        }
+      },
+      {
+        "name": "embedded_curve",
+        "variables": [
+          "x",
+          "y",
+          "z"
+        ],
+        "generators": [
+          "x*y",
+          "x*z+y^2"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.210017,
+            0.263699,
+            0.219205,
+            0.357406,
+            0.30108,
+            0.333761,
+            0.201591
+          ],
+          "median_ms": 0.263699
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            7.087,
+            7.488,
+            7.16,
+            7.016,
+            7.182,
+            7.058,
+            7.338
+          ],
+          "median_ms": 7.16
+        },
+        "primdecSY": {
+          "samples_ms": [
+            5.046,
+            4.853,
+            5.169,
+            4.885,
+            4.679,
+            4.759,
+            4.718
+          ],
+          "median_ms": 4.853
+        },
+        "speedup_vs_faster_reference": 18.403558602800917,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 13.667929469566822,
+        "verified_components": 2,
+        "result_sha256": "7de175d17b53002be90b63c9eccef0b410da5ea1fb44fbbbd00930b216021716",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.82776,
+              5.593035,
+              5.60594,
+              6.360586,
+              5.829443,
+              5.571936,
+              5.338815
+            ],
+            "median_ms": 5.60594
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              26.991537,
+              27.750221,
+              30.879999,
+              28.848739,
+              27.427922,
+              26.952663,
+              26.825623
+            ],
+            "median_ms": 27.427922
+          },
+          "primdecSY": {
+            "samples_ms": [
+              25.290159,
+              24.96263,
+              23.812896,
+              25.344142,
+              24.666741,
+              24.38582,
+              24.198465
+            ],
+            "median_ms": 24.666741
+          },
+          "speedup_vs_faster_reference": 4.400107921240683,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 3.9845608564997
+        }
+      },
+      {
+        "name": "exceptional_fiber",
+        "variables": [
+          "t",
+          "x",
+          "y"
+        ],
+        "generators": [
+          "(t)*(t*x-1)",
+          "(t)*((y-t^2)^2)",
+          "(y)*(t*x-1)",
+          "(y)*((y-t^2)^2)",
+          "(x^2+1)*(t*x-1)",
+          "(x^2+1)*((y-t^2)^2)"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            0.396099,
+            0.392432,
+            0.924188,
+            0.864284,
+            0.407651,
+            0.420445,
+            0.408993
+          ],
+          "median_ms": 0.408993
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            7.453,
+            7.423,
+            7.071,
+            7.195,
+            7.56,
+            7.499,
+            7.092
+          ],
+          "median_ms": 7.423
+        },
+        "primdecSY": {
+          "samples_ms": [
+            5.731,
+            5.841,
+            5.79,
+            5.91,
+            6.056,
+            6.024,
+            5.957
+          ],
+          "median_ms": 5.91
+        },
+        "speedup_vs_faster_reference": 14.450125063265142,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 6.264959077590274,
+        "verified_components": 2,
+        "result_sha256": "a317029a033d3c7ce05257c6e422fe26f52d68d79621feb23828f5ba3596f6de",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              5.76455,
+              5.595931,
+              6.539245,
+              6.261128,
+              5.821839,
+              5.834241,
+              6.527362
+            ],
+            "median_ms": 5.834241
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              27.462918,
+              27.065246,
+              28.673827,
+              26.87729,
+              27.615236,
+              27.253121,
+              26.241989
+            ],
+            "median_ms": 27.253121
+          },
+          "primdecSY": {
+            "samples_ms": [
+              26.328223,
+              25.635613,
+              25.638458,
+              25.800294,
+              26.513923,
+              26.363839,
+              24.990133
+            ],
+            "median_ms": 25.800294
+          },
+          "speedup_vs_faster_reference": 4.422219445511422,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 3.8285195458747348
+        }
+      },
+      {
+        "name": "katsura_3",
+        "variables": [
+          "u0",
+          "u1",
+          "u2",
+          "u3"
+        ],
+        "generators": [
+          "u0^2+2*u1^2+2*u2^2+2*u3^2-u0",
+          "2*u0*u1+2*u1*u2+2*u2*u3-u1",
+          "2*u0*u2+u1^2+2*u1*u3-u2",
+          "u0+2*u1+2*u2+2*u3-1"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            1.249132,
+            1.254582,
+            1.316119,
+            1.323503,
+            1.245645,
+            1.257648,
+            1.27445
+          ],
+          "median_ms": 1.257648
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            2.047,
+            2.102,
+            2.064,
+            2.063,
+            2.034,
+            1.956,
+            2.063
+          ],
+          "median_ms": 2.063
+        },
+        "primdecSY": {
+          "samples_ms": [
+            12.227,
+            11.818,
+            12.281,
+            11.799,
+            12.153,
+            12.099,
+            12.296
+          ],
+          "median_ms": 12.153
+        },
+        "speedup_vs_faster_reference": 1.6403635993537142,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 1.555284149459944,
+        "verified_components": 3,
+        "result_sha256": "660a54c01b851c84de83fbd89189b1eeac91b33c80d9919b079c65e4b1bc04ea",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              6.831457,
+              7.056873,
+              6.936425,
+              7.335911,
+              12.884873,
+              12.753505,
+              14.071437
+            ],
+            "median_ms": 7.335911
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              21.780603,
+              21.586577,
+              21.862398,
+              44.087452,
+              40.090354,
+              40.542049,
+              33.294134
+            ],
+            "median_ms": 33.294134
+          },
+          "primdecSY": {
+            "samples_ms": [
+              31.487528,
+              31.427023,
+              31.359766,
+              65.748078,
+              60.073659,
+              66.083884,
+              43.707785
+            ],
+            "median_ms": 43.707785
+          },
+          "speedup_vs_faster_reference": 4.5385138941843755,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 2.3660791715870952
+        }
+      },
+      {
+        "name": "common_factor_holdout",
+        "variables": [
+          "a",
+          "b",
+          "c"
+        ],
+        "generators": [
+          "((a+2*b)^2+(b+3*a)^2)*((a+2*b)^2+2)",
+          "((a+2*b)^2+(b+3*a)^2)*((c+2*b+3)-(b+3*a)^2)^2"
+        ],
+        "order": "lex",
+        "atlas": {
+          "samples_ms": [
+            5.528664,
+            3.308105,
+            3.698894,
+            3.12003,
+            3.07789,
+            3.07827,
+            3.05188
+          ],
+          "median_ms": 3.12003
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            4718.129,
+            3752.668,
+            2503.912,
+            3860.535,
+            3839.682,
+            2517.6,
+            2647.477
+          ],
+          "median_ms": 3752.668
+        },
+        "primdecSY": {
+          "samples_ms": [
+            16.471,
+            17.404,
+            18.371,
+            16.889,
+            15.736,
+            15.985,
+            14.909
+          ],
+          "median_ms": 16.471
+        },
+        "speedup_vs_faster_reference": 5.279115905936802,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 2.9792007617030083,
+        "verified_components": 2,
+        "result_sha256": "e05057c3a3f8a16f85fd91cb78b927a74b24eed2a50575008bbb072c30ccbd2f",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              8.068547,
+              8.96937,
+              8.593279,
+              9.304684,
+              10.114294,
+              9.361812,
+              8.079677
+            ],
+            "median_ms": 8.96937
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              939.939569,
+              3628.193712,
+              3093.892257,
+              2783.745932,
+              2691.538542,
+              2380.689689,
+              3250.553467
+            ],
+            "median_ms": 2783.745932
+          },
+          "primdecSY": {
+            "samples_ms": [
+              32.779831,
+              36.754176,
+              36.500557,
+              32.722032,
+              33.056335,
+              34.873551,
+              34.88422
+            ],
+            "median_ms": 34.873551
+          },
+          "speedup_vs_faster_reference": 3.888071403008238,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 3.2682790316358217
+        }
+      },
+      {
+        "name": "comaximal_product_holdout",
+        "variables": [
+          "a",
+          "b",
+          "c"
+        ],
+        "generators": [
+          "((a+2*b+1)^3)*((a+2*b+1)^2+3)",
+          "((a+2*b+1)^3)*(((c+3*a+2)-(b+a+1)^2)^2)",
+          "((b+a+1)^2)*((a+2*b+1)^2+3)",
+          "((b+a+1)^2)*(((c+3*a+2)-(b+a+1)^2)^2)"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            3.546466,
+            3.605127,
+            4.174714,
+            3.672955,
+            3.837346,
+            4.65441,
+            3.80759
+          ],
+          "median_ms": 3.80759
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            36.491,
+            37.673,
+            38.244,
+            37.419,
+            40.35,
+            40.956,
+            43.313
+          ],
+          "median_ms": 38.244
+        },
+        "primdecSY": {
+          "samples_ms": [
+            11.074,
+            11.741,
+            12.108,
+            12.485,
+            14.809,
+            13.04,
+            11.665
+          ],
+          "median_ms": 12.108
+        },
+        "speedup_vs_faster_reference": 3.17996422934192,
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 2.801644032218906,
+        "verified_components": 2,
+        "result_sha256": "b1a8abeb791648848bf8fdb3a21175da6bafb144d5ee77e485c3e0570bcadafc",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              10.554927,
+              9.734396,
+              10.709691,
+              10.130986,
+              11.818557,
+              12.551694,
+              11.713608
+            ],
+            "median_ms": 10.709691
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              60.371242,
+              59.979842,
+              59.060864,
+              59.660318,
+              66.236572,
+              64.620256,
+              61.688863
+            ],
+            "median_ms": 60.371242
+          },
+          "primdecSY": {
+            "samples_ms": [
+              32.256742,
+              32.227597,
+              33.300926,
+              31.153837,
+              35.182475,
+              36.207412,
+              31.632231
+            ],
+            "median_ms": 32.256742
+          },
+          "speedup_vs_faster_reference": 3.0119208854858655,
+          "wins_vs_both": 7,
+          "worst_paired_speedup": 2.7004686344292894
+        }
+      }
+    ],
+    "cold_scope": "Fresh atlas CLI/worker returning full JSON, versus fresh Singular interpreter including primdec.lib loading, calculation and printing its complete list. File caches warm; full output captured in both cases. Output formats differ.",
+    "cold_repeats": 7,
+    "atlas_command": "./atlas",
+    "atlas_library_sha256": "2b4555be6c071ff313e8294e5608ba66850d98bdada9099d32df57448516c8d3",
+    "atlas_native_cli_sha256": "0c7535371c6876923beb9fb122437907190fa5bdc575082267d59426e63c4f60"
+  },
+  "further_holdouts_before_tuning": {
+    "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+    "affinity": [
+      6
+    ],
+    "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "repeats": 3,
+    "units": "wall-clock milliseconds",
+    "scope": "Warm Atlas affine_request including input row decoding and result serialization, versus warmed Singular primdecGTZ and primdecSY in a loaded ring, excluding source parsing, output printing and process startup. One discarded warm-up before each sample. No cached answers. Engine order rotates on each trial. Singular seeds 17 + trial number.",
+    "cases": [
+      {
+        "name": "two_parameter_tensor",
+        "variables": [
+          "x",
+          "y",
+          "u",
+          "v"
+        ],
+        "generators": [
+          "(u^2*x^2+v^2)^2",
+          "(u^2*y^2+v^2)^2"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            164.054971,
+            162.749943,
+            169.931452
+          ],
+          "median_ms": 164.054971
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            15.869,
+            15.177,
+            16.068
+          ],
+          "median_ms": 15.869
+        },
+        "primdecSY": {
+          "samples_ms": [
+            17.098,
+            18.037,
+            16.721
+          ],
+          "median_ms": 17.098
+        },
+        "speedup_vs_faster_reference": 0.09672977236392306,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.09325348888140624,
+        "verified_components": 3,
+        "result_sha256": "892090561ab40bf2f3526502f4ca575d5c290b14d261722487ae487cde522158",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              187.62581,
+              174.402016,
+              180.091754
+            ],
+            "median_ms": 180.091754
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              34.83665,
+              34.778851,
+              34.958601
+            ],
+            "median_ms": 34.83665
+          },
+          "primdecSY": {
+            "samples_ms": [
+              40.473649,
+              36.168398,
+              34.832302
+            ],
+            "median_ms": 36.168398
+          },
+          "speedup_vs_faster_reference": 0.19343834032512114,
+          "wins_vs_both": 0,
+          "worst_paired_speedup": 0.18567088397912845
+        }
+      },
+      {
+        "name": "complex_thick_fiber",
+        "variables": [
+          "a",
+          "b",
+          "c"
+        ],
+        "generators": [
+          "(a^2+1)^2",
+          "(a*b+c)^2",
+          "(b^2+a^2)^2"
+        ],
+        "order": "grevlex",
+        "atlas": {
+          "samples_ms": [
+            71.216378,
+            75.954407,
+            71.712166
+          ],
+          "median_ms": 71.712166
+        },
+        "primdecGTZ": {
+          "samples_ms": [
+            11.039,
+            11.395,
+            10.837
+          ],
+          "median_ms": 11.039
+        },
+        "primdecSY": {
+          "samples_ms": [
+            5.517,
+            5.616,
+            5.825
+          ],
+          "median_ms": 5.616
+        },
+        "speedup_vs_faster_reference": 0.07831307173178956,
+        "wins_vs_both": 0,
+        "worst_paired_speedup": 0.0739390934880184,
+        "verified_components": 2,
+        "result_sha256": "49183ac6afce4d8f488140c67cc0a7f6c95ee03ac69b64186ceb5307c719870e",
+        "fresh_command": {
+          "atlas": {
+            "samples_ms": [
+              83.062307,
+              81.155822,
+              80.778529
+            ],
+            "median_ms": 81.155822
+          },
+          "primdecGTZ": {
+            "samples_ms": [
+              30.297327,
+              29.359684,
+              28.872754
+            ],
+            "median_ms": 29.359684
+          },
+          "primdecSY": {
+            "samples_ms": [
+              24.427889,
+              24.152217,
+              24.341265
+            ],
+            "median_ms": 24.341265
+          },
+          "speedup_vs_faster_reference": 0.29993245586250117,
+          "wins_vs_both": 0,
+          "worst_paired_speedup": 0.2940911453374393
+        }
+      }
+    ],
+    "cold_scope": "Fresh atlas CLI/worker returning full JSON, versus fresh Singular interpreter including primdec.lib loading, calculation and printing its complete list. File caches warm; full output captured in both cases. Output formats differ.",
+    "cold_repeats": 3,
+    "atlas_command": "./atlas",
+    "atlas_library_sha256": "2b4555be6c071ff313e8294e5608ba66850d98bdada9099d32df57448516c8d3"
+  }
+}

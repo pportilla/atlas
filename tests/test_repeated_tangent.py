@@ -57,3 +57,21 @@ class RepeatedProjectiveTangent(unittest.TestCase):
                 certify_fibre(chart, 2)
             certify_fibre(replace(chart, removed=((x, y),)), 2)
             certify_fibre(replace(chart, region=(x-1,)), 2)
+
+    def test_sparse_replay_beyond_packed_exponents(self):
+        x, y = variables = coordinates("xy")
+        exponent = 2**67 + 1
+        f = x**exponent + (2**140 + 17)*y
+        chart = Chart(variables, (), (("strict", 1, 1, (f,)),), (x,), (), (), ())
+        certify_fibre(chart, 2)
+        with self.assertRaisesRegex(GiveUp, "fails normal crossings"):
+            certify_fibre(replace(chart, components=(*chart.components, ("E", 1, 1, (y,)))), 2)
+
+    def test_sparse_replay_of_open_region_in_33_coordinates(self):
+        variables = coordinates(tuple("x" + str(j) for j in range(33)))
+        x, y = variables[0], variables[-1]
+        chart = Chart(variables, (), (("strict", 1, 1, (x+y**2,)), ("E", 1, 1, (x,))),
+                      (x,), (), (), (), removed=((x, y),))
+        certify_fibre(chart, 33)
+        with self.assertRaisesRegex(GiveUp, "fails normal crossings"):
+            certify_fibre(replace(chart, removed=()), 33)

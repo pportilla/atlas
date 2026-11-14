@@ -1,0 +1,787 @@
+{
+  "conditions": "Compare fresh Atlas and Singular resolutions of x^p+y^p at the origin over QQ.\n\nAtlas returns both zeta functions, all charts, and individually indexed complex\nbranches. Singular resolve.lib returns checked charts over QQ. For individual\nbranches the general Singular run finds a splitting field with hnoether.lib.\nThe cyclotomic run uses the known splitting field for this family. Each\nbranch run checks the product of all reported linear factors. Singular runs\nomit zeta functions and FLINT's canonical complex root indices.\n",
+  "trials": 3,
+  "cpu_affinity": 3,
+  "command": "./atlas resolve 'x^p+y^p' --vars x,y --mode embedded --compute cpu --quick --monodromy --json",
+  "atlas_and_chart_timeout_s": 180,
+  "singular_branch_timeout_s": 12.0,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "plane_binary_sha256": {
+    "atlas": "1ff8d426e7e929410dbb103d1fae9cc006a975ead43f588f51ba9c0b7274ea0b",
+    "baseline": "b819b4bf68db0fbd4304e87f155a0809a9c8b707aeda0ffe1cc8849fbf7aa83a"
+  },
+  "cases": {
+    "13": {
+      "runs": [
+        {
+          "status": "complete",
+          "wall_s": 0.11634778400184587,
+          "cpu_s": 0.112816,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "baseline",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.1080539420072455,
+          "cpu_s": 0.10457600000000002,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "atlas",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.05661471898201853,
+          "cpu_s": 0.05453599999999997,
+          "solver": "singular_charts",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.10020479100057855,
+          "cpu_s": 0.09768299999999996,
+          "solver": "singular_charts_and_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.058033440989675,
+          "cpu_s": 0.05565800000000004,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.0573454910190776,
+          "cpu_s": 0.05490600000000001,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.10003318599774502,
+          "cpu_s": 0.09758499999999992,
+          "solver": "singular_charts_and_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.057399022014578804,
+          "cpu_s": 0.055116000000000054,
+          "solver": "singular_charts",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.10932877298910171,
+          "cpu_s": 0.10582800000000003,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "atlas",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.11783931398531422,
+          "cpu_s": 0.11437399999999998,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "baseline",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.11615823602187447,
+          "cpu_s": 0.11267899999999997,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "baseline",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.10985489701852202,
+          "cpu_s": 0.106379,
+          "record_sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+          "solver": "atlas",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.05704664601944387,
+          "cpu_s": 0.054829999999999934,
+          "solver": "singular_charts",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.10005017800722271,
+          "cpu_s": 0.09762099999999996,
+          "solver": "singular_charts_and_branches",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.05922383299912326,
+          "cpu_s": 0.05707500000000021,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 3
+        }
+      ],
+      "medians_s": {
+        "baseline": {
+          "wall_s": 0.11634778400184587,
+          "cpu_s": 0.112816
+        },
+        "atlas": {
+          "wall_s": 0.10932877298910171,
+          "cpu_s": 0.10582800000000003
+        },
+        "singular_charts": {
+          "wall_s": 0.05704664601944387,
+          "cpu_s": 0.054829999999999934
+        },
+        "singular_charts_and_branches": {
+          "wall_s": 0.10005017800722271,
+          "cpu_s": 0.09762099999999996
+        },
+        "singular_charts_and_cyclotomic_branches": {
+          "wall_s": 0.058033440989675,
+          "cpu_s": 0.05565800000000004
+        }
+      }
+    },
+    "31": {
+      "runs": [
+        {
+          "status": "complete",
+          "wall_s": 0.19971209298819304,
+          "cpu_s": 0.1962839999999999,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "baseline",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.11498004899476655,
+          "cpu_s": 0.11139699999999997,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "atlas",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.05856724100885913,
+          "cpu_s": 0.05629200000000023,
+          "solver": "singular_charts",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 3.351299050002126,
+          "cpu_s": 3.3484909999999997,
+          "solver": "singular_charts_and_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.0638869300018996,
+          "cpu_s": 0.06116300000000052,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.06391035401611589,
+          "cpu_s": 0.06126699999999996,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 5.44319795400952,
+          "cpu_s": 3.513622,
+          "solver": "singular_charts_and_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.12414521799655631,
+          "cpu_s": 0.06061099999999975,
+          "solver": "singular_charts",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.27667539700632915,
+          "cpu_s": 0.13795800000000114,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "atlas",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.43898818400339223,
+          "cpu_s": 0.22043699999999866,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "baseline",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.4381437870033551,
+          "cpu_s": 0.2185820000000014,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "baseline",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.2658605379983783,
+          "cpu_s": 0.13198299999999996,
+          "record_sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+          "solver": "atlas",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.12581222000881098,
+          "cpu_s": 0.06043399999999899,
+          "solver": "singular_charts",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 6.92113675098517,
+          "cpu_s": 3.459225,
+          "solver": "singular_charts_and_branches",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.13146010899799876,
+          "cpu_s": 0.06557199999999952,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 3
+        }
+      ],
+      "medians_s": {
+        "baseline": {
+          "wall_s": 0.4381437870033551,
+          "cpu_s": 0.2185820000000014
+        },
+        "atlas": {
+          "wall_s": 0.2658605379983783,
+          "cpu_s": 0.13198299999999996
+        },
+        "singular_charts": {
+          "wall_s": 0.12414521799655631,
+          "cpu_s": 0.06043399999999899
+        },
+        "singular_charts_and_branches": {
+          "wall_s": 5.44319795400952,
+          "cpu_s": 3.459225
+        },
+        "singular_charts_and_cyclotomic_branches": {
+          "wall_s": 0.06391035401611589,
+          "cpu_s": 0.06126699999999996
+        }
+      }
+    },
+    "61": {
+      "runs": [
+        {
+          "status": "complete",
+          "wall_s": 1.8448494440235663,
+          "cpu_s": 0.9221780000000006,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "baseline",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.2858007620088756,
+          "cpu_s": 0.14340299999999928,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "atlas",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.12598060799064115,
+          "cpu_s": 0.06237100000000062,
+          "solver": "singular_charts",
+          "trial": 1
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.018541047000326,
+          "cpu_s": 6.009861999999998,
+          "solver": "singular_charts_and_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.22220417199423537,
+          "cpu_s": 0.10868200000000172,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.21772704500472173,
+          "cpu_s": 0.10814299999999832,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 2
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.013887458015233,
+          "cpu_s": 5.992942000000003,
+          "solver": "singular_charts_and_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.159307093010284,
+          "cpu_s": 0.07873799999999775,
+          "solver": "singular_charts",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.3984683469752781,
+          "cpu_s": 0.19802600000000226,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "atlas",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 2.236054687993601,
+          "cpu_s": 1.1199679999999965,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "baseline",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 2.1685519920138177,
+          "cpu_s": 1.0907690000000017,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "baseline",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.39085191598860547,
+          "cpu_s": 0.19483800000000073,
+          "record_sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+          "solver": "atlas",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.1525710660207551,
+          "cpu_s": 0.0748899999999999,
+          "solver": "singular_charts",
+          "trial": 3
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.014159652986564,
+          "cpu_s": 11.671937,
+          "solver": "singular_charts_and_branches",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.12820358099997975,
+          "cpu_s": 0.12448400000000248,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 3
+        }
+      ],
+      "medians_s": {
+        "baseline": {
+          "wall_s": 2.1685519920138177,
+          "cpu_s": 1.0907690000000017
+        },
+        "atlas": {
+          "wall_s": 0.39085191598860547,
+          "cpu_s": 0.19483800000000073
+        },
+        "singular_charts": {
+          "wall_s": 0.1525710660207551,
+          "cpu_s": 0.0748899999999999
+        },
+        "singular_charts_and_cyclotomic_branches": {
+          "wall_s": 0.21772704500472173,
+          "cpu_s": 0.10868200000000172
+        }
+      }
+    },
+    "97": {
+      "runs": [
+        {
+          "status": "complete",
+          "wall_s": 5.42210785599309,
+          "cpu_s": 5.4182989999999975,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "baseline",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.2623280989937484,
+          "cpu_s": 0.25875800000000027,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "atlas",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.07401667299563996,
+          "cpu_s": 0.07160499999999814,
+          "solver": "singular_charts",
+          "trial": 1
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.014999450009782,
+          "cpu_s": 12.012131000000004,
+          "solver": "singular_charts_and_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.5471287000109442,
+          "cpu_s": 0.5420820000000006,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 1
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.5514598799927626,
+          "cpu_s": 0.5463140000000024,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 2
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.01562486300827,
+          "cpu_s": 12.01285099999999,
+          "solver": "singular_charts_and_branches",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.07600701600313187,
+          "cpu_s": 0.0735520000000065,
+          "solver": "singular_charts",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.2907651790010277,
+          "cpu_s": 0.287083999999993,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "atlas",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 6.691834627999924,
+          "cpu_s": 6.687388000000013,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "baseline",
+          "trial": 2
+        },
+        {
+          "status": "complete",
+          "wall_s": 7.547400051000295,
+          "cpu_s": 7.525154999999998,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "baseline",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.31719094500294887,
+          "cpu_s": 0.3135419999999982,
+          "record_sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+          "solver": "atlas",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.07452808000380173,
+          "cpu_s": 0.07198400000000049,
+          "solver": "singular_charts",
+          "trial": 3
+        },
+        {
+          "status": "timeout",
+          "wall_s": 12.01473580201855,
+          "cpu_s": 12.012197999999998,
+          "solver": "singular_charts_and_branches",
+          "trial": 3
+        },
+        {
+          "status": "complete",
+          "wall_s": 0.5190457089920528,
+          "cpu_s": 0.5144400000000076,
+          "solver": "singular_charts_and_cyclotomic_branches",
+          "trial": 3
+        }
+      ],
+      "medians_s": {
+        "baseline": {
+          "wall_s": 6.691834627999924,
+          "cpu_s": 6.687388000000013
+        },
+        "atlas": {
+          "wall_s": 0.2907651790010277,
+          "cpu_s": 0.287083999999993
+        },
+        "singular_charts": {
+          "wall_s": 0.07452808000380173,
+          "cpu_s": 0.07198400000000049
+        },
+        "singular_charts_and_cyclotomic_branches": {
+          "wall_s": 0.5471287000109442,
+          "cpu_s": 0.5420820000000006
+        }
+      }
+    }
+  },
+  "host_cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "method": "Fresh processes, three alternating trials per input, one logical CPU. Wall and child CPU times include process startup and output. Shared-host load varied. Validation parses the output outside the timer.",
+  "installed_checkout_validation": {
+    "13": {
+      "sha256": "b608a02078f3406fffb281d7fd48fcf6c46b3eb3657ef750fd0674fe69a16ce6",
+      "full_record_equal": true,
+      "saved_replay_equal": true
+    },
+    "31": {
+      "sha256": "d803730e9a6b9a6028deb7c7db531cc3d3503b9fea0196bd0f46c1b4c6eb6934",
+      "full_record_equal": true,
+      "saved_replay_equal": true
+    },
+    "61": {
+      "sha256": "9007ae1ee4581fa110ed76c2813d04157b9cf446ce3cc942114f9a9109c3c42c",
+      "full_record_equal": true,
+      "saved_replay_equal": true
+    },
+    "97": {
+      "sha256": "0ceeb71460fea7363a837cd2558c99e1664e8d2e3b749d13c5963ccf635ac063",
+      "full_record_equal": true,
+      "saved_replay_equal": true
+    }
+  },
+  "extended_general_singular_trials": {
+    "61": {
+      "charts_verified": true,
+      "hnexpansion_status": "timeout",
+      "wall_limit_s": 110,
+      "observed_wall_s": 110.0038,
+      "logical_cpu": 9
+    },
+    "97": {
+      "charts_verified": true,
+      "hnexpansion_status": "timeout",
+      "wall_limit_s": 110,
+      "observed_wall_s": 110.0048,
+      "logical_cpu": 13
+    }
+  },
+  "small_case_controls": [
+    {
+      "polynomial": "x^61+y^61",
+      "mode": "embedded",
+      "both_zetas": false,
+      "pairs": 7,
+      "median_ms": {
+        "base": 2932.508567,
+        "candidate": 478.807766
+      },
+      "record_sha256": "860c873ab2e2b5355281295ab89bfe74a6932dd279b3b9d2636b658f2e588f1f",
+      "saved_replay": []
+    },
+    {
+      "polynomial": "x^97+y^97",
+      "mode": "embedded",
+      "both_zetas": true,
+      "pairs": 5,
+      "median_ms": {
+        "base": 19080.903633,
+        "candidate": 749.613716
+      },
+      "record_sha256": "4044c0b0b369277f8b2220309b493b79b35b73b6b58a26299107678bc9b2d93a",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 284.46673,
+          "h": "71942e357ba4f82e0cc68349e9f0a60ef50c4b012d89b9e8c595b951b105b836"
+        },
+        {
+          "tree": "candidate",
+          "ms": 289.552807,
+          "h": "71942e357ba4f82e0cc68349e9f0a60ef50c4b012d89b9e8c595b951b105b836"
+        }
+      ]
+    },
+    {
+      "polynomial": "x^61+y^61",
+      "mode": "intrinsic",
+      "both_zetas": true,
+      "pairs": 3,
+      "median_ms": {
+        "base": 1677.260531,
+        "candidate": 257.34137
+      },
+      "record_sha256": "f7fd8c03c2a80008102157d2ee75905b7e6e716cf038c04afe232e8e3b6f4fc2",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 155.464367,
+          "h": "fb70cfc7c0c7903c74a5c9561307dba1fdc3b8b95b103685a5c6d060606ef0fd"
+        },
+        {
+          "tree": "candidate",
+          "ms": 132.700845,
+          "h": "fb70cfc7c0c7903c74a5c9561307dba1fdc3b8b95b103685a5c6d060606ef0fd"
+        }
+      ]
+    },
+    {
+      "polynomial": "y^41-2*x^41+x^50",
+      "mode": "embedded",
+      "both_zetas": true,
+      "pairs": 3,
+      "median_ms": {
+        "base": 256.864578,
+        "candidate": 186.493378
+      },
+      "record_sha256": "272d16ff193e7ca92db281cc4e16d225a285ad6e1e8321673d844997e8092d9e",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 136.580411,
+          "h": "65d37d55afc5798d4257e040e58987c2b01ce6017a7e7b71ba0dce6cf98e5639"
+        },
+        {
+          "tree": "candidate",
+          "ms": 125.790299,
+          "h": "65d37d55afc5798d4257e040e58987c2b01ce6017a7e7b71ba0dce6cf98e5639"
+        }
+      ]
+    },
+    {
+      "polynomial": "(y^5-x^5)^2-x^19",
+      "mode": "embedded",
+      "both_zetas": true,
+      "pairs": 3,
+      "median_ms": {
+        "base": 306.263413,
+        "candidate": 294.14545
+      },
+      "record_sha256": "00ed1f74bbe5bc1213172306a9b7a603e0b47472d82122fb2eec72275d09467c",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 216.866178,
+          "h": "b6e63b89e25787d7c6d572b0bd67a4817d08c820faa7ae07e64b3f27ea559dda"
+        },
+        {
+          "tree": "candidate",
+          "ms": 218.168801,
+          "h": "b6e63b89e25787d7c6d572b0bd67a4817d08c820faa7ae07e64b3f27ea559dda"
+        }
+      ]
+    },
+    {
+      "polynomial": "(y^3-2*x^3)^3-x^13",
+      "mode": "intrinsic",
+      "both_zetas": true,
+      "pairs": 2,
+      "median_ms": {
+        "base": 274.2295425,
+        "candidate": 272.11804500000005
+      },
+      "record_sha256": "723cd71d1b31f981d4d86d6d2192f693de3c4a3792cf988f421dc8979f085024",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 164.468603,
+          "h": "4ab78b61bab1f3813fda6cfd3f23ad97b822dc81ea8fec5dbe64e701fdc506ac"
+        },
+        {
+          "tree": "candidate",
+          "ms": 166.425874,
+          "h": "4ab78b61bab1f3813fda6cfd3f23ad97b822dc81ea8fec5dbe64e701fdc506ac"
+        }
+      ]
+    },
+    {
+      "polynomial": "(y^2-2*x^2)*(y^2+x^2)*(y^3-2*x^3)",
+      "mode": "embedded",
+      "both_zetas": true,
+      "pairs": 2,
+      "median_ms": {
+        "base": 200.48237849999998,
+        "candidate": 208.9615265
+      },
+      "record_sha256": "949ada3629d17eeb6c5ea438587c7b07c09121e40ee49a1dce8002d29a05a3b7",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 145.858504,
+          "h": "1aa60e616d85e22627e1c256d0e2eba0e588042533ed98b9b58f1c1d2129aa1b"
+        },
+        {
+          "tree": "candidate",
+          "ms": 139.475745,
+          "h": "1aa60e616d85e22627e1c256d0e2eba0e588042533ed98b9b58f1c1d2129aa1b"
+        }
+      ]
+    },
+    {
+      "polynomial": "y^2-x^3",
+      "mode": "embedded",
+      "both_zetas": true,
+      "pairs": 7,
+      "median_ms": {
+        "base": 195.145789,
+        "candidate": 197.643241
+      },
+      "record_sha256": "b7bb4cf0997f4381b35c2284fe1ce0bd1f121cddc1f692466db15b69cb650bcd",
+      "saved_replay": [
+        {
+          "tree": "base",
+          "ms": 140.342104,
+          "h": "aaf012c7df80bbf79cadae76142ae35b05a5a5e34572107bc69bc02b612032a4"
+        },
+        {
+          "tree": "candidate",
+          "ms": 142.305076,
+          "h": "aaf012c7df80bbf79cadae76142ae35b05a5a5e34572107bc69bc02b612032a4"
+        }
+      ]
+    }
+  ],
+  "profile": {
+    "input": "x^97+y^97",
+    "elapsed_s": 11.367,
+    "find_tangent_roots_s": 0.180923,
+    "root_index_calls": 96,
+    "total_root_index_s": 10.795609,
+    "scope": "Instrumented native producer measured separately before optimization."
+  },
+  "validation": {
+    "flint_legacy_root_string_corpus": 135,
+    "tested_live_install": true,
+    "ignored_plane_record_fields": [
+      "elapsed_ms"
+    ],
+    "data_checks": "Charts and their pullback factorizations, full roots and branch order, numerical data and both zeta functions. Singular independently checked chart strict transforms, transversality, total transforms, Milnor number and the product of explicit slopes on completed branch runs."
+  }
+}

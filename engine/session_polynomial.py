@@ -6,6 +6,7 @@ from functools import cached_property
 import re
 
 from . import native_polynomial as native
+from .point_geometry import support_profile
 
 
 class _RationalField:
@@ -26,7 +27,7 @@ class _NumberField:
 
     @cached_property
     def degree(self):
-        return max(powers[0] for powers in native.terms((self.parameter,), self.minimal_polynomial))
+        return support_profile(native.terms((self.parameter,), self.minimal_polynomial))[1]
 
     def __repr__(self):
         return f"QQ[{self.parameter}]/({self.minimal_polynomial}), {self.parameter} = {self.embedding}"
@@ -34,7 +35,8 @@ class _NumberField:
     def reduce(self, value, variables):
         if self.parameter not in value.free_symbols:
             return value
-        if all(powers[-1] < self.degree for powers in native.terms(variables, value)):
+        degrees, _, _ = support_profile(native.terms(variables, value))
+        if degrees[-1] < self.degree:
             return value
 
         from .affine_kernel import _request, _ring, _sparse_expression

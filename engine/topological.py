@@ -11,52 +11,19 @@ other. The strict transform is one of the components, with N = nu = 1.
 (Denef and Loeser, J. Amer. Math. Soc. 5 (1992).)
 """
 import ctypes
-from fractions import Fraction
 
 from . import native_library as gb
-from .monodromy import cyclotomic_exponent
-from .polynomial import InputError
+from .monodromy import acampo_factors, cyclotomic_exponent
+from .polynomial import InputError, integer_from_decimal
 
 
 def _acampo(data, strata):
     """The exponents {N: -chi} of A'Campo's formula, from the strata on one component."""
     orders = {row["component"]: row["multiplicity"] for row in data}
-    powers = {}
-    for row in strata:
-        if len(row["components"]) == 1:
-            n = orders[row["components"][0]]
-            powers[n] = powers.get(n, 0) - row["euler_characteristic"]
-    return {n: e for n, e in powers.items() if e}
-
-
-def _reference(numbers, strata):
-    """Independent polynomial reduction and factorization for comparison."""
-    import sympy as sp
-    s = sp.Symbol("s")
-    # Exact arithmetic of polynomials in s over a common denominator: the
-    # product of N*s + nu over all the components.
-    linear = {name: sp.Poly(order*s + nu, s, domain=sp.ZZ) for name, (order, nu) in numbers.items()}
-    numerator = sp.Poly(0, s, domain=sp.ZZ)
-    for row in strata:
-        term = sp.Poly(row["euler_characteristic"], s, domain=sp.ZZ)
-        for name, factor in linear.items():
-            if name not in row["components"]:
-                term *= factor
-        numerator += term
-    denominator = sp.Poly(1, s, domain=sp.ZZ)
-    for factor in linear.values():
-        denominator *= factor
-    numerator, denominator = numerator.cancel(denominator, include=True)
-    value = sp.factor(numerator.as_expr()/denominator.as_expr())
-    numerator, denominator = sp.fraction(value)
-    poles = []
-    for root, order in sorted(sp.roots(sp.Poly(denominator, s)).items()):
-        candidates = [name for name, (n, nu) in numbers.items() if sp.Rational(-nu, n) == root]
-        poles.append({"value": str(root), "order": order, "components": candidates})
-    if value.subs(s, 0) != 1:
-        return None
-    return (str(value).replace("**", "^"), str(sp.expand(numerator)).replace("**", "^"),
-            str(sp.factor(denominator)).replace("**", "^"), poles)
+    rows = ({"multiplicity": orders[row["components"][0]], "euler_characteristic": row["euler_characteristic"]}
+            for row in strata if len(row["components"]) == 1)
+    factors, _ = acampo_factors(rows)
+    return {row["multiplicity"]: row["exponent"] for row in factors}
 
 
 def _polynomial_text(coefficients):
@@ -75,7 +42,7 @@ def _polynomial_text(coefficients):
 
 def _factor_display(lines):
     content, count = map(int, next(lines).split())
-    factors, roots = [], []
+    factors = []
     for _ in range(count):
         exponent, *coefficients = map(int, next(lines).split())
         terms = [(i, a) for i, a in reversed(list(enumerate(coefficients))) if a]
@@ -83,9 +50,7 @@ def _factor_display(lines):
         base = f"({value})" if len(terms) > 1 else value
         key = (len(terms), terms)
         factors.append((key, value, base, exponent))
-        if len(coefficients) == 2:
-            roots.append((Fraction(-coefficients[0], coefficients[1]), exponent))
-    return content, sorted(factors), sorted(roots)
+    return content, sorted(factors)
 
 
 def _product(content, factors, grouped=False):
@@ -113,7 +78,8 @@ def _fraction_display(nc, nf, dc, df):
 
 def _reduce(numbers, strata):
     if gb._MODE == "sympy":
-        return _reference(numbers, strata)
+        from tests.topological_oracle import reduce
+        return reduce(numbers, strata)
     library = gb._kernel()
     if library is None or not hasattr(library, "atlas_topological"):
         raise ArithmeticError("Build the native topological zeta kernel.")
@@ -138,23 +104,19 @@ def _reduce(numbers, strata):
     result = None
     if coefficients != "bad origin":
         expanded = _polynomial_text(list(map(int, coefficients.split())))
-        nc, nf, _ = _factor_display(lines)
-        dc, df, roots = _factor_display(lines)
+        nc, nf = _factor_display(lines)
+        dc, df = _factor_display(lines)
         value = _fraction_display(nc, nf, dc, df)
         denominator = _product(dc, df)
-        poles = [{"value": str(r), "order": e, "components": [name for name, (n, nu) in numbers.items()
-                                                               if Fraction(-nu, n) == r]} for r, e in roots]
+        poles = []
+        names = list(numbers)
+        for line in lines:
+            root, order, *indices = line.split()
+            poles.append({"value": root, "order": int(order), "components": [names[int(i)] for i in indices]})
         result = (value, expanded, denominator, poles)
     if gb.CHECK:
-        reference = _reference(numbers, strata)
-        if result != reference:
-            # Factored polynomials have several unambiguous displays. Verify
-            # each rendered rational expression exactly as well as pole data.
-            import sympy as sp
-            if (result is None or reference is None or result[3] != reference[3]
-                    or any(sp.cancel(sp.sympify(a.replace("^", "**")) - sp.sympify(b.replace("^", "**"))) != 0
-                           for a, b in zip(result[:3], reference[:3]))):
-                raise AssertionError("The native topological zeta reduction differs from SymPy's.")
+        from tests.topological_oracle import check_reduction, reduce
+        check_reduction(result, reduce(numbers, strata))
     return result
 
 
@@ -193,7 +155,8 @@ def topological_zeta(record, *, polynomial=None, monodromy=None, strata=None):
         # the origin exactly when the cyclotomic polynomial of its order
         # divides an unbalanced product of the factors 1 - T^N.
         for pole in poles:
-            q = Fraction(pole["value"]).denominator
+            # The native kernel returns the canonical rational as a/b or a.
+            q = integer_from_decimal(pole["value"].partition("/")[2] or "1")
             balance = cyclotomic_exponent(monodromy["factors"], q)
             pole["in_monodromy_zeta_at_origin"] = balance != 0
     return {"status": "computed", "variable": "s",

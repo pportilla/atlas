@@ -1,0 +1,186 @@
+{
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "solvers": {
+    "Singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "Atlas": "819a59eec366c16fd4e829d4fc5870341142c01c"
+  },
+  "method": "Each solver starts in a new process for each input. Wall time includes process startup. Calculation CPU time excludes input parsing and library loading. Singular uses chern.lib::EulerAff with the trial number as the seed.",
+  "timeout_seconds": 15.0,
+  "cases": {
+    "fermat_curve": [
+      "x,y",
+      "x^11+y^11-1",
+      -99
+    ],
+    "free_torus_fibres": [
+      "x,y,z",
+      "x^2*y^2+x^2*z^2+y^2*z^2-1",
+      16
+    ],
+    "double_quadric_chart": [
+      "z,t,u",
+      "(z*t-u^2)^5+1+z^5+t^5+u^5",
+      145
+    ]
+  },
+  "runs": [
+    {
+      "trial": 1,
+      "case": "fermat_curve",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.069,
+      "calculation_cpu_ms": 1.825
+    },
+    {
+      "trial": 1,
+      "case": "fermat_curve",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.0288,
+      "calculation_cpu_ms": 9.0
+    },
+    {
+      "trial": 1,
+      "case": "free_torus_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0705,
+      "calculation_cpu_ms": 1.985
+    },
+    {
+      "trial": 1,
+      "case": "free_torus_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0514,
+      "calculation_cpu_ms": 31.0
+    },
+    {
+      "trial": 1,
+      "case": "double_quadric_chart",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 145,
+      "wall_seconds": 0.0667,
+      "calculation_cpu_ms": 2.972
+    },
+    {
+      "trial": 1,
+      "case": "double_quadric_chart",
+      "solver": "Singular",
+      "status": "timeout",
+      "wall_seconds": 15.017
+    },
+    {
+      "trial": 2,
+      "case": "fermat_curve",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.0291,
+      "calculation_cpu_ms": 9.0
+    },
+    {
+      "trial": 2,
+      "case": "fermat_curve",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.0624,
+      "calculation_cpu_ms": 1.526
+    },
+    {
+      "trial": 2,
+      "case": "free_torus_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0523,
+      "calculation_cpu_ms": 32.0
+    },
+    {
+      "trial": 2,
+      "case": "free_torus_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0626,
+      "calculation_cpu_ms": 1.756
+    },
+    {
+      "trial": 2,
+      "case": "double_quadric_chart",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 145,
+      "wall_seconds": 12.2888,
+      "calculation_cpu_ms": 12265.0
+    },
+    {
+      "trial": 2,
+      "case": "double_quadric_chart",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 145,
+      "wall_seconds": 0.0611,
+      "calculation_cpu_ms": 2.684
+    },
+    {
+      "trial": 3,
+      "case": "fermat_curve",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.0538,
+      "calculation_cpu_ms": 1.36
+    },
+    {
+      "trial": 3,
+      "case": "fermat_curve",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": -99,
+      "wall_seconds": 0.0269,
+      "calculation_cpu_ms": 8.0
+    },
+    {
+      "trial": 3,
+      "case": "free_torus_fibres",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0567,
+      "calculation_cpu_ms": 1.477
+    },
+    {
+      "trial": 3,
+      "case": "free_torus_fibres",
+      "solver": "Singular",
+      "status": "verified",
+      "chi": 16,
+      "wall_seconds": 0.0449,
+      "calculation_cpu_ms": 27.0
+    },
+    {
+      "trial": 3,
+      "case": "double_quadric_chart",
+      "solver": "Atlas",
+      "status": "verified",
+      "chi": 145,
+      "wall_seconds": 0.0576,
+      "calculation_cpu_ms": 2.466
+    },
+    {
+      "trial": 3,
+      "case": "double_quadric_chart",
+      "solver": "Singular",
+      "status": "timeout",
+      "wall_seconds": 15.019
+    }
+  ]
+}

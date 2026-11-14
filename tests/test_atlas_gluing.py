@@ -14,6 +14,19 @@ from engine.resolve import resolve
 
 
 class FieldAndOpenOverlaps(unittest.TestCase):
+    def test_branch_aliases_preserve_parallel_edges_and_loops(self):
+        from engine.strata import _vertex_aliases
+
+        def graph(labels, edges):
+            return {"vertices": [{"id": label} for label in labels],
+                    "cells": [{"vertices": vertices} for vertices in edges]}
+
+        old = graph(("Eu", "Ev", "F"), [("Eu", "Eu"), ("Eu", "F"), ("Eu", "F"), ("Ev", "F")])
+        new = graph(("E.1", "E.2", "F"), [("E.2", "E.2"), ("E.1", "F"), ("E.2", "F"), ("E.2", "F")])
+        self.assertEqual(_vertex_aliases(new, old), {"E.1": "Ev", "E.2": "Eu", "F": "F"})
+        new["cells"][0]["vertices"] = ("E.1", "E.1")
+        self.assertIsNone(_vertex_aliases(new, old))
+
     def test_conjugate_character_curves_attach_on_the_same_branch(self):
         result = resolve({"polynomial": "2*x^2+3*y^4-z^7+x*y*z^4", "variables": list("xyz"),
                           "mode": "intrinsic"})

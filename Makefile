@@ -1,4 +1,4 @@
-.PHONY: all ordinary plane chain toric newton groebner gpu test test-gpu test-triton bench clean
+.PHONY: all ordinary plane chain toric newton groebner gpu test check-native-boundary test-gpu test-triton bench clean
 all: ordinary plane chain toric newton groebner
 ordinary:
 	$(MAKE) -C native
@@ -31,6 +31,8 @@ test-triton: all
 	python3 -m unittest discover -s tests -p 'test_gpu_rank.py'
 	python3 -m unittest discover -s tests -p 'test_gpu_replay.py'
 	python3 -m unittest discover -s tests -p 'test_gpu_resolution.py'
+check-native-boundary:
+	python3 -m unittest tests.test_native_math_boundary.NativeMathBoundaryTests
 test: all
 	$(MAKE) -C native -f groebner.mk test-verify
 	python3 -m unittest discover -s tests -v

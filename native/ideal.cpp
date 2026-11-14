@@ -8,13 +8,16 @@
 #include "groebner.hpp"
 #include <flint/fmpz_mat.h>
 #include <flint/fmpz_poly.h>
+#include <flint/fmpz_mpoly_factor.h>
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <sstream>
 #include <memory>
+#include <optional>
 
 namespace atlas {
 namespace {
@@ -1075,10 +1078,8 @@ int minimum_height(const std::vector<u64>& supports, u64 selected, int height, i
     return best;
 }
 
-std::string op_dimension(Reader& in) {
-    const Ring R = grevlex(in.number(0));
-    const Basis basis(R, polys(in.rest(R)));
-    if (basis.unit()) return "-1\n";
+int dimension_of_basis(const Ring& R, const Basis& basis) {
+    if (basis.unit()) return -1;
     std::vector<u64> supports;
     for (const auto& e : basis.engine.G) {
         u64 support = 0;
@@ -1091,7 +1092,60 @@ std::string op_dimension(Reader& in) {
         return count_a == count_b ? a < b : count_a < count_b;
     });
     supports.erase(std::unique(supports.begin(), supports.end()), supports.end());
-    return std::to_string(R.n - minimum_height(supports, 0, 0, R.n)) + "\n";
+    return R.n - minimum_height(supports, 0, 0, R.n);
+}
+
+std::string op_dimension(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    return std::to_string(dimension_of_basis(R, Basis(R, polys(in.rest(R))))) + "\n";
+}
+
+// Does the residual ideal cut the exceptional fibre to dimension below k?
+// If V(base) = V(J) x A^d, every irreducible component is a cylinder.
+// A unit coefficient in the free variables makes the residual nonzero
+// generically on every component. Otherwise decide by the full dimension.
+std::string op_residual_dimension_below(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const int threshold = in.number(1);
+    Basis base(R, polys(in.ideal(R, in.count(2))));
+    const int dim = dimension_of_basis(R, base);
+    if (dim < threshold) return "1\n";
+    std::vector<bool> free(R.n, true);
+    for (const auto& e : base.engine.G)
+        for (size_t i = 0; i < e.p.size(); ++i)
+            for (int v = 0; v < R.n; ++v)
+                if (Ring::field(e.p.m.data() + i*R.stride, R.position(v))) free[v] = false;
+    std::vector<Poly> remaining;
+    for (const Gen& g : in.rest(R)) {
+        Poly f = base.remainder(g.p);
+        if (f.empty()) continue;
+        if (constant(f)) return "1\n";
+        if (dim == threshold && std::find(free.begin(), free.end(), true) != free.end()) {
+            // A group containing only a pure free-variable term has a
+            // nonzero constant coefficient (the grevlex normal form is
+            // already reduced modulo J). Other groups need no factorization.
+            std::map<std::vector<long>, bool> constant_coefficient;
+            long exponent[MAX_VARIABLES];
+            for (size_t i = 0; i < f.size(); ++i) {
+                R.unpack(f.m.data() + i*R.stride, exponent);
+                bool scalar = true;
+                std::vector<long> key;
+                for (int v = 0; v < R.n; ++v) {
+                    if (free[v]) key.push_back(exponent[v]);
+                    else if (exponent[v]) scalar = false;
+                }
+                const auto inserted = constant_coefficient.emplace(std::move(key), scalar);
+                if (!inserted.second) inserted.first->second = false;
+            }
+            for (const auto& entry : constant_coefficient)
+                if (entry.second) return "1\n";
+        }
+        remaining.push_back(std::move(f));
+    }
+    if (remaining.empty()) return "0\n";
+    auto all = base.elements();
+    all.insert(all.end(), remaining.begin(), remaining.end());
+    return dimension_of_basis(R, Basis(R, all)) < threshold ? "1\n" : "0\n";
 }
 
 // "saturate n s": s generators, then the element to saturate by.
@@ -2086,22 +2140,63 @@ bool monomial_orbit_strata(const Ring& R, const std::vector<Poly>& base,
 // not empty, the Euler characteristic with compact supports of the points of
 // the part lying on those of J, on no other one of the k and on none of the
 // r. Answer: a line "stratum m j_1 ... j_m chi" for each J where it is not zero.
-std::string op_strata(Reader& in) {
-    const Ring R = grevlex(in.number(0));
-    const size_t b = in.count(1), k = in.count(2);
-    std::vector<size_t> sizes(k);
-    for (size_t i = 0; i < k; ++i) sizes[i] = in.count(3 + i);
-    const size_t r = in.numbers.size() > 3 + k ? in.count(3 + k) : 0;
-    std::vector<size_t> left(r);
-    for (size_t i = 0; i < r; ++i) left[i] = in.count(4 + k + i);
-    std::vector<Poly> base = present(polys(in.ideal(R, b)));
-    std::vector<std::vector<Poly>> ideals, removed;
-    for (size_t i = 0; i < k; ++i) ideals.push_back(present(polys(in.ideal(R, sizes[i]))));
-    for (size_t i = 0; i < r; ++i) removed.push_back(present(polys(in.ideal(R, left[i]))));
+// A marked coefficient field represents one embedding. Divide each chart's
+// geometric contribution by its own degree before adding disjoint pieces.
+std::string op_strata_totals(Reader& in) {
+    std::istringstream rows(std::string(in.at, in.end));
+    std::map<size_t, Z> sums;
+    for (std::string row; std::getline(rows, row);) {
+        std::istringstream fields(row);
+        size_t key;
+        std::string degree_text, count_text, extra;
+        int sign = 1;
+        if (!(fields >> key >> degree_text >> count_text >> sign) || (sign != -1 && sign != 1) || fields >> extra)
+            throw std::invalid_argument("Expected a stratum, field degree and Euler characteristic.");
+        Z degree, count;
+        if (fmpz_set_str(&degree.v, degree_text.c_str(), 10) ||
+            fmpz_set_str(&count.v, count_text.c_str(), 10) || fmpz_sgn(&degree.v) <= 0)
+            throw std::invalid_argument("Invalid stratum contribution.");
+        if (!fmpz_divisible(&count.v, &degree.v)) return "inconsistent\n";
+        fmpz_divexact(&count.v, &count.v, &degree.v);
+        auto& total = sums[key];
+        if (sign == 1) fmpz_add(&total.v, &total.v, &count.v);
+        else fmpz_sub(&total.v, &total.v, &count.v);
+    }
     std::string out;
-    if (removed.empty() && monomial_orbit_strata(R, base, ideals, out))
-        return out.empty() ? "none\n" : out;
+    for (const auto& [key, count] : sums) {
+        if (fmpz_is_zero(&count.v)) continue;
+        char* text = fmpz_get_str(nullptr, 10, &count.v);
+        out += std::to_string(key) + " " + text + "\n";
+        flint_free(text);
+    }
+    return out;
+}
+
+using DivisorIdeals = std::vector<std::vector<Poly>>;
+struct SubsetOrder {
+    bool operator()(const std::vector<size_t>& a, const std::vector<size_t>& b) const {
+        return a.size() == b.size() ? a < b : a.size() < b.size();
+    }
+};
+using StratumTotals = std::map<std::vector<size_t>, Z, SubsetOrder>;
+
+std::vector<Poly> fibre_factors(const Ring&, const Poly&);
+
+void count_fibre_piece(const Ring& R, Basis& basis, DivisorIdeals ideals,
+                       DivisorIdeals removed, StratumTotals& totals) {
+    if (basis.unit()) return;
+    auto base = basis.elements();
+    auto restrict = [&](DivisorIdeals& conditions) {
+        for (auto& ideal : conditions) {
+            for (auto& polynomial : ideal)
+                polynomial = basis.remainder(std::move(polynomial));
+            ideal = present(std::move(ideal));
+        }
+    };
+    restrict(ideals);
+    restrict(removed);
     restrict_to_base_monomials(R, base, ideals, removed);
+    const size_t k = ideals.size();
     Euler euler(R);
     std::vector<std::vector<size_t>> alive = {{}};
     for (size_t size = 1; size <= k; ++size) {
@@ -2125,7 +2220,10 @@ std::string op_strata(Reader& in) {
                     for (size_t j = 0; j < k; ++j)
                         if (std::find(subset.begin(), subset.end(), j) == subset.end()) others.push_back(ideals[j]);
                     const auto chi = euler.characteristic(equations, others);
-                    if (!fmpz_is_zero(&chi.v)) append_stratum(out, subset, chi);
+                    if (!fmpz_is_zero(&chi.v)) {
+                        auto& value = totals[subset];
+                        fmpz_add(&value.v, &value.v, &chi.v);
+                    }
                 }
             }
             size_t d = size;
@@ -2137,6 +2235,46 @@ std::string op_strata(Reader& in) {
         if (found.empty()) break;
         alive = std::move(found);
     }
+}
+
+std::string op_strata(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const size_t b = in.count(1), k = in.count(2);
+    std::vector<size_t> sizes(k);
+    for (size_t i = 0; i < k; ++i) sizes[i] = in.count(3 + i);
+    const size_t r = in.numbers.size() > 3 + k ? in.count(3 + k) : 0;
+    std::vector<size_t> left(r);
+    for (size_t i = 0; i < r; ++i) left[i] = in.count(4 + k + i);
+    std::vector<Poly> base = present(polys(in.ideal(R, b)));
+    std::vector<std::vector<Poly>> ideals, removed;
+    for (size_t i = 0; i < k; ++i) ideals.push_back(present(polys(in.ideal(R, sizes[i]))));
+    for (size_t i = 0; i < r; ++i) removed.push_back(present(polys(in.ideal(R, left[i]))));
+    if (k == 0) return "none\n";
+    std::string out;
+    if (removed.empty() && monomial_orbit_strata(R, base, ideals, out))
+        return out.empty() ? "none\n" : out;
+    // A fan can try a shared orbit calculation before falling back to general ideal strata.
+    if (in.op == "monomial_strata") return "undetermined\n";
+    Basis basis(R, base);
+    if (basis.unit()) return "none\n";
+    const auto equations = basis.elements();
+    std::vector<Poly> factors;
+    if (equations.size() == 1 && equations[0].m[0] > 1)
+        factors = fibre_factors(R, equations[0]);
+    StratumTotals totals;
+    if (factors.empty() || (factors.size() == 1 && same(factors[0], equations[0]))) {
+        count_fibre_piece(R, basis, ideals, removed, totals);
+    } else {
+        // The first vanished factor names a unique piece of the owned fibre.
+        // Include previous factors among the holes to discard all overlaps.
+        for (const Poly& factor : factors) {
+            Basis piece(R, {factor});
+            count_fibre_piece(R, piece, ideals, removed, totals);
+            removed.push_back({factor});
+        }
+    }
+    for (const auto& [subset, chi] : totals)
+        if (!fmpz_is_zero(&chi.v)) append_stratum(out, subset, chi);
     return out.empty() ? "none\n" : out;
 }
 
@@ -2145,24 +2283,42 @@ std::string op_strata(Reader& in) {
 // tangent space of the intersection of all coordinate divisors through p.
 // The vector fields x_j*d/dx_j for boundary axes, and d/dx_j for all other
 // axes, span exactly this tangent space at p (even if an ordinary x_j=0).
-bool coordinate_crossings_on_fibre(const Ring& R, const std::vector<std::vector<Poly>>& divisors,
-                                   const std::vector<Poly>& fibre) {
+std::optional<bool> coordinate_crossings_on_fibre(const Ring& R,
+                                                 const std::vector<std::vector<Poly>>& divisors,
+                                                 const std::vector<Poly>& fibre,
+                                                 bool monomial_only = false) {
     const Poly* hypersurface = nullptr;
     std::vector<bool> boundary(R.n);
     for (const auto& ideal : divisors) {
-        if (ideal.size() != 1) return false;
+        if (ideal.size() != 1) return std::nullopt;
         const auto& f = ideal.front();
         if (f.size() == 1 && f.m[0] == 1) {
             int j = 0;
             while (!Ring::field(f.m.data(), R.position(j))) ++j;
-            if (boundary[j]) return false;
+            if (boundary[j]) return std::nullopt;
             boundary[j] = true;
         } else {
-            if (hypersurface) return false;
+            if (hypersurface) return std::nullopt;
             hypersurface = &f;
         }
     }
     if (!hypersurface || constant(*hypersurface)) return true;
+
+    // A nonzero scalar modulo the monomial fibre ideal is a unit at every
+    // geometric point of that fibre. Its support suffices over QQ. Apply
+    // this to f itself or to a derivative tangent to all boundary divisors.
+    const bool monomial_fibre = std::all_of(fibre.begin(), fibre.end(),
+                                           [](const Poly& g) { return g.size() == 1; });
+    auto unit_on_fibre = [&](const Poly& f) {
+        if (constant(f)) return true;
+        if (!monomial_fibre || f.empty() || f.m[(f.size()-1)*R.stride] != 0) return false;
+        for (size_t i = 0; i+1 < f.size(); ++i)
+            if (std::none_of(fibre.begin(), fibre.end(), [&](const Poly& g) {
+                return R.divides(g.m.data(), f.m.data() + i*R.stride);
+            })) return false;
+        return true;
+    };
+    if (unit_on_fibre(*hypersurface)) return true;
 
     std::vector<Poly> bad = fibre;
     bad.push_back(*hypersurface);
@@ -2174,15 +2330,150 @@ bool coordinate_crossings_on_fibre(const Ring& R, const std::vector<std::vector<
             variable(R, x.m.data(), j);
             d = multiply(R, x, d);
         }
-        if (constant(d)) return true;
+        if (unit_on_fibre(d)) return true;
         bad.push_back(std::move(d));
     }
+    if (monomial_only) return std::nullopt;
     try {
         return unit_basis(R, bad);
     } catch (const Limit&) {
         // The ordinary subset tests can still succeed on smaller ideals.
+        return std::nullopt;
+    }
+}
+
+// Work on each rational factor of a fibre equation. Its zero set is covered
+// over the algebraic closure even if a rational factor splits geometrically.
+std::vector<Poly> fibre_factors(const Ring& R, const Poly& equation) {
+    struct Factorization {
+        fmpz_mpoly_ctx_t ctx;
+        fmpz_mpoly_t f;
+        fmpz_mpoly_factor_t factors;
+        explicit Factorization(int n) {
+            fmpz_mpoly_ctx_init(ctx, n, ORD_DEGREVLEX);
+            fmpz_mpoly_init(f, ctx);
+            fmpz_mpoly_factor_init(factors, ctx);
+        }
+        ~Factorization() {
+            fmpz_mpoly_factor_clear(factors, ctx);
+            fmpz_mpoly_clear(f, ctx);
+            fmpz_mpoly_ctx_clear(ctx);
+        }
+    } work(R.n);
+    long powers[MAX_VARIABLES];
+    ulong exponents[MAX_VARIABLES];
+    for (size_t i = 0; i < equation.size(); ++i) {
+        R.unpack(equation.m.data()+i*R.stride, powers);
+        for (int j = 0; j < R.n; ++j) exponents[j] = powers[j];
+        fmpz_mpoly_push_term_fmpz_ui(work.f, &equation.c[i].v, exponents, work.ctx);
+    }
+    fmpz_mpoly_sort_terms(work.f, work.ctx);
+    if (!fmpz_mpoly_factor(work.factors, work.f, work.ctx))
+        return {equation}; // The unsplit fibre is still an exact cover.
+    std::vector<Poly> out;
+    for (slong i = 0; i < fmpz_mpoly_factor_length(work.factors, work.ctx); ++i) {
+        fmpz_mpoly_factor_get_base(work.f, work.factors, i, work.ctx);
+        Poly f;
+        for (slong j = 0; j < fmpz_mpoly_length(work.f, work.ctx); ++j) {
+            fmpz_mpoly_get_term_exp_si(powers, work.f, j, work.ctx);
+            fmpz_mpoly_get_term_coeff_fmpz(&f.c.emplace_back().v, work.f, j, work.ctx);
+            f.m.resize(f.c.size()*R.stride);
+            R.pack(f.m.data()+(f.c.size()-1)*R.stride, powers);
+        }
+        const auto identity = shifted(R.n, 0);
+        out.push_back(convert(R, R, f, identity.data())); // sort for the kernel
+    }
+    return out;
+}
+
+struct OwnedCrossings {
+    const Ring& R;
+    long codimension;
+    std::vector<Poly> ambient, fibre;
+    std::vector<std::vector<Poly>> divisors, removed;
+    std::vector<bool> strict;
+
+    // V(base) minus the union of the holes is a union of D(product), taking
+    // one generator per hole. Keep products reduced in the base ring.
+    bool outside_holes(Basis& base, const Poly& product, size_t i = 0) const {
+        if (product.empty() || base.unit()) return false;
+        if (i == removed.size()) return !empty_off_basis(R, base, product);
+        for (const Poly& g : removed[i]) {
+            Poly unit = base.remainder(multiply(R, product, base.remainder(g)));
+            if (outside_holes(base, unit, i+1)) return true;
+        }
         return false;
     }
+
+    bool regular(const std::vector<Poly>& piece, const std::vector<size_t>& subset) const {
+        std::vector<Poly> equations = ambient, base = piece;
+        for (size_t j : subset) {
+            equations = joined(std::move(equations), divisors[j]);
+            if (!strict[j]) base = joined(std::move(base), divisors[j]);
+        }
+        Basis boundary(R, base);
+        if (boundary.unit()) return true;
+        std::vector<Poly> locus = boundary.elements();
+        for (size_t j : subset)
+            if (strict[j])
+                for (const Poly& g : divisors[j]) locus.push_back(boundary.remainder(g));
+        Basis cut(R, present(locus));
+        if (!outside_holes(cut, one(R))) return true;
+        const long rank = codimension + static_cast<long>(subset.size());
+        Matrix matrix = jacobian(R, equations);
+        if (rank < 1 || rank > R.n || static_cast<size_t>(rank) > matrix.rows) return false;
+        // Differentiate first. Reducing the rows on the boundary before
+        // adjoining the strict equation avoids intermediate high-degree bases.
+        for (size_t i = 0; i < matrix.rows; ++i) reduce_row(boundary, matrix.row(i), matrix.columns);
+        Minors minors(R, std::move(matrix), static_cast<int>(rank));
+        do {
+            for (Poly g : remainders(boundary, minors)) {
+                if (constant(g)) return true;
+                locus.push_back(std::move(g));
+            }
+        } while (minors.next());
+        Basis bad(R, present(locus));
+        return !outside_holes(bad, one(R));
+    }
+
+    bool over(const std::vector<Poly>& piece, std::vector<size_t>& subset, size_t first = 0) const {
+        for (size_t i = first; i < divisors.size(); ++i) {
+            subset.push_back(i);
+            if (!regular(piece, subset) || !over(piece, subset, i+1)) return false;
+            subset.pop_back();
+        }
+        return true;
+    }
+
+    bool certify() const {
+        if (!codimension && ambient.empty() && removed.empty()) {
+            if (auto coordinate = coordinate_crossings_on_fibre(R, divisors, fibre)) return *coordinate;
+        }
+        std::vector<Poly> base = joined(ambient, fibre);
+        std::vector<size_t> subset;
+        if (fibre.empty()) return over(base, subset);
+        const Poly& shortest = *std::min_element(fibre.begin(), fibre.end(),
+            [](const Poly& a, const Poly& b) { return a.size() < b.size(); });
+        for (const Poly& f : fibre_factors(R, shortest))
+            if (!over(joined(base, {f}), subset)) return false;
+        return true;
+    }
+};
+
+std::string op_owned_crossings(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const long dimension = in.number(1);
+    if (dimension < 0 || dimension > R.n) throw std::invalid_argument("Invalid chart dimension.");
+    const size_t parts = in.count(3), holes = in.count(5);
+    OwnedCrossings check{R, R.n-dimension, present(polys(in.ideal(R, in.count(2)))),
+                         present(polys(in.ideal(R, in.count(4)))), {}, {}, {}};
+    for (size_t i = 0; i < parts; ++i) {
+        check.strict.push_back(in.count(6+2*i) != 0);
+        check.divisors.push_back(present(polys(in.ideal(R, in.count(7+2*i)))));
+    }
+    for (size_t i = 0; i < holes; ++i)
+        check.removed.push_back(present(polys(in.ideal(R, in.count(6+2*parts+i)))));
+    return check.certify() ? "yes\n" : "no\n";
 }
 
 // "crossings n d a k s_1 ... s_k f r": a chart W = V(ambient) of dimension d in
@@ -2209,7 +2500,12 @@ std::string op_crossings(Reader& in) {
     const std::vector<Poly> fibre = present(polys(in.ideal(R, f)));
     const std::vector<Poly> region = present(polys(in.ideal(R, r)));
     const long codimension = R.n - dimension;
-    if (!codimension && ambient.empty() && coordinate_crossings_on_fibre(R, divisors, fibre))
+    if (in.op == "bounded_crossings") {
+        if (codimension || !ambient.empty() || !region.empty()) return "unknown\n";
+        return coordinate_crossings_on_fibre(R, divisors, fibre, true).value_or(false)
+            ? "none\n" : "unknown\n";
+    }
+    if (!codimension && ambient.empty() && coordinate_crossings_on_fibre(R, divisors, fibre).value_or(false))
         return "none\n";
     std::vector<std::vector<size_t>> alive = {{}};
     std::string out;
@@ -2461,6 +2757,54 @@ std::string op_blowup(Reader& in) {
     return out;
 }
 
+std::string graph_strict_parts(const Ring& R, const std::vector<Poly>& ambient,
+                              Basis& chart, Basis& exceptional, const Gen& pivot,
+                              const Ideal& functions) {
+    // Graph charts are saturated by p. In their coordinate ring p
+    // is regular, so the residual of a principal (f) stays
+    // principal. Use normal forms in A[t]/(t*p-1) to divide.
+    Ring E;
+    E.init(R.n + 1, 2);
+    auto up = shifted(R.n, 1);
+    auto down = shifted(E.n, -1);
+    std::unique_ptr<Basis> inverse;
+    std::string out;
+    for (Gen f : functions) {
+        if (chart.contains(f.p))
+            throw std::invalid_argument("The function vanishes identically on the chart.");
+        size_t order = 0;
+        while (exceptional.contains(f.p)) {
+            if (!inverse) {
+                std::vector<Poly> lifted;
+                for (const Poly& a : ambient) lifted.push_back(convert(R, E, a, up.data()));
+                lifted.push_back(inverse_relation(R, E, pivot.p));
+                inverse = std::make_unique<Basis>(E, lifted);
+            }
+            // The inverse relation uses the primitive polynomial.
+            // Its rational content is accounted for in f's scale.
+            Poly tf = convert(R, E, f.p, up.data());
+            u64 t[MAX_STRIDE];
+            variable(E, t, 0);
+            for (size_t j = 0; j < tf.size(); ++j) {
+                u64* monomial = tf.m.data() + j*E.stride;
+                E.multiply(monomial, monomial, t);
+            }
+            Fraction q = residue(*inverse, std::move(tf));
+            if (q.p.empty() || Ring::field(q.p.m.data(), E.position(0)))
+                throw std::logic_error("The exceptional quotient is not a chart polynomial.");
+            f.p = convert(E, R, q.p, down.data());
+            fmpz_mul(&f.num.v, &f.num.v, &q.num.v);
+            fmpz_mul(&f.num.v, &f.num.v, &pivot.den.v);
+            fmpz_mul(&f.den.v, &f.den.v, &q.den.v);
+            fmpz_mul(&f.den.v, &f.den.v, &pivot.num.v);
+            ++order;
+        }
+        out += std::to_string(order) + " 1\n";
+        put(R, out, {normal(std::move(f.p), &f.num.v, &f.den.v)});
+    }
+    return out;
+}
+
 // Remove the exceptional part from the divisor of a nonzero function.
 // On a smooth chart the ideal of each Cartier divisor is invertible.
 // If the residual ideal is contained in that ideal, quotienting by it
@@ -2473,11 +2817,17 @@ std::string op_strict_parts(Reader& in) {
     std::vector<std::vector<Poly>> divisors;
     std::vector<std::unique_ptr<Basis>> tests;
     for (size_t i = 0; i < count; ++i) {
-        divisors.push_back(polys(in.ideal(R, in.count(3 + i))));
+        const Ideal equations = in.ideal(R, in.count(3 + i));
+        divisors.push_back(polys(equations));
         auto test = std::make_unique<Basis>(R, joined(ambient, divisors.back()));
         if (test->unit() || std::all_of(divisors.back().begin(), divisors.back().end(),
                                        [&](const Poly& f) { return chart.contains(f); }))
             throw std::invalid_argument("Expected a nonempty divisor of positive codimension.");
+        if (in.op == "graph_strict_part") {
+            if (count != 1 || equations.size() != 1)
+                throw std::invalid_argument("Expected one principal exceptional divisor.");
+            return graph_strict_parts(R, ambient, chart, *test, equations.front(), in.rest(R));
+        }
         tests.push_back(std::move(test));
     }
     Quotient quotient(R);
@@ -2641,6 +2991,8 @@ using namespace atlas;
 
 extern "C" {
 
+int atlas_monomial_strata_abi() noexcept { return 1; }
+
 // One request: a header line naming the operation with its integers, then
 // one polynomial per line as read by atlas_groebner. The operations are
 // described above each op_ function. Returns the answer, to be freed with
@@ -2649,7 +3001,8 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
     try {
         Reader in(input, length);
         std::string out;
-        if (in.op == "strict_parts") out = op_strict_parts(in);
+        if (in.op == "strict_parts" || in.op == "graph_strict_part") out = op_strict_parts(in);
+        else if (in.op == "residual_dimension_below") out = op_residual_dimension_below(in);
         else if (in.op == "plane_components") out = op_plane_components(in);
         else if (in.op == "graph_orders") out = op_graph_orders(in);
         else if (in.op == "dimension") out = op_dimension(in);
@@ -2661,8 +3014,10 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "charts") out = op_charts(in);
         else if (in.op == "verify") out = op_verify(in);
         else if (in.op == "surface") out = op_surface(in);
-        else if (in.op == "strata") out = op_strata(in);
-        else if (in.op == "crossings") out = op_crossings(in);
+        else if (in.op == "strata" || in.op == "monomial_strata") out = op_strata(in);
+        else if (in.op == "strata_totals") out = op_strata_totals(in);
+        else if (in.op == "crossings" || in.op == "bounded_crossings") out = op_crossings(in);
+        else if (in.op == "owned_crossings") out = op_owned_crossings(in);
         else if (in.op == "blowup") out = op_blowup(in);
         else throw std::invalid_argument("Unknown operation.");
         return copy_text(out);
@@ -2706,3 +3061,5 @@ char* atlas_groebner_colon(const char* input, size_t length) noexcept {
 }
 
 }
+
+extern "C" int atlas_bounded_crossings_abi() noexcept { return 1; }

@@ -3,39 +3,30 @@
 The C++ kernel constructs a regular fan. Cone exponents give all pullbacks
 and orbit strata exactly by integer pairings, without solving chart equations.
 """
-from itertools import combinations
-from math import prod
 import subprocess
-from .polynomial import LimitError
+from .polynomial import LimitError, integer_text, rational_text
 from .resolve import BUILD
 import json
-from .binomial_kernel import pairings, primitive_character
+from .binomial_kernel import _integer, character, minimum_faces, pairings, run, signed_powers
 
 
 def monomial(names, powers):
-    return '*'.join(v if e==1 else f'{v}^{e}' for v,e in zip(names,powers) if e) or '1'
+    return '*'.join(v if e==1 else f'{v}^{integer_text(e)}' for v,e in zip(names,powers) if e) or '1'
 
 
 def resolve_toric(p, variables, mode, compute=None):
     if len(variables)!=3:
         return None
-    exps=sorted(p, key=lambda e:(sum(e),e), reverse=True)
-    axial=[min((e[i] for e in exps if e[i] and sum(e)==e[i]),default=0) for i in range(3)]
-    if min(axial)<2:
+    rows = run(f"diagonal 3 {len(p)}", *p)
+    if rows == ["none"]:
         return None
-    cofactor = tuple(prod(b for j,b in enumerate(axial) if j != i) for i in range(3))
-    _, w = primitive_character(cofactor)
-    level = w[0]*axial[0]
-    if max(w)>1024:
-        return None
-    principal=[tuple(a if j==i else 0 for j in range(3)) for i,a in enumerate(axial)]
-    higher = [e for e in exps if e not in principal]
-    if higher and min(pairings([w], higher)[0]) <= level:
-        return None
+    level, *w = map(_integer, rows[0].split())
+    principal = [tuple(map(_integer, row.split())) for row in rows[1:4]]
+    exps = [tuple(map(_integer, row.split())) for row in rows[4:]]
     binary=BUILD/'toricfan'
     if not binary.is_file():
         raise RuntimeError('Toric engine is not built. Run make.')
-    proc=subprocess.run([str(binary)],input=' '.join(map(str,w))+'\n',text=True,capture_output=True,timeout=35)
+    proc=subprocess.run([str(binary)],input=' '.join(map(integer_text,w))+'\n',text=True,capture_output=True,timeout=35)
     if not proc.stdout or proc.returncode:
         raise LimitError('Toric fan refinement exceeded its computation budget.')
     fan=json.loads(proc.stdout)
@@ -48,15 +39,14 @@ def resolve_toric(p, variables, mode, compute=None):
     # The Newton polyhedron is the diagonal simplex plus the positive orthant:
     # every higher-weight exponent lies above its supporting plane.
     valuations = pairings(rays, principal)
-    orders = [min(row) for row in valuations]
+    orders, face = minimum_faces(valuations)
     from .chart_batch import transform_batch
     transformed,batch_info=transform_batch(exps,rays,cones,orders,compute=compute)
-    face=[tuple(i for i,value in enumerate(row) if value==m) for row,m in zip(valuations,orders)]
     characters = {}
     for edge in dict.fromkeys(f for f in face[3:] if mode == "intrinsic" and len(f) == 2):
         a, b = edge
-        degree, direction = primitive_character(tuple(x-y for x,y in zip(principal[a],principal[b])))
-        characters[edge] = degree, tuple(v for v, in pairings(rays, (direction,)))
+        _, degree, direction, coefficient = character(principal[a], principal[b], p[principal[a]], p[principal[b]])
+        characters[edge] = degree, tuple(v for v, in pairings(rays, (direction,))), rational_text(coefficient)
     coords=['u','v','w']
     def eid(i):
         return f'E{i-2}'
@@ -75,32 +65,35 @@ def resolve_toric(p, variables, mode, compute=None):
             a,b=face[i];g=characters[face[i]][0]
             divs[i]=[]
             family=f'alpha{a+1}{b+1}'
-            roots[family]={'degree':g,'power_value':str(-p[principal[b]]/p[principal[a]]),
-                'definition':f'{family}_j is root j of T^{g} = {(-p[principal[b]]/p[principal[a]])}, ordered by real then imaginary part, starting at 1.'}
+            roots[family]={'degree':g,'power_value':characters[a,b][2],
+                'definition':f'{family}_j is root j of T^{g} = {characters[a,b][2]}, ordered by real then imaginary part, starting at 1.'}
             for j in range(1,g+1):
                 ident=f'{eid(i)}.{j}';divs[i].append(ident)
                 vertices.append({'id':ident,'ray':rays[i],'root':f'{family}_{j}','ambient_divisor':eid(i)})
         else:
             divs[i]=[]
-    edges=set()
-    for cone in cones:
-        edges.update(tuple(sorted(pair)) for pair in combinations((i for i in cone if i>=3),2))
-    cells=[]
-    for i,j in sorted(edges):
-        if mode=='embedded':
-            cells.append({'vertices':[eid(i),eid(j)]})
-        elif len(inter:=set(face[i])&set(face[j]))==2:
-            a,b=sorted(inter)
-            for t in range(characters[a,b][0]):
-                cells.append({'vertices':[divs[i][t if len(face[i])==2 else 0],divs[j][t if len(face[j])==2 else 0]],
-                    'stratum_root':f'alpha{a+1}{b+1}_{t+1}'})
-    if mode=='embedded':
-        cells += [{'vertices':[eid(i) for i in c]} for c in cones if min(c)>=3]
+    face_rows = [(len(indices), *indices) for indices in face]
+    incidence = run(f"diagonal_cells 3 {len(rays)} {len(cones)} {int(mode == 'intrinsic')}", *face_rows, *cones)
+    cells = []
+    for row in incidence:
+        kind, *fields = row.split()
+        indices = list(map(int, fields))
+        if kind == "triangle" or mode == "embedded":
+            cells.append({"vertices": [eid(i) for i in indices]})
+            continue
+        i, j, a, b = indices
+        for t in range(characters[a,b][0]):
+            cells.append({"vertices": [divs[i][t if len(face[i]) == 2 else 0], divs[j][t if len(face[j]) == 2 else 0]],
+                          "stratum_root": f"alpha{a+1}{b+1}_{t+1}"})
     # A unimodular substitution is injective on monomials. Keep the input's
     # canonical term order across charts; no per-chart sorting or collecting
     # is needed. Reuse the same coefficient and monomial strings in the atlas.
-    coeffs=[(('-' if p[e]<0 else ('+' if i else '')),
-             '' if abs(p[e])==1 else str(abs(p[e]))) for i,e in enumerate(exps)]
+    coeffs = []
+    for i, e in enumerate(exps):
+        text = rational_text(p[e])
+        sign = "-" if text.startswith("-") else "+" if i else ""
+        absolute = text.lstrip("-")
+        coeffs.append((sign, "" if absolute == "1" else absolute))
     powers=[{0:'',1:v} for v in coords]
     def power(j,n):
         cache=powers[j]
@@ -125,8 +118,8 @@ def resolve_toric(p, variables, mode, compute=None):
             elif len(face[i])==2:
                 a,b=face[i]
                 chi=[characters[a,b][1][j] for j in cone]
-                pos=monomial(coords,map(lambda x:max(0,x),chi))
-                neg=monomial(coords,map(lambda x:max(0,-x),chi))
+                plus, minus = signed_powers(tuple(chi))
+                pos, neg = monomial(coords, plus), monomial(coords, minus)
                 for t,ident in enumerate(divs[i],1):
                     root=f'alpha{a+1}{b+1}_{t}'
                     ideal=[coords[k],f'{pos}-{root}*{neg}']

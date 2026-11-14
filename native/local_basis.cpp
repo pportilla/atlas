@@ -1,8 +1,11 @@
 #include "local_basis.hpp"
+#include "local_io.hpp"
+#include "groebner.hpp"
 
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <queue>
 #include <sstream>
 #include <stdexcept>
@@ -25,6 +28,37 @@ mpz_class degree(const Powers& e) {
     mpz_class d = 0;
     for (const auto& power : e) d += power;
     return d;
+}
+
+Poly packed_row(const Ring& ring, const Polynomial& row, Rational* scale) {
+    for (const auto& term : row)
+        if (term.first.size() != static_cast<size_t>(ring.n))
+            throw std::invalid_argument("Wrong width for a local polynomial.");
+    auto text = encode_row(row);
+    text += '\n';
+    const char* at = text.data();
+    return parse(ring, at, at + text.size(), scale);
+}
+
+Powers unpack_powers(const Ring& ring, const u64* term) {
+    long exponents[MAX_VARIABLES];
+    ring.unpack(term, exponents);
+    return Powers(exponents, exponents + ring.n);
+}
+
+Polynomial unpack_row(const Ring& ring, const Poly& row, const fmpz* numerator,
+                      const fmpz* denominator) {
+    Polynomial result;
+    mpq_class scale;
+    fmpz_get_mpz(mpq_numref(scale.get_mpq_t()), numerator);
+    fmpz_get_mpz(mpq_denref(scale.get_mpq_t()), denominator);
+    scale.canonicalize();
+    mpz_class integer;
+    for (size_t i = 0; i < row.size(); ++i) {
+        fmpz_get_mpz(integer.get_mpz_t(), &row.c[i].v);
+        result.emplace(unpack_powers(ring, row.m.data() + i * ring.stride), scale * integer);
+    }
+    return result;
 }
 
 bool divides(const Powers& a, const Powers& b) {
@@ -175,6 +209,218 @@ Basis global_basis(const Basis& rows, size_t variables, bool lex, bool lift, boo
     return projected;
 }
 
+}
+
+// A dimension query only needs the supports of the leading monomials. Keep
+// the rational input and the certified result in memory across this boundary.
+std::optional<std::vector<std::vector<int>>> local_leading_supports(
+        const Basis& rows, size_t width, bool lex, bool prefer_modular) {
+    if (!width || width > MAX_VARIABLES) return std::nullopt;
+    // A monomial times a local unit generates the same localized ideal as
+    // that monomial. Preserve the shortcut used by the full basis routine.
+    std::vector<std::vector<int>> supports;
+    bool associates = true;
+    for (const auto& row : rows) if (!row.empty()) {
+        const auto head = local_head(row, lex);
+        if (std::any_of(row.begin(), row.end(), [&](const auto& t) { return !divides(head, t.first); })) {
+            associates = false;
+            break;
+        }
+        std::vector<int> support;
+        for (size_t i = 0; i < width; ++i) if (head[i] != 0) support.push_back(i);
+        supports.push_back(std::move(support));
+    }
+    if (associates) return supports;
+    supports.clear();
+    bool lift = false;
+    for (const auto& row : rows) if (!row.empty()) {
+        const auto d = degree(row.begin()->first);
+        for (const auto& term : row) if (degree(term.first) != d) { lift = true; break; }
+        if (lift) break;
+    }
+    if (width + lift > MAX_VARIABLES) return std::nullopt;
+    Ring ring;
+    ring.init(static_cast<int>(width + lift), lex ? 1 : (lift ? 2 : 0));
+    std::vector<Poly> polys;
+    try {
+        for (const auto& row : rows) if (!row.empty()) {
+            const auto top = max_degree(row);
+            if (top > MAX_DEGREE) return std::nullopt;
+            std::vector<u64> packed(row.size() * ring.stride);
+            std::vector<const mpq_class*> coefficients;
+            coefficients.reserve(row.size());
+            mpz_class denominator = 1;
+            for (const auto& [e, q] : row) {
+                long powers[MAX_VARIABLES];
+                long d = 0;
+                for (size_t i = 0; i < width; ++i) {
+                    powers[i + lift] = e[i].get_si();
+                    d += powers[i + lift];
+                }
+                if (lift) powers[0] = top.get_si() - d;
+                ring.pack(packed.data() + coefficients.size() * ring.stride, powers);
+                mpz_lcm(denominator.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q.get_mpq_t()));
+                coefficients.push_back(&q);
+            }
+            std::vector<size_t> order(row.size());
+            std::iota(order.begin(), order.end(), 0);
+            auto monomial = [&](size_t i) { return packed.data() + i * ring.stride; };
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return ring.compare(monomial(a), monomial(b)) > 0;
+            });
+            Poly poly;
+            poly.m.reserve(packed.size());
+            poly.c.reserve(row.size());
+            mpz_class integer;
+            for (const auto i : order) {
+                const auto q = coefficients[i]->get_mpq_t();
+                mpz_divexact(integer.get_mpz_t(), denominator.get_mpz_t(), mpq_denref(q));
+                mpz_mul(integer.get_mpz_t(), integer.get_mpz_t(), mpq_numref(q));
+                poly.m.insert(poly.m.end(), monomial(i), monomial(i) + ring.stride);
+                poly.c.emplace_back();
+                fmpz_set_mpz(&poly.c.back().v, integer.get_mpz_t());
+            }
+            primitive(poly, nullptr);
+            polys.push_back(std::move(poly));
+        }
+        Engine engine;
+        if (!prefer_modular || !modular_basis(ring, polys, engine)) {
+            engine.R = ring;
+            engine.compute(polys, 0);
+        }
+        for (const auto& g : engine.G) {
+            // Every lifted row is homogeneous. Suppressing t turns its
+            // leading term into its local leading term in the original axes.
+            std::vector<int> support;
+            for (size_t i = 0; i < width; ++i)
+                if (Ring::field(g.p.m.data(), ring.position(i + lift))) support.push_back(i);
+            if (support.empty()) throw std::logic_error("On-scheme local basis contains a unit.");
+            supports.push_back(std::move(support));
+        }
+        return supports;
+    } catch (const Limit&) {
+        return std::nullopt;
+    }
+}
+
+HomogeneousReducer::HomogeneousReducer(std::unique_ptr<Engine> engine) : engine_(std::move(engine)) {
+    const auto& ring = engine_->R;
+    std::vector<unsigned long> bounds(ring.n, 0);
+    for (const auto& g : engine_->G) {
+        binomial_ |= g.p.size() == 2;
+        const u64* head = g.p.m.data();
+        for (int i = 0; i < ring.n; ++i) {
+            // A pure power has its entire total degree on one axis.
+            if (Ring::field(head, ring.position(i)) == head[0]) {
+                auto d = static_cast<unsigned long>(head[0]);
+                if (!bounds[i] || d < bounds[i]) bounds[i] = d;
+                break;
+            }
+        }
+    }
+    unsigned long cutoff = 1;
+    for (auto bound : bounds) {
+        if (!bound) return;
+        cutoff += bound - 1;
+    }
+    cutoff_ = cutoff;
+}
+HomogeneousReducer::HomogeneousReducer(HomogeneousReducer&&) noexcept = default;
+HomogeneousReducer::~HomogeneousReducer() = default;
+
+std::optional<HomogeneousReducer> homogeneous_reducer(const Basis& centered, size_t width,
+                                                      bool lex, bool prefer_modular) {
+    if (width == 0 || width > MAX_VARIABLES || centered.size() < 2) return std::nullopt;
+    size_t count = 0;
+    bool nonmonomial = false;
+    for (const auto& f : centered) {
+        if (f.empty()) continue;
+        const auto d = degree(f.begin()->first);
+        if (d == 0 || d > MAX_DEGREE) return std::nullopt;
+        for (const auto& [e, c] : f)
+            if (e.size() != width || c == 0 || degree(e) != d) return std::nullopt;
+        ++count;
+        nonmonomial |= f.size() > 1;
+    }
+    if (count < 2 || !nonmonomial) return std::nullopt;
+
+    Ring ring;
+    ring.init(static_cast<int>(width), lex ? 1 : 0);
+    try {
+        std::vector<Poly> polys;
+        polys.reserve(count);
+        for (const auto& f : centered)
+            if (!f.empty()) polys.push_back(packed_row(ring, f, nullptr));
+
+        auto engine = std::make_unique<Engine>();
+        if (prefer_modular) {
+            try {
+                if (modular_basis(ring, polys, *engine))
+                    return HomogeneousReducer(std::move(engine));
+            } catch (const Limit&) {
+                // The homogenized modular computation can exceed the packed limits.
+            }
+            engine = std::make_unique<Engine>();
+        }
+        engine->R = ring;
+        engine->compute(polys, 0);
+        return HomogeneousReducer(std::move(engine));
+    } catch (const Limit&) {
+        return std::nullopt;
+    }
+}
+
+Basis HomogeneousReducer::materialize() const {
+    Basis basis;
+    basis.reserve(engine_->G.size());
+    Z one;
+    fmpz_one(&one.v);
+    for (const auto& g : engine_->G)
+        basis.push_back(unpack_row(engine_->R, g.p, &one.v, &g.p.c.front().v));
+    return basis;
+}
+
+std::optional<Polynomial> HomogeneousReducer::reduce(const Polynomial& centered_query) const {
+    const size_t width = static_cast<size_t>(engine_->R.n);
+    // Filter before packing. Even a query outside the packed range can vanish
+    // modulo a finite homogeneous ideal. Only allocate a filtered row on demand.
+    Polynomial filtered;
+    bool dropped = false;
+    for (auto it = centered_query.begin(); it != centered_query.end(); ++it) {
+        if (it->first.size() != width) throw std::invalid_argument("Wrong width for a local polynomial.");
+        const auto d = degree(it->first);
+        if (cutoff_ && d >= *cutoff_) {
+            if (!dropped) filtered.insert(centered_query.begin(), it);
+            dropped = true;
+        } else {
+            // The local binomial reducer can jump over many repeated divisions.
+            if ((binomial_ && d >= 128) || d > MAX_DEGREE) return std::nullopt;
+            if (dropped) filtered.insert(filtered.end(), *it);
+        }
+    }
+    if (dropped && filtered.empty()) return Polynomial{};
+    try {
+        Rational scale;
+        Poly f = packed_row(engine_->R, dropped ? filtered : centered_query, &scale);
+        engine_->reduce(f, 0, &scale.num.v, &scale.den.v);
+        return unpack_row(engine_->R, f, &scale.num.v, &scale.den.v);
+    } catch (const Limit&) {
+        return std::nullopt;
+    }
+}
+
+bool global_less(const Powers& a, const Powers& b, bool lex) {
+    if (lex) return a < b;
+    const auto da = degree(a), db = degree(b);
+    if (da != db) return da < db;
+    return std::lexicographical_compare(b.rbegin(), b.rend(), a.rbegin(), a.rend());
+}
+
+const Powers& global_head(const Polynomial& f, bool lex) {
+    if (lex) return f.rbegin()->first;
+    return std::max_element(f.begin(), f.end(), [](const auto& a, const auto& b) {
+        return global_less(a.first,b.first,false);
+    })->first;
 }
 
 Powers local_head(const Polynomial& polynomial, bool lex) {

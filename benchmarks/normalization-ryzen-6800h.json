@@ -1,0 +1,2193 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": 5,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "units": "wall-clock milliseconds",
+  "repeats": 7,
+  "cold_repeats": 7,
+  "scope": "Warm native affine request with sparse input decoding and complete result serialization, versus Singular normal(I) and normal(I, prim) with the same input ring already loaded. Discarded warmup for each trial. Fresh CLI measurements include startup, parsing and complete output of the presentation and maps. Order rotates and Singular seeds are 17 + trial.",
+  "cases": [
+    {
+      "name": "smooth_graph",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y-x^2-x-1"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.138442,
+            0.146517,
+            0.145084,
+            0.125217,
+            0.11665,
+            0.132029,
+            0.119566
+          ],
+          "median_ms": 0.132029
+        },
+        "normal": {
+          "samples_ms": [
+            3.076,
+            3.207,
+            3.106,
+            2.555,
+            3.188,
+            2.915,
+            3.109
+          ],
+          "median_ms": 3.106
+        },
+        "normal_prim": {
+          "samples_ms": [
+            6.603,
+            8.238,
+            7.954,
+            7.834,
+            7.642,
+            7.447,
+            7.63
+          ],
+          "median_ms": 7.642
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 20.404577653194057,
+        "median_speedup_vs_faster_reference": 23.52513462951321
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.886013,
+            7.694251,
+            7.681977,
+            7.807895,
+            12.126863,
+            9.644288,
+            7.717234
+          ],
+          "median_ms": 7.807895
+        },
+        "normal": {
+          "samples_ms": [
+            44.066131,
+            44.054299,
+            43.434546,
+            43.477678,
+            43.35713,
+            51.184792,
+            50.425316
+          ],
+          "median_ms": 44.054299
+        },
+        "normal_prim": {
+          "samples_ms": [
+            49.469309,
+            49.138012,
+            48.580557,
+            49.262678,
+            46.977797,
+            55.306988,
+            54.175188
+          ],
+          "median_ms": 49.262678
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 3.575296430742229,
+        "median_speedup_vs_faster_reference": 5.642276055197976
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "smooth_conic",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^2+y^2-3"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.142409,
+            0.138272,
+            0.117072,
+            0.138582,
+            0.146798,
+            0.164751,
+            0.160844
+          ],
+          "median_ms": 0.142409
+        },
+        "normal": {
+          "samples_ms": [
+            2.652,
+            2.698,
+            2.789,
+            2.37,
+            2.593,
+            2.838,
+            2.657
+          ],
+          "median_ms": 2.657
+        },
+        "normal_prim": {
+          "samples_ms": [
+            11.74,
+            12.365,
+            12.538,
+            12.646,
+            30.009,
+            13.29,
+            12.72
+          ],
+          "median_ms": 12.646
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 16.519111685857105,
+        "median_speedup_vs_faster_reference": 18.657528667429727
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            8.058489,
+            7.809198,
+            8.724979,
+            7.828333,
+            7.462051,
+            7.89009,
+            7.907604
+          ],
+          "median_ms": 7.89009
+        },
+        "normal": {
+          "samples_ms": [
+            42.499799,
+            43.155108,
+            46.244901,
+            45.189765,
+            44.677657,
+            44.36728,
+            43.838401
+          ],
+          "median_ms": 44.36728
+        },
+        "normal_prim": {
+          "samples_ms": [
+            55.209112,
+            54.162143,
+            55.138509,
+            55.835908,
+            56.15432,
+            54.910688,
+            54.150921
+          ],
+          "median_ms": 55.138509
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.273916611414373,
+        "median_speedup_vs_faster_reference": 5.623165261739727
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "normal_quadric_cone",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*z-y^2"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.129635,
+            0.113855,
+            0.124426,
+            0.165213,
+            0.150144,
+            0.143271,
+            0.141437
+          ],
+          "median_ms": 0.141437
+        },
+        "normal": {
+          "samples_ms": [
+            6.024,
+            5.928,
+            6.027,
+            6.013,
+            5.681,
+            6.016,
+            6.134
+          ],
+          "median_ms": 6.016
+        },
+        "normal_prim": {
+          "samples_ms": [
+            14.045,
+            12.579,
+            13.764,
+            14.089,
+            13.76,
+            13.726,
+            13.14
+          ],
+          "median_ms": 13.76
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 36.39544103672229,
+        "median_speedup_vs_faster_reference": 42.53483883283723
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.726551,
+            8.012542,
+            8.250783,
+            7.948,
+            8.028332,
+            7.707835,
+            6.884799
+          ],
+          "median_ms": 7.948
+        },
+        "normal": {
+          "samples_ms": [
+            48.125287,
+            48.103135,
+            48.91998,
+            46.339841,
+            54.220744,
+            46.496737,
+            47.036137
+          ],
+          "median_ms": 48.103135
+        },
+        "normal_prim": {
+          "samples_ms": [
+            57.007353,
+            57.702338,
+            57.938283,
+            57.516596,
+            56.811743,
+            56.965915,
+            57.271803
+          ],
+          "median_ms": 57.271803
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.830377579265224,
+        "median_speedup_vs_faster_reference": 6.052231378963261
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "cusp_2_3",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^2-x^3"
+      ],
+      "order": "lex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.069511,
+            0.060153,
+            0.071836,
+            0.106993,
+            0.093316,
+            0.085371,
+            0.041198
+          ],
+          "median_ms": 0.071836
+        },
+        "normal": {
+          "samples_ms": [
+            13.917,
+            14.347,
+            14.005,
+            13.795,
+            13.91,
+            12.547,
+            13.59
+          ],
+          "median_ms": 13.91
+        },
+        "normal_prim": {
+          "samples_ms": [
+            23.306,
+            22.155,
+            21.932,
+            24.212,
+            24.21,
+            24.385,
+            24.117
+          ],
+          "median_ms": 24.117
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 128.9336685577561,
+        "median_speedup_vs_faster_reference": 193.63550309037254
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            8.412098,
+            8.156965,
+            7.931709,
+            7.912653,
+            8.215887,
+            7.423328,
+            13.389169
+          ],
+          "median_ms": 8.156965
+        },
+        "normal": {
+          "samples_ms": [
+            56.287532,
+            54.945434,
+            55.462041,
+            54.725518,
+            54.694359,
+            53.227475,
+            54.33486
+          ],
+          "median_ms": 54.725518
+        },
+        "normal_prim": {
+          "samples_ms": [
+            64.421383,
+            65.470126,
+            65.960825,
+            63.604538,
+            66.362704,
+            68.482473,
+            65.111398
+          ],
+          "median_ms": 65.470126
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 4.058120410609501,
+        "median_speedup_vs_faster_reference": 6.709053918951473
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "shifted_cusp_3_5",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y+x-2)^3-(x-1)^5"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.331978,
+            0.35939,
+            0.354972,
+            0.377444,
+            0.29611,
+            0.30681,
+            0.300538
+          ],
+          "median_ms": 0.331978
+        },
+        "normal": {
+          "samples_ms": [
+            48.242,
+            44.814,
+            47.907,
+            49.882,
+            46.231,
+            46.522,
+            49.18
+          ],
+          "median_ms": 47.907
+        },
+        "normal_prim": {
+          "samples_ms": [
+            59.147,
+            59.036,
+            58.905,
+            59.685,
+            59.339,
+            60.313,
+            55.64
+          ],
+          "median_ms": 59.147
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 124.69462144188765,
+        "median_speedup_vs_faster_reference": 144.30775533318473
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.707906,
+            7.689812,
+            7.443516,
+            7.320854,
+            7.399984,
+            7.306998,
+            6.965462
+          ],
+          "median_ms": 7.399984
+        },
+        "normal": {
+          "samples_ms": [
+            96.452145,
+            92.358774,
+            79.129326,
+            80.121002,
+            79.308826,
+            79.588755,
+            79.449272
+          ],
+          "median_ms": 79.588755
+        },
+        "normal_prim": {
+          "samples_ms": [
+            107.969054,
+            102.230202,
+            103.848812,
+            89.312082,
+            89.662606,
+            86.030407,
+            86.732264
+          ],
+          "median_ms": 89.662606
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 10.630638262885444,
+        "median_speedup_vs_faster_reference": 10.755260416779281
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "rational_node",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^2-x^2*(x+1)"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.12148,
+            0.117312,
+            0.113415,
+            0.114426,
+            0.113865,
+            0.115688,
+            0.110749
+          ],
+          "median_ms": 0.114426
+        },
+        "normal": {
+          "samples_ms": [
+            12.161,
+            12.961,
+            12.504,
+            12.495,
+            12.271,
+            12.578,
+            13.24
+          ],
+          "median_ms": 12.504
+        },
+        "normal_prim": {
+          "samples_ms": [
+            20.19,
+            20.815,
+            20.31,
+            20.533,
+            20.716,
+            20.891,
+            21.529
+          ],
+          "median_ms": 20.716
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 100.10701350016463,
+        "median_speedup_vs_faster_reference": 109.27586387709087
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.877857,
+            6.900479,
+            7.343687,
+            7.205035,
+            11.426548,
+            7.301657,
+            7.237446
+          ],
+          "median_ms": 7.301657
+        },
+        "normal": {
+          "samples_ms": [
+            57.674425,
+            50.685338,
+            54.655266,
+            53.265788,
+            51.867544,
+            51.972552,
+            52.952616
+          ],
+          "median_ms": 52.952616
+        },
+        "normal_prim": {
+          "samples_ms": [
+            66.131037,
+            60.575771,
+            59.784685,
+            59.994262,
+            61.889015,
+            68.772812,
+            61.667556
+          ],
+          "median_ms": 61.667556
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 4.539213767797588,
+        "median_speedup_vs_faster_reference": 7.2521368779716715
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "tacnode",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^2-x^4"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.176764,
+            0.16369,
+            0.213273,
+            0.167166,
+            0.204587,
+            0.180081,
+            0.145826
+          ],
+          "median_ms": 0.176764
+        },
+        "normal": {
+          "samples_ms": [
+            19.904,
+            18.187,
+            20.288,
+            19.86,
+            20.641,
+            16.529,
+            23.473
+          ],
+          "median_ms": 19.904
+        },
+        "normal_prim": {
+          "samples_ms": [
+            18.039,
+            19.974,
+            20.171,
+            19.627,
+            17.364,
+            23.095,
+            21.408
+          ],
+          "median_ms": 19.974
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 84.87342793041591,
+        "median_speedup_vs_faster_reference": 112.60211355253332
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.220484,
+            6.687656,
+            6.565075,
+            12.260485,
+            8.183826,
+            8.630861,
+            8.172955
+          ],
+          "median_ms": 8.172955
+        },
+        "normal": {
+          "samples_ms": [
+            54.458774,
+            51.522541,
+            65.359557,
+            99.918691,
+            65.889269,
+            66.188084,
+            65.767389
+          ],
+          "median_ms": 65.767389
+        },
+        "normal_prim": {
+          "samples_ms": [
+            51.327181,
+            55.612976,
+            51.3631,
+            65.71013,
+            65.840867,
+            111.158856,
+            66.556121
+          ],
+          "median_ms": 65.71013
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.359504946174642,
+        "median_speedup_vs_faster_reference": 8.039947607689019
+      },
+      "verified_components": 2
+    },
+    {
+      "name": "space_curve_3_4_5",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "y^2-x*z",
+        "y*z-x^3",
+        "z^2-x^2*y"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.383956,
+            0.357897,
+            0.365301,
+            0.374488,
+            0.36496,
+            0.378436,
+            0.37542
+          ],
+          "median_ms": 0.374488
+        },
+        "normal": {
+          "samples_ms": [
+            19.336,
+            19.345,
+            18.955,
+            19.355,
+            19.323,
+            18.871,
+            19.406
+          ],
+          "median_ms": 19.336
+        },
+        "normal_prim": {
+          "samples_ms": [
+            30.006,
+            28.79,
+            28.901,
+            28.85,
+            27.512,
+            29.116,
+            29.971
+          ],
+          "median_ms": 28.901
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 49.86576329947468,
+        "median_speedup_vs_faster_reference": 51.633163145414535
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            8.153108,
+            8.003996,
+            7.913555,
+            7.719448,
+            8.209765,
+            7.452402,
+            7.480085
+          ],
+          "median_ms": 7.913555
+        },
+        "normal": {
+          "samples_ms": [
+            62.874278,
+            64.263776,
+            61.488247,
+            60.245186,
+            62.684108,
+            62.169545,
+            61.134568
+          ],
+          "median_ms": 62.169545
+        },
+        "normal_prim": {
+          "samples_ms": [
+            73.099464,
+            73.854031,
+            71.913932,
+            74.102892,
+            74.269236,
+            73.571406,
+            74.973398
+          ],
+          "median_ms": 73.854031
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 7.635310876742513,
+        "median_speedup_vs_faster_reference": 7.856083011996505
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "whitney_umbrella",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "z^2-x^2*y"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.081424,
+            0.096543,
+            0.07943,
+            0.144253,
+            0.09011,
+            0.077797,
+            0.114787
+          ],
+          "median_ms": 0.09011
+        },
+        "normal": {
+          "samples_ms": [
+            107.698,
+            21.205,
+            30.114,
+            21.37,
+            21.515,
+            29.412,
+            20.346
+          ],
+          "median_ms": 21.515
+        },
+        "normal_prim": {
+          "samples_ms": [
+            38.502,
+            30.558,
+            29.719,
+            32.12,
+            35.159,
+            41.773,
+            29.601
+          ],
+          "median_ms": 32.12
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 148.1424996360561,
+        "median_speedup_vs_faster_reference": 238.7637332149595
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.110075,
+            7.751929,
+            6.120634,
+            6.050512,
+            8.151906,
+            7.555808,
+            6.268374
+          ],
+          "median_ms": 6.268374
+        },
+        "normal": {
+          "samples_ms": [
+            57.115277,
+            61.689578,
+            57.033723,
+            69.019028,
+            58.122051,
+            56.909749,
+            58.668505
+          ],
+          "median_ms": 58.122051
+        },
+        "normal_prim": {
+          "samples_ms": [
+            66.345222,
+            86.114025,
+            65.537224,
+            72.170868,
+            68.90923,
+            86.456713,
+            84.822182
+          ],
+          "median_ms": 72.170868
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 7.12987257213221,
+        "median_speedup_vs_faster_reference": 9.27226917219681
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "line_plus_cusp",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x*(y^2-x^3)"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.218553,
+            0.196231,
+            0.194879,
+            0.189569,
+            0.214396,
+            0.179399,
+            0.206159
+          ],
+          "median_ms": 0.196231
+        },
+        "normal": {
+          "samples_ms": [
+            17.66,
+            17.713,
+            15.905,
+            15.605,
+            16.073,
+            19.017,
+            11.097
+          ],
+          "median_ms": 16.073
+        },
+        "normal_prim": {
+          "samples_ms": [
+            27.385,
+            27.472,
+            28.699,
+            27.121,
+            27.748,
+            25.454,
+            19.107
+          ],
+          "median_ms": 27.385
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 53.827385658642115,
+        "median_speedup_vs_faster_reference": 81.90856694406084
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.010767,
+            7.926189,
+            5.901811,
+            6.056493,
+            6.552881,
+            6.338276,
+            8.289216
+          ],
+          "median_ms": 6.338276
+        },
+        "normal": {
+          "samples_ms": [
+            48.128813,
+            46.961947,
+            45.267643,
+            54.674211,
+            46.856798,
+            55.643785,
+            52.137333
+          ],
+          "median_ms": 48.128813
+        },
+        "normal_prim": {
+          "samples_ms": [
+            56.802916,
+            60.519605,
+            63.098131,
+            66.874472,
+            60.84508,
+            55.776446,
+            72.665103
+          ],
+          "median_ms": 60.84508
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.924908805480162,
+        "median_speedup_vs_faster_reference": 7.593360244962511
+      },
+      "verified_components": 2
+    },
+    {
+      "name": "mixed_plane_line",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*(x-1)",
+        "x*y"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.268507,
+            0.491149,
+            0.631304,
+            0.379608,
+            0.277906,
+            0.267737,
+            0.572653
+          ],
+          "median_ms": 0.379608
+        },
+        "normal": {
+          "samples_ms": [
+            5.851,
+            6.278,
+            7.042,
+            6.682,
+            8.71,
+            6.027,
+            5.897
+          ],
+          "median_ms": 6.278
+        },
+        "normal_prim": {
+          "samples_ms": [
+            9.949,
+            14.341,
+            9.606,
+            14.979,
+            9.752,
+            9.285,
+            10.126
+          ],
+          "median_ms": 9.949
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 10.297684636245686,
+        "median_speedup_vs_faster_reference": 16.538113000779752
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.247714,
+            7.951276,
+            8.663523,
+            8.284837,
+            7.98007,
+            6.570836,
+            8.090058
+          ],
+          "median_ms": 7.98007
+        },
+        "normal": {
+          "samples_ms": [
+            41.086636,
+            48.150474,
+            50.775769,
+            50.148643,
+            44.84801,
+            41.504236,
+            50.321761
+          ],
+          "median_ms": 48.150474
+        },
+        "normal_prim": {
+          "samples_ms": [
+            44.193462,
+            55.423608,
+            52.056681,
+            46.255341,
+            51.573998,
+            46.260922,
+            53.958458
+          ],
+          "median_ms": 51.573998
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.5831322933692,
+        "median_speedup_vs_faster_reference": 6.0338410565320855
+      },
+      "verified_components": 2
+    },
+    {
+      "name": "finite_conjugate_field",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^2+1",
+        "y-2*x"
+      ],
+      "order": "lex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.115338,
+            0.082446,
+            0.122331,
+            0.081374,
+            0.132701,
+            0.134965,
+            0.137349
+          ],
+          "median_ms": 0.122331
+        },
+        "normal": {
+          "samples_ms": [
+            2.755,
+            2.903,
+            2.281,
+            2.654,
+            2.339,
+            2.243,
+            2.111
+          ],
+          "median_ms": 2.339
+        },
+        "normal_prim": {
+          "samples_ms": [
+            8.463,
+            6.766,
+            8.365,
+            7.68,
+            8.544,
+            8.69,
+            6.898
+          ],
+          "median_ms": 8.365
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 15.369605894473205,
+        "median_speedup_vs_faster_reference": 19.120255699699996
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.421864,
+            7.475987,
+            8.853863,
+            8.570377,
+            9.059181,
+            8.643365,
+            8.731371
+          ],
+          "median_ms": 8.643365
+        },
+        "normal": {
+          "samples_ms": [
+            45.59375,
+            43.157021,
+            46.06431,
+            44.913764,
+            44.83266,
+            44.318007,
+            47.384496
+          ],
+          "median_ms": 44.913764
+        },
+        "normal_prim": {
+          "samples_ms": [
+            50.65463,
+            50.772232,
+            52.631829,
+            52.406423,
+            53.600371,
+            53.767436,
+            55.111257
+          ],
+          "median_ms": 52.631829
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 4.948864582791755,
+        "median_speedup_vs_faster_reference": 5.196328513258436
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "conjugate_cusps",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^2-(x^2+1)^3"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.215607,
+            0.280561,
+            0.209606,
+            0.30689,
+            0.226618,
+            0.166504,
+            0.173438
+          ],
+          "median_ms": 0.215607
+        },
+        "normal": {
+          "samples_ms": [
+            19.091,
+            20.047,
+            18.453,
+            18.869,
+            19.004,
+            15.627,
+            15.058
+          ],
+          "median_ms": 18.869
+        },
+        "normal_prim": {
+          "samples_ms": [
+            30.17,
+            29.603,
+            28.045,
+            29.53,
+            29.179,
+            23.195,
+            25.208
+          ],
+          "median_ms": 29.179
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 61.48457101893187,
+        "median_speedup_vs_faster_reference": 87.5157114564926
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.168055,
+            8.287562,
+            7.940326,
+            7.594311,
+            8.121728,
+            8.216498,
+            8.267694
+          ],
+          "median_ms": 8.121728
+        },
+        "normal": {
+          "samples_ms": [
+            56.483803,
+            54.77922,
+            61.619034,
+            62.72237,
+            61.325859,
+            62.116886,
+            63.069206
+          ],
+          "median_ms": 61.619034
+        },
+        "normal_prim": {
+          "samples_ms": [
+            64.347844,
+            70.690579,
+            74.245942,
+            72.914704,
+            73.878487,
+            73.600432,
+            75.949053
+          ],
+          "median_ms": 73.600432
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 6.609811184519646,
+        "median_speedup_vs_faster_reference": 7.586936425351847
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "ramified_cusp_3_7",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y+2*x+1)^3-(x+1)^7"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.407852,
+            0.282384,
+            0.372875,
+            0.374468,
+            0.387031,
+            0.341946,
+            0.370079
+          ],
+          "median_ms": 0.372875
+        },
+        "normal": {
+          "samples_ms": [
+            55.414,
+            46.868,
+            63.639,
+            63.782,
+            63.283,
+            63.289,
+            63.137
+          ],
+          "median_ms": 63.283
+        },
+        "normal_prim": {
+          "samples_ms": [
+            54.709,
+            55.666,
+            72.681,
+            72.964,
+            72.596,
+            72.038,
+            73.117
+          ],
+          "median_ms": 72.596
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 134.13934466424095,
+        "median_speedup_vs_faster_reference": 169.71639289306069
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            8.908696,
+            8.583021,
+            8.376169,
+            8.130655,
+            8.698539,
+            8.52456,
+            8.483662
+          ],
+          "median_ms": 8.52456
+        },
+        "normal": {
+          "samples_ms": [
+            111.451118,
+            109.873505,
+            110.761414,
+            110.382127,
+            113.809037,
+            113.706955,
+            112.684912
+          ],
+          "median_ms": 111.451118
+        },
+        "normal_prim": {
+          "samples_ms": [
+            139.048606,
+            121.646839,
+            120.122135,
+            122.507165,
+            123.858692,
+            122.791264,
+            119.159916
+          ],
+          "median_ms": 122.507165
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 12.510373908818977,
+        "median_speedup_vs_faster_reference": 13.074119719962086
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "translated_cusp_4_7",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y-x-1)^4-(x-2)^7"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.451374,
+            0.462325,
+            0.47056,
+            0.489295,
+            0.460982,
+            0.277334,
+            0.490147
+          ],
+          "median_ms": 0.462325
+        },
+        "normal": {
+          "samples_ms": [
+            107.491,
+            108.094,
+            84.757,
+            97.216,
+            122.261,
+            94.515,
+            108.308
+          ],
+          "median_ms": 107.491
+        },
+        "normal_prim": {
+          "samples_ms": [
+            117.997,
+            117.657,
+            119.25,
+            110.578,
+            95.387,
+            121.981,
+            121.703
+          ],
+          "median_ms": 117.997
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 180.11943216592996,
+        "median_speedup_vs_faster_reference": 232.50094630400693
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            8.229693,
+            6.072884,
+            8.054171,
+            10.473075,
+            8.669464,
+            6.040674,
+            16.634136
+          ],
+          "median_ms": 8.229693
+        },
+        "normal": {
+          "samples_ms": [
+            140.90144,
+            138.192878,
+            126.342288,
+            157.167179,
+            143.902455,
+            145.024216,
+            141.365368
+          ],
+          "median_ms": 141.365368
+        },
+        "normal_prim": {
+          "samples_ms": [
+            147.442891,
+            142.862128,
+            167.077972,
+            152.993637,
+            164.11076,
+            139.766725,
+            166.703092
+          ],
+          "median_ms": 152.993637
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 8.498509811390262,
+        "median_speedup_vs_faster_reference": 17.177477701780614
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "shifted_cyclic_cover",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y-x)^3-x^7*(1+x)"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.208515,
+            0.12724,
+            0.118564,
+            0.224234,
+            0.130497,
+            0.133883,
+            0.225256
+          ],
+          "median_ms": 0.133883
+        },
+        "normal": {
+          "samples_ms": [
+            42.378,
+            41.497,
+            44.894,
+            48.68,
+            39.751,
+            46.213,
+            57.68
+          ],
+          "median_ms": 44.894
+        },
+        "normal_prim": {
+          "samples_ms": [
+            56.288,
+            47.088,
+            52.597,
+            46.844,
+            45.5,
+            45.869,
+            45.326
+          ],
+          "median_ms": 46.844
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 201.21994530667328,
+        "median_speedup_vs_faster_reference": 335.3226324477342
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.114723,
+            7.551551,
+            7.577019,
+            7.247054,
+            5.955071,
+            6.3777,
+            6.122809
+          ],
+          "median_ms": 6.3777
+        },
+        "normal": {
+          "samples_ms": [
+            78.614393,
+            75.582319,
+            98.117654,
+            99.092218,
+            73.22419,
+            71.97594,
+            74.095537
+          ],
+          "median_ms": 75.582319
+        },
+        "normal_prim": {
+          "samples_ms": [
+            83.804277,
+            84.592839,
+            109.036172,
+            93.255149,
+            80.937566,
+            77.87754,
+            80.349254
+          ],
+          "median_ms": 83.804277
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 10.008847056717222,
+        "median_speedup_vs_faster_reference": 11.851030779121
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "two_branch_divisors",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^3-(x-1)^2*(x+1)^4"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.296821,
+            0.426516,
+            0.304296,
+            0.298284,
+            0.321278,
+            0.300859,
+            0.325415
+          ],
+          "median_ms": 0.304296
+        },
+        "normal": {
+          "samples_ms": [
+            20.292,
+            20.453,
+            23.021,
+            20.309,
+            20.286,
+            20.206,
+            22.156
+          ],
+          "median_ms": 20.309
+        },
+        "normal_prim": {
+          "samples_ms": [
+            27.539,
+            27.297,
+            27.726,
+            28.007,
+            28.401,
+            28.32,
+            28.388
+          ],
+          "median_ms": 28.007
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 47.95365238349792,
+        "median_speedup_vs_faster_reference": 66.74093645660804
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.734655,
+            6.532273,
+            6.362261,
+            6.255389,
+            8.084929,
+            6.633094,
+            6.783357
+          ],
+          "median_ms": 6.633094
+        },
+        "normal": {
+          "samples_ms": [
+            55.282301,
+            57.212511,
+            55.290907,
+            56.230213,
+            57.401128,
+            55.595533,
+            56.253637
+          ],
+          "median_ms": 56.230213
+        },
+        "normal_prim": {
+          "samples_ms": [
+            65.818555,
+            63.4363,
+            63.399121,
+            63.753581,
+            65.934755,
+            66.704851,
+            67.960195
+          ],
+          "median_ms": 65.818555
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 7.099768965194375,
+        "median_speedup_vs_faster_reference": 8.47722239425523
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "cyclic_cover_surface",
+      "variables": [
+        "u",
+        "v",
+        "w"
+      ],
+      "generators": [
+        "w^3-(u+1)^2*(v^2+u)^4"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.34398,
+            0.434151,
+            0.324874,
+            0.30652,
+            0.330195,
+            0.323221,
+            0.317009
+          ],
+          "median_ms": 0.324874
+        },
+        "normal": {
+          "samples_ms": [
+            55.654,
+            55.304,
+            53.558,
+            54.47,
+            53.394,
+            54.828,
+            54.638
+          ],
+          "median_ms": 54.638
+        },
+        "normal_prim": {
+          "samples_ms": [
+            63.692,
+            63.063,
+            61.454,
+            61.264,
+            62.822,
+            62.83,
+            64.038
+          ],
+          "median_ms": 62.83
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 127.38425110157526,
+        "median_speedup_vs_faster_reference": 168.18212599346208
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.230221,
+            6.437414,
+            6.078765,
+            6.318017,
+            6.361931,
+            6.084165,
+            6.11839
+          ],
+          "median_ms": 6.230221
+        },
+        "normal": {
+          "samples_ms": [
+            91.148715,
+            90.297446,
+            90.926516,
+            88.600006,
+            87.352597,
+            98.463479,
+            97.63918
+          ],
+          "median_ms": 90.926516
+        },
+        "normal_prim": {
+          "samples_ms": [
+            97.711126,
+            99.225038,
+            100.069686,
+            95.813978,
+            97.09469,
+            97.469999,
+            101.924243
+          ],
+          "median_ms": 97.711126
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 13.730516253634313,
+        "median_speedup_vs_faster_reference": 14.594428672754947
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "noncyclic_plane_quartic",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^4-x^3*y^2+x^6*y-x^7"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            3.712621,
+            3.720636,
+            3.757495,
+            3.880478,
+            3.643941,
+            3.683776,
+            3.697152
+          ],
+          "median_ms": 3.712621
+        },
+        "normal": {
+          "samples_ms": [
+            44.268,
+            44.089,
+            47.999,
+            91.793,
+            93.249,
+            50.217,
+            46.442
+          ],
+          "median_ms": 47.999
+        },
+        "normal_prim": {
+          "samples_ms": [
+            51.299,
+            52.512,
+            51.476,
+            110.852,
+            51.672,
+            51.451,
+            52.242
+          ],
+          "median_ms": 51.672
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 11.849855777345594,
+        "median_speedup_vs_faster_reference": 12.928602192359522
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            10.853895,
+            10.050947,
+            12.527741,
+            11.007035,
+            10.281062,
+            10.685677,
+            10.739619
+          ],
+          "median_ms": 10.739619
+        },
+        "normal": {
+          "samples_ms": [
+            79.687272,
+            80.470613,
+            86.187214,
+            83.61532,
+            79.927636,
+            82.421291,
+            109.23084
+          ],
+          "median_ms": 82.421291
+        },
+        "normal_prim": {
+          "samples_ms": [
+            88.106953,
+            86.750058,
+            87.682321,
+            93.634667,
+            88.73452,
+            87.780777,
+            115.175762
+          ],
+          "median_ms": 88.106953
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 6.879709119146061,
+        "median_speedup_vs_faster_reference": 7.674507913176436
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "noncyclic_plane_quintic",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "y^3-2*x^2*y^2+x^4*y-x^5"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.947953,
+            0.986145,
+            1.014799,
+            1.014628,
+            0.997366,
+            1.003097,
+            1.112744
+          ],
+          "median_ms": 1.003097
+        },
+        "normal": {
+          "samples_ms": [
+            21.62,
+            22.216,
+            21.224,
+            45.15,
+            27.724,
+            22.411,
+            22.958
+          ],
+          "median_ms": 22.411
+        },
+        "normal_prim": {
+          "samples_ms": [
+            27.895,
+            28.448,
+            27.922,
+            58.159,
+            28.358,
+            29.153,
+            30.146
+          ],
+          "median_ms": 28.448
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 20.631879390048383,
+        "median_speedup_vs_faster_reference": 22.341807422412792
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.124724,
+            6.534567,
+            7.874731,
+            7.878438,
+            7.052196,
+            8.328419,
+            7.414821
+          ],
+          "median_ms": 7.414821
+        },
+        "normal": {
+          "samples_ms": [
+            57.553436,
+            58.727977,
+            55.897194,
+            54.919304,
+            61.411292,
+            56.514812,
+            55.959321
+          ],
+          "median_ms": 56.514812
+        },
+        "normal_prim": {
+          "samples_ms": [
+            61.905997,
+            71.983434,
+            63.588118,
+            62.327233,
+            64.647972,
+            64.363944,
+            66.094097
+          ],
+          "median_ms": 64.363944
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 6.785779149680149,
+        "median_speedup_vs_faster_reference": 7.6218713843530415
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "mixed_translated_curve",
+      "variables": [
+        "u",
+        "v",
+        "w"
+      ],
+      "generators": [
+        "((v+1)^2-(u+v)^3)*(u+w-1)",
+        "((w-u)^2-(v+1))*(u+w-1)"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            3.612802,
+            4.196837,
+            6.324449,
+            4.051642,
+            9.534039,
+            5.061832,
+            15.286407
+          ],
+          "median_ms": 5.061832
+        },
+        "normal": {
+          "samples_ms": [
+            40.125,
+            40.522,
+            47.298,
+            91.448,
+            131.942,
+            476.126,
+            83.643
+          ],
+          "median_ms": 83.643
+        },
+        "normal_prim": {
+          "samples_ms": [
+            75.213,
+            81.149,
+            84.094,
+            164.673,
+            162.581,
+            166.62,
+            161.579
+          ],
+          "median_ms": 161.579
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.4717239963583335,
+        "median_speedup_vs_faster_reference": 16.524254459650184
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            18.562032,
+            19.882799,
+            22.737096,
+            18.898979,
+            10.18989,
+            15.731289,
+            10.644509
+          ],
+          "median_ms": 18.562032
+        },
+        "normal": {
+          "samples_ms": [
+            174.637175,
+            659.84352,
+            155.784234,
+            803.597425,
+            156.74451,
+            88.52224,
+            76.997766
+          ],
+          "median_ms": 156.74451
+        },
+        "normal_prim": {
+          "samples_ms": [
+            768.192563,
+            227.184846,
+            229.727745,
+            638.624985,
+            174.667583,
+            131.685082,
+            111.269044
+          ],
+          "median_ms": 227.184846
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 5.6271447304794915,
+        "median_speedup_vs_faster_reference": 8.444361587136582
+      },
+      "verified_components": 2
+    },
+    {
+      "name": "nonmonic_surface",
+      "variables": [
+        "x",
+        "z",
+        "y"
+      ],
+      "generators": [
+        "x*y^3+(x+z)^5*y+(x+z)^7"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            7.810941,
+            7.879861,
+            7.874491,
+            7.988607,
+            7.837732,
+            7.850966,
+            7.393892
+          ],
+          "median_ms": 7.850966
+        },
+        "normal": {
+          "samples_ms": [
+            61.204,
+            133.272,
+            62.148,
+            67.553,
+            63.699,
+            58.642,
+            65.248
+          ],
+          "median_ms": 63.699
+        },
+        "normal_prim": {
+          "samples_ms": [
+            71.599,
+            69.454,
+            70.267,
+            77.364,
+            69.623,
+            68.745,
+            66.006
+          ],
+          "median_ms": 69.623
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 7.469399307040688,
+        "median_speedup_vs_faster_reference": 8.113523864451839
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            16.697696,
+            13.844851,
+            15.022578,
+            13.933549,
+            21.655211,
+            14.076479,
+            13.588907
+          ],
+          "median_ms": 14.076479
+        },
+        "normal": {
+          "samples_ms": [
+            94.996622,
+            96.968862,
+            96.357736,
+            93.394913,
+            93.189355,
+            90.465034,
+            93.908254
+          ],
+          "median_ms": 93.908254
+        },
+        "normal_prim": {
+          "samples_ms": [
+            105.783871,
+            104.531553,
+            107.153101,
+            103.697746,
+            100.335598,
+            102.027918,
+            100.794336
+          ],
+          "median_ms": 103.697746
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 4.303322419716898,
+        "median_speedup_vs_faster_reference": 6.671288608465227
+      },
+      "verified_components": 1
+    },
+    {
+      "name": "non_complete_intersection_surface",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "generators": [
+        "x^3-y^2",
+        "w^2-x*z^2",
+        "x*w-y*z",
+        "y*w-x^2*z"
+      ],
+      "order": "grevlex",
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            1.319165,
+            1.294889,
+            1.287986,
+            1.300609,
+            1.284279,
+            1.33809,
+            1.287234
+          ],
+          "median_ms": 1.294889
+        },
+        "normal": {
+          "samples_ms": [
+            12.998,
+            13.088,
+            13.032,
+            13.448,
+            13.276,
+            13.199,
+            14.205
+          ],
+          "median_ms": 13.199
+        },
+        "normal_prim": {
+          "samples_ms": [
+            20.93,
+            20.449,
+            20.341,
+            20.634,
+            20.786,
+            20.747,
+            20.747
+          ],
+          "median_ms": 20.747
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 9.853202594065186,
+        "median_speedup_vs_faster_reference": 10.193151690994364
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.519821,
+            7.732532,
+            7.65672,
+            8.912955,
+            7.412407,
+            9.805613,
+            7.791965
+          ],
+          "median_ms": 7.732532
+        },
+        "normal": {
+          "samples_ms": [
+            47.539138,
+            47.693841,
+            46.205095,
+            48.026771,
+            45.754734,
+            48.894892,
+            49.804793
+          ],
+          "median_ms": 47.693841
+        },
+        "normal_prim": {
+          "samples_ms": [
+            56.284656,
+            57.704271,
+            56.733586,
+            56.446683,
+            54.687657,
+            56.255902,
+            58.501068
+          ],
+          "median_ms": 56.446683
+        },
+        "wins_vs_both": 7,
+        "worst_paired_speedup": 4.98641869712786,
+        "median_speedup_vs_faster_reference": 6.167946152696167
+      },
+      "verified_components": 1
+    }
+  ],
+  "atlas_library_sha256": "66f053c1f5877ac34a063f4de118e98c39e6276b2930389001158b6852a5580f",
+  "atlas_launcher_sha256": "08564de3bf6100b187b18bd84a118933600e08462a0df6c7203cb35b30aaf1bb",
+  "atlas_native_cli_sha256": "ae0b214ab3889f66c49173c7cda33c1e2815ef4eea2ab226b96397b1d9bc2515"
+}

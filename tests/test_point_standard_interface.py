@@ -74,6 +74,42 @@ class PointStandardInterfaceTests(unittest.TestCase):
         self.assertTrue(any(at_point(g, a, b, derivative=True) for g in generators))
         self.assert_replays(record)
 
+    def test_wide_point_cli_and_worker_reproduce_unit_and_remainder(self):
+        exponent = 2**64+7
+        ring = {"field": "QQ", "variables": ["x", "y", "z"], "order": "grevlex"}
+        operands = {"ideal": [f"x^{exponent}*z-y^2"], "point": ["1", "0", "0"]}
+        for op in ("local-standard-basis", "local-normal-form"):
+            with self.subTest(op=op):
+                if op == "local-normal-form":
+                    operands["polynomial"] = "z"
+                record = self.request(op, operands, ring=ring)
+                if op == "local-normal-form":
+                    result = record["result"]
+                    self.assertEqual((result["unit"], result["remainder"], result["reduction"]),
+                                     (f"x^{exponent}", "y^2", "standard"))
+                cli = shell(shlex.split(record["replay"]["command"]))
+                self.assertEqual(cli.returncode, 0, cli.stdout + cli.stderr)
+                direct = json.loads(cli.stdout)
+                self.assertEqual(direct["result"], record["result"])
+                self.assertTrue(any(s["operation"] == ("local_point_basis" if op == "local-standard-basis"
+                                                       else "local_point_normal_form")
+                                    for s in direct["execution"]["stages"]))
+                replay = run_script(direct["replay"]["script"])
+                self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+                self.assertEqual(json.loads(replay.stdout)["result"], direct["result"])
+
+    def test_small_generators_can_produce_a_large_restored_basis_row(self):
+        names = ["x", "y", "z", "w"]
+        data = {"ideal": ["w-z^5", "z-y^5", "y-(x-1)^5", "w^5"], "point": ["1","0","0","0"]}
+        record = self.request("local-standard-basis", data, ring={"variables": names, "order": "lex"})
+        self.assertFalse(any(s["operation"] == "local_point_basis" for s in record["execution"]["stages"]))
+        # Substitution through the chain gives (x-1)^625. Its expanded
+        # representation is much longer than any polynomial in the request.
+        expected = parse_expression("(x-1)^625", names)
+        expanded = max(record["result"]["generators"], key=len)
+        self.assertEqual(parse_expression(expanded, names), expected)
+        self.assert_replays(record)
+
     def test_weak_reduction_at_a_rational_point_and_negative_cli_argument(self):
         op = "local-normal-form"
         operands = {"ideal": ["x+1/2"], "polynomial": "x+y", "point": ["-3/6", 2]}

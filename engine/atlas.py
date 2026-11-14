@@ -39,8 +39,11 @@ map alone:
 
 Affine maps, including translated point blowups and sheared fans, use native
 pullbacks and orders. For a regular rational fan the kernel applies the common
-linear change once, then uses the ray matrices for strict transforms and
-Jacobian orders. A regular fan supplies its common faces for overlaps.
+linear change once, then uses the ray matrices for strict transforms,
+Jacobian orders and the projection of each chart. The verifier formats the
+full strict equation from its verified exponents and the source coefficients.
+It checks alternate spellings of a projection for exact equality in the chart
+ring. A regular fan supplies its common faces for overlaps.
 The kernel's sparse exponent and coefficient lists also supply the torus
 orbit sections and the polynomials in the serialized charts. An affine
 strict transform need not be converted into a dense coefficient array.
@@ -83,7 +86,6 @@ Direct symbolic callers and comparison runs can request the symbolic chart view.
 """
 from functools import lru_cache
 from dataclasses import replace
-from math import prod
 import re
 
 from . import native_polynomial as np
@@ -91,7 +93,8 @@ from .affine_kernel import _polynomial
 from .chart_expressions import chart_expressions
 from .reference import sp
 
-from .local_blowups import Chart, GiveUp, _own_failures, _strata, cells, dual_cells
+from .local_blowups import Chart, GiveUp, _own_failures, _strata, cells
+from .incidence import counted_boundary, incidence, stratum_dimension
 from .strata import records
 from .fan_geometry import split_cone
 from .polynomial import InputError, format_poly
@@ -124,14 +127,15 @@ def _affine(variables, mapping, divisors, parts, base, region, removed=(), field
     if field:
         parameter, modulus, _, _ = field
         source, target, images = (*source, parameter), (*target, parameter), (*images, parameter)
-    total_orders = [0] * len(divisors)
+    from .point_geometry import weighted_orders
+    valuations = []
     components = []
     for label, weight, equation in parts:
         data, strict = chart_data(source, images, axes, equation, target, modulus=modulus)
-        for i, (order, _) in enumerate(data):
-            total_orders[i] += weight * order
+        valuations.append((weight, [order for order, _ in data]))
         if not strict.is_number:
             components.append((label, weight, 1, (strict,)))
+    total_orders = weighted_orders(len(divisors), valuations)
     exceptional = [(label, order, nu, (v,)) for (label, v), order, (_, nu) in zip(divisors, total_orders, data)]
     return Chart(source, (modulus,) if field else (), tuple(exceptional + components), mapping,
                  tuple(region), tuple((v.name, g) for v, g in zip(base, mapping)), (), removed, field)
@@ -153,7 +157,8 @@ def _fan_region(variables, cone, earlier):
     are needed to describe the union of earlier chart overlaps."""
     from .fan_geometry import excluded_faces
     minimal = excluded_faces(cone, earlier)
-    return tuple(prod((variables[i] for i in sorted(indices)), start=chart_expressions(variables).S.One) for indices in minimal)
+    api = chart_expressions(variables)
+    return tuple(api.Mul(*(variables[i] for i in sorted(indices))) for indices in minimal)
 
 
 def _field(record, item, symbols, base):
@@ -437,30 +442,25 @@ def _product_charts(charts, dimension):
     """
     if not charts or dimension <= 2:
         return None
-    factors = None
+    supports = []
     for c in charts:
-        if len(c.coordinates) != dimension or len(dict(c.coordinates)) != dimension:
-            return None
+        # Serialize symbol identities as local column indices, preserving
+        # private symbols that happen to have the same display name.
+        index = {v: str(i) for i,v in enumerate(c.variables)}
+        def variables(g):
+            return [index[v] for v in getattr(g, "free_symbols", ()) if v in index]
         equations = (*c.ambient, *c.region, *(g for ideal in c.removed for g in ideal),
                      *(g for _, _, _, ideal in c.components for g in ideal))
-        dependencies = set().union(*(getattr(g, "free_symbols", ()) for g in equations))
-        if c.coefficient_field:
-            dependencies.add(c.coefficient_field[0])
-        candidates = set()
-        for name, axis in c.coordinates:
-            if axis in dependencies or axis not in c.variables or axis not in c.fibre:
-                continue
-            others = (g for key, g in c.coordinates if key != name)
-            if any(axis in getattr(g, "free_symbols", ()) for g in others):
-                continue
-            if any(axis in getattr(g, "free_symbols", ()) for g in c.fibre if g != axis):
-                continue
-            candidates.add(name)
-        factors = candidates if factors is None else factors.intersection(candidates)
-        if not factors:
-            return None
-    if dimension - len(factors) < 2:
+        dependencies = {v for g in equations for v in variables(g)}
+        if c.coefficient_field and c.coefficient_field[0] in index:
+            dependencies.add(index[c.coefficient_field[0]])
+        supports.append({"coordinates": [[key, index.get(g), variables(g)] for key,g in c.coordinates],
+                         "fibre": [[index.get(g), variables(g)] for g in c.fibre],
+                         "dependencies": list(dependencies)})
+    factors = incidence("product_axes", charts=supports, dimension=dimension)
+    if not factors:
         return None
+    factors = set(factors)
     reduced = []
     for c in charts:
         axes = {v for name, v in c.coordinates if name in factors}
@@ -485,14 +485,13 @@ def _product_charts(charts, dimension):
             rays, linear = c.torus
             indices = [i for i, (name, _) in enumerate(c.coordinates) if name not in factors]
             local = [i for i, v in enumerate(c.variables) if v not in axes]
-            if (len(c.variables) == len(rays) == len(linear) == dimension
-                    and all(len(row) == dimension for row in (*rays, *linear))
-                    and all(not row[j] for i,row in enumerate(rays) for j in range(dimension)
-                            if (i in local) != (j in indices))
-                    and all(not row[j] for i,row in enumerate(linear) for j in range(dimension)
-                            if (i in indices) != (j in indices))):
-                torus = (tuple(tuple(rays[i][j] for j in indices) for i in local),
-                         tuple(tuple(linear[i][j] for j in indices) for i in indices))
+            if len(c.variables) == dimension:
+                blocks = incidence("product_torus", dimension=dimension, local=local, base=indices,
+                                   rays=[list(map(bool, row)) for row in rays],
+                                   linear=[list(map(bool, row)) for row in linear])
+                if blocks is not None:
+                    torus = tuple(tuple(tuple(matrix[i][j] for j in columns) for i, columns in block)
+                                  for matrix, block in zip(c.torus, blocks))
         reduced.append(replace(c, variables=tuple(v for v in c.variables if v not in axes),
                                fibre=tuple(g for g in c.fibre if g not in axes),
                                coordinates=tuple(pair for pair in c.coordinates if pair[0] not in factors),
@@ -505,11 +504,12 @@ def _intrinsic_product(charts, dimension):
     if product is None:
         return None
     reduced, free = product
-    boundary = boundary_complex(reduced, dimension - free, intrinsic=True)
+    base_dimension = stratum_dimension(dimension, free)
+    boundary = boundary_complex(reduced, base_dimension, intrinsic=True)
     if boundary["status"] != "complete":
         return None
-    return {**boundary, "vertices": [{**v, "dimension": v["dimension"] + free}
-                                     for v in boundary["vertices"]]}
+    dimensions = incidence("product_dimensions", base=[v["dimension"] for v in boundary["vertices"]], free=free)
+    return {**boundary, "vertices": [{**v, "dimension": d} for v,d in zip(boundary["vertices"], dimensions)]}
 
 
 def boundary_complex(charts, dimension, intrinsic=False):
@@ -538,46 +538,14 @@ def boundary_complex(charts, dimension, intrinsic=False):
         charts = [replace(c, ambient=(*c.ambient, *ideal),
                           components=tuple(row for row in c.components if not _is_strict(row[0])))
                   for c in charts for name, _, _, ideal in c.components if _is_strict(name)]
-        dimension -= 1
+    ambient_dimension = dimension
+    dimension = stratum_dimension(ambient_dimension, int(intrinsic))
     orbits = {}
     counts = cells(charts, dimension, rational_counts=orbits)
-    labels = [next(iter(key)) for key in counts if len(key) == 1]
-    vertices = []
-    ids = {}
-    for label in labels:
-        key = frozenset((label,))
-        n = counts[key]
-        ids[label] = ([f"{label}.{i+1}" for i in range(n)] if intrinsic and n and n > 1 else [label])
-        vertices.extend({"id": name, "dimension": dimension-1} for name in ids[label])
+    incidence_data = counted_boundary(counts, orbits, ambient_dimension, intrinsic, any(c.coefficient_field for c in charts))
+    vertices, edges, reason = incidence_data["vertices"], incidence_data["edges"], incidence_data["reason"]
     convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else
                   "Ambient exceptional divisor") + " in the germ over the origin over Qbar."
-    order = labels.index
-    reason = None
-    edges = []
-    if intrinsic and dimension <= 2:
-        # When an end is one rational orbit and the other is a single
-        # geometric component, Galois symmetry fixes the incidence numbers.
-        for label in labels:
-            if counts[frozenset((label,))] is None:
-                reason = f"The number of components of {label} was not determined."
-                break
-        for key, count in counts.items():
-            if reason or len(key) != 2:
-                continue
-            a, b = sorted(key, key=order)
-            split = a if len(ids[a]) > 1 else b
-            pairs = [(u, v) for u in ids[a] for v in ids[b]]
-            if (count is None or count % len(pairs) or
-                    (len(pairs) > 1 and (min(len(ids[a]), len(ids[b])) > 1 or
-                                         orbits[frozenset((split,))] != 1 or
-                                         any(c.coefficient_field for c in charts)))):
-                reason = f"The incidences between the components of {a} and {b} were not determined."
-                break
-            for u, v in pairs:
-                edges.extend({"id": f"C{u}-{v}.{i+1}", "dimension": 1, "vertices": [u, v], "faces": [u, v]}
-                             for i in range(count // len(pairs)))
-    else:
-        edges, reason = dual_cells(counts, order)
     # Counts determine faces only for a simple normal crossings boundary.
     # Restricting one ambient divisor to the strict transform can produce
     # several branches that intersect each other, even when there is only
@@ -594,7 +562,7 @@ def boundary_complex(charts, dimension, intrinsic=False):
         edges = []
     elif reason:
         from .atlas_gluing import glued_complex
-        glued = glued_complex(ambient_charts, dimension + int(intrinsic), intrinsic,
+        glued = glued_complex(ambient_charts, ambient_dimension, intrinsic,
                               counts=None if intrinsic else counts)
         if glued is not None:
             return glued

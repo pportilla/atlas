@@ -13,6 +13,7 @@ import ctypes
 from functools import cached_property, lru_cache
 
 from . import native_polynomial as np
+from .polynomial import integer_text, rational_text, sparse_row
 from .reference import sp
 from .reference import QQ
 from .algebra_execution import current_execution, packed_basis, record_fallback, record_stage
@@ -27,10 +28,8 @@ _MAX_DEGREE = 32767  # Native packed exponent/total-degree limit.
 
 
 def _reference_order(order):
-    if order != "first":
-        return order
-    from sympy.polys.orderings import ProductOrder, grevlex, lex
-    return ProductOrder((lex, lambda monomial: monomial[:1]), (grevlex, lambda monomial: monomial[1:]))
+    from tests.groebner_oracle import reference_order
+    return reference_order(order)
 
 
 # Generators recur from one basis to the next, and converting a SymPy
@@ -55,24 +54,22 @@ def _monomial_row(gens, expr):
         return None
     if expr.is_Rational and expr.is_zero:
         return ""
-    powers = [0] * len(gens)
-    coefficient = 1
+    powers = ["0"] * len(gens)
+    coefficient = None
     for factor in expr.args if expr.is_Mul else (expr,):
         if factor.is_Rational:
-            coefficient *= factor
+            if coefficient is not None:
+                return None  # Unevaluated repeated factors go through the native parser.
+            coefficient = str(factor)
             continue
         base, exponent = (factor.base, factor.exp) if factor.is_Pow else (factor, 1)
         if factor.is_Pow and not (exponent.is_Integer and exponent.is_positive):
             return None
         i = positions.get(base)
-        if i is None:
+        if i is None or powers[i] != "0":
             return None
-        powers[i] += int(exponent)
-    if not coefficient:
-        return ""
-    if sum(powers) > _MAX_DEGREE:
-        return None
-    return str(coefficient) + " " + " ".join(map(str, powers))
+        powers[i] = str(exponent)
+    return "" if coefficient == "0" else (coefficient or "1") + " " + " ".join(powers)
 
 
 def _expanded_qq_line(gens, expr):
@@ -99,11 +96,8 @@ def _expanded_qq_line(gens, expr):
             raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.") from exc
         return None
     if CHECK:
-        from .affine_kernel import _sparse_terms
-        from sympy.polys.rings import ring
-        sparse, *_ = ring(gens, QQ)
-        if dict(_sparse_terms(row)) != dict(sparse.from_expr(expr)):
-            raise AssertionError("Native polynomial expansion differs from the QQ term list.")
+        from tests.groebner_oracle import check_expanded
+        check_expanded(gens, expr, row)
     return row
 
 
@@ -116,7 +110,7 @@ def _line(gens, expr):
         expr = sp.sympify(expr)
     if isinstance(expr, sp.Poly) and expr.domain in (QQ,sp.ZZ) and set(expr.gens).issubset(gens):
         positions = tuple(expr.gens.index(g) if g in expr.gens else None for g in gens)
-        return ";".join(f"{c} " + " ".join(str(m[i]) if i is not None else "0" for i in positions)
+        return ";".join(rational_text(c) + " " + " ".join(integer_text(m[i]) if i is not None else "0" for i in positions)
                         for m,c in expr.rep.to_dict().items())
     key = (gens, expr)
     line = _lines.get(key)
@@ -165,12 +159,7 @@ def _poly(gens, line):
     key = (gens, line)
     found = _polys.get(key)
     if found is None:
-        terms = {}
-        for term in line.split(";") if line else ():
-            coefficient, *powers = term.split(" ")
-            numerator, _, denominator = coefficient.partition("/")
-            terms[tuple(map(int, powers))] = QQ(int(numerator), int(denominator or 1))
-        poly = sp.Poly.from_dict(terms, *gens, domain=QQ)
+        poly = sp.Poly.from_dict(sparse_row(line), *gens, domain=QQ)
         found = poly, poly.as_expr()
         if len(_polys) >= _CACHE_LIMIT:
             _polys.clear()
@@ -347,7 +336,10 @@ def groebner(ideal, gens, *, order="grevlex", domain=QQ, known=0):
         elif getattr(domain, "is_AlgebraicField", False):
             from .field_polynomial import native_basis
             native = native_basis(ideal, gens, order, domain)
-    if native is not None and _MODE != "check":
+    if native is not None and CHECK and np.native_ring(gens) and domain == QQ:
+        from tests.groebner_oracle import _SymbolicBasis
+        return _Checked(native, _SymbolicBasis(ideal, gens, order, trusted=False))
+    if native is not None and (_MODE != "check" or np.native_ring(gens)):
         return native
     if _MODE == "native" or np.native_ring(gens):
         raise Unavailable("Native Groebner computation unavailable for the specified ring or order. "

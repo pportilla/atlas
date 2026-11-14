@@ -76,7 +76,7 @@ class MonodromyTests(unittest.TestCase):
 
 
     def test_archived_graph_reconstructs_its_marked_field(self):
-        from engine.monodromy_graph import _archived_field, _field_coefficients
+        from tests.graph_monodromy_oracle import _archived_field, _field_coefficients
         from engine.polynomial import InputError
         x = sp.Symbol("x")
         for text, root, coefficients in (

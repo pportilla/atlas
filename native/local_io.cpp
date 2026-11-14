@@ -1,7 +1,7 @@
 // Use the existing Atlas expression parser and FLINT pullback in the CLI process.
 #include "local_io.hpp"
 #include "groebner.hpp"
-#include <flint/fmpq_mpoly.h>
+#include "sparse_flint.hpp"
 #include <algorithm>
 #include <sstream>
 #include <cstdint>
@@ -250,74 +250,71 @@ Basis project_monomials(const Basis& generators, const std::vector<mpq_class>& p
     return result;
 }
 
+std::optional<Polynomial> polynomial_gcd(const Basis& generators, size_t width) {
+    SparseLexRing ring(width);
+    PolyValue common(ring.ctx), f(ring.ctx);
+    for (const auto& g : generators) {
+        if (g.empty()) continue;
+        ring.write(f.p, g);
+        if (fmpq_mpoly_is_zero(common.p, ring.ctx)) fmpq_mpoly_set(common.p, f.p, ring.ctx);
+        else if (!fmpq_mpoly_gcd(common.p, common.p, f.p, ring.ctx)) return std::nullopt;
+        if (fmpq_mpoly_is_fmpq(common.p, ring.ctx)) break;
+    }
+    return ring.read(common.p);
+}
+
+bool polynomial_divides(const Polynomial& divisor, const Polynomial& f, size_t width) {
+    SparseLexRing ring(width);
+    PolyValue a(ring.ctx), b(ring.ctx), quotient(ring.ctx);
+    ring.write(a.p, divisor);
+    ring.write(b.p, f);
+    return fmpq_mpoly_divides(quotient.p, b.p, a.p, ring.ctx);
+}
+
+Basis divide_generators(const Basis& generators, const Polynomial& divisor, size_t width) {
+    SparseLexRing ring(width);
+    PolyValue common(ring.ctx), f(ring.ctx), quotient(ring.ctx);
+    ring.write(common.p, divisor);
+    Basis result;
+    result.reserve(generators.size());
+    for (const auto& g : generators) if (!g.empty()) {
+        ring.write(f.p, g);
+        if (!fmpq_mpoly_divides(quotient.p, f.p, common.p, ring.ctx))
+            throw std::logic_error("Inexact division by a common polynomial factor.");
+        result.push_back(ring.read(quotient.p));
+    }
+    return result;
+}
+
 namespace {
 // One FLINT ring and one set of substitutions x_i + p_i for the entire batch.
 class CoordinateTranslation {
-    fmpq_mpoly_ctx_t ring;
-    std::vector<fmpq_mpoly_struct> coordinates;
+    SparseLexRing ring;
+    PolyValue source, result;
+    std::vector<PolyValue> coordinates;
     std::vector<fmpq_mpoly_struct*> images;
-    fmpq_mpoly_t source, result;
-    fmpq_t coefficient;
-    std::vector<Z> storage;
-    std::vector<fmpz*> powers;
 
 public:
     explicit CoordinateTranslation(const std::vector<mpq_class>& shifts)
-        : coordinates(shifts.size()), images(shifts.size()), storage(shifts.size()) {
-        for (auto& e : storage) powers.push_back(&e.v);
-        fmpq_mpoly_ctx_init(ring, shifts.size(), ORD_LEX);
-        fmpq_mpoly_init(source, ring);
-        fmpq_mpoly_init(result, ring);
-        fmpq_init(coefficient);
+        : ring(shifts.size()), source(ring.ctx), result(ring.ctx) {
+        coordinates.reserve(shifts.size());
         for (size_t i = 0; i < shifts.size(); ++i) {
-            images[i] = &coordinates[i];
-            fmpq_mpoly_init(images[i], ring);
-            fmpq_mpoly_gen(images[i], i, ring);
+            coordinates.emplace_back(ring.ctx);
+            auto image = coordinates.back().p;
+            fmpq_mpoly_gen(image, i, ring.ctx);
             if (shifts[i] != 0) {
-                fmpq_set_mpq(coefficient, shifts[i].get_mpq_t());
-                fmpq_mpoly_add_fmpq(images[i], images[i], coefficient, ring);
+                fmpq_set_mpq(ring.coefficient, shifts[i].get_mpq_t());
+                fmpq_mpoly_add_fmpq(image, image, ring.coefficient, ring.ctx);
             }
+            images.push_back(image);
         }
-    }
-
-    CoordinateTranslation(const CoordinateTranslation&) = delete;
-    CoordinateTranslation& operator=(const CoordinateTranslation&) = delete;
-
-    ~CoordinateTranslation() {
-        for (auto p : images) fmpq_mpoly_clear(p, ring);
-        fmpq_mpoly_clear(source, ring);
-        fmpq_mpoly_clear(result, ring);
-        fmpq_clear(coefficient);
-        fmpq_mpoly_ctx_clear(ring);
     }
 
     Polynomial apply(const Polynomial& f) {
-        fmpq_mpoly_zero(source, ring);
-        fmpq_mpoly_fit_length(source, f.size(), ring);
-        // Distinct terms in reverse map order already match FLINT's descending lex order.
-        for (auto it = f.rbegin(); it != f.rend(); ++it) {
-            fmpq_set_mpq(coefficient, it->second.get_mpq_t());
-            for (size_t i = 0; i < powers.size(); ++i)
-                fmpz_set_mpz(powers[i], it->first[i].get_mpz_t());
-            fmpq_mpoly_push_term_fmpq_fmpz(source, coefficient, powers.data(), ring);
-        }
-        fmpq_mpoly_reduce(source, ring);
-        if (!fmpq_mpoly_compose_fmpq_mpoly(result, source, images.data(), ring, ring))
+        ring.write(source.p, f);
+        if (!fmpq_mpoly_compose_fmpq_mpoly(result.p, source.p, images.data(), ring.ctx, ring.ctx))
             throw std::overflow_error("The polynomial pullback exceeds FLINT's limits.");
-
-        Polynomial translated;
-        const slong length = fmpq_mpoly_length(result, ring);
-        for (slong i = 0; i < length; ++i) {
-            // A shift can only decrease the exponents of an input term.
-            Powers powers(images.size());
-            fmpq_mpoly_get_term_exp_fmpz(this->powers.data(), result, i, ring);
-            for (size_t j = 0; j < powers.size(); ++j)
-                fmpz_get_mpz(powers[j].get_mpz_t(), this->powers[j]);
-            fmpq_mpoly_get_term_coeff_fmpq(coefficient, result, i, ring);
-            auto term = translated.try_emplace(translated.begin(), std::move(powers));
-            fmpq_get_mpq(term->second.get_mpq_t(), coefficient);
-        }
-        return translated;
+        return ring.read(result.p);
     }
 };
 }
@@ -338,6 +335,12 @@ Basis translate(const Basis& inputs, const std::vector<mpq_class>& shifts) {
             }
         }
     }
+    return translate_unbounded(inputs, shifts);
+}
+
+Basis translate_unbounded(const Basis& inputs, const std::vector<mpq_class>& shifts) {
+    if (inputs.empty() || std::all_of(shifts.begin(), shifts.end(), [](const auto& p) { return p == 0; }))
+        return inputs;
     CoordinateTranslation translation(shifts);
     Basis output;
     output.reserve(inputs.size());

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine.native_backend import resolve_native
+from engine.native_backend import resolve_native, smooth_projective_tangent
 from engine.polynomial import parse
 
 def run(source, names, mode, **kwargs):
@@ -13,6 +13,19 @@ def run(source, names, mode, **kwargs):
     return resolve_native([(p, str(c)) for p, c in sparse.items()], names, mode, **kwargs)
 
 class OrdinaryTests(unittest.TestCase):
+    def test_projective_tangent_only_certifies_proven_smooth_sections(self):
+        names = ["x","y","z"]
+        forms = (
+            ("x^3+y^3+z^3+x*y*z/3+x^7", True),
+            ("x^2+y+z^3", True),
+            ("x^3+y^3+z^3-3*x*y*z+x^7", False),
+            ("1000000007*1000000009*(x^2+y^2+z^2+x*y)", False),
+            ("x^2+y^2+z^2+x^18446744073709551617", False),
+        )
+        for equation, expected in forms:
+            with self.subTest(equation=equation):
+                self.assertEqual(smooth_projective_tangent(len(names), parse(equation, names, bounded=False)), expected)
+
     def test_four_variable_coordinate_witness(self):
         details = {}
         self.assertIsNone(run("a^2+b^3+c^4+t^5", ["a","b","c","t"], "embedded", diagnostics=details))

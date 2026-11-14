@@ -16,11 +16,11 @@ index propagates to a containing split section only when the character
 and polynomial agree. Single-component faces need no root matching.
 See native/KERNEL.md for the hypotheses and reference.
 """
-from fractions import Fraction
 from functools import lru_cache
-from itertools import combinations
 
-from .fan_geometry import canonical_laurent_terms, complete_fan as _complete_fan
+from .fan_geometry import canonical_laurent_terms, complete_fan as _complete_fan, _determinant
+from .kernel_json import kernel_json
+from .polynomial import integer_from_decimal, integer_text
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 
 
@@ -29,12 +29,10 @@ def _normalized(terms):
     if first == 1:
         return tuple(sorted(terms.items()))
     from .native_library import affine_request
-    from .polynomial import checked_native, format_poly, rational_text, sparse_row
+    from .polynomial import format_poly, rational_text, sparse_row
     names = tuple(f"x{i}" for i in range(len(next(iter(terms)))))
-    def native():
-        row, = affine_request(["function", " ".join(names), f"({format_poly(terms,names)})/({rational_text(first)})"])
-        return tuple(sorted(sparse_row(row).items()))
-    return checked_native(native, lambda: tuple((e, Fraction(c)/first) for e, c in sorted(terms.items())))
+    row, = affine_request(["function", " ".join(names), f"({format_poly(terms,names)})/({rational_text(first)})"])
+    return tuple(sorted(sparse_row(row).items()))
 
 
 @lru_cache(maxsize=4096)
@@ -46,19 +44,13 @@ def _orbit(rays, terms, exhaustive=False):
 def _section(terms, exhaustive):
     common = dict(terms)
     proof = certify_face(common, exhaustive=exhaustive)
-    if proof["status"] != "nondegenerate":
+    edge = proof.get("edge")
+    count = kernel_json("atlas_torus_sections", "section", nondegenerate=proof["status"] == "nondegenerate",
+                        rank=proof["face_dimension"], degree=integer_text(edge["degree"]) if edge else None)
+    if count is None:
         return None
-    dimension = proof["face_dimension"]
-    if dimension == 0:
-        return 0, None
-    if dimension > 1:
-        return 1, None
-    edge = proof["edge"]
-    # Torus nondegeneracy in one primitive character means every nonzero
-    # root is simple. Translating the segment to start at zero makes its
-    # constant coefficient nonzero, so its degree counts all its roots.
-    signature = tuple(edge["direction"]), _normalized(edge_polynomial(edge))
-    return edge["degree"], signature
+    signature = (tuple(edge["direction"]), _normalized(edge_polynomial(edge))) if edge else None
+    return integer_from_decimal(count), signature
 
 
 @lru_cache(maxsize=4096)
@@ -87,8 +79,7 @@ def _affine_orbit(rays, terms, exhaustive):
 
 
 def _chart_terms(chart, dimension, common_linear):
-    from .chart_expressions import chart_expressions
-    from .affine_kernel import pullbacks, sparse_terms
+    from .affine_kernel import sparse_terms
     from .blowup_ideal import radical_subset
     from .local_blowups import _is_strict
     if (chart.ambient or chart.removed or chart.coefficient_field or len(chart.variables) != dimension or
@@ -101,12 +92,14 @@ def _chart_terms(chart, dimension, common_linear):
             type(entry) is not int for row in (*rays, *linear) for entry in row):
         return None
     axes = chart.variables
-    sp = chart_expressions(axes)
-    monomials = tuple(sp.Mul(*(v**r[j] for v, r in zip(axes, rays))) for j in range(dimension))
-    mapping = tuple(sum(c*m for c, m in zip(row, monomials)) for row in linear)
+    columns = tuple(zip(*rays))
     actual = tuple(g for _, g in chart.coordinates)
-    if any(pullbacks(axes, axes, axes, tuple(a-b for a, b in zip(mapping, actual)))):
-        return None
+    # A regular cone has independent and distinct columns. Its projections
+    # therefore have precisely the sparse coefficients of the common frame.
+    for row, image in zip(linear, actual):
+        expected = {power: c for power, c in zip(columns, row) if c}
+        if expected != dict(sparse_terms(axes, image)):
+            return None
     if set(chart.fibre) != set(actual) and not (
             radical_subset(axes, chart.fibre, actual) and radical_subset(axes, actual, chart.fibre)):
         return None
@@ -123,16 +116,11 @@ def _chart_terms(chart, dimension, common_linear):
         if at in boundary:
             return None
         boundary[at] = label
-    axes_of_orthant = {tuple(int(i == j) for i in range(dimension)) for j in range(dimension)}
-    if any((ray not in axes_of_orthant) != (i in boundary) for i, ray in enumerate(rays)):
-        return None
     return rays, boundary, sparse_terms(axes, strict[0][0])
 
 
 def torus_complex(charts, dimension, intrinsic):
     """Return a certified common-torus complex, or defer to general gluing."""
-    from .chart_expressions import chart_expressions
-    from .affine_kernel import frame_minor
     if not charts or not 2 <= dimension <= 8 or any(len(c.torus) != 2 for c in charts):
         return None
     if not _complete_fan(tuple(c.torus[0] for c in charts), dimension):
@@ -145,8 +133,7 @@ def torus_complex(charts, dimension, intrinsic):
     if len(set(base_names)) != dimension or any(
             tuple(name for name, _ in chart.coordinates) != base_names for chart in charts):
         return None
-    axes = chart_expressions(charts[0].variables).symbols(f"torus_0:{dimension}")
-    if not frame_minor(axes, [sum(c*v for c, v in zip(row, axes)) for row in linear], axes):
+    if not _determinant(linear):
         return None
     return section_complex((_chart_terms(c, dimension, linear) for c in charts), dimension, intrinsic)
 
@@ -162,104 +149,36 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
     chart_terms = tuple(chart_terms)
     if any(details is None for details in chart_terms):
         return None
-    over_base_strata = any(min(rays[i]) == 0 for rays, boundary, _ in chart_terms for i in boundary)
-    if over_base_strata:
-        if not intrinsic:
-            return None
-    sections, labels, rays_by_label = {}, [], {}
-    exhaustive = exhaustive_faces()
-    visible = set()
-    seen_faces = set()
-    global_equation = None
-    for details in chart_terms:
-        rays, boundary, terms = details
+    ray_ids, equations, charts = {}, {}, []
+    for rays, boundary, terms in chart_terms:
+        chart = {"rays": [ray_ids.setdefault(ray, len(ray_ids)) for ray in rays],
+                 "boundary": list(boundary.items())}
+        if intrinsic:
+            chart["powers"] = [list(map(integer_text, e)) for e, _ in terms]
         if not common_source:
             try:
-                original = _normalized(canonical_laurent_terms(rays, dict(terms)))
+                equation = _normalized(canonical_laurent_terms(rays, dict(terms)))
             except ArithmeticError:
                 return None
-            if global_equation is not None and original != global_equation:
-                return None
-            global_equation = original
-        for at, name in boundary.items():
-            if name in rays_by_label and rays_by_label[name] != rays[at]:
-                return None
-            if name not in rays_by_label:
-                if rays[at] in rays_by_label.values():
-                    return None
-                labels.append(name)
-                rays_by_label[name] = rays[at]
-        # Restrict to each coordinate hyperplane once. The terms on an
-        # intersection survive on every participating hyperplane, so the
-        # smallest restriction suffices to find their common subset.
-        hyperplanes = [tuple(term for term in terms if term[0][i] == 0) for i in range(dimension)]
-        for size in range(1, dimension+1):
-            for indices in combinations(range(dimension), size):
-                if not any(i in boundary for i in indices):
-                    continue
-                if common_source:
-                    # A cone face defines one orbit across all charts containing it.
-                    # Coordinate rays also determine its section and its image in the base.
-                    face = frozenset(rays[i] for i in indices)
-                    if face in seen_faces:
-                        continue
-                    seen_faces.add(face)
-                if size == 1:
-                    restricted = hyperplanes[indices[0]]
-                else:
-                    first = min(indices, key=lambda i: len(hyperplanes[i]))
-                    other = tuple(i for i in indices if i != first)
-                    restricted = tuple(term for term in hyperplanes[first] if all(term[0][i] == 0 for i in other))
-                if not restricted:
-                    return None
-                boundary_face = all(i in boundary for i in indices)
-                orbit = (_affine_orbit(rays, restricted, exhaustive) if over_base_strata and boundary_face
-                         else _orbit(rays, restricted, exhaustive))
-                if orbit is None:
-                    return None
-                if (over_base_strata and orbit[0] and
-                        all(any(rays[i][j] for i in indices) for j in range(dimension))):
-                    # This orbit lies over the origin. Every subface with
-                    # a segment section has all its roots represented here.
-                    names = [boundary[i] for i in indices if i in boundary]
-                    for k in range(1, len(names)+1):
-                        visible.update(map(frozenset, combinations(names, k)))
-                if not boundary_face:
-                    continue
-                key = frozenset(boundary[i] for i in indices)
-                value = orbit if intrinsic else (1, None)
-                if key in sections and sections[key] != value:
-                    return None
-                sections[key] = value
-    if over_base_strata:
-        sections = {key: section for key, section in sections.items() if key in visible}
-    ids, vertices, cells = {}, [], []
-    order = labels.index
-    for key in sorted(sections, key=lambda k: (len(k), sorted(map(order, k)))):
-        count, signature = sections[key]
-        names = sorted(key, key=order)
-        ids[key] = []
-        for i in range(count):
-            if len(key) == 1:
-                name = names[0] + (f".{i+1}" if count > 1 else "")
-                vertices.append({"id": name, "dimension": dimension-1-int(intrinsic)})
-            else:
-                def restriction(face):
-                    face = frozenset(face)
-                    choices = ids.get(face, [])
-                    if len(choices) == 1:
-                        return choices[0]
-                    if len(choices) == count and signature is not None and sections[face][1] == signature:
-                        return choices[i]
-                    raise ValueError("Unmatched primitive characters on intersecting torus strata.")
-                try:
-                    ends = [restriction((v,)) for v in names]
-                    faces = [restriction(face) for face in combinations(names, len(names)-1)]
-                except ValueError:
-                    return None
-                name = "C" + "-".join(names) + f".{i+1}"
-                cells.append({"id": name, "dimension": len(names)-1, "vertices": ends, "faces": faces})
-            ids[key].append(name)
-    return {"status": "complete", "vertices": vertices, "cells": cells,
-            "convention": ("Exceptional divisor on the smooth strict transform" if intrinsic else
-                           "Ambient exceptional divisor") + " in the germ over the origin over Qbar."}
+            chart["equation"] = equations.setdefault(equation, len(equations))
+        charts.append(chart)
+    plan = kernel_json("atlas_torus_sections", "plan", dimension=dimension, intrinsic=intrinsic,
+                       common_source=common_source, rays=[list(map(integer_text, ray)) for ray in ray_ids],
+                       charts=charts)
+    if plan is None:
+        return None
+    if "complex" in plan:
+        return plan["complex"]
+
+    exhaustive = exhaustive_faces()
+    sections, characters = [], {None: 0}
+    for index, affine, terms in plan["checks"]:
+        rays, _, polynomial = chart_terms[index]
+        restricted = tuple(polynomial[j] for j in terms)
+        prove_section = _affine_orbit if affine else _orbit
+        section = prove_section(rays, restricted, exhaustive)
+        if section is None:
+            return None
+        count, character = section
+        sections.append((integer_text(count), characters.setdefault(character, len(characters))))
+    return kernel_json("atlas_torus_sections", "glue", incidence=plan["incidence"], sections=sections)

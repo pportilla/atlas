@@ -1,4 +1,5 @@
 // Packed and arbitrary-precision exponent substitutions for toric charts.
+#include "chart_equation.hpp"
 #include <array>
 #include <cstdint>
 #include <algorithm>
@@ -142,12 +143,39 @@ Verification certify_device(const Integers& exponents, const Integers& rays, con
     return Verification::checked;
 }
 
+std::vector<std::string> read_words(std::istream& in, size_t count) {
+    std::vector<std::string> words(count);
+    for (auto& word : words) if (!(in >> word)) throw std::invalid_argument("Incomplete chart equation data.");
+    return words;
+}
+
 char* owned_text(const std::string& text) {
     char* result = static_cast<char*>(std::malloc(text.size()+1));
     if (result) std::memcpy(result, text.c_str(), text.size()+1);
     return result;
 }
 } // namespace
+
+// Read the transformed buffer produced by the selected CPU or GPU kernel.
+extern "C" char* resolution_chart_equations(const char* input, const int32_t* powers,
+                                          size_t terms, size_t charts, size_t dimension) noexcept {
+    try {
+        if (!input || !powers || !terms || !charts || dimension < 2 || dimension > 8 ||
+            terms > 6000000 / dimension / charts)
+            throw std::invalid_argument("Invalid packed chart dimensions.");
+        std::istringstream in(input);
+        const auto names = read_words(in, dimension);
+        const auto coefficients = read_words(in, terms);
+        std::string result;
+        for (size_t i = 0; i < charts; ++i)
+            atlas::append_chart_equation(result, powers+i*terms*dimension, coefficients, names);
+        return owned_text(result);
+    } catch (const std::exception& e) {
+        return owned_text(std::string("error ") + e.what());
+    } catch (...) {
+        return nullptr;
+    }
+}
 
 // Reuse the exact ray/term valuations from the fan. A requested device
 // recomputes them with packed digit products; certify its entire result
@@ -157,20 +185,22 @@ extern "C" char* resolution_chart_wide(const char* input, size_t terms, size_t r
     try {
         if (!input || !terms || !ray_count || !dimension)
             throw std::invalid_argument("Expected nonempty chart tables.");
+        if (ray_count > std::numeric_limits<size_t>::max() / terms)
+            throw std::length_error("The chart table size exceeds the address space.");
         std::istringstream in(input);
         const auto orders = read_integers(in, ray_count);
-        const auto values = read_integers(in, ray_count*terms);
+        auto values = read_integers(in, ray_count*terms);
         Verification verification = Verification::checked;
         if (run) {
             if (dimension < 2 || dimension > 8 || ray_count > 100000 ||
-                    ((ray_count+dimension-1)/dimension)*terms*dimension > 6000000)
+                    terms > 6000000 / dimension / ((ray_count+dimension-1)/dimension))
                 throw std::invalid_argument("The ray table exceeds the chart device batch size.");
             const auto exponents = read_integers(in, terms*dimension);
             const auto rays = read_integers(in, ray_count*dimension);
             verification = certify_device(exponents, rays, values, terms, ray_count, dimension, run);
         }
         in >> std::ws;
-        if (!in.eof()) throw std::invalid_argument("Incorrect chart table dimensions.");
+        const bool equations = !in.eof();
         std::ostringstream out;
         switch (verification) {
             case Verification::checked: out << "ok\n"; break;
@@ -179,15 +209,40 @@ extern "C" char* resolution_chart_wide(const char* input, size_t terms, size_t r
         }
         for (size_t i = 0; i < ray_count; ++i) {
             for (size_t j = 0; j < terms; ++j) {
-                const auto& value = values[i*terms+j];
+                auto& value = values[i*terms+j];
                 if (value < orders[i])
                     throw std::invalid_argument("A ray order exceeds the valuation of an input monomial.");
-                if (j) out << ' ';
-                out << value - orders[i];
+                value -= orders[i];
+                if (!equations) {
+                    if (j) out << ' ';
+                    out << value;
+                }
             }
-            out << '\n';
+            if (!equations) out << '\n';
         }
-        return owned_text(out.str());
+        if (!equations) return owned_text(out.str());
+
+        std::string operation;
+        size_t charts;
+        if (!(in >> operation >> charts) || operation != "equations" || !charts ||
+            terms > std::numeric_limits<size_t>::max()/dimension)
+            throw std::invalid_argument("Incorrect chart equation table.");
+        const auto names = read_words(in, dimension);
+        const auto coefficients = read_words(in, terms);
+        Integers powers(terms*dimension);
+        std::string result = out.str();
+        for (size_t i = 0; i < charts; ++i) {
+            for (size_t j = 0; j < dimension; ++j) {
+                size_t ray;
+                if (!(in >> ray) || ray >= ray_count) throw std::invalid_argument("Invalid chart ray index.");
+                for (size_t k = 0; k < terms; ++k)
+                    powers[k*dimension+j] = values[ray*terms+k];
+            }
+            atlas::append_chart_equation(result, powers.data(), coefficients, names);
+        }
+        in >> std::ws;
+        if (!in.eof()) throw std::invalid_argument("Incorrect chart table dimensions.");
+        return owned_text(result);
     } catch (const std::exception& e) {
         return owned_text(std::string("error ") + e.what());
     } catch (...) {

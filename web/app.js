@@ -1092,8 +1092,9 @@ function fieldInfo(data) {
     section.append(el("h4", "sub", "Algebraic numbers"), table(["Symbol", "Value", "Definition"], rows,
       ([id, number]) => [typeset(id), approximation(number?.approximation ?? "—"), exactNumber(number?.exact ?? number)]));
   }
-  if (Object.keys(data.root_families || {}).length) {
-    const rows = Object.entries(data.root_families);
+  const roots = {...data.dual_complex?.root_families, ...data.root_families};
+  if (Object.keys(roots).length) {
+    const rows = Object.entries(roots);
     section.append(el("h4", "sub", "Roots in the chart equations"), table(["Family", "Definition"], rows,
       ([id, family]) => [typeset(id), family?.definition ?? stringify(family)]));
   }

@@ -9,6 +9,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MarkedRecordTests(unittest.TestCase):
+    def test_marked_angles_and_scaled_polynomials(self):
+        from engine.marked_field import description, record_field
+        from engine.polynomial import InputError
+        for literal, equivalent in (("exp(pi/I/5)", "exp(-I*pi/5)"),
+                                    ("sin(I*I*pi/7)", "sin(-pi/7)"),
+                                    ("tan(pi/7 + pi/7)", "tan(2*pi/7)")):
+            with self.subTest(literal=literal):
+                self.assertEqual(description(literal), description(equivalent))
+        for literal in ("sin(I*pi)", "cos(pi+I)", "csc(0)", "exp(pi)"):
+            with self.subTest(literal=literal), self.assertRaises(InputError):
+                description(literal)
+        field = {"generator": "a", "exact_root": "sqrt(2)",
+                 "minimal_polynomial_coefficients": ["0.5", 0, -1]}
+        self.assertIsNotNone(record_field(field, {}, ["a"], "t")[0])
+        field["minimal_polynomial_coefficients"] = [1, 0, -3]
+        with self.assertRaisesRegex(InputError, "does not define"):
+            record_field(field, {}, ["a"], "t")
+
     def test_native_indices_on_mixed_factors(self):
         import sympy as sp
         from engine import native_library

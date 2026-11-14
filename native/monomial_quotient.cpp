@@ -1,6 +1,7 @@
 // Sparse standard monomials and Hilbert series of monomial quotients.
 // Exponents, degrees, coefficients, and lengths can all exceed a machine word.
 #include <gmpxx.h>
+#include "local_point_quotient.hpp"
 #include <algorithm>
 #include <map>
 #include <numeric>
@@ -153,7 +154,7 @@ void boxes(const Staircase& staircase, Emit emit) {
     }
 }
 
-std::string basis(const Staircase& staircase) {
+Rows standard_monomials(const Staircase& staircase) {
     struct Monomial { Integer degree; Row row; };
     std::vector<Monomial> points;
     boxes(staircase, [&](const Row& lower, const Row& upper) {
@@ -171,10 +172,10 @@ std::string basis(const Staircase& staircase) {
     std::sort(points.begin(), points.end(), [](const Monomial& a, const Monomial& b) {
         return a.degree != b.degree ? a.degree < b.degree : a.row > b.row;
     });
-    std::ostringstream out;
-    out << points.size() << '\n';
-    for (const auto& point : points) write_row(out, point.row);
-    return out.str();
+    Rows result;
+    result.reserve(points.size());
+    for (auto& point : points) result.push_back(std::move(point.row));
+    return result;
 }
 
 struct SeriesBox { Integer offset; Row lengths; long free; };
@@ -395,6 +396,16 @@ std::string homogeneous_heads(std::istream& in, size_t width, bool inspect) {
 
 } // namespace
 
+local::PointQuotient local::monomial_point_quotient(size_t width, const std::vector<Powers>& heads, bool include_basis) {
+    Staircase staircase(width,heads);
+    if (staircase.unit) return {0,{},{}};
+    if (std::any_of(staircase.bounds.begin(),staircase.bounds.end(),
+                    [](const Integer& bound) { return bound < 0; })) return {};
+    if (!include_basis) return {analyze(staircase,false).multiplicity,{},{}};
+    auto monomials = standard_monomials(staircase);
+    return {Integer(monomials.size()),std::move(monomials),{}};
+}
+
 std::string monomial_quotient(std::istream& in, const std::string& operation) {
     const long width = std::stol(next_line(in));
     if (width < 0) throw std::invalid_argument("A ring cannot have negative coordinate count.");
@@ -409,14 +420,35 @@ std::string monomial_quotient(std::istream& in, const std::string& operation) {
             throw std::invalid_argument("Expected one nonnegative exponent per coordinate.");
         heads.push_back(std::move(row));
     }
-    const Staircase staircase(width, heads);
-    if (operation == "monomial_basis" || operation == "monomial_length") {
-        if (staircase.unit) return "0\n";
-        if (std::any_of(staircase.bounds.begin(), staircase.bounds.end(),
-                        [](const Integer& bound) { return bound < 0; })) return "infinite\n";
-        if (operation == "monomial_basis") return basis(staircase);
-        return analyze(staircase, false).multiplicity.get_str() + "\n";
+    if (operation == "monomial_support_masks") {
+        std::ostringstream out;
+        for (const auto& row : heads) {
+            Integer mask = 0;
+            for (size_t j = 0; j < row.size(); ++j)
+                if (row[j] != 0) mpz_setbit(mask.get_mpz_t(), j);
+            out << mask << ' ';
+        }
+        return out.str() + "\n";
     }
+    if (operation == "monomial_degree_bounds") {
+        if (heads.empty()) throw std::invalid_argument("Expected a nonzero polynomial.");
+        Integer low = sum(heads.front()), high = low;
+        for (const auto& powers : heads) {
+            const auto degree = sum(powers);
+            low = std::min(low, degree);
+            high = std::max(high, degree);
+        }
+        return low.get_str() + " " + high.get_str() + "\n";
+    }
+    if (operation == "monomial_basis" || operation == "monomial_length") {
+        auto quotient = local::monomial_point_quotient(width, heads, operation == "monomial_basis");
+        if (!quotient.dimension) return "infinite\n";
+        std::ostringstream out;
+        out << *quotient.dimension << '\n';
+        for (const auto& e : quotient.monomials) write_row(out,e);
+        return out.str();
+    }
+    const Staircase staircase(width, heads);
     const auto series = analyze(staircase, operation == "monomial_series" || !degrees.empty());
     if (operation == "monomial_function") return function_values(series, width, degrees);
     if (operation != "monomial_series") throw std::invalid_argument("Unknown monomial quotient operation.");

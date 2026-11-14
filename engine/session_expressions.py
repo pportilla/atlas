@@ -7,13 +7,21 @@ import operator
 from subprocess import TimeoutExpired
 import tokenize
 
+from .native_polynomial import scalar_arithmetic
 from .session_polynomial import Polynomial
 
 
+_EVALUATION_ERRORS = (ValueError, TypeError, KeyError, IndexError, AttributeError,
+                      ArithmeticError, OSError, RuntimeError, TimeoutExpired)
+
+
 class SessionError(ValueError):
-    def __init__(self, message, line):
+    def __init__(self, message, line, *, unknown_name=None, function=None, method=None):
         super().__init__(message)
         self.line = line
+        self.unknown_name = unknown_name
+        self.function = function
+        self.method = method
 
 
 def _parse(source):
@@ -41,6 +49,9 @@ _OPERATORS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.m
               ast.Div: operator.truediv, ast.Pow: operator.pow}
 
 
+_SCALAR_OPERATORS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Pow: "^"}
+
+
 def _numeric(value):
     return type(value) is int or isinstance(value, (Fraction, Polynomial))
 
@@ -49,16 +60,19 @@ def _arithmetic(op, left, right):
     operation = _OPERATORS.get(type(op))
     if operation is None or not (_numeric(left) and _numeric(right)):
         raise ValueError("Arithmetic requires rational numbers or polynomials and +, -, *, / or ^.")
-    if isinstance(op, ast.Div) and not isinstance(left, Polynomial):
-        left = Fraction(left)
     if isinstance(op, ast.Pow):
         if isinstance(right, Fraction) and right.denominator == 1:
-            right = int(right)
+            right = right.numerator
         if type(right) is not int:
             raise ValueError("Use an integer exponent.")
-        if type(left) is int and right < 0:
-            left = Fraction(left)
-    return operation(left, right)
+    if isinstance(left, Polynomial) or isinstance(right, Polynomial):
+        return operation(left, right)
+    result = scalar_arithmetic(_SCALAR_OPERATORS[type(op)], left, right)
+    if isinstance(left, Fraction) or isinstance(right, Fraction) or isinstance(op, ast.Div):
+        return result
+    if isinstance(op, ast.Pow) and right < 0:
+        return result
+    return result.numerator
 
 
 def _field(value, name):
@@ -123,8 +137,7 @@ class Evaluator:
             raise
         except ZeroDivisionError:
             raise SessionError("Division by zero.", statement.lineno) from None
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError, ArithmeticError,
-                OSError, RuntimeError, TimeoutExpired) as error:
+        except _EVALUATION_ERRORS as error:
             raise SessionError(str(error), statement.lineno) from None
 
     def _bind(self, target, value):
@@ -158,7 +171,7 @@ class Evaluator:
                 return self.variables[node.id]
             if node.id in self.builtins:
                 return self.builtins[node.id]
-            raise ValueError(f"Unknown name {node.id!r}.")
+            raise SessionError(f"Unknown name {node.id!r}.", node.lineno, unknown_name=node.id)
         if isinstance(node, ast.List):
             return [self._value(element) for element in node.elts]
         if isinstance(node, ast.Tuple):
@@ -178,7 +191,7 @@ class Evaluator:
             if isinstance(node.op, ast.Not):
                 return not value
             if _numeric(value) and isinstance(node.op, (ast.UAdd, ast.USub)):
-                return +value if isinstance(node.op, ast.UAdd) else -value
+                return value if isinstance(node.op, ast.UAdd) else _arithmetic(ast.Sub(), 0, value)
             raise ValueError("A sign requires a rational number or polynomial.")
         if isinstance(node, ast.BinOp):
             return _arithmetic(node.op, self._value(node.left), self._value(node.right))
@@ -189,7 +202,11 @@ class Evaluator:
                 if compare is None:
                     raise ValueError("Use ==, !=, <, <=, > or >= for comparisons.")
                 right = self._value(next_node)
-                if not compare(left, right):
+                if type(left) in (int, Fraction) and type(right) in (int, Fraction):
+                    matches = compare(scalar_arithmetic("compare", left, right).numerator, 0)
+                else:
+                    matches = compare(left, right)
+                if not matches:
                     return False
                 left = right
             return True
@@ -197,15 +214,30 @@ class Evaluator:
             if not isinstance(node.func, (ast.Name, ast.Attribute)):
                 raise ValueError("Call an Atlas function or method by name.")
             function = self._value(node.func)
-            if not callable(function):
-                raise ValueError("This value is not an Atlas function.")
-            args = [self._value(arg) for arg in node.args]
-            kwargs = {}
-            for keyword in node.keywords:
-                if not keyword.arg or keyword.arg.startswith("_"):
-                    raise ValueError("Use public, named keyword arguments.")
-                if keyword.arg in kwargs:
-                    raise ValueError(f"Repeated keyword {keyword.arg!r}.")
-                kwargs[keyword.arg] = self._value(keyword.value)
-            return function(*args, **kwargs)
+            try:
+                return self._call(node, function)
+            except SessionError as error:
+                # Preserve a more specific failure from a nested call.
+                if error.function is None and isinstance(node.func, ast.Name):
+                    error.function = node.func.id
+                raise
+            except _EVALUATION_ERRORS as error:
+                # Methods can share a name with a different top-level operation.
+                message = "Division by zero." if isinstance(error, ZeroDivisionError) else str(error)
+                if isinstance(node.func, ast.Attribute):
+                    raise SessionError(message, node.lineno, function=ast.unparse(node.func), method=function) from None
+                raise SessionError(message, node.lineno, function=node.func.id) from None
         raise ValueError(f"Unsupported Atlas expression: {type(node).__name__}.")
+
+    def _call(self, node, function):
+        if not callable(function):
+            raise ValueError("This value is not an Atlas function.")
+        args = [self._value(arg) for arg in node.args]
+        kwargs = {}
+        for keyword in node.keywords:
+            if not keyword.arg or keyword.arg.startswith("_"):
+                raise ValueError("Use public, named keyword arguments.")
+            if keyword.arg in kwargs:
+                raise ValueError(f"Repeated keyword {keyword.arg!r}.")
+            kwargs[keyword.arg] = self._value(keyword.value)
+        return function(*args, **kwargs)

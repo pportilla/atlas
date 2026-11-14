@@ -2,7 +2,7 @@
 from functools import lru_cache
 from hashlib import sha256
 import json
-import math
+from math import isfinite
 import os
 from pathlib import Path
 import platform
@@ -64,7 +64,7 @@ def _selected_device(backend, index):
 
 
 def _duration(value):
-    return type(value) in (int, float) and math.isfinite(value) and value >= 0
+    return type(value) in (int, float) and isfinite(value) and value >= 0
 
 
 def _shape(row):

@@ -23,6 +23,9 @@ def _load(path):
     library.resolution_ordinary.restype = ctypes.c_void_p
     library.resolution_free.argtypes = [ctypes.c_void_p]
     library.resolution_free.restype = None
+    if hasattr(library, "resolution_smooth_tangent"):
+        library.resolution_smooth_tangent.argtypes = [ctypes.c_char_p]
+        library.resolution_smooth_tangent.restype = ctypes.c_int
     return library
 
 
@@ -165,20 +168,18 @@ def _certificate(line, index, attempt):
     return proof
 
 
-def _plane_points(terms, order, tangent_polynomial):
+def _plane_points(counts, tangent_polynomial):
     """Label each distinct geometric direction, including the point at infinity.
 
     Input binary form is certified square-free; a zero or infinity direction
     therefore contributes exactly one point. The other roots are specified
     exactly by a polynomial and index. This avoids numeric root isolation.
     """
-    exponents = {tuple(powers) for powers, _ in terms if sum(powers) == order}
-    zero = (order, 0) not in exponents
-    infinity = (0, order) not in exponents
+    zero, nonzero_roots, infinity = map(int, counts.split())
     directions = []
     if zero:
         directions.append(("0", None))
-    for idx in range(1, order - zero - infinity + 1):
+    for idx in range(1, nonzero_roots + 1):
         root = f"alpha_{idx}"
         directions.append((root, f"1/{root}"))
     if infinity:
@@ -239,6 +240,25 @@ def _explain_defer(fields, variables):
     return details
 
 
+def _ordinary_payload(variables, terms):
+    from .polynomial import integer_text
+    rows = [f"{variables} {len(terms)}"]
+    rows.extend(f"{coeff} {' '.join(map(integer_text, powers))}" for powers, coeff in terms)
+    return "\n".join(rows).encode("ascii")
+
+
+def smooth_projective_tangent(variables, polynomial):
+    """Return a positive native certificate or leave verification to the chart ideals."""
+    from .polynomial import rational_text
+    if not _LIBRARY.is_file():
+        return False
+    predicate = getattr(_load(_LIBRARY), "resolution_smooth_tangent", None)
+    if predicate is None:
+        return False
+    terms = [(powers, rational_text(coeff)) for powers, coeff in polynomial.items()]
+    return bool(predicate(_ordinary_payload(variables, terms)))
+
+
 def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str], mode: str,
                    compute: str | None = None, diagnostics: dict | None = None) -> dict | None:
     """Return a proven local resolution, or None when the classification defers.
@@ -258,15 +278,13 @@ def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str
     n = len(variables)
     if any(len(exp) != n for exp, _ in terms):
         raise ValueError("monomial dimension differs from the number of variables")
-    payload = [f"{n} {len(terms)}"]
-    payload.extend(f"{coeff} {' '.join(map(str, powers))}" for powers, coeff in terms)
     library = _load(_LIBRARY)
     attempt = {}
     kernel = None
     if use_gpu:
         from .gpu_devices import gpu_preference
         kernel = _rank_callback(gpu_preference(), attempt)
-    result = library.resolution_ordinary("\n".join(payload).encode("ascii"), kernel, device_index, minimum_columns)
+    result = library.resolution_ordinary(_ordinary_payload(n, terms), kernel, device_index, minimum_columns)
     if result is None:
         raise RuntimeError("The native tangent-cone computation could not finish.")
     try:
@@ -304,7 +322,7 @@ def resolve_native(terms: list[tuple[tuple[int, ...], str]], variables: list[str
     vertices = [{"id": "E1", "label": "E1"}]
     plane_chart_components = None
     if mode == "intrinsic" and n == 2:
-        vertices, plane_chart_components, definition = _plane_points(terms, order, fields[5])
+        vertices, plane_chart_components, definition = _plane_points(fields[-1], fields[5])
         dual["root_definition"] = definition
     elif mode == "intrinsic":
         vertices[0].update({"projective_equation": tangent, "dimension": n-2})

@@ -45,7 +45,12 @@
                 <option value="intersection">Intersection</option>
                 <option value="quotient">Ideal quotient</option>
                 <option value="saturation">Saturation</option>
+                <option value="ideal-power">Ordinary ideal power</option>
+                <option value="symbolic-power">Symbolic power</option>
                 <option value="radical">Ideal radical</option>
+                <option value="localization">Localization at a prime</option>
+                <option value="normalization">Normalization</option>
+                <option value="primary-decomposition">Primary decomposition</option>
                 <option value="dimension">Krull dimension</option>
                 <option value="gcd">Polynomial GCD</option>
                 <option value="factor">Polynomial factorization</option>
@@ -66,6 +71,8 @@
                   <option value="tangent-cone-hilbert-series">Tangent cone Hilbert series</option>
                   <option value="zariski-tangent-space">Zariski tangent space</option>
                   <option value="embedding-dimension">Embedding dimension</option>
+                  <option value="local-dimension">Local dimension</option>
+                  <option value="local-smoothness">Local smoothness</option>
                 </optgroup>
               </select>
             </label>
@@ -103,6 +110,43 @@
                 <div class="generator-list" id="generators"></div>
                 <button type="button" id="add-generator" class="link">Add generator</button>
               </fieldset>
+            </fieldset>
+            <fieldset id="exponent-field" hidden disabled>
+              <legend>Power</legend>
+              <label class="field algebra-field" for="exponent">
+                <span>Exponent</span>
+                <input id="exponent" type="text" inputmode="numeric" pattern="[0-9]+" required value="2"
+                       title="Enter a nonnegative integer" autocomplete="off" spellcheck="false">
+              </label>
+            </fieldset>
+            <fieldset id="prime-field" hidden disabled>
+              <legend>Prime ideal <i>P</i></legend>
+              <label class="field algebra-field operand-source" id="prime-source-field" for="prime-source" hidden>
+                <span class="visually-hidden">Source of prime ideal P</span>
+                <select id="prime-source"><option value="">Enter generators</option></select>
+              </label>
+              <fieldset id="prime-inputs">
+                <legend class="visually-hidden">Generators of prime ideal P</legend>
+                <div class="generator-list" id="prime-generators"></div>
+                <button type="button" id="add-prime" class="link">Add prime ideal generator</button>
+              </fieldset>
+              <p class="helper">Leave the generators empty for the zero prime.</p>
+            </fieldset>
+            <fieldset id="fraction-field" hidden disabled>
+              <legend>Test a fraction (optional)</legend>
+              <label class="field algebra-field" for="fraction-numerator" id="fraction-numerator-label">Numerator</label>
+              <label class="field algebra-field operand-source" id="numerator-source-field" for="numerator-source" hidden>
+                <span class="visually-hidden">Numerator source</span>
+                <select id="numerator-source"><option value="">Enter polynomial</option></select>
+              </label>
+              <input id="fraction-numerator" type="text" placeholder="1" spellcheck="false" autocomplete="off" autocapitalize="off">
+              <label class="field algebra-field" for="fraction-denominator" id="fraction-denominator-label">Denominator</label>
+              <label class="field algebra-field operand-source" id="denominator-source-field" for="denominator-source" hidden>
+                <span class="visually-hidden">Denominator source</span>
+                <select id="denominator-source"><option value="">Enter polynomial</option></select>
+              </label>
+              <input id="fraction-denominator" type="text" placeholder="1" spellcheck="false" autocomplete="off" autocapitalize="off">
+              <p class="helper">Use a denominator outside the prime ideal. Entering just one polynomial sets the other to 1.</p>
             </fieldset>
             <fieldset id="second-ideal" hidden>
               <legend>Second ideal <i>J</i></legend>

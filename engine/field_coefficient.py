@@ -1,12 +1,14 @@
 """Exact qqbar interchange for the public SymPy algebraic-expression syntax."""
-from fractions import Fraction
 from functools import lru_cache
 
 import sympy as sp
 from sympy.polys.polyerrors import CoercionFailed
 
 from . import groebner as gb
+from .field_polynomial import _oracle
 from .native_library import Unavailable, field_request
+from .polynomial import integer_from_decimal
+from .rational_point import coordinate_fraction
 
 
 class UnsupportedExpression(CoercionFailed):
@@ -24,11 +26,6 @@ def _call(name, lines):
     if row is None and gb._MODE == "native":
         raise Unavailable(f"The native field kernel lacks {name}. Rebuild it with make groebner.")
     return row
-
-
-def _unity_power(q):
-    # exp(i*pi*q) is the principal rational power (-1)**q.
-    return ("q", "-1", "pow", str(q))
 
 
 @lru_cache(maxsize=512)
@@ -76,23 +73,13 @@ def program(value):
         bounds = value._get_interval()
         box = (bounds.a, bounds.b, 0, 0) if value.is_real else (bounds.ax, bounds.bx, bounds.ay, bounds.by)
         return ("root", str(value.poly.degree()), *map(str,reversed(value.poly.all_coeffs())), *map(str,box))
-    if value.func == sp.exp:
-        q = value.args[0]/(sp.I*sp.pi)
-        if q.is_Rational:
-            return _unity_power(q)
-    if value.func in (sp.sin, sp.cos, sp.tan, sp.cot, sp.sec, sp.csc):
-        q = value.args[0]/sp.pi
-        if q.is_Rational:
-            # Euler's identities at a rational multiple of pi use only
-            # roots of unity and field operations. QQbar evaluates the
-            # reciprocal and detects a pole when its denominator vanishes.
-            z, inv = _unity_power(q), _unity_power(-q)
-            cosine = (*z, *inv, "+", "q", "1/2", "*")
-            sine = (*z, *inv, "q", "-1", "*", "+", "i", "*", "q", "-1/2", "*")
-            formulas = {sp.cos: cosine, sp.sin: sine, sp.tan: (*sine, *cosine, "pow", "-1", "*"),
-                        sp.cot: (*cosine, *sine, "pow", "-1", "*"), sp.sec: (*cosine, "pow", "-1"),
-                        sp.csc: (*sine, "pow", "-1")}
-            return formulas[value.func]
+    if value.func in (sp.exp, sp.sin, sp.cos, sp.tan, sp.cot, sp.sec, sp.csc):
+        from .marked_field import program as marked_program
+        from .polynomial import InputError
+        try:
+            return tuple(marked_program(str(value)).split())
+        except InputError as exc:
+            raise UnsupportedExpression(value) from exc
     raise UnsupportedExpression(value)
 
 
@@ -101,20 +88,19 @@ def rational_sqrt(value, scale=1, offset=0):
     """offset + scale times the principal radical in the historical display syntax."""
     q = sp.Rational(value)
     scale, offset = sp.Rational(scale), sp.Rational(offset)
-    def reference():
-        return offset + scale * sp.sqrt(q)
 
     if gb._MODE == "sympy":
-        return reference()
-    row = _call("atlas_field_radical", [str(q)])
+        return _oracle("rational_sqrt", q, scale, offset)
+    row = _call("atlas_field_scaled_radical", [f"{q} {scale} {offset}"])
     if row is None:
-        return reference()
-    num, den, d, same_spelling = map(int, row.split())
-    scalar = scale * sp.Rational(num, den)
+        return _oracle("rational_sqrt", q, scale, offset)
+    num, den, raw_d, same_spelling, rational_sum = row.split()
+    num, den, d = map(integer_from_decimal, (num, den, raw_d))
+    scalar = sp.Rational(num, den)
     # The radicand has already been normalized by FLINT. Keep the power
     # unevaluated so constructing the display expression does not factor it.
     if not scalar or d == 1:
-        result = offset + scalar
+        result = sp.Rational(coordinate_fraction(rational_sum))
     else:
         factors = [scalar] if scalar != 1 else []
         if d < 0:
@@ -123,15 +109,8 @@ def rational_sqrt(value, scale=1, offset=0):
             factors.append(sp.Pow(sp.Integer(abs(d)), sp.S.Half, evaluate=False))
         radical = sp.Mul(*factors, evaluate=False)
         result = sp.Add(offset, radical, evaluate=False) if offset else radical
-    if gb.CHECK and result != reference():
-        # A bounded historical search can leave a large square inside a
-        # radical. Since both branches use the principal root, comparing
-        # its square suffices even for negative rational radicands.
-        if same_spelling or not scale:
-            raise AssertionError("The marked quadratic radical differs from its historical spelling.")
-        if (sp.simplify(((result - offset) / scale)**2 - q) != 0
-                or sp.simplify(((reference() - offset) / scale)**2 - q) != 0):
-            raise AssertionError("Quadratic radicals differ after normalization.")
+    if gb.CHECK:
+        _oracle("compare_radical", result, q, scale, offset, same_spelling == "1")
     return result
 
 
@@ -148,7 +127,7 @@ def coefficients(value, domain):
         return None
     if row == "outside":
         raise CoercionFailed(f"{value} does not lie in {domain}.")
-    return tuple(Fraction(word) for word in row.split())
+    return tuple(map(coordinate_fraction, row.split()))
 
 
 @lru_cache(maxsize=128)
@@ -178,27 +157,26 @@ def indexed_field(coeffs, variable, index):
     if not 0 <= index < poly.degree():
         raise IndexError("Root index exceeds the defining polynomial's degree.")
 
-    def reference():
-        root = sp.CRootOf(poly.as_expr(), index)
-        return sp.QQ.algebraic_field(root), root
-
     if gb._MODE == "sympy":
-        return reference()
+        return _oracle("indexed_field", poly, index)
     # Retain CRootOf's historical spelling, including positive rational
     # rescaling. Irreducibility makes refactorization and index adjustment
     # unnecessary. A positive scale preserves all real and conjugate indices
     # in the normalized polynomial, just as in CRootOf's public constructor.
     if poly.degree() == 1:
-        root = -poly.TC() / poly.LC()
+        row = _call("atlas_field_low_degree_root", [f"1 0 {poly.LC()} {poly.TC()}"])
+        if row is None:
+            return _oracle("indexed_field", poly, index)
+        root = sp.Rational(coordinate_fraction(row))
     else:
         row = _call("atlas_field_normalize", [" ".join(map(str, (poly.degree(), *reversed(coeffs))))])
         if row is None:
-            return reference()
+            return _oracle("indexed_field", poly, index)
         scale, *normalized_coeffs = map(int, row.split())
         normalized = sp.PurePoly.from_list(normalized_coeffs, variable, domain=sp.ZZ)
         root = scale * sp.CRootOf._new(normalized, index)
     result = sp.QQ.algebraic_field((poly, root)), root
-    if gb.CHECK and result != reference():
+    if gb.CHECK and result != _oracle("indexed_field", poly, index):
         raise AssertionError("The reconstructed primitive field differs from its reference.")
     return result
 
@@ -211,20 +189,14 @@ def root_position(poly, primitive):
     if isinstance(primitive, sp.CRootOf):
         return primitive.index
 
-    def reference():
-        if poly.degree() == 1 and primitive == -poly.TC()/poly.LC():
-            return 0
-        return next(i for i in range(poly.degree())
-                    if poly.same_root(primitive, sp.CRootOf(poly.as_expr(), i)))
-
     if gb._MODE == "sympy":
-        return reference()
+        return _oracle("root_position", poly, primitive)
     try:
         generator = " ".join(program(primitive))
     except UnsupportedExpression:
         if gb._MODE == "native":
             raise
-        return reference()
+        return _oracle("root_position", poly, primitive)
     coeffs = tuple(reversed(poly.all_coeffs()))
     lines = [generator, " ".join(map(str, (poly.degree(), *coeffs)))]
     display = (marked_root_display(coeffs) if gb._MODE == "native"
@@ -234,7 +206,7 @@ def root_position(poly, primitive):
     else:
         row = _call("atlas_field_position", lines)
     if row is None:
-        return reference()
+        return _oracle("root_position", poly, primitive)
     if row.startswith("boxes "):
         # With several conjugate pairs, SymPy sorts by the lower corners
         # of its isolating rectangles. Compare those marked roots exactly.
@@ -245,6 +217,6 @@ def root_position(poly, primitive):
         if row.startswith("boxes "):
             raise ArithmeticError("The marked root has no matching complex isolator.")
     index = int(row)
-    if gb.CHECK and index != reference():
+    if gb.CHECK and index != _oracle("root_position", poly, primitive):
         raise AssertionError("The marked field root index differs from its reference.")
     return index

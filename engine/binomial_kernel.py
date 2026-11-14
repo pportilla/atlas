@@ -1,26 +1,16 @@
 """Transport the exact fan trace and generic orbit incidences from the native kernel."""
 import ctypes
-from decimal import Decimal
 from functools import lru_cache
-from math import gcd
+from fractions import Fraction
 
-from .native_library import _MODE, _kernel
-
-
-def _integer(text):
-    # Decimal's exact integer conversion also accepts coefficients beyond
-    # Python's per-process limit for decimal integer strings.
-    return int(text) if len(text)<640 else int(Decimal(text))
-
-
-def _encode(value):
-    return str(value) if value.bit_length()<2000 else str(Decimal(value))
+from .native_library import Unavailable, _kernel
+from .polynomial import integer_from_decimal as _integer, integer_text as _encode
 
 
 def run(operation, *rows):
     lib = _kernel()
-    if _MODE == "sympy" or lib is None or not hasattr(lib, "atlas_binomial"):
-        return None
+    if lib is None or not hasattr(lib, "atlas_binomial"):
+        raise Unavailable("Rebuild the native binomial kernel with make.")
     call = lib.atlas_binomial
     call.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
     call.restype = ctypes.c_void_p
@@ -73,43 +63,20 @@ def incidence(rows):
 
 def pairings(rays, forms):
     """Integer order of each monomial or Laurent character on every ray."""
-    from .native_library import CHECK
     rows = run(f"pairings {len(forms[0])} {len(rays)} {len(forms)}", *forms, *rays)
-    if rows is not None:
-        answer = tuple(tuple(map(_integer, row.split())) for row in rows)
-        if not CHECK:
-            return answer
-    reference = tuple(tuple(sum(a*b for a,b in zip(ray,f)) for f in forms) for ray in rays)
-    if rows is not None and answer != reference:
-        raise AssertionError("The binomial monomial orders differ from their reference.")
-    return reference
+    return tuple(tuple(map(_integer, row.split())) for row in rows)
 
 
 def _newton(operation, dimension, *rows):
-    library = _kernel()
-    if _MODE == "sympy" or not hasattr(library, "atlas_newton_support_abi"):
-        return None
     return run(f"newton_{operation} {dimension}", *rows)
 
 
 @lru_cache(maxsize=4096)
 def edge_parameters(support, axis):
     """Length, primitive signed character and powers of collinear exponents."""
-    n = len(support[0])
-    rows = _newton("edge", n, (len(support), 1), (axis,), *support)
-    if rows is not None:
-        degree, *direction = map(_integer, rows[0].split())
-        actual = degree, tuple(direction), tuple(map(_integer, rows[1:]))
-        if _MODE != "check":
-            return actual
-    start, end = support[0], support[-1]
-    difference = tuple(b-a for a, b in zip(start, end))
-    degree = gcd(*difference)
-    direction = tuple(v//degree for v in difference)
-    reference = degree, direction, tuple((e[axis]-start[axis])//direction[axis] for e in support)
-    if rows is not None and reference != actual:
-        raise AssertionError("The Newton edge parameters differ from their reference.")
-    return reference
+    rows = _newton("edge", len(support[0]), (len(support), 1), (axis,), *support)
+    degree, *direction = map(_integer, rows[0].split())
+    return degree, tuple(direction), tuple(map(_integer, rows[1:]))
 
 
 def primitive_character(delta):
@@ -124,12 +91,44 @@ def primitive_character(delta):
 def projected_support(support, axes):
     """Project onto pivot coordinates and translate by their joint minimum."""
     rows = _newton("project", len(support[0]), (len(support),len(axes)), axes, *support)
-    if rows is not None:
-        actual = [tuple(map(_integer, row.split())) for row in rows]
-        if _MODE != "check":
-            return actual
-    minimum = [min(e[i] for e in support) for i in axes]
-    reference = [tuple(e[i]-v for i,v in zip(axes,minimum)) for e in support]
-    if rows is not None and actual != reference:
-        raise AssertionError("The projected Newton support differs from its reference.")
-    return reference
+    return [tuple(map(_integer, row.split())) for row in rows]
+
+
+def separating_forms(variables, points, *, first):
+    """Integer linear forms covering the finite separating-parameter bound."""
+    from .affine_kernel import _polynomial
+    n = len(variables)
+    bound, = _newton("separating_bound", n, (points,))
+    units = tuple(tuple(int(i == j) for j in range(n)) for i in range(n))
+    for a in range(first, first + _integer(bound)):
+        weights, = _newton("separating_coefficients", n, (a,))
+        yield _polynomial(dict(zip(units, map(_integer, weights.split()))), variables)
+
+
+def exceptional_data(codimension, orders):
+    result, = run(f"exceptional_data {codimension} {len(orders)}", *orders)
+    return tuple(map(_integer, result.split()))
+
+
+def character(left, right, a, b):
+    """Return the signed and primitive characters, degree, and oriented root coefficient."""
+    rows = run(f"character {len(left)}", left, right, (a.numerator, a.denominator, b.numerator, b.denominator))
+    degree, numerator, denominator = map(_integer, rows[0].split())
+    return (tuple(map(_integer, rows[1].split())), degree,
+            tuple(map(_integer, rows[2].split())), Fraction(numerator, denominator))
+
+
+def minimum_faces(values):
+    rows = run(f"minima {len(values[0])} {len(values)}", *values)
+    orders, faces = [], []
+    for row in rows:
+        minimum, *axes = map(_integer, row.split())
+        orders.append(minimum)
+        faces.append(tuple(axes))
+    return orders, faces
+
+
+@lru_cache(maxsize=8192)
+def signed_powers(values):
+    positive, negative = run(f"signed_split {len(values)}", values)
+    return tuple(map(_integer, positive.split())), tuple(map(_integer, negative.split()))

@@ -4,7 +4,7 @@ import sympy as sp
 from sympy import QQ
 
 from engine.blowup_ideal import ideal_subset, saturate
-from engine.nonreduced import nonreduced_resolution
+from engine.weighted_record import nonreduced_resolution
 from engine.polynomial import InputError, format_poly, parse
 from engine.resolve import resolve
 
@@ -22,7 +22,7 @@ def expr(text, names):
 class WeightedEmbedded(unittest.TestCase):
     def test_quadratic_display_preserves_archived_signs_and_rational_cancellation(self):
         from engine.field_coefficient import rational_sqrt
-        from engine.nonreduced import _weight_embedding
+        from tests.nonreduced_oracle import _weight_embedding
         for c,b,a in ((2,-3,1), (1,2,1), (-2,3,4), (7,2,3), (-7,-2,3), (0,-4,2)):
             for position, sign in ((1,1),(2,-1)):
                 marked = f"PolynomialRootIndexed(List({c}, {b}, {a}), {position})"
@@ -41,7 +41,7 @@ class WeightedEmbedded(unittest.TestCase):
         self.assertEqual(str(rational_sqrt(-p*p*q)), f"{p}*sqrt({q})*I")
 
     def test_graph_lift_over_a_marked_field(self):
-        from engine.nonreduced import _lift_graph
+        from tests.nonreduced_oracle import _lift_graph
         x, y, r, t = sp.symbols("x y r weight_generator")
         atlas = {"coefficient_field": {"generator": "a", "minimal_polynomial_coefficients": ["1", "0", "1"],
                                        "exact_root": "I"}}
@@ -64,7 +64,7 @@ class WeightedEmbedded(unittest.TestCase):
         self.assertTrue(ideal_subset(frame, expected, (*ambient, *proper)))
 
     def test_weighted_pullback_in_the_marked_quadratic_field(self):
-        from engine.nonreduced import _lift_free
+        from tests.nonreduced_oracle import _lift_free
         x, y, u, v, t = sp.symbols("x y u v weight_generator")
         atlas = {"coefficient_field": {"generator": "theta", "minimal_polynomial": "theta^2-(-1)"}}
         chart = {"coordinates": ["u", "v"], "map": {"x": "u", "y": "u*(v+theta)"},
@@ -134,7 +134,7 @@ class WeightedEmbedded(unittest.TestCase):
         names={"u":x,"v":y,f["generator"]:sp.sympify(f["exact"])}
         for label, definition in r["algebraic_numbers"].items():
             # For this fixture all recorded coefficients are Gaussian integers.
-            from engine.nonreduced import _algebraics
+            from tests.nonreduced_oracle import _algebraics
             names.update(_algebraics({label:definition},{label}))
         mapping={s:expr(a,names) for s,a in ch["map"].items()}
         expected=((mapping["x"]**2+mapping["y"]**2)**2+mapping["x"]**7)**2 * mapping["x"]**3
@@ -142,7 +142,7 @@ class WeightedEmbedded(unittest.TestCase):
         self.assertEqual(sp.expand(expected-strict*expr(ch["pullback_factor"],names)),0)
 
     def test_multiple_conjugate_pairs_and_native_labels(self):
-        from engine.nonreduced import _weight_embedding
+        from tests.nonreduced_oracle import _weight_embedding
         x = sp.Symbol("x")
         # Non-real roots in this quintic have different real parts and
         # imaginary signs. The two numbering conventions run in different orders.
@@ -151,7 +151,7 @@ class WeightedEmbedded(unittest.TestCase):
             self.assertTrue(sp.sympify(_weight_embedding(label)).equals(sp.CRootOf(x**5-x+1, sympy_index)))
         # Four purely imaginary roots in two conjugate pairs with the same
         # real part. FLINT orders positive imaginary first within each pair.
-        from engine.nonreduced import _flint_roots
+        from tests.nonreduced_oracle import _flint_roots
         roots=_flint_roots((1,0,3,0,1))
         small=(sp.sqrt(5)-1)/2
         large=(sp.sqrt(5)+1)/2
@@ -167,7 +167,7 @@ class WeightedEmbedded(unittest.TestCase):
         from unittest.mock import patch
         from engine import groebner
         from engine.field_coefficient import marked_root_display
-        from engine.nonreduced import _weight_embedding
+        from tests.nonreduced_oracle import _weight_embedding
 
         if groebner._MODE == "sympy" or not hasattr(groebner._kernel(), "atlas_field_display_order"):
             self.skipTest("Requires the native marked-root ordering kernel.")

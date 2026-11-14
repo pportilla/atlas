@@ -1,5 +1,7 @@
 // Exact conversion of marked algebraic constants to a primitive power basis.
+#include <gmpxx.h>
 #include "groebner.hpp"
+#include "field_root_coordinates.hpp"
 #include <flint/fmpq.h>
 #include <flint/fmpz_factor.h>
 #include <flint/fmpz_poly.h>
@@ -8,6 +10,7 @@
 #include <flint/fmpq_poly.h>
 #include <flint/ulong_extras.h>
 #include <sstream>
+#include <map>
 
 namespace atlas {
 namespace {
@@ -31,6 +34,13 @@ struct Fraction {
         fmpq_canonicalise(value);
     }
 };
+
+std::string text(const fmpq_t value) {
+    char* raw = fmpq_get_str(nullptr, 10, value);
+    std::string result(raw);
+    flint_free(raw);
+    return result;
+}
 
 struct Polynomial {
     fmpq_poly_t p;
@@ -68,6 +78,172 @@ struct Roots {
     explicit Roots(slong n) : degree(n), r(_qqbar_vec_init(n)) {}
     ~Roots() { _qqbar_vec_clear(r,degree); }
 };
+
+mpz_class power(const mpz_class& base, const mpz_class& exponent) {
+    Integer b, e, result;
+    fmpz_set_mpz(b.n, base.get_mpz_t());
+    fmpz_set_mpz(e.n, exponent.get_mpz_t());
+    if (!fmpz_pow_fmpz(result.n, b.n, e.n))
+        throw Limit("A displayed rational power exceeds the available precision.");
+    mpz_class out;
+    fmpz_get_mpz(out.get_mpz_t(), result.n);
+    return out;
+}
+
+void prime_powers(std::map<mpz_class, mpq_class>& powers, const mpz_class& value, const mpq_class& e) {
+    if (value == 1) return;
+    Integer n;
+    fmpz_set_mpz(n.n, value.get_mpz_t());
+    Factors factors;
+    fmpz_factor(factors.data, n.n);
+    for (slong j = 0; j < factors.data->num; ++j) {
+        mpz_class prime;
+        fmpz_get_mpz(prime.get_mpz_t(), factors.data->p+j);
+        powers[prime] += e*factors.data->exp[j];
+    }
+}
+
+void normalize_power(mpq_class base, mpq_class exponent, mpq_class& scalar,
+                     std::map<mpq_class, mpz_class>& radicals) {
+    mpz_class whole;
+    mpz_fdiv_q(whole.get_mpz_t(), exponent.get_num_mpz_t(), exponent.get_den_mpz_t());
+    if (whole > 0)
+        scalar *= mpq_class(power(base.get_num(), whole), power(base.get_den(), whole));
+    else if (whole < 0)
+        scalar *= mpq_class(power(base.get_den(), -whole), power(base.get_num(), -whole));
+    exponent -= whole;
+    // Integral powers, including the large integer part of a rational
+    // exponent, need no prime factorization of their base.
+    if (exponent == 0 || base == 1) return;
+
+    std::map<mpz_class, mpq_class> powers;
+    prime_powers(powers, base.get_num(), exponent);
+    prime_powers(powers, base.get_den(), -exponent);
+    std::map<mpz_class, std::map<mpz_class, mpz_class>> groups;
+    for (const auto& [p, e] : powers) {
+        mpz_class remainder;
+        mpz_fdiv_qr(whole.get_mpz_t(), remainder.get_mpz_t(), e.get_num_mpz_t(), e.get_den_mpz_t());
+        if (whole > 0) scalar *= power(p, whole);
+        else if (whole < 0) scalar /= power(p, -whole);
+        if (remainder != 0) groups[e.get_den()][p] = remainder;
+    }
+    for (const auto& [denominator, exponents] : groups) {
+        // Preserve equal-denominator factors of an individual radical,
+        // such as 12^(2/5), before combining equal powers across atoms.
+        mpz_class common;
+        for (const auto& [p, k] : exponents) mpz_gcd(common.get_mpz_t(), common.get_mpz_t(), k.get_mpz_t());
+        auto it = radicals.try_emplace(mpq_class(common, denominator), 1).first;
+        for (const auto& [p, k] : exponents) it->second *= power(p, k/common);
+    }
+}
+
+void combine_radicals(mpq_class& scalar, std::map<mpq_class,mpz_class>& radicals) {
+    std::vector<std::pair<mpz_class, mpq_class>> pending;
+    for (const auto& [e, b] : radicals) pending.emplace_back(b,e);
+    for (size_t i=0; i<pending.size(); ++i) {
+        for (size_t j=0; j<i; ++j) {
+            mpz_class g;
+            mpz_gcd(g.get_mpz_t(), pending[i].first.get_mpz_t(), pending[j].first.get_mpz_t());
+            if (g == 1) continue;
+            pending[i].first /= g;
+            pending[j].first /= g;
+            mpq_class e = pending[i].second + pending[j].second;
+            pending.emplace_back(g, e);
+        }
+    }
+    radicals.clear();
+    for (const auto& [b, e] : pending) if (b != 1) normalize_power(b, e, scalar, radicals);
+}
+
+mpq_class read_rational(std::istream& row) {
+    Fraction f;
+    f.read(row);
+    mpq_class q;
+    fmpq_get_mpq(q.get_mpq_t(),f.value);
+    return q;
+}
+
+std::string display_terms(std::istream& input) {
+    std::string line;
+    if (!std::getline(input,line)) throw std::invalid_argument("Missing marked display operation.");
+    if (line == "combine") {
+        std::map<size_t,mpq_class> coefficients;
+        while (std::getline(input,line)) {
+            std::istringstream row(line);
+            size_t i;
+            if (!(row >> i)) throw std::invalid_argument("Missing marked display leaf.");
+            auto c = read_rational(row);
+            coefficients[i] += c * read_rational(row);
+        }
+        std::ostringstream out;
+        for (const auto& [i,c] : coefficients) if (c != 0) out << i << ' ' << c << '\n';
+        return out.str();
+    }
+    if (line != "monomial") throw std::invalid_argument("Unknown marked display operation.");
+    mpq_class phase = 0, angle = 0, scalar = 1;
+    std::map<mpq_class,mpz_class> radicals;
+    std::ostringstream leaves;
+    while (std::getline(input,line)) {
+        std::istringstream row(line);
+        std::string kind;
+        size_t i;
+        if (!(row >> kind >> i)) throw std::invalid_argument("Invalid display atom.");
+        mpq_class n = read_rational(row);
+        if (kind == "i") phase += n/2;
+        else if (kind == "exp") angle += n*read_rational(row);
+        else if (kind == "rational") {
+            mpq_class base = read_rational(row), exponent = n*read_rational(row);
+            if (base == 0) throw std::invalid_argument("Expected a nonzero radical base.");
+            if (base < 0) { base = -base; phase += exponent; }
+            normalize_power(base,exponent,scalar,radicals);
+        } else if (kind == "power") {
+            mpq_class exponent = n*read_rational(row);
+            if (-1 < exponent && exponent < 1) leaves << "power " << i << ' ' << exponent << '\n';
+            else leaves << "reciprocal " << i << ' ' << abs(exponent) << '\n';
+        } else if (kind == "atom") leaves << "atom " << i << ' ' << n << '\n';
+        else throw std::invalid_argument("Unknown display atom.");
+    }
+    combine_radicals(scalar,radicals);
+    mpz_class periods;
+    mpq_class half_angle = angle/2;
+    mpz_fdiv_q(periods.get_mpz_t(),half_angle.get_num_mpz_t(),half_angle.get_den_mpz_t());
+    angle -= 2*periods;
+    if (angle.get_den() <= 2) phase += angle;
+    else leaves << "exp " << (angle > 1 ? angle-2 : angle) << '\n';
+    mpz_fdiv_q(periods.get_mpz_t(),phase.get_num_mpz_t(),phase.get_den_mpz_t());
+    phase -= periods;
+    if (mpz_odd_p(periods.get_mpz_t())) scalar = -scalar;
+    if (phase == mpq_class(1,2)) leaves << "i\n";
+    else if (phase != 0) {
+        auto it = radicals.try_emplace(phase,1).first;
+        it->second = -it->second;
+    }
+    for (const auto& [e,b] : radicals) leaves << "radical " << e << ' ' << b << '\n';
+    return scalar.get_str() + "\n" + leaves.str();
+}
+
+std::string rational_product(std::istream& in) {
+    mpq_class scalar(1);
+    std::map<mpq_class, mpz_class> radicals;
+    for (std::string line; std::getline(in, line);) {
+        if (line.empty()) continue;
+        std::istringstream row(line);
+        Fraction b, e;
+        b.read(row);
+        e.read(row);
+        if (fmpq_sgn(b.value) <= 0) throw std::invalid_argument("Expected a positive radical base.");
+        mpq_class base, exponent;
+        fmpq_get_mpq(base.get_mpq_t(), b.value);
+        fmpq_get_mpq(exponent.get_mpq_t(), e.value);
+        normalize_power(base, exponent, scalar, radicals);
+    }
+
+    combine_radicals(scalar, radicals);
+    std::ostringstream result;
+    result << scalar << '\n';
+    for (const auto& [e, b] : radicals) if (b != 1) result << e << ' ' << b << '\n';
+    return result.str();
+}
 
 // Decompose an integer using the trial bound of the archived radical
 // printer. Fully factor any unresolved cofactor. A previously hidden square
@@ -143,8 +319,25 @@ std::string rational_radical(std::istream& in) {
     if (fmpq_sgn(value.value) < 0) fmpz_neg(radicand.n,radicand.n);
     Integer denominator;
     fmpz_set(denominator.n,fmpq_denref(value.value));
+    std::string sum;
+    in >> std::ws;
+    if (in.peek() != std::char_traits<char>::eof()) {
+        Fraction scale, factor;
+        scale.read(in);
+        fmpq_set_fmpz_frac(factor.value, num_out.n, denominator.n);
+        fmpq_mul(factor.value, factor.value, scale.value);
+        fmpz_set(num_out.n, fmpq_numref(factor.value));
+        fmpz_set(denominator.n, fmpq_denref(factor.value));
+        in >> std::ws;
+        if (in.peek() != std::char_traits<char>::eof()) {
+            Fraction offset;
+            offset.read(in);
+            fmpq_add(offset.value, offset.value, factor.value);
+            sum = " " + text(offset.value);
+        }
+    }
     return num_out.str() + " " + denominator.str() + " " + radicand.str() +
-           (numerator_same && denominator_same ? " 1\n" : " 0\n");
+           (numerator_same && denominator_same ? " 1" : " 0") + sum + "\n";
 }
 
 void read_polynomial(std::istream& in, Polynomial& p) {
@@ -517,6 +710,29 @@ Number evaluate(std::istream& in) {
     return std::move(s.back());
 }
 
+bool in_power_basis(fmpq_poly_t result, qqbar_srcptr alpha, qqbar_srcptr value) {
+    const slong d = qqbar_degree(alpha);
+    if (d % qqbar_degree(value)) return false;
+    // At fixed precision, failure to recognize a power basis is inconclusive.
+    // Try increasing precision. To certify nonmembership, find a primitive
+    // linear combination alpha + j*value whose degree exceeds [K:Q].
+    // All but finitely many integers j separate the distinct embeddings
+    // of the compositum in characteristic zero.
+    for (slong j = 1, prec = 128;; ++j, prec *= 2) {
+        if (qqbar_express_in_field(result,alpha,value,0,0,prec)) {
+            if (!qqbar_equal_fmpq_poly_val(value,result,alpha))
+                throw std::logic_error("Uncertified field coefficient.");
+            break;
+        }
+        Number sum;
+        qqbar_mul_si(sum.n,value,j);
+        qqbar_add(sum.n,sum.n,alpha);
+        if (qqbar_degree(sum.n) > d) return false;
+        if (prec > WORD_MAX/2) throw Limit("Field expression precision limit.");
+    }
+    return true;
+}
+
 std::string express(std::istream& in) {
     std::string line;
     if (!std::getline(in,line)) throw std::invalid_argument("Missing field generator.");
@@ -524,25 +740,7 @@ std::string express(std::istream& in) {
     if (!std::getline(in,line)) throw std::invalid_argument("Missing algebraic coefficient.");
     std::istringstream expression(line); const Number value = evaluate(expression);
     Polynomial result;
-    const slong d = qqbar_degree(alpha.n);
-    if (d % qqbar_degree(value.n)) return "outside\n";
-    // At fixed precision, failure to recognize a power basis is inconclusive.
-    // Try increasing precision. To certify nonmembership, find a primitive
-    // linear combination alpha + j*value whose degree exceeds [K:Q].
-    // All but finitely many integers j separate the distinct embeddings
-    // of the compositum in characteristic zero.
-    for (slong j = 1, prec = 128;; ++j, prec *= 2) {
-        if (qqbar_express_in_field(result.p,alpha.n,value.n,0,0,prec)) {
-            if (!qqbar_equal_fmpq_poly_val(value.n,result.p,alpha.n))
-                throw std::logic_error("Uncertified field coefficient.");
-            break;
-        }
-        Number sum;
-        qqbar_mul_si(sum.n,value.n,j);
-        qqbar_add(sum.n,sum.n,alpha.n);
-        if (qqbar_degree(sum.n) > d) return "outside\n";
-        if (prec > WORD_MAX/2) throw Limit("Field expression precision limit.");
-    }
+    if (!in_power_basis(result.p, alpha.n, value.n)) return "outside\n";
     Fraction c;
     std::string out;
     for (slong j = 0; j < fmpq_poly_length(result.p); ++j) {
@@ -569,6 +767,40 @@ std::string describe(std::istream& in) {
     throw std::logic_error("No matching embedding of the minimal polynomial.");
 }
 }  // namespace
+std::optional<std::vector<std::vector<mpq_class>>> roots_in_power_basis(
+        const std::vector<mpq_class>& minimal, const std::vector<mpq_class>& equation) {
+    if (minimal.size() < 2 || equation.size() < 2)
+        throw std::invalid_argument("Expected nonconstant field and root polynomials.");
+    auto load = [](Polynomial& p, const std::vector<mpq_class>& coeffs) {
+        Fraction coefficient;
+        for (size_t j=0; j<coeffs.size(); ++j) {
+            fmpq_set_mpq(coefficient.value, coeffs[j].get_mpq_t());
+            fmpq_poly_set_coeff_fmpq(p.p, j, coefficient.value);
+        }
+    };
+    Polynomial m, f;
+    load(m, minimal);
+    load(f, equation);
+    Roots embeddings(fmpq_poly_degree(m.p)), roots(fmpq_poly_degree(f.p));
+    qqbar_roots_fmpq_poly(embeddings.r, m.p, 0);
+    qqbar_roots_fmpq_poly(roots.r, f.p, 0);
+    std::vector<std::vector<mpq_class>> coordinates;
+    // All roots are included, so choosing any one embedding gives the
+    // same set of formal roots in the abstract coefficient field.
+    for (slong i=0; i<roots.degree; ++i) {
+        Polynomial image;
+        if (!in_power_basis(image.p, embeddings.r, roots.r+i)) return std::nullopt;
+        std::vector<mpq_class> row(fmpq_poly_length(image.p));
+        Fraction c;
+        for (size_t j=0; j<row.size(); ++j) {
+            fmpq_poly_get_coeff_fmpq(c.value, image.p, j);
+            fmpq_get_mpq(row[j].get_mpq_t(), c.value);
+        }
+        coordinates.push_back(std::move(row));
+    }
+    return coordinates;
+}
+
 }  // namespace atlas
 
 extern "C" char* atlas_field_coefficient(const char* input, size_t length) noexcept {
@@ -591,6 +823,52 @@ extern "C" char* atlas_field_radical(const char* input, size_t length) noexcept 
         atlas::set_error(error.what());
     } catch (...) {
         atlas::set_error("Unknown rational radical display failure.");
+    }
+    return nullptr;
+}
+
+// The optional scale and offset are returned in exact rational arithmetic.
+extern "C" char* atlas_field_scaled_radical(const char* input, size_t length) noexcept {
+    return atlas_field_radical(input, length);
+}
+
+extern "C" char* atlas_field_low_degree_root(const char* input, size_t length) noexcept {
+    try {
+        std::istringstream stream(std::string(input,length));
+        int degree, index;
+        if (!(stream >> degree >> index) || degree < 1 || degree > 2 || index < 0 || index >= degree)
+            throw std::invalid_argument("Expected a linear or quadratic marked root.");
+        atlas::Fraction a, b, c, det, offset, scale;
+        a.read(stream);
+        b.read(stream);
+        if (fmpq_is_zero(a.value)) throw std::invalid_argument("The leading coefficient vanishes.");
+        fmpq_div(offset.value, b.value, a.value);
+        fmpq_neg(offset.value, offset.value);
+        if (degree == 1) return atlas::copy_text(atlas::text(offset.value));
+        c.read(stream);
+        fmpq_div_2exp(offset.value, offset.value, 1);
+        fmpq_mul(det.value, a.value, c.value);
+        fmpq_mul_2exp(det.value, det.value, 2);
+        fmpq_mul(c.value, b.value, b.value);
+        fmpq_sub(det.value, c.value, det.value);
+        fmpq_inv(scale.value, a.value);
+        fmpq_div_2exp(scale.value, scale.value, 1);
+        if (index == 0) fmpq_neg(scale.value, scale.value);
+        std::istringstream radical(atlas::text(det.value) + " " + atlas::text(scale.value));
+        return atlas::copy_text(atlas::text(offset.value) + " " + atlas::rational_radical(radical));
+    } catch (const std::exception& error) { atlas::set_error(error.what()); }
+    catch (...) { atlas::set_error("Failed to compute a low degree marked root."); }
+    return nullptr;
+}
+
+extern "C" char* atlas_field_rational_product(const char* input, size_t length) noexcept {
+    try {
+        std::istringstream stream(std::string(input,length));
+        return atlas::copy_text(atlas::rational_product(stream));
+    } catch (const std::exception& error) {
+        atlas::set_error(error.what());
+    } catch (...) {
+        atlas::set_error("Rational product normalization failed.");
     }
     return nullptr;
 }
@@ -671,5 +949,14 @@ extern "C" char* atlas_field_description(const char* input, size_t length) noexc
         return atlas::copy_text(atlas::describe(stream));
     } catch (const std::exception& error) { atlas::set_error(error.what()); }
     catch (...) { atlas::set_error("Unknown marked coefficient failure."); }
+    return nullptr;
+}
+
+extern "C" char* atlas_field_display_terms(const char* input, size_t length) noexcept {
+    try {
+        std::istringstream stream(std::string(input,length));
+        return atlas::copy_text(atlas::display_terms(stream));
+    } catch (const std::exception& error) { atlas::set_error(error.what()); }
+    catch (...) { atlas::set_error("Unknown marked display normalization failure."); }
     return nullptr;
 }

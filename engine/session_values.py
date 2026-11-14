@@ -158,6 +158,9 @@ class Resolution(_RecordView):
     _members = ("coordinates", "divisors", "charts", "branches", "divisor", "chart")
 
     def __init__(self, record, source_space=None, *, _from_solver=False):
+        if "chart_sections" in record.get("dual_complex", {}).get("finite_sheet_certificate", {}):
+            from .atlas_finite import geometric_chart_records
+            record = {**record, "charts": geometric_chart_records(record)}
         super().__init__(record)
         self._source_space = source_space or _CoordinateSpace.named(record["variables"])
         self._charts = {c["id"]: Chart(self, c) for c in record["charts"]}

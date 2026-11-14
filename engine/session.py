@@ -18,6 +18,8 @@ HELP = """Define coordinates and keep the results of calculations:
   x, y = coordinates("x", "y")       # optional: coeffs=QQ
   f = y^2 - x^3
   R = resolve(f)
+  D = dual_complex(R)                    # recompute the exceptional incidence from charts
+  D.vertices, D.cells
   R.divisors
   E = R.divisor("E3")
   C = R.chart("B3.u")
@@ -48,6 +50,15 @@ HELP = """Define coordinates and keep the results of calculations:
 
   I = ideal(x^2*(x-1), y)
   J = radical(I)                         # the ideal of the two reduced points
+  K = ideal_power(I, 2)                  # ordinary square
+  S = symbolic_power(J, 2)               # symbolic square of the radical ideal
+  D = primary_decomposition(I)           # each component has a primary ideal and its prime
+  Q, P = D.components[0].primary, D.components[0].prime
+  L = localize(ideal(x*y), ideal(x), numerator=x, denominator=y)
+  N = normalization(ideal(y^2-x^3))     # normalize the affine cusp
+  C = N.components[0]
+  C.relations, C.images                 # presentation and images of x and y
+  C.fractions                           # normalized coordinates as fractions on C.prime
   membership(x*(x-1), J).value           # True
   e = multiplicity(I)                    # total dimension of QQ[x,y]/I over QQ
   e.value, e.finite                      # (3, True)
@@ -92,6 +103,8 @@ basis with its saved point. The loop prints each degree and its signed
 coefficient in ascending degree order, here 0 1 followed by 2 -1.
 
   embedding_dimension(B).value           # 2 at the cusp, using B's saved point
+  local_dimension(B).value               # 1 at the same point
+  local_smoothness(B).value              # False: local dimension 1, embedding dimension 2
   V = zariski_tangent_space(ideal(y-(x-1/2)^2), point=(1/2, 0))
   dx, dy = V.coordinates
   V.equations[0] == dy                   # True, the parabola's tangent is dy = 0
@@ -173,7 +186,14 @@ def new_session(calculate):
             resolution = Resolution(record, source_space, _from_solver=True)
         return check_resolution(resolution, check_isolation=check_isolation, compute=compute)
 
+    def dual_complex(resolution):
+        from .resolution_complex import dual_complex as replay
+        if not isinstance(resolution, Resolution):
+            raise ValueError("dual_complex expects an Atlas resolution.")
+        return replay(resolution._record)
+
     return Evaluator({"QQ": QQ, "coordinates": coordinates, "resolve": resolve,
+                      "dual_complex": dual_complex,
                       "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
                       **algebra_bindings()}, reserved=("help", "quit", "exit"))
 

@@ -11,7 +11,7 @@ from engine.polynomial import InputError, format_poly, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
 from engine.strata import resolution_strata
-from engine.strata_reference import _power_factors
+from tests.strata_oracle import _power_factors
 from engine.topological import _reduce, topological_zeta
 
 

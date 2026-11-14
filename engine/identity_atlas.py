@@ -6,36 +6,24 @@ product agrees with the input up to a unit at that point. Independent linear
 parts certify smooth transverse branches. This is a special fibre of the
 general atlas computation: a single owned point, with Euler characteristic one.
 """
-from fractions import Fraction
-from math import lcm
 import re
 
 from . import native_library
+from .kernel_json import kernel_json
+from .point_geometry import encode_terms, request as point_request
 from .polynomial import InputError, checked_native, format_poly, integer_from_decimal, integer_text, parse_expression, sparse_row
 from .strata import InvalidChart
 
 
 def independent(parts, dimension):
-    if not parts or len(parts) > dimension:
-        return False
-    units = [tuple(int(i == j) for i in range(dimension)) for j in range(dimension)]
-    rows = [[f.get(e, 0) for e in units] for f in parts]
-    if len(rows) == 1:
-        return any(rows[0])
-
-    def rank():
-        inputs = ["lattice_dimension", str(dimension), " ".join(["0"] * dimension)]
-        for row in rows:
-            scalar = lcm(*(c.denominator for c in row))
-            inputs.append(" ".join(integer_text(c * scalar) for c in row))
-        answer, = native_library.affine_request(inputs)
-        return int(answer)
+    def native():
+        return point_request("independent", point=["0"] * dimension, ideal=list(map(encode_terms, parts)))
 
     def reference():
-        from sympy import Matrix
-        return Matrix(rows).rank()
+        from tests.identity_oracle import independent as rank
+        return rank(parts, dimension)
 
-    return checked_native(rank, reference) == len(rows)
+    return checked_native(native, reference)
 
 
 def rational_factors(poly, names):
@@ -48,53 +36,15 @@ def rational_factors(poly, names):
         return ordered((sparse_row(row), integer_from_decimal(m)) for m, row in zip(rows[1::2], rows[2::2]))
 
     def reference():
-        from sympy import Poly, QQ, Symbol
-        f = Poly.from_dict(poly.copy(), *map(Symbol, names), domain=QQ)
-        return ordered(({e: Fraction(c) for e, c in g.terms()}, m) for g, m in f.factor_list()[1])
+        from tests.identity_oracle import rational_factors as factor
+        return ordered(factor(poly, names))
 
     return checked_native(native, reference)
 
 
-def branch_order(poly, length):
-    """The nested coefficient ordering of archived factors in the bounded SNC recognizer."""
-    if length == 0:
-        return poly.get((), 0)
-    coefficients = {}
-    for (power, *rest), value in poly.items():
-        coefficients.setdefault(power, {})[tuple(rest)] = value
-    degree = max(coefficients, default=-1 if length == 1 else 0)
-    return [branch_order(coefficients.get(i, {}), length - 1) for i in range(degree, -1, -1)]
-
-
-def _active_factors(f, names):
-    """A local divisor at the origin: retain the rational primes with zero constant term."""
-    from .monodromy_special import _simple_coordinates
-    coordinate = _simple_coordinates(f, names)
-    if coordinate:
-        return {((tuple(int(v == name) for v in names), 1),): m for name, m in coordinate}
-    zero = (0,) * len(names)
-    return {tuple(sorted(g.items())): m for g, m in rational_factors(f, names) if zero not in g}
-
-
 def _certify_divisor(f, parts, names):
-    if len(parts) == 1 and parts[0] == (f, 1):
-        return True
-    # Independent smooth branches have order one at the origin. This also
-    # rules out malformed large recorded powers before any factorization.
-    if min(map(sum, f)) != sum(m for _, m in parts):
-        return False
-    active = _active_factors(f, names)
-    for g, m in parts:
-        prime = tuple(sorted(g.items()))
-        if prime not in active:
-            # Each smooth principal generator can include a nonvanishing unit.
-            factors = _active_factors(g, names)
-            if len(factors) != 1 or next(iter(factors.values())) != 1:
-                return False
-            prime, = factors
-        if active.pop(prime, None) != m:
-            return False
-    return not active
+    return kernel_json("atlas_identity_divisor", "certify", width=len(names), terms=encode_terms(f),
+                       parts=[[encode_terms(g), integer_text(m)] for g, m in parts])
 
 
 def _serialized(record, polynomial):
@@ -156,12 +106,8 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
             return all(native_library.affine_request([*rows, v]) == ["1"] for v in coords)
 
         def reference():
-            from sympy import Dummy, Poly, QQ, S, Symbol, groebner
-            variables = tuple(map(Symbol, coords))
-            t = Dummy("t")
-            equations = [Poly.from_dict(f.copy(), *variables, domain=QQ).as_expr() for f in fibre]
-            return all(groebner([*equations, 1-t*v], t, *variables, domain=QQ).contains(S.One)
-                       for v in variables)
+            from tests.identity_oracle import fibre_is_origin
+            return fibre_is_origin(fibre, coords)
 
         if not checked_native(native, reference):
             raise InvalidChart("The claimed identity fibre contains points outside the origin.")

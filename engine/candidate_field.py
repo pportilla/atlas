@@ -54,12 +54,20 @@ class FieldPolynomial:
     def monoms(self):
         return tuple(field_power_rows(self))
 
+    @cached_property
+    def _degrees(self):
+        from .point_geometry import support_profile
+        powers = self.monoms()
+        if not powers:
+            return tuple(-1 for _ in self.gens), -1
+        axes, total, _ = support_profile(powers)
+        return axes, total
+
     def degree(self, variable):
-        j = self.gens.index(variable)
-        return max((e[j] for e in self.monoms()), default=-1)
+        return self._degrees[0][self.gens.index(variable)]
 
     def total_degree(self):
-        return max(map(sum, self.monoms()), default=-1)
+        return self._degrees[1]
 
 
 def field_power_rows(poly):

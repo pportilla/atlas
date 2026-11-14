@@ -1,25 +1,12 @@
 """Transport sparse point-local operations to the exact kernel."""
 
-import ctypes
-import json
-
-from .native_library import _kernel
-from .polynomial import InputError, integer_from_decimal, integer_text, rational_text
+from .kernel_json import kernel_json
+from .polynomial import integer_from_decimal, integer_text, rational_text
 from .rational_point import coordinate_fraction
 
 
 def request(operation, **operands):
-    library = _kernel()
-    if library is None or not hasattr(library, "atlas_point_geometry"):
-        raise RuntimeError("Build the Atlas point geometry kernel with make.")
-    function = library.atlas_point_geometry
-    function.argtypes = [ctypes.c_char_p]
-    function.restype = ctypes.c_char_p
-    payload = json.dumps(dict(operation=operation, **operands), separators=(",", ":"))
-    response = json.loads(function(payload.encode("ascii")))
-    if "error" in response:
-        raise InputError(response["error"])
-    return response["result"]
+    return kernel_json("atlas_point_geometry", operation, **operands)
 
 
 def encode_terms(terms):
@@ -32,3 +19,19 @@ def decode_terms(data):
 
 def point_operation(operation, point, terms, **options):
     return request(operation, point=list(map(rational_text, point)), terms=encode_terms(terms), **options)
+
+
+def weighted_orders(width, valuations):
+    rows = [[integer_text(weight), list(map(integer_text, orders))] for weight, orders in valuations]
+    return list(map(integer_from_decimal, kernel_json("atlas_identity_divisor", "weighted_orders",
+                                                      width=width, rows=rows)))
+
+
+def support_profile(powers):
+    """Coordinate degrees, total degree, and homogeneity of a sparse support."""
+    support = [list(map(integer_text, row)) for row in powers]
+    if not support:
+        return (), -1, True
+    result = kernel_json("atlas_component_geometry", "profile", support=support)
+    return (tuple(map(integer_from_decimal, result["degrees"])), integer_from_decimal(result["degree"]),
+            result["homogeneous"])

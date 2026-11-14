@@ -72,16 +72,39 @@ class LocalGraphChart(unittest.TestCase):
                          (1, (y, z)))
 
     def test_principal_graph_transform_divides_in_the_chart_ring(self):
+        from engine import kernel
         from engine.local_blowups import _generators
         x, y, z = sp.symbols("x y z")
         variables = (x, y, z)
         pivot = x**2+1
         ambient = (z-pivot*y,)
-        order, (after,) = _strict_ideal(variables, ambient, pivot, (z**3 + pivot**4,))
+        order, after = _strict_ideal(variables, ambient, pivot, (z**3 + pivot**4,))
         self.assertEqual(order, 3)
-        self.assertTrue(ideal_subset(variables, (after-(y**3+pivot),), ambient))
-        self.assertEqual(len(_generators(variables, ambient, (after,))), 1)
+        expected = (y**3+pivot,)
+        self.assertTrue(ideal_subset(variables, after, (*ambient, *expected)))
+        self.assertTrue(ideal_subset(variables, expected, (*ambient, *after)))
+        if kernel._MODE != "sympy":
+            order, (q,) = kernel.graph_strict_part(variables, ambient, -3*pivot, 21*z**3)
+            self.assertEqual(order, 3)
+            self.assertEqual(q, -sp.Rational(7,9)*y**3)
+        self.assertEqual(len(_generators(variables, ambient, expected)), 1)
         self.assertEqual(_generators(variables, ambient, ambient), ())
+
+    def test_residual_dimension_on_components_of_an_exceptional_cylinder(self):
+        from engine import kernel
+        if kernel._MODE == "sympy":
+            self.skipTest("Exercises the native exceptional-stratum test.")
+        x, y, z = sp.symbols("x y z")
+        variables = (x, y, z)
+        # The base has two irreducible planes. A residual with a constant
+        # coefficient of z misses the generic point of each. x*z alone
+        # vanishes on an entire plane, which must be detected.
+        for equations, threshold, expected in [
+                ((z + x*y**5,), 2, True), ((x*z,), 2, False),
+                ((x*z, (x-1)*y), 2, True), ((), 2, False),
+                ((z,), 1, False), ((x*(x-1),), 3, True)]:
+            self.assertEqual(kernel.residual_dimension_below(
+                variables, (x*(x-1),), equations, threshold), expected)
 
     def test_a_zero_map_coordinate_and_empty_removed_ideal_survive(self):
         x, y = sp.symbols("x y")
@@ -110,6 +133,19 @@ if __name__ == "__main__":
 
 
 class WideNativeChart(unittest.TestCase):
+    def test_large_degree_graph_transform_uses_wide_quotients(self):
+        from engine import native_polynomial as np
+        from engine.local_blowups import _dimension
+        from engine.native_library import _MODE
+        x, y, z = variables = sp.symbols("x y z") if _MODE == "sympy" else tuple(map(np.Symbol, "xyz"))
+        ambient = (z-y,)
+        residual = (2**180+1)*z**40000+1
+        order, ideal = _strict_ideal(variables, ambient, x, (x*residual,))
+        self.assertEqual(order, 1)
+        self.assertTrue(ideal_subset(variables, ideal, (*ambient, residual)))
+        self.assertTrue(ideal_subset(variables, (residual,), (*ambient, *ideal)))
+        self.assertEqual(_dimension(variables, (*ambient, x, *ideal)), 0)
+
     def test_large_fibre_restriction_and_kernel_limits_without_sympy(self):
         from pathlib import Path
         import subprocess

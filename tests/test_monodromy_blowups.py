@@ -1,6 +1,6 @@
 import unittest
 
-from engine.monodromy_blowups import blowup_contributions
+from tests.blowup_monodromy_oracle import blowup_contributions
 from engine.resolve import resolve
 
 

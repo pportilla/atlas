@@ -1,25 +1,37 @@
 #!/bin/sh
 """:"
-# Execute the native point-local commands before starting an interpreter.
+# Execute supported native CPU commands before starting an interpreter.
 # The same file remains a Python entry point for explicit interpreter callers.
 case "$0" in
     */*) atlas_dir=${0%/*} ;;
     *) atlas_dir=. ;;
 esac
+if [ "$1" = resolve ] && [ -x "$atlas_dir/native/build/resolve_supervisor" ]; then
+    exec "$atlas_dir/native/build/resolve_supervisor" "$0" "$@"
+fi
 case "$1/$2" in
-    algebra/local-standard-basis|algebra/local-normal-form)
-        if [ "${ATLAS_GROEBNER-native}" = native ] && [ -z "${ATLAS_GROEBNER_GPU-}" ] &&
-           [ -z "${PYTHONINTMAXSTRDIGITS-}" ] &&
-           [ -x "$atlas_dir/native/build/local_algebra" ]; then
-            exec "$atlas_dir/native/build/local_algebra" "$0" "$@"
-        fi ;;
+    algebra/local-standard-basis|algebra/local-normal-form|algebra/local-dimension|algebra/local-smoothness)
+        atlas_binary=local_algebra ;;
+    algebra/localization|algebra/localize) atlas_binary=localization ;;
+    algebra/normalization) atlas_binary=normalization ;;
+    algebra/ideal-power) atlas_binary=ideal_power ;;
+    algebra/symbolic-power) atlas_binary=symbolic_power ;;
+    algebra/primary-decomposition) atlas_binary=primary_decomposition ;;
+    *) atlas_binary= ;;
 esac
+if [ -n "$atlas_binary" ] && [ "${ATLAS_GROEBNER-native}" = native ] && [ -z "${ATLAS_GROEBNER_GPU-}" ] &&
+   [ -z "${PYTHONINTMAXSTRDIGITS-}" ] && [ -x "$atlas_dir/native/build/$atlas_binary" ]; then
+    exec "$atlas_dir/native/build/$atlas_binary" "$0" "$@"
+fi
 exec python3 "$0" "$@"
 ":"""
 import os
 import sys
 
-from engine.app import main
+if sys.argv[1:2] == ["resolve"]:
+    from engine.resolve_cli import main
+else:
+    from engine.app import main
 
 if __name__ == '__main__':
     # Explicit interpreter settings take precedence over the standalone

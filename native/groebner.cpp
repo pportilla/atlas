@@ -71,6 +71,26 @@ void primitive(Poly& f, fmpz* num) {
     if (num) fmpz_mul(num, num, &content.v);
 }
 
+// The settled terms and the live suffix share one rational scale. Terms
+// before 'at' have already been moved or reduced and no longer contribute.
+static void remove_reduction_content(Poly& done, Poly& pending, size_t at, fmpz* num) {
+    Z content;
+    for (const auto& coefficient : done.c) {
+        fmpz_gcd(&content.v, &content.v, &coefficient.v);
+        if (fmpz_is_one(&content.v)) return;
+    }
+    for (size_t i = at; i < pending.size(); ++i) {
+        fmpz_gcd(&content.v, &content.v, &pending.c[i].v);
+        if (fmpz_is_one(&content.v)) return;
+    }
+    if (fmpz_is_zero(&content.v)) return;
+    for (auto& coefficient : done.c)
+        fmpz_divexact(&coefficient.v, &coefficient.v, &content.v);
+    for (size_t i = at; i < pending.size(); ++i)
+        fmpz_divexact(&pending.c[i].v, &pending.c[i].v, &content.v);
+    if (num) fmpz_mul(num, num, &content.v);
+}
+
 template<bool membership>
 bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* sugar, long bound) {
     const int S = R.stride;
@@ -84,6 +104,15 @@ bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* suga
     while (at < keep && at < f.size()) settle();
     Z scale, negative, common;
     int scalings = 0;
+    auto check_growth = [&] {
+        guard_work();
+        if (scalings < 8 && !over_bit_limit(f, at)) return;
+        // A pseudo-division step can inflate all coefficients by the same
+        // factor. Apply the bit limit to the head after removing that factor.
+        remove_reduction_content(done, f, at, num);
+        scalings = 0;
+        if (over_bit_limit(f, at)) throw Swell();
+    };
     while (at < f.size()) {
         const u64* mono = f.m.data() + at * S;
         const int g = reducer(mono, bound == LONG_MAX ? LONG_MAX : bound - static_cast<long>(mono[0]));
@@ -99,7 +128,7 @@ bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* suga
             // A monomial divides this term exactly over Q and contributes no tail.
             ++at;
             if (work_limit_ > 0) ++work_;
-            guard(f, at);
+            check_growth();
             continue;
         }
         u64 shift[MAX_STRIDE];
@@ -122,22 +151,13 @@ bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* suga
         merge(next, f, at + 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
         f.swap(next);
         at = 0;
-        guard(f);
-        if (one) continue;
-        for (size_t i = 0; i < done.size(); ++i) fmpz_mul(&done.c[i].v, &done.c[i].v, &scale.v);
-        if (den) fmpz_mul(den, den, &scale.v);
-        if (++scalings < 8) continue;
-        // Keep the integers small: divide out the content of everything held.
-        scalings = 0;
-        fmpz_zero(&common.v);
-        for (size_t i = 0; i < done.size() && !fmpz_is_one(&common.v); ++i)
-            fmpz_gcd(&common.v, &common.v, &done.c[i].v);
-        for (size_t i = 0; i < f.size() && !fmpz_is_one(&common.v); ++i)
-            fmpz_gcd(&common.v, &common.v, &f.c[i].v);
-        if (fmpz_is_zero(&common.v) || fmpz_is_one(&common.v)) continue;
-        for (size_t i = 0; i < done.size(); ++i) fmpz_divexact(&done.c[i].v, &done.c[i].v, &common.v);
-        for (size_t i = 0; i < f.size(); ++i) fmpz_divexact(&f.c[i].v, &f.c[i].v, &common.v);
-        if (num) fmpz_mul(num, num, &common.v);
+        if (!one) {
+            for (auto& coefficient : done.c)
+                fmpz_mul(&coefficient.v, &coefficient.v, &scale.v);
+            if (den) fmpz_mul(den, den, &scale.v);
+            ++scalings;
+        }
+        check_growth();
     }
     f.swap(done);
     return f.empty();
@@ -566,10 +586,11 @@ Engine::Outcome Engine::head(Poly& f, long& sugar) {
         const bool one = fmpz_is_one(&scale.v);
         merge(next, f, 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
         f.swap(next);
-        guard(f);
-        if (!one && ++scalings >= 4) {
+        guard_work();
+        if ((!one && ++scalings >= 4) || over_bit_limit(f)) {
             primitive(f, nullptr);
             scalings = 0;
+            if (over_bit_limit(f)) throw Swell();
         }
     }
     return ZERO;

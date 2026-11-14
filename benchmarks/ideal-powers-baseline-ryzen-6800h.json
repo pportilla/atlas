@@ -1,0 +1,2081 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": 5,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "benchmark_sha256": "cf9ed91d0afb9f27fc68c92feaf9e23892fb7f2a9f2141e559d70c3de498cc7a",
+  "repeats": 3,
+  "cold_repeats": 3,
+  "warm_batch_size": 5,
+  "units": "milliseconds per power",
+  "scope": "Complete reduced ideal on parsed objects with one discarded warm-up. Warm wire separately includes sparse parsing and result serialization. Fresh commands include loading, parsing and result printing. No result cache; run order rotates; Singular seed 17+trial. Ordinary uses built-in std(I^n). Symbolic verifies radicality, computes intersections of minimal coordinate prime powers for monomial ideals, splits squarefree coprime common factors, returns ordinary powers for complete intersections and finite reduced algebras, and compares GTZ primary filtering to Jacobian saturation on unmixed ideals (SY primary filtering for mixed dimensions).",
+  "cases": [
+    {
+      "name": "zero_power_zero",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [],
+      "exponent": 0,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0005290000000000001,
+            0.000535,
+            0.000491
+          ],
+          "median_ms": 0.0005290000000000001
+        },
+        "std": {
+          "samples_ms": [
+            0.0086,
+            0.0082,
+            0.0058000000000000005
+          ],
+          "median_ms": 0.0082
+        },
+        "worst_paired_speedup": 11.812627291242363,
+        "median_speedup_vs_faster_reference": 15.50094517958412,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.703917,
+            5.564412,
+            5.169876
+          ],
+          "median_ms": 5.564412
+        },
+        "std": {
+          "samples_ms": [
+            7.569494,
+            8.462032,
+            7.840437
+          ],
+          "median_ms": 7.840437
+        },
+        "worst_paired_speedup": 1.3270694506950225,
+        "median_speedup_vs_faster_reference": 1.4090324368504703,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.013591800000000001,
+          0.012543799999999999,
+          0.0119264
+        ],
+        "median_ms": 0.012543799999999999
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "unit_power",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "3"
+      ],
+      "exponent": 17,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.000519,
+            0.000517,
+            0.0004908
+          ],
+          "median_ms": 0.000517
+        },
+        "std": {
+          "samples_ms": [
+            0.0128,
+            0.0126,
+            0.0128
+          ],
+          "median_ms": 0.0128
+        },
+        "worst_paired_speedup": 24.37137330754352,
+        "median_speedup_vs_faster_reference": 24.758220502901356,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.744924,
+            5.971462,
+            6.004755
+          ],
+          "median_ms": 5.971462
+        },
+        "std": {
+          "samples_ms": [
+            9.008986,
+            8.899058,
+            8.698569
+          ],
+          "median_ms": 8.899058
+        },
+        "worst_paired_speedup": 1.4486134738219962,
+        "median_speedup_vs_faster_reference": 1.4902645281842202,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0129806,
+          0.013153000000000001,
+          0.027502
+        ],
+        "median_ms": 0.013153000000000001
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "exponent_one",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "2*x+y",
+        "3*y^2"
+      ],
+      "exponent": 1,
+      "symbolic": false,
+      "order": "lex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0104478,
+            0.010233200000000001,
+            0.0101674
+          ],
+          "median_ms": 0.010233200000000001
+        },
+        "std": {
+          "samples_ms": [
+            0.27440000000000003,
+            0.2766,
+            0.26880000000000004
+          ],
+          "median_ms": 0.27440000000000003
+        },
+        "worst_paired_speedup": 26.263902448362337,
+        "median_speedup_vs_faster_reference": 26.81468162451628,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.486815,
+            5.682936,
+            6.643914
+          ],
+          "median_ms": 5.682936
+        },
+        "std": {
+          "samples_ms": [
+            7.629808,
+            8.256293,
+            9.374878
+          ],
+          "median_ms": 8.256293
+        },
+        "worst_paired_speedup": 1.3905713970673332,
+        "median_speedup_vs_faster_reference": 1.4528217456610455,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0295078,
+          0.0303974,
+          0.0567294
+        ],
+        "median_ms": 0.0303974
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "monomial_principal",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "3*x^2*z"
+      ],
+      "exponent": 50,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0014085999999999999,
+            0.0013806,
+            0.0013746
+          ],
+          "median_ms": 0.0013806
+        },
+        "std": {
+          "samples_ms": [
+            0.017599999999999998,
+            0.0128,
+            0.0126
+          ],
+          "median_ms": 0.0128
+        },
+        "worst_paired_speedup": 9.166302924487125,
+        "median_speedup_vs_faster_reference": 9.27133130522961,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.427133,
+            5.571596,
+            6.416775
+          ],
+          "median_ms": 5.571596
+        },
+        "std": {
+          "samples_ms": [
+            7.426394,
+            8.477721,
+            9.080051
+          ],
+          "median_ms": 8.477721
+        },
+        "worst_paired_speedup": 1.3683825327295276,
+        "median_speedup_vs_faster_reference": 1.5215965048434954,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0334734,
+          0.0150306,
+          0.0320768
+        ],
+        "median_ms": 0.0320768
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "rational_principal",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "2*x^2+3*y-1"
+      ],
+      "exponent": 5,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0199576,
+            0.021162,
+            0.0197314
+          ],
+          "median_ms": 0.0199576
+        },
+        "std": {
+          "samples_ms": [
+            0.0172,
+            0.0174,
+            0.017599999999999998
+          ],
+          "median_ms": 0.0174
+        },
+        "worst_paired_speedup": 0.8222285228239297,
+        "median_speedup_vs_faster_reference": 0.8718483184350824,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.216656,
+            5.183292,
+            5.125172
+          ],
+          "median_ms": 5.183292
+        },
+        "std": {
+          "samples_ms": [
+            7.881214,
+            7.838043,
+            7.164909
+          ],
+          "median_ms": 7.838043
+        },
+        "worst_paired_speedup": 1.2677577784583864,
+        "median_speedup_vs_faster_reference": 1.5121746951551254,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.049503599999999995,
+          0.0463516,
+          0.046993
+        ],
+        "median_ms": 0.046993
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "nonradical_embedded",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x^3",
+        "x*y",
+        "y^2*z"
+      ],
+      "exponent": 4,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0102132,
+            0.0101472,
+            0.0101592
+          ],
+          "median_ms": 0.0101592
+        },
+        "std": {
+          "samples_ms": [
+            0.015,
+            0.014599999999999998,
+            0.0158
+          ],
+          "median_ms": 0.015
+        },
+        "worst_paired_speedup": 1.4388205613371174,
+        "median_speedup_vs_faster_reference": 1.4764942121426883,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.968736,
+            4.166409,
+            3.943508
+          ],
+          "median_ms": 4.166409
+        },
+        "std": {
+          "samples_ms": [
+            5.50487,
+            7.143418,
+            5.3782
+          ],
+          "median_ms": 5.50487
+        },
+        "worst_paired_speedup": 1.1079014864142511,
+        "median_speedup_vs_faster_reference": 1.3212505061312994,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.026213599999999997,
+          0.025913000000000002,
+          0.0248228
+        ],
+        "median_ms": 0.025913000000000002
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "coordinate_complete_intersection",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x",
+        "y",
+        "z"
+      ],
+      "exponent": 5,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0144092,
+            0.014363,
+            0.014555599999999998
+          ],
+          "median_ms": 0.0144092
+        },
+        "std": {
+          "samples_ms": [
+            0.0228,
+            0.0234,
+            0.022600000000000002
+          ],
+          "median_ms": 0.0228
+        },
+        "worst_paired_speedup": 1.5526670147572073,
+        "median_speedup_vs_faster_reference": 1.5823224051300557,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            3.893482,
+            3.826957,
+            3.821687
+          ],
+          "median_ms": 3.826957
+        },
+        "std": {
+          "samples_ms": [
+            5.272871,
+            5.158786,
+            5.289863
+          ],
+          "median_ms": 5.272871
+        },
+        "worst_paired_speedup": 1.3480125331954345,
+        "median_speedup_vs_faster_reference": 1.377823424720999,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.037847599999999995,
+          0.033842,
+          0.0345994
+        ],
+        "median_ms": 0.0345994
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "triangle_ordinary",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "x*z",
+        "y*z"
+      ],
+      "exponent": 4,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.015134600000000002,
+            0.015188799999999999,
+            0.015154599999999999
+          ],
+          "median_ms": 0.015154599999999999
+        },
+        "std": {
+          "samples_ms": [
+            0.0162,
+            0.020200000000000003,
+            0.0166
+          ],
+          "median_ms": 0.0166
+        },
+        "worst_paired_speedup": 1.0703949889656812,
+        "median_speedup_vs_faster_reference": 1.0953769812466183,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.055671,
+            4.448372,
+            5.217898
+          ],
+          "median_ms": 5.055671
+        },
+        "std": {
+          "samples_ms": [
+            6.804829,
+            6.498158,
+            7.066994
+          ],
+          "median_ms": 6.804829
+        },
+        "worst_paired_speedup": 1.3459793962067546,
+        "median_speedup_vs_faster_reference": 1.3459793962067546,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.032946199999999995,
+          0.032900200000000004,
+          0.0326378
+        ],
+        "median_ms": 0.032900200000000004
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "dense_plane",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^2+2*x*y+3*y^2+x+1",
+        "x*y+2*y^2+3*x-1"
+      ],
+      "exponent": 3,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.2181524,
+            0.2385412,
+            0.22105199999999997
+          ],
+          "median_ms": 0.22105199999999997
+        },
+        "std": {
+          "samples_ms": [
+            0.055600000000000004,
+            0.05600000000000001,
+            0.05600000000000001
+          ],
+          "median_ms": 0.05600000000000001
+        },
+        "worst_paired_speedup": 0.23476028459653933,
+        "median_speedup_vs_faster_reference": 0.25333405714492524,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.70039,
+            4.626078,
+            5.149658
+          ],
+          "median_ms": 5.149658
+        },
+        "std": {
+          "samples_ms": [
+            6.994978,
+            5.270276,
+            6.020425
+          ],
+          "median_ms": 6.020425
+        },
+        "worst_paired_speedup": 1.1392535966751967,
+        "median_speedup_vs_faster_reference": 1.169092199909198,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.2827366,
+          0.41438579999999997,
+          0.28327779999999997
+        ],
+        "median_ms": 0.28327779999999997
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "space_curve_ordinary",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "y^2-x*z",
+        "y*z-x^3",
+        "z^2-x^2*y"
+      ],
+      "exponent": 3,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.12176419999999999,
+            0.1204296,
+            0.12135560000000001
+          ],
+          "median_ms": 0.12135560000000001
+        },
+        "std": {
+          "samples_ms": [
+            0.0332,
+            0.0342,
+            0.033
+          ],
+          "median_ms": 0.0332
+        },
+        "worst_paired_speedup": 0.2719281186859115,
+        "median_speedup_vs_faster_reference": 0.2735761678900685,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.66396,
+            5.315502,
+            5.098381
+          ],
+          "median_ms": 5.098381
+        },
+        "std": {
+          "samples_ms": [
+            7.059901,
+            5.323106,
+            5.999646
+          ],
+          "median_ms": 5.999646
+        },
+        "worst_paired_speedup": 1.0014305328076256,
+        "median_speedup_vs_faster_reference": 1.1767747447670154,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.15456419999999998,
+          0.1637356,
+          0.15353840000000002
+        ],
+        "median_ms": 0.15456419999999998
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "shifted_generators",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(x+y+2*z)*(y-2*z)",
+        "(x+y+2*z)*(z+1)",
+        "(y-2*z)*(z+1)"
+      ],
+      "exponent": 2,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.167611,
+            0.170741,
+            0.16772320000000002
+          ],
+          "median_ms": 0.16772320000000002
+        },
+        "std": {
+          "samples_ms": [
+            0.0376,
+            0.0356,
+            0.0354
+          ],
+          "median_ms": 0.0356
+        },
+        "worst_paired_speedup": 0.2085029371972754,
+        "median_speedup_vs_faster_reference": 0.21225447642305892,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.276006,
+            4.999634,
+            4.142874
+          ],
+          "median_ms": 4.276006
+        },
+        "std": {
+          "samples_ms": [
+            6.039711,
+            5.9121,
+            5.432333
+          ],
+          "median_ms": 5.9121
+        },
+        "worst_paired_speedup": 1.1825065594801538,
+        "median_speedup_vs_faster_reference": 1.3826220075462943,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.21266,
+          0.2202224,
+          0.21184240000000001
+        ],
+        "median_ms": 0.21266
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "symbolic_zero",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [],
+      "exponent": 5,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0002626,
+            0.0002546,
+            0.0002566
+          ],
+          "median_ms": 0.0002566
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.008799999999999999,
+            0.0086,
+            0.008400000000000001
+          ],
+          "median_ms": 0.0086
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.008799999999999999,
+            0.0086,
+            0.009600000000000001
+          ],
+          "median_ms": 0.008799999999999999
+        },
+        "worst_paired_speedup": 32.735775526110686,
+        "median_speedup_vs_faster_reference": 33.515198752922835,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.448322,
+            3.693064,
+            3.699646
+          ],
+          "median_ms": 3.699646
+        },
+        "GTZ": {
+          "samples_ms": [
+            5.272921,
+            5.142094,
+            5.256781
+          ],
+          "median_ms": 5.256781
+        },
+        "Jacobian": {
+          "samples_ms": [
+            5.19785,
+            5.141012,
+            5.258063
+          ],
+          "median_ms": 5.19785
+        },
+        "worst_paired_speedup": 1.1684967949712273,
+        "median_speedup_vs_faster_reference": 1.4049587447015202,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0246066,
+          0.007897,
+          0.007414
+        ],
+        "median_ms": 0.007897
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "symbolic_unit",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "1"
+      ],
+      "exponent": 2,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0003606,
+            0.00036459999999999997,
+            0.0003626
+          ],
+          "median_ms": 0.0003626
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.016,
+            0.014000000000000002,
+            0.013800000000000002
+          ],
+          "median_ms": 0.014000000000000002
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.013800000000000002,
+            0.013800000000000002,
+            0.0144
+          ],
+          "median_ms": 0.013800000000000002
+        },
+        "worst_paired_speedup": 37.849698299506315,
+        "median_speedup_vs_faster_reference": 38.05846662989521,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            3.973775,
+            4.210673,
+            3.817048
+          ],
+          "median_ms": 3.973775
+        },
+        "GTZ": {
+          "samples_ms": [
+            5.747529,
+            6.634636,
+            5.431601
+          ],
+          "median_ms": 5.747529
+        },
+        "Jacobian": {
+          "samples_ms": [
+            6.740015,
+            5.424868,
+            5.429147
+          ],
+          "median_ms": 5.429147
+        },
+        "worst_paired_speedup": 1.288361266714371,
+        "median_speedup_vs_faster_reference": 1.366244188460595,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0098166,
+          0.0110028,
+          0.0087566
+        ],
+        "median_ms": 0.0098166
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "squarefree_principal",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(y^2-x^3)*(2*x+1)"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.013992399999999999,
+            0.013828199999999999,
+            0.0137018
+          ],
+          "median_ms": 0.013828199999999999
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.0794,
+            0.078,
+            0.08
+          ],
+          "median_ms": 0.0794
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.08,
+            0.08020000000000001,
+            0.0828
+          ],
+          "median_ms": 0.08020000000000001
+        },
+        "worst_paired_speedup": 5.640647372760013,
+        "median_speedup_vs_faster_reference": 5.7418897615018585,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.057332,
+            4.029911,
+            3.968645
+          ],
+          "median_ms": 4.029911
+        },
+        "GTZ": {
+          "samples_ms": [
+            5.690351,
+            5.502966,
+            5.547501
+          ],
+          "median_ms": 5.547501
+        },
+        "Jacobian": {
+          "samples_ms": [
+            5.501203,
+            5.439847,
+            5.554654
+          ],
+          "median_ms": 5.501203
+        },
+        "worst_paired_speedup": 1.3498677762362494,
+        "median_speedup_vs_faster_reference": 1.365092926369838,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0325496,
+          0.0310668,
+          0.033323000000000005
+        ],
+        "median_ms": 0.0325496
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "triangle_symbolic",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "x*z",
+        "y*z"
+      ],
+      "exponent": 4,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.021651,
+            0.021512800000000002,
+            0.0215126
+          ],
+          "median_ms": 0.021512800000000002
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.2,
+            0.1944,
+            0.198
+          ],
+          "median_ms": 0.198
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.1982,
+            0.19519999999999998,
+            0.20400000000000001
+          ],
+          "median_ms": 0.1982
+        },
+        "worst_paired_speedup": 9.036480606894498,
+        "median_speedup_vs_faster_reference": 9.203822840355508,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.862076,
+            4.212376,
+            4.004152
+          ],
+          "median_ms": 4.212376
+        },
+        "GTZ": {
+          "samples_ms": [
+            6.964861,
+            5.797914,
+            5.691984
+          ],
+          "median_ms": 5.797914
+        },
+        "Jacobian": {
+          "samples_ms": [
+            5.723824,
+            5.694499,
+            6.865824
+          ],
+          "median_ms": 5.723824
+        },
+        "worst_paired_speedup": 0.9764158635950813,
+        "median_speedup_vs_faster_reference": 1.3588112742072407,
+        "wins_vs_all": 2
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0376232,
+          0.0388294,
+          0.0344972
+        ],
+        "median_ms": 0.0376232
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "mixed_heights",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y",
+        "x*z"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "lex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.0091572,
+            0.0082036,
+            0.008043400000000001
+          ],
+          "median_ms": 0.0082036
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.1302,
+            0.1416,
+            0.1276
+          ],
+          "median_ms": 0.1302
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.1286,
+            0.1348,
+            0.1322
+          ],
+          "median_ms": 0.1322
+        },
+        "worst_paired_speedup": 14.04359411173721,
+        "median_speedup_vs_faster_reference": 15.871080988834171,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            3.953697,
+            3.88166,
+            4.507254
+          ],
+          "median_ms": 3.953697
+        },
+        "GTZ": {
+          "samples_ms": [
+            5.636499,
+            5.468672,
+            5.555216
+          ],
+          "median_ms": 5.555216
+        },
+        "Jacobian": {
+          "samples_ms": [
+            5.522102,
+            6.117889,
+            5.580623
+          ],
+          "median_ms": 5.580623
+        },
+        "worst_paired_speedup": 1.2325056453441496,
+        "median_speedup_vs_faster_reference": 1.4050687242851436,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.0210218,
+          0.020703199999999998,
+          0.0216248
+        ],
+        "median_ms": 0.0210218
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "five_cycle",
+      "variables": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "generators": [
+        "a*b",
+        "b*c",
+        "c*d",
+        "d*e",
+        "e*a"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.14628259999999998,
+            0.14605220000000002,
+            0.146964
+          ],
+          "median_ms": 0.14628259999999998
+        },
+        "GTZ": {
+          "samples_ms": [
+            0.758,
+            0.7454,
+            0.7392000000000001
+          ],
+          "median_ms": 0.7454
+        },
+        "Jacobian": {
+          "samples_ms": [
+            0.7454,
+            0.7508,
+            0.7432000000000001
+          ],
+          "median_ms": 0.7454
+        },
+        "worst_paired_speedup": 5.029803217114395,
+        "median_speedup_vs_faster_reference": 5.095616293393746,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.591494,
+            5.164126,
+            5.851766
+          ],
+          "median_ms": 5.591494
+        },
+        "GTZ": {
+          "samples_ms": [
+            7.984349,
+            6.547602,
+            7.993186
+          ],
+          "median_ms": 7.984349
+        },
+        "Jacobian": {
+          "samples_ms": [
+            6.227717,
+            7.835848,
+            7.95329
+          ],
+          "median_ms": 7.835848
+        },
+        "worst_paired_speedup": 1.1137840798899186,
+        "median_speedup_vs_faster_reference": 1.4013871784535583,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.3768186,
+          0.17370259999999998,
+          0.3781112
+        ],
+        "median_ms": 0.3768186
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "rational_and_conjugate_points",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "(x^2+1)*(x-2)",
+        "y-x"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "lex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.1673684,
+            0.1698872,
+            0.17881819999999998
+          ],
+          "median_ms": 0.1698872
+        },
+        "GTZ": {
+          "samples_ms": [
+            2.2862,
+            2.3666,
+            2.3457999999999997
+          ],
+          "median_ms": 2.3457999999999997
+        },
+        "Jacobian": {
+          "samples_ms": [
+            4.172,
+            4.274,
+            4.218
+          ],
+          "median_ms": 4.218
+        },
+        "worst_paired_speedup": 13.1183514877121,
+        "median_speedup_vs_faster_reference": 13.807985533930749,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.741979,
+            4.587085,
+            4.716739
+          ],
+          "median_ms": 4.716739
+        },
+        "GTZ": {
+          "samples_ms": [
+            18.653444,
+            18.558756,
+            19.966207
+          ],
+          "median_ms": 18.653444
+        },
+        "Jacobian": {
+          "samples_ms": [
+            20.800745,
+            21.553157,
+            21.202234
+          ],
+          "median_ms": 21.202234
+        },
+        "worst_paired_speedup": 3.248608885542772,
+        "median_speedup_vs_faster_reference": 3.954733132361151,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.22513960000000002,
+          0.199874,
+          0.20196779999999998
+        ],
+        "median_ms": 0.20196779999999998
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "nonlinear_complete_intersection",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "y^2-x^3",
+        "z-x*y"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.3778766,
+            0.3794236,
+            0.3710678
+          ],
+          "median_ms": 0.3778766
+        },
+        "GTZ": {
+          "samples_ms": [
+            4.2926,
+            4.2696,
+            4.2822000000000005
+          ],
+          "median_ms": 4.2822000000000005
+        },
+        "Jacobian": {
+          "samples_ms": [
+            2.256,
+            2.2904,
+            2.2888
+          ],
+          "median_ms": 2.2888
+        },
+        "worst_paired_speedup": 5.970202971022815,
+        "median_speedup_vs_faster_reference": 6.057003794360382,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            6.00161,
+            4.868517,
+            5.323327
+          ],
+          "median_ms": 5.323327
+        },
+        "GTZ": {
+          "samples_ms": [
+            22.176307,
+            20.643698,
+            20.99905
+          ],
+          "median_ms": 20.99905
+        },
+        "Jacobian": {
+          "samples_ms": [
+            18.325855,
+            19.083087,
+            19.319093
+          ],
+          "median_ms": 19.083087
+        },
+        "worst_paired_speedup": 3.053489813566693,
+        "median_speedup_vs_faster_reference": 3.58480457803926,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.4146962,
+          0.4165156,
+          0.4136564
+        ],
+        "median_ms": 0.4146962
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "twisted_cubic",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "generators": [
+        "x*z-y^2",
+        "x*w-y*z",
+        "y*w-z^2"
+      ],
+      "exponent": 2,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.3534424,
+            0.3610308,
+            0.3551056
+          ],
+          "median_ms": 0.3551056
+        },
+        "GTZ": {
+          "samples_ms": [
+            9.7044,
+            9.6196,
+            9.6372
+          ],
+          "median_ms": 9.6372
+        },
+        "Jacobian": {
+          "samples_ms": [
+            3.5997999999999997,
+            3.5683999999999996,
+            3.5572000000000004
+          ],
+          "median_ms": 3.5683999999999996
+        },
+        "worst_paired_speedup": 9.883921261011524,
+        "median_speedup_vs_faster_reference": 10.04884180930968,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.178143,
+            5.882544,
+            5.362821
+          ],
+          "median_ms": 5.362821
+        },
+        "GTZ": {
+          "samples_ms": [
+            27.510363,
+            26.669143,
+            26.962347
+          ],
+          "median_ms": 26.962347
+        },
+        "Jacobian": {
+          "samples_ms": [
+            20.449871,
+            19.841171,
+            21.619744
+          ],
+          "median_ms": 20.449871
+        },
+        "worst_paired_speedup": 3.3728895185484373,
+        "median_speedup_vs_faster_reference": 3.8132674948501917,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.4304822,
+          0.3853008,
+          0.3763074
+        ],
+        "median_ms": 0.3853008
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "singular_space_curve",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "y^2-x*z",
+        "y*z-x^3",
+        "z^2-x^2*y"
+      ],
+      "exponent": 2,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.7653132,
+            0.7781494,
+            0.7697476
+          ],
+          "median_ms": 0.7697476
+        },
+        "GTZ": {
+          "samples_ms": [
+            11.754999999999999,
+            11.6176,
+            11.633
+          ],
+          "median_ms": 11.633
+        },
+        "Jacobian": {
+          "samples_ms": [
+            3.3364,
+            3.3324,
+            3.3482
+          ],
+          "median_ms": 3.3364
+        },
+        "worst_paired_speedup": 4.2824681224453816,
+        "median_speedup_vs_faster_reference": 4.33440779808862,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.382098,
+            6.248757,
+            6.296227
+          ],
+          "median_ms": 6.248757
+        },
+        "GTZ": {
+          "samples_ms": [
+            28.747793,
+            28.498833,
+            28.583482
+          ],
+          "median_ms": 28.583482
+        },
+        "Jacobian": {
+          "samples_ms": [
+            20.94095,
+            19.900924,
+            21.338812
+          ],
+          "median_ms": 20.94095
+        },
+        "worst_paired_speedup": 3.184781229290881,
+        "median_speedup_vs_faster_reference": 3.3512184903333573,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.7977786,
+          0.799023,
+          0.7953602
+        ],
+        "median_ms": 0.7977786
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "transformed_triangle",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(x+y+2*z)*(y-2*z)",
+        "(x+y+2*z)*(z+1)",
+        "(y-2*z)*(z+1)"
+      ],
+      "exponent": 2,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.7464997999999999,
+            0.7374806,
+            0.7503208
+          ],
+          "median_ms": 0.7464997999999999
+        },
+        "GTZ": {
+          "samples_ms": [
+            17.718,
+            17.5218,
+            18.195
+          ],
+          "median_ms": 17.718
+        },
+        "Jacobian": {
+          "samples_ms": [
+            8.5856,
+            8.6752,
+            8.653
+          ],
+          "median_ms": 8.653
+        },
+        "worst_paired_speedup": 11.50114172837019,
+        "median_speedup_vs_faster_reference": 11.591429763276562,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.631109,
+            6.469975,
+            5.37753
+          ],
+          "median_ms": 5.631109
+        },
+        "GTZ": {
+          "samples_ms": [
+            36.256974,
+            35.264997,
+            36.066143
+          ],
+          "median_ms": 36.066143
+        },
+        "Jacobian": {
+          "samples_ms": [
+            26.156082,
+            25.363223,
+            26.755185
+          ],
+          "median_ms": 26.156082
+        },
+        "worst_paired_speedup": 3.9201423498545207,
+        "median_speedup_vs_faster_reference": 4.644925537758193,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.7914106000000001,
+          0.8072324,
+          0.7923161999999999
+        ],
+        "median_ms": 0.7923161999999999
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "nonlinear_mixed_components",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*(y^2-z^3)",
+        "x*(x-z^2)"
+      ],
+      "exponent": 2,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            0.2946472,
+            0.305083,
+            0.29722400000000004
+          ],
+          "median_ms": 0.29722400000000004
+        },
+        "GTZ": {
+          "samples_ms": [
+            3.9956000000000005,
+            4.013199999999999,
+            3.9951999999999996
+          ],
+          "median_ms": 3.9956000000000005
+        },
+        "Jacobian": {
+          "samples_ms": [
+            2.452,
+            2.4536000000000002,
+            2.4428
+          ],
+          "median_ms": 2.452
+        },
+        "worst_paired_speedup": 8.042401575964574,
+        "median_speedup_vs_faster_reference": 8.249670282345974,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            4.791691,
+            5.51009,
+            4.868838
+          ],
+          "median_ms": 4.868838
+        },
+        "GTZ": {
+          "samples_ms": [
+            20.382965,
+            21.323984,
+            21.471684
+          ],
+          "median_ms": 21.323984
+        },
+        "Jacobian": {
+          "samples_ms": [
+            19.133622,
+            19.11115,
+            19.38106
+          ],
+          "median_ms": 19.133622
+        },
+        "worst_paired_speedup": 3.4683916233673133,
+        "median_speedup_vs_faster_reference": 3.9298128218683797,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          0.3387866,
+          0.323662,
+          0.32901400000000003
+        ],
+        "median_ms": 0.32901400000000003
+      },
+      "warm_batch_size": 5
+    },
+    {
+      "name": "transformed_determinantal_cube",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "generators": [
+        "(x+2*y)*(z+w)-(y-z)^2",
+        "(x+2*y)*w-(y-z)*(z+w)",
+        "(y-z)*w-(z+w)^2"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            8.912424,
+            8.985462,
+            8.922994
+          ],
+          "median_ms": 8.922994
+        },
+        "GTZ": {
+          "samples_ms": [
+            17.679,
+            17.715,
+            17.783
+          ],
+          "median_ms": 17.715
+        },
+        "Jacobian": {
+          "samples_ms": [
+            27.229,
+            27.493,
+            27.239
+          ],
+          "median_ms": 27.239
+        },
+        "worst_paired_speedup": 1.9715179920631793,
+        "median_speedup_vs_faster_reference": 1.9853201739236854,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            14.353482,
+            15.028901,
+            14.26738
+          ],
+          "median_ms": 14.353482
+        },
+        "GTZ": {
+          "samples_ms": [
+            35.028811,
+            35.45626,
+            35.212709
+          ],
+          "median_ms": 35.212709
+        },
+        "Jacobian": {
+          "samples_ms": [
+            44.786202,
+            44.997352,
+            44.817352
+          ],
+          "median_ms": 44.817352
+        },
+        "worst_paired_speedup": 2.359205107545788,
+        "median_speedup_vs_faster_reference": 2.453252040166978,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          8.774553,
+          8.758533,
+          8.764855
+        ],
+        "median_ms": 8.764855
+      },
+      "warm_batch_size": 1
+    },
+    {
+      "name": "mixed_cusp_and_plane_fourth",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(x-z+1)*(y^2-x^3)",
+        "(x-z+1)*(z-x*y)"
+      ],
+      "exponent": 4,
+      "symbolic": true,
+      "order": "grevlex",
+      "preoptimization_case_timeout_seconds": 10,
+      "warm_batch_size": 1
+    },
+    {
+      "name": "two_cubics_fourth",
+      "variables": [
+        "x",
+        "y"
+      ],
+      "generators": [
+        "x^3+2*x*y+3*y^2+1",
+        "x*y^2-2*y^3+3*x^2-y"
+      ],
+      "exponent": 4,
+      "symbolic": false,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            1.019127,
+            0.988339,
+            1.013957
+          ],
+          "median_ms": 1.013957
+        },
+        "std": {
+          "samples_ms": [
+            0.283,
+            0.283,
+            0.272
+          ],
+          "median_ms": 0.283
+        },
+        "worst_paired_speedup": 0.2682559516823692,
+        "median_speedup_vs_faster_reference": 0.27910453796364143,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            5.816018,
+            5.60511,
+            5.558882
+          ],
+          "median_ms": 5.60511
+        },
+        "std": {
+          "samples_ms": [
+            6.310563,
+            6.075069,
+            6.460326
+          ],
+          "median_ms": 6.310563
+        },
+        "worst_paired_speedup": 1.0838447416732233,
+        "median_speedup_vs_faster_reference": 1.125858903750328,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          1.199679,
+          1.508363,
+          1.109899
+        ],
+        "median_ms": 1.199679
+      },
+      "warm_batch_size": 1
+    },
+    {
+      "name": "plane_and_space_curve_cube",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "(x-z+1)*(y^2-x*z)",
+        "(x-z+1)*(y*z-x^3)",
+        "(x-z+1)*(z^2-x^2*y)"
+      ],
+      "exponent": 3,
+      "symbolic": true,
+      "order": "grevlex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            766.707083,
+            762.32128,
+            772.038075
+          ],
+          "median_ms": 766.707083
+        },
+        "GTZ": {
+          "samples_ms": [
+            15.355,
+            15.285,
+            15.426
+          ],
+          "median_ms": 15.355
+        },
+        "Jacobian": {
+          "samples_ms": [
+            5.015,
+            5.0,
+            5.005
+          ],
+          "median_ms": 5.005
+        },
+        "worst_paired_speedup": 0.00648284088838494,
+        "median_speedup_vs_faster_reference": 0.00652791673766238,
+        "wins_vs_all": 0
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            764.748169,
+            772.630475,
+            777.462222
+          ],
+          "median_ms": 772.630475
+        },
+        "GTZ": {
+          "samples_ms": [
+            32.487004,
+            33.223326,
+            33.846775
+          ],
+          "median_ms": 33.223326
+        },
+        "Jacobian": {
+          "samples_ms": [
+            22.666673,
+            22.118617,
+            21.70265
+          ],
+          "median_ms": 22.118617
+        },
+        "worst_paired_speedup": 0.02791473255661289,
+        "median_speedup_vs_faster_reference": 0.028627678710188075,
+        "wins_vs_all": 0
+      },
+      "warm_wire": {
+        "samples_ms": [
+          788.016321,
+          801.859869,
+          824.411836
+        ],
+        "median_ms": 801.859869
+      },
+      "warm_batch_size": 1
+    },
+    {
+      "name": "translated_grid_fourth",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "generators": [
+        "x*y-1",
+        "(x-2)*(x-3)",
+        "z-y^2"
+      ],
+      "exponent": 4,
+      "symbolic": true,
+      "order": "lex",
+      "verified": true,
+      "warm": {
+        "atlas": {
+          "samples_ms": [
+            2.396092,
+            2.372226,
+            2.37397
+          ],
+          "median_ms": 2.37397
+        },
+        "GTZ": {
+          "samples_ms": [
+            7.447,
+            7.418,
+            7.439
+          ],
+          "median_ms": 7.439
+        },
+        "Jacobian": {
+          "samples_ms": [
+            9.6,
+            9.58,
+            9.543
+          ],
+          "median_ms": 9.58
+        },
+        "worst_paired_speedup": 3.1079774900129045,
+        "median_speedup_vs_faster_reference": 3.1335695059330995,
+        "wins_vs_all": 3
+      },
+      "fresh_command": {
+        "atlas": {
+          "samples_ms": [
+            7.650247,
+            7.506626,
+            7.248898
+          ],
+          "median_ms": 7.506626
+        },
+        "GTZ": {
+          "samples_ms": [
+            24.447702,
+            24.358924,
+            23.89166
+          ],
+          "median_ms": 24.358924
+        },
+        "Jacobian": {
+          "samples_ms": [
+            27.185559,
+            28.007123,
+            27.23901
+          ],
+          "median_ms": 27.23901
+        },
+        "worst_paired_speedup": 3.1956748586026045,
+        "median_speedup_vs_faster_reference": 3.244989693105797,
+        "wins_vs_all": 3
+      },
+      "warm_wire": {
+        "samples_ms": [
+          2.461374,
+          2.404346,
+          2.426238
+        ],
+        "median_ms": 2.426238
+      },
+      "warm_batch_size": 1
+    }
+  ],
+  "atlas_library_sha256": "df5341a302c9db29a00d1c5b602b919a483cfeb1dcc4a44f2ef51c55b026cb2a",
+  "atlas_typed_sha256": "8530344316f8ee6da059184b7ad0f73c115eabd6c6b133868b7cc7bbfdf99320",
+  "atlas_native_cli_sha256": "436117dab2528472c259e4ac744a1bca4acd25503485e5bf569fdc4ac0c48079",
+  "atlas_launcher_sha256": "d9262581916e43906a24ccc10f4fb922af4e6dc25c49500258bfaae953ce8862"
+}

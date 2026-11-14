@@ -820,6 +820,22 @@ void atlas_groebner_certification_counts(uint64_t* counts) noexcept {
     counts[3] = verification_ns;
 }
 
+// Snapshot all thread-local activity at a stage boundary in a single call.
+void atlas_groebner_activity_counts(uint64_t* counts) noexcept {
+    atlas_groebner_cpu_replays(counts, counts + 1);
+    atlas_groebner_cpu_trace_counts(counts + 2, counts + 3);
+    atlas_groebner_certification_counts(counts + 4);
+}
+
+// A CPU request sets both thread-local hooks to null and restores both on exit.
+// Read the counters at the same boundary to avoid separate foreign calls.
+void atlas_groebner_swap_cpu_scope(ReplayBatch* batch, int* active, TraceScreen* trace,
+                                   uint64_t* counts) noexcept {
+    atlas_groebner_swap_batch(batch, active);
+    atlas_groebner_swap_trace_screen(trace);
+    atlas_groebner_activity_counts(counts);
+}
+
 // For benchmarks and tests of a batch backend: trace the problem, then replay
 // it for `count` primes on the host's threads and through the hook. seconds
 // receives the trace, the host replay and the hook replay. Returns the number

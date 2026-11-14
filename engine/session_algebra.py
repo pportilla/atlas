@@ -99,6 +99,101 @@ class _Basis(_IdealResult):
     _label = "Groebner basis"
 
 
+class _PrimaryComponent(NamedTuple):
+    primary: Ideal
+    prime: Ideal
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise AttributeError(f"A primary component has no Atlas field {name!r}.")
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _PrimaryDecomposition(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    components: tuple[_PrimaryComponent, ...]
+    _fields = _Result._fields | {"components"}
+
+    def __repr__(self):
+        if not self.components:
+            return "The unit ideal has no primary components."
+        return "\n".join(f"Primary component {i}: {q}\nAssociated prime: {p}"
+                         for i, (q, p) in enumerate(self.components, start=1))
+
+
+class _LocalElement(NamedTuple):
+    numerator: Polynomial
+    denominator: Polynomial
+    member: bool
+    unit: bool
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise AttributeError(f"A local fraction has no Atlas field {name!r}.")
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _Localization(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    prime: Ideal
+    contraction: Ideal
+    element: _LocalElement | None
+    _fields = _Result._fields | {"prime", "contraction", "element", "fraction"}
+
+    def fraction(self, f, s=1, *, compute=None):
+        """Test f/s for membership in the localized ideal and invertibility in the local ring."""
+        mode = self.execution["requested"] if compute is None else compute
+        return localize(self.contraction, self.prime, numerator=f, denominator=s, compute=mode).element
+
+    def __repr__(self):
+        from .algebra_cli import localization_lines
+        return "\n".join(localization_lines(self._record["result"]))
+
+
+class _NormalizationFraction(NamedTuple):
+    numerator: Polynomial
+    denominator: Polynomial
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise AttributeError(f"A normalization fraction has no Atlas field {name!r}.")
+
+
+@dataclass(frozen=True, eq=False)
+class _NormalizedComponent(_RingValue):
+    _space: _CoordinateSpace
+    order: str
+    prime: Ideal
+    relations: Ideal
+    images: tuple[Polynomial, ...]
+    fractions: tuple[_NormalizationFraction, ...]
+    _fields = _RingValue._fields | {"prime", "relations", "images", "fractions"}
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _Normalization(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    components: tuple[_NormalizedComponent, ...]
+    _fields = _Result._fields | {"components", "input_reduced"}
+
+    @property
+    def input_reduced(self):
+        return self._record["result"]["input_reduced"]
+
+    def __repr__(self):
+        from .algebra_cli import normalization_lines
+        return "\n".join(normalization_lines(self._record["result"]))
+
+
 class _AtPoint:
     @property
     def scope(self):
@@ -334,6 +429,25 @@ class _HilbertSamuelMultiplicity(_AtPoint, _ScalarResult):
 class _EmbeddingDimension(_TangentDimensions, _AtPoint, _ScalarResult):
     _fields = _ScalarResult._fields | {"point", "scope", "ambient_dimension", "jacobian_rank"}
 
+class _LocalDimension(_AtPoint, _ScalarResult):
+    _fields = _ScalarResult._fields | {"point", "scope", "local_dimension"}
+
+    @property
+    def local_dimension(self):
+        return self._record["result"]["local_dimension"]
+
+
+class _LocalSmoothness(_LocalDimension):
+    _fields = _LocalDimension._fields | {"embedding_dimension", "jacobian_rank"}
+
+    @property
+    def embedding_dimension(self):
+        return self._record["result"]["embedding_dimension"]
+
+    @property
+    def jacobian_rank(self):
+        return self._record["result"]["jacobian_rank"]
+
 
 class _HilbertSamuelFunction(_PointResult):
     _fields = _PointResult._fields | {"degrees", "values", "graded_values", "dimension", "multiplicity"}
@@ -503,20 +617,45 @@ def _typed(record, space):
              else _result_space(space, names))
     order = result["ring"]["order"]
 
-    def decode(text):
+    def decode(text, coordinate_space=space):
         # Kernel output is already canonical. Decode its exact coefficients as
         # arithmetic results, which can exceed the session's input-literal limit.
-        if not space.generators:
+        if not coordinate_space.generators:
             return native.coerce(sparse_row(text).get((), 0))
-        row, = affine_request(["decode", " ".join(space.names), text])
-        return native.from_row(space.generators, row)
+        row, = affine_request(["decode", " ".join(coordinate_space.names), text])
+        return native.from_row(coordinate_space.generators, row)
 
-    def polynomials(expressions):
-        return tuple(Polynomial(space, decode(text)) for text in expressions)
+    def polynomials(expressions, coordinate_space=space):
+        return tuple(Polynomial(coordinate_space, decode(text, coordinate_space)) for text in expressions)
 
+    if kind == "localization":
+        element = result.get("element")
+        if element is not None:
+            numerator, denominator = polynomials((element["numerator"], element["denominator"]))
+            element = _LocalElement(numerator, denominator, element["member"], element["unit"])
+        return _Localization(space, order, record, Ideal(space, polynomials(result["prime"]), order),
+                             Ideal(space, polynomials(result["generators"]), order), element)
+    if kind == "normalization":
+        components = []
+        for component in result["components"]:
+            target_names = component["ring"]["variables"]
+            target = _CoordinateSpace.named(target_names) if target_names else _scalar_space
+            target_order = component["ring"]["order"]
+            fractions = tuple(_NormalizationFraction(*polynomials((f["numerator"], f["denominator"])))
+                              for f in component["fractions"])
+            components.append(_NormalizedComponent(
+                target, target_order, Ideal(space, polynomials(component["prime"]), order),
+                Ideal(target, polynomials(component["relations"], target), target_order),
+                polynomials(component["images"], target), fractions))
+        return _Normalization(space, order, record, tuple(components))
     if kind in ("basis", "ideal"):
         cls = _Basis if kind == "basis" else _IdealResult
         return cls(space, polynomials(result["generators"]), order, record)
+    if kind == "primary-decomposition":
+        components = tuple(_PrimaryComponent(Ideal(space, polynomials(component["primary"]), order),
+                                             Ideal(space, polynomials(component["prime"]), order))
+                           for component in result["components"])
+        return _PrimaryDecomposition(space, order, record, components)
     if kind == "local-standard-basis":
         return _LocalStandardBasis(space, order, record, polynomials(result["generators"]))
     if kind == "tangent-cone":
@@ -553,6 +692,10 @@ def _typed(record, space):
             return _HilbertSamuelMultiplicity(space, order, result["value"], record)
         if record["operation"] == "embedding-dimension":
             return _EmbeddingDimension(space, order, result["value"], record)
+        if record["operation"] == "local-dimension":
+            return _LocalDimension(space, order, result["value"], record)
+        if record["operation"] == "local-smoothness":
+            return _LocalSmoothness(space, order, result["value"], record)
         cls = _ScalarResult
         if "finite" in result:
             cls = _QuotientNumber if result["scope"] == "global" else _LocalNumber
@@ -587,7 +730,8 @@ def _require_ideal(value):
 
 
 def _calculate(operation, left, compute, **operands):
-    accepts_cone = operation in ("tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension")
+    accepts_cone = operation in ("tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension",
+                                 "local-dimension", "local-smoothness")
     local_basis = (isinstance(left, _LocalStandardBasis)
                    and (accepts_cone or operation in ("local-normal-form", "local-quotient-basis",
                                                       "hilbert-samuel-function", "hilbert-samuel-multiplicity",
@@ -604,15 +748,18 @@ def _calculate(operation, left, compute, **operands):
         saved_point = left.point
         if operands.setdefault("point", saved_point) != saved_point:
             raise ValueError("The supplied point differs from the saved local standard basis point.")
-    if "other_ideal" in operands:
-        right = _require_ideal(operands["other_ideal"])
+    for key in ("other_ideal", "prime"):
+        if key not in operands:
+            continue
+        right = _require_ideal(operands[key])
         if right._space is not left._space:
             raise ValueError("These ideals belong to different coordinate spaces.")
         if right.order != left.order:
             raise ValueError("These ideals have different monomial orders.")
-        operands["other_ideal"] = [str(f) for f in right.generators]
-    if "polynomial" in operands:
-        operands["polynomial"] = str(_polynomial(operands["polynomial"], left._space))
+        operands[key] = [str(f) for f in right.generators]
+    for key in ("polynomial", "numerator", "denominator"):
+        if key in operands:
+            operands[key] = str(_polynomial(operands[key], left._space))
     operands["ideal"] = [str(f) for f in left.generators]
     request = {"operation": operation, "ring": left.ring, "operands": operands, "compute": compute}
     known_basis = ((local_basis and operation == "local-normal-form") or
@@ -717,9 +864,39 @@ def saturation(ideal, polynomial, *, compute="auto"):
     return _calculate("saturation", ideal, compute, polynomial=polynomial)
 
 
+def ideal_power(ideal, n, *, compute="auto"):
+    """Return the ordinary n-th power of this ideal in its original polynomial ring."""
+    return _calculate("ideal-power", ideal, compute, exponent=n)
+
+
+def symbolic_power(ideal, n, *, compute="auto"):
+    """Return the n-th symbolic power of a prime or radical ideal over QQ."""
+    return _calculate("symbolic-power", ideal, compute, exponent=n)
+
+
 def radical(ideal, *, compute="auto"):
     """The radical ideal in the input polynomial ring over QQ."""
     return _calculate("radical", ideal, compute)
+
+
+def primary_decomposition(ideal, *, compute="auto"):
+    """Return the primary ideals and their associated primes in the input ring over QQ."""
+    return _calculate("primary-decomposition", ideal, compute)
+
+
+def localize(ideal, prime=None, *, numerator=None, denominator=None, compute="auto"):
+    """Localize at a prime, optionally extending an ideal and testing a fraction."""
+    if prime is None:
+        prime = _require_ideal(ideal)
+        ideal = Ideal(prime._space, (), prime.order)
+    operands = {key: value for key, value in (("numerator", numerator), ("denominator", denominator))
+                if value is not None}
+    return _calculate("localization", ideal, compute, prime=prime, **operands)
+
+
+def normalization(ideal, *, compute="auto"):
+    """Present the normalization of the reduced QQ quotient, with its component maps."""
+    return _calculate("normalization", ideal, compute)
 
 
 def dimension(ideal, *, compute="auto"):
@@ -780,6 +957,16 @@ def embedding_dimension(ideal, *, point=None, compute="auto"):
     return _calculate("embedding-dimension", ideal, compute, point=point)
 
 
+def local_dimension(ideal, *, point=None, compute="auto"):
+    """Krull dimension of the local ring at a rational point of the scheme."""
+    return _calculate("local-dimension", ideal, compute, point=point)
+
+
+def local_smoothness(ideal, *, point=None, compute="auto"):
+    """Return whether the scheme is smooth at the point, with its local and embedding dimensions."""
+    return _calculate("local-smoothness", ideal, compute, point=point)
+
+
 def algebra_bindings():
     return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
             "resultant": resultant,
@@ -787,11 +974,15 @@ def algebra_bindings():
             "local_standard_basis": local_standard_basis, "local_normal_form": local_normal_form,
             "eliminate": eliminate, "intersection": intersection, "quotient": quotient,
             "saturation": saturation, "saturate": saturation, "radical": radical, "dimension": dimension,
+            "ideal_power": ideal_power, "symbolic_power": symbolic_power,
+            "primary_decomposition": primary_decomposition, "normalization": normalization,
+            "localize": localize, "localization": localize,
             "quotient_basis": quotient_basis, "local_quotient_basis": local_quotient_basis,
             "multiplicity": multiplicity, "hilbert_series": hilbert_series,
             "hilbert_samuel_function": hilbert_samuel_function,
             "hilbert_samuel_multiplicity": hilbert_samuel_multiplicity,
             "tangent_cone": tangent_cone, "tangent_cone_hilbert_series": tangent_cone_hilbert_series,
             "zariski_tangent_space": zariski_tangent_space, "embedding_dimension": embedding_dimension,
+            "local_dimension": local_dimension, "local_smoothness": local_smoothness,
             "local_jacobian_algebra": local_jacobian_algebra, "milnor_number": milnor_number,
             "tjurina_number": tjurina_number, "algebra_request": algebra_request}

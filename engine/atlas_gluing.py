@@ -47,6 +47,7 @@ from .blowup_ideal import ideal_basis, ideal_subset, radical_subset, saturate, s
 from .constructible_euler import euler_characteristic
 from .geometric_components import geometric_components
 from .groebner import groebner
+from .incidence import component_classes, stratum_dimension
 from .local_blowups import _is_strict, _own_failures, _present
 
 
@@ -112,7 +113,8 @@ def _quadratic_character(variables, equations):
     if degree != 2:
         return None
     monomial = api.prod(v**i for v, i in zip(free, direction))
-    return fixed, monomial, api.Rational(-trailing/leading)
+    ratio = -np.Rational(trailing, leading)
+    return fixed, monomial, api.Rational(ratio.scalar)
 
 
 @lru_cache(maxsize=256)
@@ -167,7 +169,7 @@ def _rational_primes(variables, equations, dimension, *, reduced_support=False):
     coordinates = tuple(v for v in variables if v in active)
     if not coordinates:
         return [] if any(equations) else ([()] if dimension == len(variables) else None)
-    return geometric_components(coordinates, equations, dimension-len(variables)+len(coordinates),
+    return geometric_components(coordinates, equations, stratum_dimension(dimension, len(set(variables) - active)),
                                 reduced_support=reduced_support)
 
 
@@ -233,17 +235,9 @@ def _branch_primes(chart, equations, dimension, character):
 
 def _prime_groups(charts, pieces, overlap, transition):
     """Glue irreducible primes by equality on a nonempty open of the diagonal."""
-    parents = list(range(len(pieces)))
-
     @cache
     def basis_of(index, prime):
         return groebner(prime,charts[index].variables)
-
-    def root(k):
-        while parents[k] != k:
-            parents[k] = parents[parents[k]]
-            k = parents[k]
-        return k
 
     @cache
     def image_coordinates(index, prime, mapping):
@@ -271,50 +265,36 @@ def _prime_groups(charts, pieces, overlap, transition):
                 return True
         return False
 
-    for p, ((i, strict), prime) in enumerate(pieces):
-        distinct = set()
-        for q in range(p):
-            (j, other_strict), other = pieces[q]
-            target = root(q)
-            if i == j or strict != other_strict or root(p) == target or target in distinct:
-                continue
-            if different_images(i,prime,j,other):
-                distinct.add(target)
-                continue
-            direct = transition(j, i)
-            if direct is not None:
-                transfer, holes = direct
-                basis = basis_of(j,other)
-                if not (all(any(not basis.contains(g) for g in h) for h in holes)
-                        and all(transfer(g,basis) == 0 for g in prime)):
-                    continue
-            reverse = transition(i,j) if direct is not None else None
-            if direct is not None and reverse is not None:
-                # A regular birational map may contract a divisor. Both
-                # directions must be regular on the actual identified open.
-                # Pull the inverse's denominator ideals and the target holes
-                # back before comparing the two generic points.
+    def compare(p, q):
+        (i, _), prime = pieces[p]
+        (j, _), other = pieces[q]
+        if different_images(i, prime, j, other):
+            return -1
+        direct = transition(j, i)
+        if direct is not None:
+            transfer, holes = direct
+            basis = basis_of(j, other)
+            if not (all(any(not basis.contains(g) for g in h) for h in holes)
+                    and all(transfer(g,basis) == 0 for g in prime)):
+                return 0
+            reverse = transition(i, j)
+            if reverse is not None:
+                # Both rational transitions must be regular on this prime.
                 _, target_holes = reverse
-                # A finite intersection of nonempty opens of one geometric
-                # prime is nonempty. Each removed ideal must have a generator
-                # nonzero there. Membership is checked in its coordinate ring.
-                if all(any(transfer(g,basis) != 0 for g in h) for h in target_holes):
-                    parents[root(p)] = root(q)
-                continue
-            coords, swap_a, swap_b, graph, holes = overlap(j, i)
-            source = (*graph, *(g.xreplace(swap_a) for g in other))
-            if _present(coords, source, holes) and all(
-                    not _present(coords, source, (*holes, (g.xreplace(swap_b),))) for g in prime):
-                parents[root(p)] = target
-            else:
-                # The saturated diagonal covers the entire chart overlap.
-                # Two nonempty chart restrictions of one irreducible prime
-                # share its generic point. An empty restriction here, or a
-                # point outside the target prime, rules out its whole class.
-                distinct.add(target)
+                return int(all(any(transfer(g,basis) != 0 for g in h) for h in target_holes))
+        coords, swap_a, swap_b, graph, holes = overlap(j, i)
+        source = (*graph, *(g.xreplace(swap_a) for g in other))
+        if _present(coords, source, holes) and all(
+                not _present(coords, source, (*holes, (g.xreplace(swap_b),))) for g in prime):
+            return 1
+        # The saturated diagonal covers the whole overlap. It rules out
+        # the entire equivalence class of the other prime.
+        return -1
+
+    classes = component_classes([section for section, _ in pieces], compare)
     groups = defaultdict(dict)
-    for p, (section, prime) in enumerate(pieces):
-        group = groups[root(p)]
+    for group_id, (section, prime) in zip(classes, pieces):
+        group = groups[group_id]
         if section in group:
             # A geometric prime restricts to an irreducible subset of each open.
             return None
@@ -328,7 +308,7 @@ class _NeedsSplittingField(Exception):
     """Carry the exact failed section into a proposed base change."""
 
 
-def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, character):
+def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, character, *, absolute=False):
     """Compute the complex of the reduced boundary on a smooth strict transform.
 
     First identify the individual prime divisors, including meeting branches
@@ -339,6 +319,14 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
     partitions its points. Euler characteristic on each owned piece therefore
     counts the top cells with precisely that boundary, including parallel cells.
     """
+    def branch_primes(chart, equations, dim):
+        primes = _branch_primes(chart, equations, dim, character)
+        if absolute and primes is None:
+            from .absolute_sections import absolute_primes
+            return absolute_primes(chart, equations, dim)
+        return primes
+
+    divisor_dimension = stratum_dimension(dimension, 1)
     local_labels = defaultdict(set)
     for i, chart in enumerate(charts):
         owned = (*chart.fibre, *chart.region)
@@ -355,9 +343,9 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
                 equations = (*carrier, *divisor)
                 if chart.removed and not _present(chart.variables, equations, chart.removed):
                     continue
-                primes = _branch_primes(chart, equations, dimension-1, character)
+                primes = branch_primes(chart, equations, divisor_dimension)
                 if primes is None:
-                    raise _NeedsSplittingField(i, equations, dimension-1)
+                    raise _NeedsSplittingField(i, equations, divisor_dimension)
                 for prime in primes:
                     ideal = tuple(dict.fromkeys((*chart.ambient, *prime)))
                     if any(ideal_subset(chart.variables, hole, ideal) for hole in chart.removed):
@@ -402,7 +390,7 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
             while name in used or (name in reserved and not single):
                 name += "_"
             used.add(name)
-            vertex = {"id": name, "dimension": dimension-1}
+            vertex = {"id": name, "dimension": divisor_dimension}
             if len(labels) > 1:
                 vertex["ambient_components"] = list(labels)
             vertices.append(vertex)
@@ -412,24 +400,27 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
 
     # Each chart contributes only combinations of branches present there.
     for size in range(2, min(dimension, max(map(len, local_vertices.values()), default=0))+1):
+        section_dimension = stratum_dimension(dimension, size)
+        cell_dimension = stratum_dimension(size, 1)
         intersections = defaultdict(list)
         for section, divisors in local_vertices.items():
             for key in combinations(sorted(divisors), size):
                 ideal = tuple(dict.fromkeys(g for name in key for g in divisors[name]))
                 intersections[key].append((section, ideal))
         for key, sections in sorted(intersections.items()):
-            subkeys = tuple(combinations(key, size-1))
+            subkeys = tuple(combinations(key, cell_dimension))
             index = 0
 
             def add_cell(boundary):
                 nonlocal index
                 index += 1
                 name = "C" + "-".join(key) + f".{index}"
-                cells.append({"id": name, "dimension": size-1, "vertices": list(key), "faces": list(boundary)})
+                cells.append({"id": name, "dimension": cell_dimension, "vertices": list(key), "faces": list(boundary)})
                 return name
 
             if size == dimension:
-                counts = defaultdict(int)
+                from .chart_kernel import strata_totals
+                contributions = []
                 for section, equations in sections:
                     chart = charts[section[0]]
                     owned = (*equations, *chart.fibre, *chart.region)
@@ -437,7 +428,7 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
                     expected = chart.one_sheet(euler_characteristic(chart.variables, owned, chart.removed))
                     if expected == 0:
                         continue
-                    accounted = 0
+                    observed = []
                     for incident in product(*choices):
                         # The restrictions for singleton faces already occur
                         # among the defining equations of a two-fold intersection.
@@ -445,11 +436,11 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
                         count = (chart.one_sheet(euler_characteristic(chart.variables, (*owned, *extra), chart.removed))
                                  if extra else expected)
                         if count:
-                            counts[tuple(name for name, _ in incident)] += count
-                            accounted += count
-                    if expected != accounted:
+                            contributions.append((tuple(name for name, _ in incident), 1, count))
+                            observed.append((section, 1, count))
+                    if strata_totals(observed).get(section, 0) != expected:
                         return None
-                for boundary, count in sorted(counts.items()):
+                for boundary, count in sorted(strata_totals(contributions).items()):
                     for _ in range(count):
                         add_cell(boundary)
                 continue
@@ -459,9 +450,9 @@ def _intrinsic_complex(charts, boundaries, overlap, transition, dimension, chara
                 chart = charts[section[0]]
                 if not _present(chart.variables, equations, chart.removed):
                     continue
-                primes = _branch_primes(chart, equations, dimension-size, character)
+                primes = branch_primes(chart, equations, section_dimension)
                 if primes is None:
-                    raise _NeedsSplittingField(section[0], equations, dimension-size)
+                    raise _NeedsSplittingField(section[0], equations, section_dimension)
                 for prime in primes:
                     ideal = tuple(dict.fromkeys((*chart.ambient, *prime)))
                     if not any(ideal_subset(chart.variables, hole, ideal) for hole in chart.removed):
@@ -522,6 +513,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
     character = None
     if intrinsic and dimension >= 3:
         charts, character = _character_field(charts)
+    carrier_dimension = stratum_dimension(dimension, int(intrinsic))
     if not intrinsic or dimension < 3:
         for c in charts:
             boundary = tuple(row for row in c.components if not _is_strict(row[0]))
@@ -530,7 +522,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
             for ambient in carriers:
                 owned = replace(c, ambient=ambient, components=boundary,
                                 fibre=tuple(dict.fromkeys((*c.fibre, *c.region))), region=())
-                if _own_failures(owned, dimension-int(intrinsic), {})[0]:
+                if _own_failures(owned, carrier_dimension, {})[0]:
                     return None
     boundaries = [{k: ideal for k, _, _, ideal in c.components if not _is_strict(k)} for c in charts]
     parent_equations = None
@@ -632,21 +624,34 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
         from .repair_gluing import transition_on_field_sheet
         return transition_on_field_sheet(a,b,a.repair_projection[1],b.repair_projection[1],target_parent=target_parent)
 
+    from .absolute_sections import ExtendSectionField, absolute_primes, extend_section_field
+
+    def retry(enlarged):
+        if enlarged is None:
+            return None
+        return glued_complex(enlarged, dimension, intrinsic=intrinsic, _descended=_descended)
+
     if intrinsic and dimension >= 3:
         try:
-            return _intrinsic_complex(charts, boundaries, overlap, transition, dimension-1, character)
+            return _intrinsic_complex(charts, boundaries, overlap, transition, carrier_dimension, character)
         except _NeedsSplittingField as failed:
             enlarged = splitting_charts(charts, failed.args)
-            if enlarged is None:
+            if enlarged is not None:
+                return retry(enlarged)
+            try:
+                return _intrinsic_complex(charts, boundaries, overlap, transition, carrier_dimension,
+                                          character, absolute=True)
+            except ExtendSectionField as extension:
+                return retry(extend_section_field(charts, extension.args[0]))
+            except _NeedsSplittingField:
                 return None
-            return glued_complex(enlarged, dimension, intrinsic=True, _descended=_descended)
 
     # A complete face map needs primes for every stratum. Discover an
     # unrepresented geometric component before saturating large chart
     # products for any of the already known strata.
     # Generate only keys supported on a chart.
     keys = {tuple(sorted(key)) for boundary in boundaries
-            for size in range(1, min(len(boundary), dimension - int(intrinsic)) + 1)
+            for size in range(1, min(len(boundary), carrier_dimension) + 1)
             for key in combinations(boundary, size)}
     pieces_by_key = {}
     for key in sorted(keys, key=lambda ids: (len(ids), ids)):
@@ -661,10 +666,16 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
                 equations = (*carrier, *ideal)
                 if chart.removed and not _present(chart.variables, equations, chart.removed):
                     continue
-                primes = _geometric_primes(chart, equations, dimension-len(key)-int(intrinsic), character)
+                dim = stratum_dimension(carrier_dimension, len(key))
+                primes = _geometric_primes(chart, equations, dim, character)
                 if primes is None:
-                    return None
-                local.extend((i, strict, (*chart.ambient, *prime)) for prime in primes
+                    try:
+                        primes = absolute_primes(chart, equations, dim)
+                    except ExtendSectionField as extension:
+                        return retry(extend_section_field(charts, extension.args[0]))
+                    if primes is None:
+                        return None
+                local.extend(((i, strict), (*chart.ambient, *prime)) for prime in primes
                              if not any(ideal_subset(chart.variables, hole, (*chart.ambient, *prime))
                                         for hole in chart.removed))
         pieces_by_key[key] = local
@@ -672,35 +683,14 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
     groups = {}
     vertices, cells = [], []
     for key, local in pieces_by_key.items():
-        parent = list(range(len(local)))
-
-        def root(k):
-            while parent[k] != k:
-                parent[k] = parent[parent[k]]
-                k = parent[k]
-            return k
-
-        for p, (i, strict, prime) in enumerate(local):
-            for q in range(p):
-                j, other_strict, other = local[q]
-                if i == j or strict != other_strict or root(p) == root(q):
-                    continue
-                coords, swap_a, swap_b, graph, removed = overlap(j, i)
-                intersection = (*graph, *(g.xreplace(swap_a) for g in other),
-                                *(g.xreplace(swap_b) for g in prime))
-                if _present(coords, intersection, removed):
-                    parent[root(p)] = root(q)
-        marked = defaultdict(dict)
-        for p, (i, strict, prime) in enumerate(local):
-            marked[root(p)][(i, strict)] = prime
-        visible = [group for group in marked.values() if any(
-            _present(charts[i].variables, (*prime, *charts[i].fibre, *charts[i].region), charts[i].removed)
-            for (i, _), prime in group.items())]
+        visible = _prime_groups(charts, local, overlap, transition)
+        if visible is None:
+            return None
         groups[key] = []
         for k, group in enumerate(visible, 1):
             if len(key) == 1:
                 name = key[0] if len(visible) == 1 else f"{key[0]}.{k}"
-                vertices.append({"id": name, "dimension": dimension - 1 - int(intrinsic)})
+                vertices.append({"id": name, "dimension": stratum_dimension(carrier_dimension, 1)})
             else:
                 local_key, prime = next(iter(group.items()))
                 v = charts[local_key[0]].variables
@@ -713,9 +703,10 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
                     return hits[0]
 
                 ids = [contains((label,)) for label in key]
-                faces = [contains(face) for face in combinations(key, len(key)-1)]
+                cell_dimension = stratum_dimension(len(key), 1)
+                faces = [contains(face) for face in combinations(key, cell_dimension)]
                 name = "C" + "-".join(key) + f".{k}"
-                cells.append({"id": name, "dimension": len(key)-1, "vertices": ids, "faces": faces})
+                cells.append({"id": name, "dimension": cell_dimension, "vertices": ids, "faces": faces})
             groups[key].append((name, group))
     return {"status": "complete", "vertices": vertices, "cells": cells,
             "convention": ("Exceptional divisor on the smooth strict transform" if intrinsic else
