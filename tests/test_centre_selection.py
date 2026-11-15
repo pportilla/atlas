@@ -126,9 +126,13 @@ class CentreSelection(unittest.TestCase):
         self.assertEqual(ordered_parts(variables, parts, degrees),
                          sorted(range(len(parts)), key=lambda i: (degrees[i],np.default_sort_key(parts[i]))))
         chart = Chart((x,y), (), (("S1",1,1,(x,)),("S2",1,1,(y-1,)),("B1",1,2,(y,))), (), (), (), ())
-        self.assertEqual(_Canonical._surface_of(chart, {("S1","B1"): (x,y)}), (x,))
-        self.assertIsNone(_Canonical._surface_of(chart, {("S1","S2"): (x,y-1)}))
-        self.assertIsNone(_Canonical._surface_of(chart, {("S1","B1"): (x,y), ("S2","B1"): (y-1,)}))
+        rule = _Canonical(chart.components)
+        failures = [{("S1","B1"): (x,y)}, {("S1","S2"): (x,y-1,)},
+                    {("S1","B1"): (x,y), ("S2","B1"): (y-1,)}, {}]
+        phase = rule._phase([chart]*4, [(f, {}) for f in failures], 3)
+        self.assertEqual(phase, {"phase": "order", "charts": [1, 2], "surfaces": [0, None, None, None]})
+        surface = rule._phase([chart, chart], [(failures[0], {}), ({}, {})], 3)
+        self.assertEqual(surface, {"phase": "surface", "charts": [0], "surfaces": [0, None]})
 
     def test_unpacked_surface_priority_and_callback_interrupt(self):
         from engine import surface

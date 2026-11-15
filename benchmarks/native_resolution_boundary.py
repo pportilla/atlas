@@ -21,6 +21,11 @@ CASES = {
     "centre": ("(x+y)^2+z^3+x^3", "xyz", "embedded", "canonical-blowups", 15),
     "newton": ("x*y*z+x^4+y^4+z^4", "xyz", "intrinsic", "newton-polyhedron", 9),
 }
+DEFAULT_CASES = tuple(CASES)
+CASES.update({
+    "tangent": ("(x*y-z^2)^2+x^5+y^5", "xyz", "embedded", "canonical-blowups", 18),
+    "double_cone": ("x^2+(y+z)^3+y^4", "xyz", "embedded", "canonical-blowups", 19),
+})
 
 
 def without_timings(result):
@@ -289,7 +294,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--singular-timeout", type=float, default=120)
     parser.add_argument("--singular", default=shutil.which("Singular"))
-    parser.add_argument("--cases", nargs="+", choices=CASES, default=list(CASES))
+    parser.add_argument("--cases", nargs="+", choices=CASES, default=DEFAULT_CASES)
     parser.add_argument("--toric-control", action="store_true", help="Also compare all 191 published toric charts")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

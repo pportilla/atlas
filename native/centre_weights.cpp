@@ -300,6 +300,33 @@ Json::Value linear_centre(const Json::Value& request) {
     return solved;
 }
 
+Json::Value strict_surface(const Json::Value& request) {
+    // A rank failure involving strict components alone rules out this
+    // phase. Otherwise exactly one strict component must meet a bad locus.
+    for (const auto& failure : request["strict_labels"])
+        if (std::all_of(failure.begin(),failure.end(),[](const auto& strict){return strict.asBool();})) return {};
+    const auto n=request["width"].asUInt();
+    const auto ambient=equations(request["ambient"],n);
+    const auto& strict=request["strict"];
+    const Basis unit{{{Powers(n),1}}};
+    std::vector<Basis> failures;
+    for (const auto& rows : request["failures"]) failures.push_back(equations(rows,n));
+    Json::Value selected;
+    for (Json::ArrayIndex i=0; i<strict.size(); ++i) {
+        auto chart=equations(strict[i]["ideal"],n);
+        chart.insert(chart.end(),ambient.begin(),ambient.end());
+        for (const auto& failure : failures) {
+            auto locus=chart;
+            locus.insert(locus.end(),failure.begin(),failure.end());
+            if (reduced(locus,n,false)==unit) continue;
+            if (!selected.isNull()) return {};
+            selected=strict[i]["index"];
+            break;
+        }
+    }
+    return selected;
+}
+
 Json::Value level_weights(const Json::Value& request) {
     const auto op = request["operation"].asString();
     const auto weights = read_row(request["weights"]);
@@ -321,32 +348,6 @@ Json::Value level_weights(const Json::Value& request) {
             if (subset(ideal,reduced(ambient,n,true))) return i;
         }
         return {};
-    }
-    if (op == "strict_surface") {
-        // A rank failure involving strict components alone rules out this
-        // phase. Otherwise exactly one strict component must meet a bad locus.
-        for (const auto& failure : request["strict_labels"])
-            if (std::all_of(failure.begin(),failure.end(),[](const auto& strict){return strict.asBool();})) return {};
-        const auto n=request["width"].asUInt();
-        const auto ambient=equations(request["ambient"],n);
-        const auto& strict=request["strict"];
-        const Basis unit{{{Powers(n),1}}};
-        std::vector<Basis> failures;
-        for (const auto& rows : request["failures"]) failures.push_back(equations(rows,n));
-        Json::Value selected;
-        for (Json::ArrayIndex i=0; i<strict.size(); ++i) {
-            auto chart=equations(strict[i],n);
-            chart.insert(chart.end(),ambient.begin(),ambient.end());
-            for (const auto& failure : failures) {
-                auto locus=chart;
-                locus.insert(locus.end(),failure.begin(),failure.end());
-                if (reduced(locus,n,false)==unit) continue;
-                if (!selected.isNull()) return {};
-                selected=i;
-                break;
-            }
-        }
-        return selected;
     }
     if (op == "candidate_order") {
         const auto& ranks = request["ranks"];
@@ -440,16 +441,22 @@ Json::Value level_weights(const Json::Value& request) {
     }
     if (op == "point_signatures") return point_signatures(request);
     if (op == "canonical_phase") {
-        // 0: no failures; 1: one smooth strict component; 2: other failure.
         const auto& charts = request["charts"];
-        const bool singular = std::any_of(charts.begin(), charts.end(), [](const auto& chart){ return chart.asInt()==2; });
+        Json::Value surfaces(Json::arrayValue), selected(Json::arrayValue);
+        bool singular = false;
+        for (const auto& chart : charts) {
+            auto surface = chart.isNull() ? Json::Value() : strict_surface(chart);
+            if (!chart.isNull() && surface.isNull()) singular = true;
+            surfaces.append(std::move(surface));
+        }
         auto phase = request["phase"].asString();
         if (phase == "order" && request["dimension"].asInt()==3 && !singular) phase = "surface";
-        Json::Value result, selected(Json::arrayValue);
         for (Json::ArrayIndex i=0; i<charts.size(); ++i)
-            if (charts[i].asInt() && (phase!="order" || !singular || charts[i].asInt()==2)) selected.append(i);
+            if (!charts[i].isNull() && (phase!="order" || !singular || surfaces[i].isNull())) selected.append(i);
+        Json::Value result;
         result["phase"] = phase;
         result["charts"] = std::move(selected);
+        result["surfaces"] = std::move(surfaces);
         return result;
     }
     if (op == "direct_locus" || op == "split_curve") {

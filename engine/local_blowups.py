@@ -633,18 +633,20 @@ class _Canonical:
         self.births = list(self.records)
         self.mode = "order"
 
-    @staticmethod
-    def _surface_of(chart, over):
-        """The component of the strict transform through the points where normal
-        crossings fail, when it is the only one and it is smooth at them."""
-        strict = [ideal for label, _, _, ideal in chart.components if _is_strict(label)]
-        selected = level_weights("strict_surface", (), width=len(chart.variables),
-                                 strict_labels=[[_is_strict(label) for label in key] for key in over],
-                                 failures=[centre_rows(chart.variables, w) for w in over.values()],
-                                 ambient=centre_rows(chart.variables, chart.ambient),
-                                 strict=[centre_rows(chart.variables, ideal) for ideal in strict])
-        return None if selected is None else strict[selected]
-
+    def _phase(self, current, failures, dimension):
+        """Classify the strict transforms and select the active charts in one native call."""
+        charts = []
+        for chart, (over, _) in zip(current, failures):
+            if not over:
+                charts.append(None)
+                continue
+            variables = chart.variables
+            charts.append(dict(width=len(variables), ambient=centre_rows(variables, chart.ambient),
+                               strict=[dict(index=i, ideal=centre_rows(variables, ideal))
+                                       for i, (label, _, _, ideal) in enumerate(chart.components) if _is_strict(label)],
+                               strict_labels=[[_is_strict(label) for label in key] for key in over],
+                               failures=[centre_rows(variables, ideal) for ideal in over.values()]))
+        return level_weights("canonical_phase", (), phase=self.mode, dimension=dimension, charts=charts)
 
     def _locus(self, chart, bad, dimension, deadline):
         """The largest value of the invariant at the points of the chart where
@@ -701,13 +703,13 @@ class _Canonical:
         return centres, {"rule": "surface"}
 
     def choose(self, current, failures, dimension, deadline):
-        surfaces = [self._surface_of(chart, over) if over else None for chart, (over, _) in zip(current, failures)]
-        statuses = [0 if not over else 1 if surface is not None else 2 for (over, _), surface in zip(failures, surfaces)]
-        phase = level_weights("canonical_phase", (), phase=self.mode, dimension=dimension, charts=statuses)
+        phase = self._phase(current, failures, dimension)
         self.mode = phase["phase"]
         if self.mode == "surface":
             from .surface import NoModel
             try:
+                surfaces = [None if index is None else chart.components[index][3]
+                            for chart, index in zip(current, phase["surfaces"])]
                 return self._on_surface(current, failures, surfaces, deadline)
             except NoModel:
                 # The invariant from here on, with the divisors present as the given ones.
@@ -1050,6 +1052,79 @@ def _strata_here(chart, domain=None):
     return strata_totals(contributions)
 
 
+def _chart_cell_counts(chart, dimension, labels):
+    from . import kernel
+    from .polynomial import integer_text
+
+    own = (*chart.fibre, *chart.region)
+
+    def intersection(subset):
+        return (*chart.ambient, *(g for j in subset for g in labels[j][1]))
+
+    def owned(prime):
+        return ideal_subset(chart.variables, own, prime) and not any(
+            ideal_subset(chart.variables, hole, prime) for hole in chart.removed)
+
+    def geometric(whole, dimension):
+        from .geometric_components import geometric_components
+        primes = geometric_components(chart.variables, whole, dimension)
+        return None if primes is None else [owned((*chart.ambient, *prime)) for prime in primes]
+
+    from .native_library import _kernel, current_replay_scope
+    replay = current_replay_scope()
+    if (_MODE == "native" and (replay is None or replay.compute in (None, "cpu"))
+            and hasattr(_kernel(), "atlas_owned_chart_incidence")):
+        from .chart_gluing_kernel import rows
+        from .kernel_json import kernel_json
+        axes = chart.variables
+        field = chart.coefficient_field
+        items = kernel_json("atlas_owned_chart_incidence", "cells", width=len(axes), dimension=dimension,
+                            ambient=rows(axes, chart.ambient), fibre=rows(axes, chart.fibre),
+                            region=rows(axes, chart.region), holes=[rows(axes, h) for h in chart.removed],
+                            labels=[rows(axes, ideal) for _,ideal in labels],
+                            degree=integer_text(field[2]) if field else None,
+                            relation=rows(axes, (field[1],))[0] if field else None)
+        if items is not None:
+            for item in items:
+                subset = item["indices"]
+                if "components_dimension" in item:
+                    # The unresolved projection uses the same geometric decomposition
+                    # and generic-point ownership checks as the full chart verifier.
+                    flags = geometric(intersection(subset), item["components_dimension"])
+                    item["here"] = item["rational"] = (
+                        kernel_json("atlas_owned_chart_incidence", "count_owned", flags=flags)
+                        if flags is not None else None)
+                yield subset, item
+            return
+
+    def live(task):
+        return _present(chart.variables, (*intersection(task["indices"]), *own), chart.removed)
+    for subset in centre_search("strata", live, count=len(labels)):
+        size = len(subset)
+        whole = intersection(subset)
+        def query(task):
+            op = task["query"]
+            if op == "over_fibre":
+                return radical_subset(chart.variables,chart.fibre,whole)
+            if op == "points":
+                native = kernel.strata(chart.variables, (*whole, *own), [()], chart.removed)
+                if native is not None:
+                    return integer_text(native.get((0,), 0))
+                from .constructible_euler import euler_characteristic
+                return integer_text(euler_characteristic(chart.variables, (*whole, *own), chart.removed))
+            if op == "plane":
+                pair = kernel.plane_components(chart.variables, whole, own, chart.removed)
+                return list(map(integer_text,pair)) if pair is not None else None
+            if op == "owned":
+                return owned(whole)
+            return geometric(whole, task["dimension"])
+        flat = bool(chart.coefficient_field and chart.ambient == (chart.coefficient_field[1],)
+                    and all(len(labels[j][1]) == 1 and labels[j][1][0] in chart.variables[:-1] for j in subset))
+        counts_here = centre_search("incidence_count",query,dimension=dimension,count=size,flat=flat,
+                                    degree=integer_text(chart.coefficient_field[2]) if flat else None)
+        yield subset, counts_here
+
+
 def cells(charts, dimension, *, rational_counts=None):
     """The sets of exceptional divisors with a common point over the fibre,
     with the number of geometric components of their intersection:
@@ -1069,47 +1144,15 @@ def cells(charts, dimension, *, rational_counts=None):
     reaches outside the fibre the number is None, and its presence in the
     answer still says that the intersection has a point over the fibre.
     """
-    from . import kernel
     from .chart_kernel import strata_totals
-    from .polynomial import integer_from_decimal, integer_text
+    from .polynomial import integer_from_decimal
     counts, contributions = {}, []
     rational_contributions = []
     for chart in charts:
         labels = [(name, ideal) for name, _, _, ideal in chart.components if not _is_strict(name)]
-        own = (*chart.fibre, *chart.region)
-        def intersection(subset):
-            return (*chart.ambient, *(g for j in subset for g in labels[j][1]))
-        def live(task):
-            return _present(chart.variables, (*intersection(task["indices"]), *own), chart.removed)
-        for subset in centre_search("strata", live, count=len(labels)):
+        for subset, counts_here in _chart_cell_counts(chart, dimension, labels):
             size = len(subset)
-            whole = intersection(subset)
             key = frozenset(labels[j][0] for j in subset)
-            def query(task):
-                op = task["query"]
-                if op == "over_fibre":
-                    return radical_subset(chart.variables,chart.fibre,whole)
-                if op == "points":
-                    native = kernel.strata(chart.variables, (*whole, *own), [()], chart.removed)
-                    if native is not None:
-                        return integer_text(native.get((0,), 0))
-                    from .constructible_euler import euler_characteristic
-                    return integer_text(euler_characteristic(chart.variables, (*whole, *own), chart.removed))
-                if op == "plane":
-                    pair = kernel.plane_components(chart.variables, whole, own, chart.removed)
-                    return list(map(integer_text,pair)) if pair is not None else None
-                def owned(prime):
-                    return ideal_subset(chart.variables, own, prime) and not any(
-                        ideal_subset(chart.variables,z,prime) for z in chart.removed)
-                if op == "owned":
-                    return owned(whole)
-                from .geometric_components import geometric_components
-                primes = geometric_components(chart.variables, whole, task["dimension"])
-                return None if primes is None else [owned((*chart.ambient,*prime)) for prime in primes]
-            flat = bool(chart.coefficient_field and chart.ambient == (chart.coefficient_field[1],)
-                        and all(len(labels[j][1]) == 1 and labels[j][1][0] in chart.variables[:-1] for j in subset))
-            counts_here = centre_search("incidence_count",query,dimension=dimension,count=size,flat=flat,
-                                        degree=integer_text(chart.coefficient_field[2]) if flat else None)
             here = integer_from_decimal(counts_here["here"]) if counts_here["here"] is not None else None
             if rational_counts is not None and size == 1:
                 count = integer_from_decimal(counts_here["rational"]) if counts_here["rational"] is not None else None

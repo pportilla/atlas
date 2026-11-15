@@ -474,6 +474,14 @@ Json::Value run(const Json::Value& q) {
     throw std::invalid_argument("Unknown geometric component operation.");
 }
 } // namespace
+Json::Value absolute_rational_factor(const std::string& row, size_t width) {
+    Json::Value q;
+    q["operation"]="absolute_factor";
+    q["width"]=Json::UInt64(width);
+    q["polynomial"]=row;
+    q["effort"]="1";
+    return absolute_factor(q);
+}
 } // namespace atlas::components
 
 extern "C" const char* atlas_component_geometry(const char* input) noexcept {

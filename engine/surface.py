@@ -345,6 +345,26 @@ def _implicit_step(frame, functions, working, deadline=None):
     return _surface_search(ring, labels, query, implicit=True)
 
 
+def _line_centre(variables, ambient, strict, divisors, working, away):
+    """Try the native rational-graph certificate in an affine threefold."""
+    from .groebner import _MODE
+    from .native_polynomial import native_ring, row
+    from .kernel import exprs
+    from .kernel_json import kernel_json
+    from .polynomial import integer_from_decimal
+    if (_MODE != "native" or len(variables) != 3 or ambient or len(strict) != 1
+            or not native_ring(variables) or any(len(ideal) != 1 for _, ideal in divisors)):
+        return None
+    def rows(ideal):
+        return [row(variables, g) for g in ideal]
+    found = kernel_json("atlas_surface_centre_choice", "curve", surface=row(variables, strict[0]),
+                        divisors=[[label, row(variables, ideal[0])] for label, ideal in divisors],
+                        work=[rows(w) for w in working], holes=[rows(h) for h in away])
+    if found is not None:
+        return (2, integer_from_decimal(found["top"]), 0, tuple(found["labels"])), "curve", exprs(variables, found["ideal"])
+    return None
+
+
 def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
     """One step of the procedure on a chart.
 
@@ -363,7 +383,11 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
     and must agree.
     """
     variables, ambient = tuple(variables), tuple(ambient)
-    working = [tuple(w) for w in working if not empty_locus(variables, (*ambient, *strict, *w))]
+    working = [tuple(w) for w in working]
+    direct = _line_centre(variables, ambient, strict, divisors, working, away)
+    if direct is not None:
+        return direct
+    working = [w for w in working if not empty_locus(variables, (*ambient, *strict, *w))]
     if not working:
         return None
     away = [z for z in away if any(not empty_locus(variables, (*ambient, *strict, *z, *w)) for w in working)]

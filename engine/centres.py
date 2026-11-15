@@ -566,6 +566,40 @@ def _intersection(variables, first, second):
     return exprs(variables, rows)
 
 
+def _affine_maximum(variables, ambient, dimension, strict, divisors, working, records, away):
+    """Transport an ordinary chart to the complete native coefficient descent."""
+    from . import native_library
+    from .kernel import _lines, exprs
+    from .kernel_json import kernel_json
+    from .native_polynomial import native_ring
+    from .polynomial import kernel_fraction
+
+    if (ambient or away or dimension != len(variables) or dimension > 3 or len(strict) != 1
+            or len(divisors) > 1 or not native_ring(variables)):
+        return None
+    scope = native_library.current_replay_scope()
+    if scope is not None and scope.compute == "gpu":
+        return None
+    if not hasattr(native_library._kernel(), "atlas_affine_centre_maximum"):
+        return None
+    divisor, birth = None, None
+    if divisors:
+        label, generators = divisors[0]
+        divisor = _lines(variables, generators)
+        if (record := records.get(label)) is not None:
+            birth = invariant_row(record)
+    result = kernel_json("atlas_affine_centre_maximum", "maximum", width=dimension,
+                         strict=_lines(variables, strict), working=[_lines(variables, w) for w in working],
+                         divisor=divisor, birth=birth)
+    if result is None:
+        return None
+    def value(entry):
+        if isinstance(entry, int):
+            return entry
+        return INFINITE if entry == "inf" else kernel_fraction(entry)
+    return tuple(map(value, result["value"])), (), exprs(variables, result["ideal"])
+
+
 def maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline=None, away=()):
     """The maximum of the invariant of the hypersurface `strict` over a closed
     set of the chart, and the locus where it is attained.
@@ -584,6 +618,12 @@ def maximum(variables, ambient, dimension, strict, divisors, working, records, b
     each Z is invertible.
     """
     original, chart = tuple(variables), tuple(ambient)
+    if deadline is None or monotonic() <= deadline:
+        direct = _affine_maximum(original, chart, dimension, strict, divisors, working, records, away)
+        if direct is not None:
+            if deadline is not None and monotonic() > deadline:
+                raise GiveUp("The time allowed for the blowups is over.")
+            return direct
     strict = tuple(g for g in strict if not ideal_subset(original, (g,), chart))
     working = [tuple(w) for w in working if not empty_locus(original, (*chart, *strict, *w))]
     if not working or not strict:

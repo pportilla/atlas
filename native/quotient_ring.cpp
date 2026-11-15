@@ -320,19 +320,25 @@ std::optional<Polynomial> Ring::inverse(const Polynomial& a) const {
     return std::nullopt;
 }
 
-bool independent_graph(const Basis& rows, size_t geometric_width) {
-    std::vector<size_t> appearances(geometric_width);
+std::vector<size_t> unresolved_graph_rows(const Basis& rows, size_t geometric_width) {
+    std::vector<size_t> appearances(geometric_width), unresolved;
     for (const auto& g : rows) for (const auto& [e,c] : g)
         for (size_t j=0; j<geometric_width; ++j) if (e[j]) ++appearances[j];
-    return std::all_of(rows.begin(),rows.end(),[&](const auto& g) {
-        for (const auto& [e,c] : g) {
+    for (size_t i=0;i<rows.size();++i) {
+        const auto pivot=std::any_of(rows[i].begin(),rows[i].end(),[&](const auto& term) {
+            const auto& e=term.first;
             const auto end=e.begin()+geometric_width;
             const auto it=std::find_if(e.begin(),end,[](const auto& k){return k!=0;});
-            if (it!=end && *it==1 && appearances[it-e.begin()]==1 &&
-                std::all_of(it+1,e.end(),[](const auto& k){return k==0;})) return true;
-        }
-        return false;
-    });
+            return it!=end && *it==1 && appearances[it-e.begin()]==1 &&
+                std::all_of(it+1,e.end(),[](const auto& k){return k==0;});
+        });
+        if (!pivot) unresolved.push_back(i);
+    }
+    return unresolved;
+}
+
+bool independent_graph(const Basis& rows, size_t geometric_width) {
+    return unresolved_graph_rows(rows,geometric_width).empty();
 }
 
 Value Ring::evaluate(const std::string& action, const Basis& args, const mpz_class& exponent) const {
