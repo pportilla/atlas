@@ -2,6 +2,7 @@
 #include "chart_equation.hpp"
 #include "groebner.hpp"
 #include "local_dimension.hpp"
+#include "local_io.hpp"
 #include "polynomial_factors.hpp"
 #include "primary_decomposition.hpp"
 #include "normalization.hpp"
@@ -473,10 +474,44 @@ struct InputBudget {
     slong degree, terms, bits, products;
 };
 
+void reduce_mod(Polynomial& f, const Polynomial& modulus);
+
+// Chart fields use the last column for the primitive element of QQ[theta]/(m).
+local::Polynomial coefficient_row(const Polynomial& f) {
+    std::string row;
+    emit(row, f);
+    if (!row.empty()) row.pop_back();  // emit terminates each row with a newline
+    local::Polynomial result;
+    for (const auto& [powers, c] : local::decode_row(row, f.ring.n)) {
+        if (std::any_of(powers.begin(), powers.end()-1, [](const auto& power) { return power != 0; }))
+            throw std::invalid_argument("Division requires a nonzero constant in the coefficient field.");
+        result[{powers.back()}] = c;
+    }
+    return result;
+}
+
+struct ParserField {
+    const Polynomial& modulus;
+    quotient_ring::Ring field;
+    explicit ParserField(const Polynomial& m) : modulus(m), field({coefficient_row(m)}, 1, true) {
+        if (fmpq_mpoly_is_fmpq(m.p, m.ring.ctx))
+            throw std::invalid_argument("The coefficient modulus must have positive degree.");
+    }
+
+    void invert(Polynomial& denominator) const {
+        const auto inverse = field.evaluate("inverse", {coefficient_row(denominator)});
+        const auto text = local::format_polynomial(std::get<local::Polynomial>(inverse), {modulus.ring.names.back()});
+        auto names = modulus.ring.pointers;
+        if (fmpq_mpoly_set_str_pretty(denominator.p, text.c_str(), names.data(), modulus.ring.ctx))
+            throw std::logic_error("Cannot read the native representative of the inverse coefficient.");
+    }
+};
+
 class RecordParser {
     const std::string input;
     Variables& ring;
     const InputBudget* budget;
+    const ParserField* field;
     size_t at = 0;
 
     char peek() {
@@ -583,8 +618,17 @@ class RecordParser {
         case '-': fmpq_mpoly_sub(left.p, left.p, right.p, ring.ctx); break;
         case '*': multiply(left, right); break;
         case '/': {
+            if (field && !fmpq_mpoly_is_fmpq(right.p, ring.ctx)) {
+                reduce_mod(right, field->modulus);
+                if (!fmpq_mpoly_is_fmpq(right.p, ring.ctx)) {
+                    field->invert(right);
+                    multiply(left, right);
+                    break;
+                }
+            }
             if (fmpq_mpoly_is_zero(right.p, ring.ctx) || !fmpq_mpoly_is_fmpq(right.p, ring.ctx))
-                throw std::invalid_argument("Division needs a nonzero rational constant.");
+                throw std::invalid_argument(field ? "Division requires a nonzero constant in the coefficient field."
+                                                  : "Division needs a nonzero rational constant.");
             fmpq_t denominator;
             fmpq_init(denominator);
             fmpq_mpoly_get_fmpq(denominator, right.p, ring.ctx);
@@ -598,8 +642,8 @@ class RecordParser {
     }
 
 public:
-    RecordParser(std::string s, Variables& r, const InputBudget* b = nullptr)
-        : input(std::move(s)), ring(r), budget(b) {}
+    RecordParser(std::string s, Variables& r, const InputBudget* b = nullptr, const ParserField* k = nullptr)
+        : input(std::move(s)), ring(r), budget(b), field(k) {}
     Polynomial run() {
         std::vector<Operator> pending;
         std::vector<Polynomial> values;
@@ -1600,6 +1644,15 @@ std::string affine(std::istream& in) {
         emit(result, RecordParser(line(in), chart).run());
         return result;
     }
+    if (operation == "parse_field_input") {
+        auto modulus = RecordParser(line(in), chart).run();
+        ParserField field(modulus);
+        auto value = RecordParser(line(in), chart, nullptr, &field).run();
+        reduce_mod(value, modulus);
+        std::string result;
+        emit(result, value);
+        return result;
+    }
     if (operation == "parse_quick") {
         InputBudget budget;
         std::istringstream bounds(line(in));
@@ -1840,4 +1893,4 @@ extern "C" char* atlas_affine(const char* input, size_t length) noexcept {
     return nullptr;
 }
 
-extern "C" int atlas_input_abi() noexcept { return 1; }
+extern "C" int atlas_input_abi() noexcept { return 2; }

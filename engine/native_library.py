@@ -526,6 +526,8 @@ def affine_request(lines):
         raise Unavailable("The installed kernel predates the torus lattice operations.")
     if lines[0] in ("parse_input", "parse_quick") and not hasattr(lib, "atlas_input_abi"):
         raise Unavailable("The installed kernel predates the public input parser.")
+    if lines[0] == "parse_field_input" and (not hasattr(lib, "atlas_input_abi") or lib.atlas_input_abi() < 2):
+        raise Unavailable("Rebuild the native kernel to parse division by algebraic chart coefficients.")
     answer = lib.atlas_affine(data, len(data))
     if not answer:
         message = lib.atlas_groebner_error().decode("utf-8")

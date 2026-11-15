@@ -1,20 +1,14 @@
 """Polynomials bound to an explicit coordinate space in Atlas sessions."""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from fractions import Fraction
-from functools import cache, cached_property
+from functools import cache, cached_property, lru_cache
 import re
 
 from . import native_polynomial as native
 from .point_geometry import support_profile
-
-
-class _RationalField:
-    def __repr__(self):
-        return "QQ"
-
-
-QQ = _RationalField()
 
 
 @dataclass(frozen=True, eq=False)
@@ -31,6 +25,14 @@ class _NumberField:
 
     def __repr__(self):
         return f"QQ[{self.parameter}]/({self.minimal_polynomial}), {self.parameter} = {self.embedding}"
+
+    @lru_cache(maxsize=512)
+    def inverse(self, value):
+        """Invert in QQ[theta]/(m), using the chart's own primitive parameter."""
+        from .native_library import affine_request
+
+        row, = affine_request(["parse_field_input", self.parameter.name, str(self.minimal_polynomial), f"1/({value})"])
+        return native.from_row((self.parameter,), row)
 
     def reduce(self, value, variables):
         if self.parameter not in value.free_symbols:
@@ -50,11 +52,15 @@ class _NumberField:
 class _CoordinateSpace:
     generators: tuple[native.Expr, ...]
     has_relations: bool = False
-    coeffs: _RationalField | _NumberField = QQ
+    coeffs: _RationalField | _NumberField = field(default_factory=lambda: QQ)
     _fields = {"coordinates", "variables", "coeffs"}
 
     @classmethod
-    def named(cls, names, *, coeffs=QQ, has_relations=False):
+    def named(cls, names, *, coeffs=None, has_relations=False):
+        if coeffs is None:
+            coeffs = QQ
+        if not names and coeffs is QQ and not has_relations:
+            return QQ
         return cls(tuple(native.Dummy(name) for name in names), has_relations=has_relations, coeffs=coeffs)
 
     @property
@@ -86,6 +92,16 @@ class _CoordinateSpace:
         return ring + (" (quotient)" if self.has_relations else "")
 
 
+class _RationalField(_CoordinateSpace):
+    """The rational field is also the polynomial ring with no generators."""
+
+    def __init__(self):
+        super().__init__((), coeffs=self)
+
+
+QQ = _RationalField()
+
+
 @dataclass(frozen=True, eq=False)
 class Polynomial:
     """A native value and its ambient coordinates, including unused variables."""
@@ -95,7 +111,9 @@ class Polynomial:
     _fields = {"variables", "coeffs", "multiplicity", "parent"}
 
     def __post_init__(self):
-        if self._space.coeffs is not QQ:
+        if self._space.has_relations:
+            object.__setattr__(self, "_value", self._space.relation_basis.remainder(self._value))
+        elif self._space.coeffs is not QQ:
             reduced = self._space.coeffs.reduce(self._value, self._space.polynomial_generators)
             object.__setattr__(self, "_value", reduced)
 
@@ -126,37 +144,42 @@ class Polynomial:
 
     def __eq__(self, other):
         if isinstance(other, Polynomial):
-            return self._space is other._space and self._value == other._value
+            if self._space is not other._space and self._space is not QQ and other._space is not QQ:
+                return False
+            return self._value == other._value
         if type(other) is int or isinstance(other, Fraction):
             return self._value == other
         return NotImplemented
 
     def _operand(self, other):
+        """Return the common parent and the operand embedded in it."""
         if isinstance(other, Polynomial):
-            if self._space is not other._space:
+            if self._space is QQ:
+                return other._space, other._value
+            if self._space is not other._space and other._space is not QQ:
                 raise ValueError("These polynomials belong to different coordinate spaces.")
-            return other._value
+            return self._space, other._value
         if type(other) is int or isinstance(other, Fraction):
-            return native.coerce(other)
+            return self._space, native.coerce(other)
         raise TypeError("Polynomial arithmetic requires a polynomial or an exact rational number.")
 
     def multiplicity(self, factor):
         """Largest exponent n for which factor**n divides this polynomial."""
-        divisor = self._operand(factor)
-        if self._space.has_relations:
+        space, divisor = self._operand(factor)
+        if space.has_relations:
             raise ValueError("Computing multiplicity on a chart with ambient relations requires "
                              "divisibility in its quotient ring.")
-        if not divisor.has(*self._space.generators):
+        if not divisor.has(*space.generators):
             raise ValueError("Multiplicity requires a nonconstant polynomial factor.")
         if not self._value:
             raise ValueError("The zero polynomial has no finite factor multiplicity.")
 
-        variables = self._space.polynomial_generators
+        variables = space.polynomial_generators
         from .affine_kernel import _request, _ring
         from .polynomial import integer_from_decimal
 
         ring = _ring(variables)
-        request = ["factor_multiplicity", ring.header, str(len(self._space.generators)),
+        request = ["factor_multiplicity", ring.header, str(len(space.generators)),
                    ring.text(self._value), ring.text(divisor)]
         result, = _request(request)
         if result == "field_basis":
@@ -164,7 +187,7 @@ class Polynomial:
 
             # With the coefficient parameter last, the rational lex basis is
             # the monic field divisor followed by its defining relation.
-            basis = wide_basis((divisor, self.coeffs.minimal_polynomial), variables, "lex")
+            basis = wide_basis((divisor, space.coeffs.minimal_polynomial), variables, "lex")
             if basis is None:
                 raise ArithmeticError("The native coefficient-field division kernel is unavailable.")
             result, = _request([*request, *(ring.text(row) for row in basis.exprs)])
@@ -179,35 +202,42 @@ class Polynomial:
     def __add__(self, other):
         if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
             return NotImplemented
-        return Polynomial(self._space, self._value + self._operand(other))
+        space, value = self._operand(other)
+        return Polynomial(space, self._value + value)
 
     __radd__ = __add__
 
     def __sub__(self, other):
         if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
             return NotImplemented
-        return Polynomial(self._space, self._value - self._operand(other))
+        space, value = self._operand(other)
+        return Polynomial(space, self._value - value)
 
     def __rsub__(self, other):
-        return Polynomial(self._space, self._operand(other) - self._value)
+        space, value = self._operand(other)
+        return Polynomial(space, value - self._value)
 
     def __mul__(self, other):
         if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
             return NotImplemented
-        return Polynomial(self._space, self._value * self._operand(other))
+        space, value = self._operand(other)
+        return Polynomial(space, self._value * value)
 
     __rmul__ = __mul__
 
     def __truediv__(self, other):
         if not isinstance(other, (Polynomial, Fraction)) and type(other) is not int:
             return NotImplemented
-        divisor = self._operand(other)
+        space, divisor = self._operand(other)
+        if not divisor.is_number and space.coeffs is not QQ and divisor.free_symbols == {space.coeffs.parameter}:
+            return Polynomial(space, self._value * space.coeffs.inverse(divisor))
         if not divisor.is_number or not divisor:
-            raise ValueError("Division requires a nonzero rational constant.")
-        return Polynomial(self._space, self._value / divisor)
+            raise ValueError("Division requires a nonzero constant in the coefficient field.")
+        return Polynomial(space, self._value / divisor)
 
     def __rtruediv__(self, other):
-        return Polynomial(self._space, self._operand(other)) / self
+        space, value = self._operand(other)
+        return Polynomial(space, value) / self
 
     def __pow__(self, exponent):
         if not (type(exponent) is int or isinstance(exponent, Fraction)):

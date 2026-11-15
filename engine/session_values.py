@@ -66,7 +66,7 @@ class Divisor(_Component):
 
 
 class Chart(_Component):
-    _members = ("coordinates", "divisors", "pullback", "strict_transform", "map")
+    _members = ("parent", "ambient", "coordinates", "divisors", "pullback", "pullback_map", "strict_transform", "map")
 
     def __init__(self, resolution, record):
         super().__init__(resolution, record)
@@ -78,6 +78,14 @@ class Chart(_Component):
 
     def _polynomial(self, expression):
         return chart_polynomial(expression, self._space)
+
+    @property
+    def parent(self):
+        return self._space
+
+    @property
+    def ambient(self):
+        return self._space.ambient
 
     @property
     def coordinates(self):
@@ -99,12 +107,26 @@ class Chart(_Component):
     def map(self):
         return {name: self._polynomial(image) for name, image in self._record["map"].items()}
 
+    @cached_property
+    def pullback_map(self):
+        from .session_maps import hom
+        domain = self._resolution._source_space
+        if not set(domain.names).issubset(self._record.get("map", {})):
+            raise ValueError(f"The map for chart {self.id} does not record every original coordinate.")
+        images = self.map
+        return hom(domain, self.parent, images=tuple(images[name] for name in domain.names))
+
     def pullback(self, polynomial):
+        # Partial archival charts can still pull back functions of the recorded coordinates.
+        if set(self._resolution._source_space.names).issubset(self._record.get("map", {})):
+            return self.pullback_map(polynomial)
         return pullback(polynomial, self._resolution._source_space, self._record, self._space)
 
     def _local_component(self, record):
         component = dict(record)
-        for name in ("ideal", "ambient_ideal", "root_equation"):
+        if "ambient_ideal" in record:
+            component["ambient_ideal"] = [chart_polynomial(g, self.ambient) for g in record["ambient_ideal"]]
+        for name in ("ideal", "root_equation"):
             if name in record:
                 component[name] = self._equations(record[name])
         if "equation" in record:
@@ -118,7 +140,9 @@ class Chart(_Component):
 
     def session_attribute(self, name):
         if name in self._record:
-            if name in ("ambient_ideal", "ambient_total_transform", "ambient_exceptional", "pullback_factor",
+            if name == "ambient_ideal":
+                return [chart_polynomial(g, self.ambient) for g in self._record[name]]
+            if name in ("ambient_total_transform", "ambient_exceptional", "pullback_factor",
                         "strict_transform_on_exceptional", "reduced_strict_transform",
                         "reduced_strict_transform_on_exceptional", "pivot_generator", "projective_coordinates"):
                 return self._equations(self._record[name])

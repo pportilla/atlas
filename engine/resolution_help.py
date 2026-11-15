@@ -77,8 +77,24 @@ _CHART = {
     ),
     "map": (
         "The map to the original coordinates. Each key is an original coordinate name and its "
-        "value is the corresponding polynomial in this chart.",
+        "value is the corresponding polynomial in this chart. The ring map {name}.pullback_map "
+        "carries its domain, codomain, and ordered images.",
         "{name}.map",
+    ),
+    "pullback_map": (
+        "The ring homomorphism from the original polynomial ring to this chart. "
+        "Apply it to a polynomial in its domain to substitute the chart coordinates.",
+        "{name}.pullback_map.domain\n{name}.pullback_map.codomain\n{name}.pullback_map.images",
+    ),
+    "parent": (
+        "The ring of functions on the chart. The defining equations of its ambient presentation "
+        "vanish in this ring.",
+        "{name}.parent\n{name}.parent.coordinates",
+    ),
+    "ambient": (
+        "The polynomial ring in which the chart's defining relations are written. "
+        "Chart functions belong to {name}.parent.",
+        "{name}.ambient.coordinates",
     ),
     "divisors": (
         "The exceptional divisors with a recorded local equation or ideal in this chart. "

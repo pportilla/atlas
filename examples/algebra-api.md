@@ -115,7 +115,7 @@ print(t^2 == 0, t.is_unit())            # True False
 print((1 + t)^-1 == 1 - t)              # True
 ```
 
-Use these expressions at the prompt or in a file passed to `./atlas run`. Rational numbers and ambient polynomials from the original coordinates can appear on either side of an operator. To transfer a representative into a second quotient of the same ambient space, write `D(u.representative)`. Division and negative powers require an invertible denominator or base. In the zero ring, $0=1$ and its only element is its own inverse.
+Use these expressions at the prompt or in a file passed to `./atlas run`. In arithmetic with a residue class, Atlas projects rational numbers and polynomials from `A.ambient` into `A`. For equality, project an ambient polynomial explicitly with `A(f) == u`. The map `A.projection` has domain `A.ambient` and codomain `A`. To transfer a representative into a second quotient of the same ambient space, write `D(u.representative)`. Division and negative powers require an invertible denominator or base. In the zero ring, $0=1$ and its only element is its own inverse.
 
 ```sh
 ./atlas algebra quotient-ring --vars x,y --gen 'x*y-1' --action inverse --poly x
@@ -185,12 +185,14 @@ N = normalization(ideal(y^2-x^3))
 C = N.components[0]
 t = C.coordinates[0]
 print(C.images[0] == t^2, C.images[1] == t^3)  # True True
+phi = C.map
+print(phi(phi.domain(x)) == phi.codomain(t^2))  # True
 print(C.fractions[0].numerator, C.fractions[0].denominator)  # y x
 ```
 
 For a reduced algebra with several minimal primes, the normalization is the product of the returned component algebras. Each `C.prime` is an ideal in the original coordinates. The normalized algebra is the polynomial ring on `C.coordinates` modulo `C.relations`. The tuple `C.images` follows the input coordinate order, and `C.fractions` follows the target coordinate order. A denominator is nonzero in the component's function field and may vanish at particular points. For input with nilpotents, Atlas normalizes the reduction and sets `N.input_reduced` to `False`. The unit ideal presents the zero algebra and returns no components.
 
-A saved normalization lets you reuse its component primes and defining relations. The JSON record preserves the component maps and their coordinate rings.
+`C.map` sends classes modulo `C.prime` to classes modulo `C.relations`. Its `.domain`, `.codomain`, and ordered `.images` are live objects. A saved normalization lets you reuse its component primes and defining relations. The JSON record preserves the component maps and their coordinate rings.
 
 ### Primary decomposition over QQ
 
@@ -277,6 +279,7 @@ t, x, y = coordinates("t", "x", "y", coeffs=QQ)
 R = resultant(t^2-x, t^3-y, t)
 u, v = R.coordinates
 print(R.polynomial == v^2-u^3)
+print(R.inclusion(R.polynomial) == y^2-x^3)
 ```
 
 The HTTP request specifies both polynomials in order and the variable to eliminate.

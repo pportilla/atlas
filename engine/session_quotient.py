@@ -5,7 +5,7 @@ from fractions import Fraction
 from functools import cached_property
 
 from .session_algebra import Ideal, _Result, _evaluate, _polynomial, _require_ideal, _typed
-from .session_polynomial import Polynomial, _CoordinateSpace
+from .session_polynomial import QQ, Polynomial, _CoordinateSpace
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -14,7 +14,7 @@ class QuotientRing(_Result):
     order: str
     _record: dict
     defining_ideal: Ideal
-    _fields = _Result._fields | {"defining_ideal", "relations", "gens", "generators", "apply", "element"}
+    _fields = _Result._fields | {"defining_ideal", "relations", "gens", "generators", "apply", "element", "projection"}
 
     @property
     def relations(self):
@@ -23,6 +23,11 @@ class QuotientRing(_Result):
     @cached_property
     def gens(self):
         return tuple(self(f) for f in self.coordinates)
+
+    @cached_property
+    def projection(self):
+        from .session_maps import hom
+        return hom(self.ambient, self, images=self.gens)
 
     @property
     def generators(self):
@@ -94,6 +99,8 @@ class QuotientElement(_Result):
     def __eq__(self, other):
         if not isinstance(other, (QuotientElement, Polynomial, Fraction)) and type(other) is not int:
             return NotImplemented
+        if isinstance(other, Polynomial) and other.parent is not QQ:
+            raise ValueError("Project the polynomial into the quotient ring before comparing, for example A(f) == a.")
         return self.parent.apply("equal", self, other).value
 
     def __neg__(self):

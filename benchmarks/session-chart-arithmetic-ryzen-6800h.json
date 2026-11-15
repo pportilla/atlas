@@ -1,0 +1,64 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    11
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "trials": 5,
+  "operations_per_trial": 256,
+  "scope": "Microseconds per operation on prepared chart objects and input values, including returning each polynomial. Atlas calls the same typed operators as the prompt. Singular calls reduce with a prepared lex basis or divides by a coefficient in QQ(a), a^2=2. Excludes process startup, resolution, ring declarations, operand construction and agreement checks. One discarded warmup batch, disjoint consecutive k starting at 2 even across trials, and alternating system order.",
+  "cases": {
+    "chart_product": {
+      "ring": "ring R=0,(x,y,z,t),lp; ideal G=std(t*x-y);",
+      "operand": "x+k",
+      "operation": "reduce(t*inputs[i],G)",
+      "agreement": "answers[i] == y+k*t",
+      "samples_us": {
+        "atlas": [
+          71.279,
+          70.877,
+          95.387,
+          70.855,
+          71.506
+        ],
+        "singular": [
+          3.309,
+          3.363,
+          3.578,
+          3.34,
+          3.285
+        ]
+      },
+      "median_us": {
+        "atlas": 71.279,
+        "singular": 3.34
+      }
+    },
+    "coefficient_division": {
+      "ring": "ring R=(0,a),(u,v,w),lp; minpoly=a^2-2; poly dividend=u+v;",
+      "operand": "number(a+k)",
+      "operation": "dividend/inputs[i]",
+      "agreement": "answers[i]*inputs[i] == dividend",
+      "samples_us": {
+        "atlas": [
+          185.629,
+          184.348,
+          185.441,
+          186.52,
+          187.331
+        ],
+        "singular": [
+          9.566,
+          9.785,
+          9.352,
+          9.562,
+          9.488
+        ]
+      },
+      "median_us": {
+        "atlas": 185.629,
+        "singular": 9.562
+      }
+    }
+  }
+}

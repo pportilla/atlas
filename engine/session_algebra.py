@@ -3,8 +3,9 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import cached_property
 import json
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 from weakref import WeakValueDictionary
 
 from . import native_polynomial as native
@@ -15,9 +16,16 @@ from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace
 
+if TYPE_CHECKING:
+    from .session_maps import RingHomomorphism
+
 
 class _RingValue:
-    _fields = {"variables", "coordinates", "coeffs", "order", "ring"}
+    _fields = {"variables", "coordinates", "coeffs", "order", "ring", "ambient"}
+
+    @property
+    def ambient(self):
+        return self._space
 
     @property
     def variables(self):
@@ -46,8 +54,12 @@ class Ideal(_RingValue):
     _space: _CoordinateSpace
     generators: tuple[Polynomial, ...]
     order: str
-    _fields = _RingValue._fields | {"generators"}
+    _fields = _RingValue._fields | {"generators", "parent"}
     _label = "ideal"
+
+    @property
+    def parent(self):
+        return self._space
 
     def __repr__(self):
         ring = f"QQ[{', '.join(self.variables)}]" if self.variables else "QQ"
@@ -97,6 +109,12 @@ class _Basis(_IdealResult):
     """Only the dispatcher can return a verified, reduced basis to the session."""
 
     _label = "Groebner basis"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _EliminatedIdeal(_IdealResult):
+    inclusion: "RingHomomorphism"
+    _fields = _IdealResult._fields | {"inclusion"}
 
 
 class _PrimaryComponent(NamedTuple):
@@ -174,7 +192,15 @@ class _NormalizedComponent(_RingValue):
     relations: Ideal
     images: tuple[Polynomial, ...]
     fractions: tuple[_NormalizationFraction, ...]
-    _fields = _RingValue._fields | {"prime", "relations", "images", "fractions"}
+    _fields = _RingValue._fields | {"prime", "relations", "images", "fractions", "map"}
+
+    @cached_property
+    def map(self):
+        from .session_maps import hom
+        from .session_quotient import quotient_ring
+        domain = quotient_ring(self.prime)
+        codomain = quotient_ring(self.relations)
+        return hom(domain, codomain, images=tuple(codomain(f) for f in self.images))
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -297,6 +323,12 @@ class _PolynomialResult(_Result, _OrderedPolynomial):
     @property
     def polynomial(self):
         return self
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _Resultant(_PolynomialResult):
+    inclusion: "RingHomomorphism"
+    _fields = _PolynomialResult._fields | {"inclusion"}
 
 
 class _Factor(NamedTuple):
@@ -528,6 +560,8 @@ class _JacobianAlgebra(_LocalQuotientBasis):
 
 def _polynomial(value, space):
     if isinstance(value, Polynomial):
+        if value._space is QQ and space is not QQ:
+            return Polynomial(space, value._value)
         if value._space is not space:
             raise ValueError("These operands belong to different coordinate spaces.")
         return value
@@ -542,7 +576,6 @@ def _unpack(values):
     return values
 
 
-_scalar_space = _CoordinateSpace(())
 # Keep repeated eliminations from the same declaration in the same surviving
 # space while users hold a result. Independent coordinate declarations stay distinct.
 _subspaces = WeakValueDictionary()
@@ -550,7 +583,7 @@ _subspaces = WeakValueDictionary()
 
 def _result_space(space, names):
     if not names:
-        return space if not space.generators else _scalar_space
+        return space if not space.generators else QQ
     if tuple(names) == space.names:
         return space
     by_name = dict(zip(space.names, space.generators))
@@ -566,11 +599,20 @@ def _coordinate_space(variables):
     variables = _unpack((variables,))
     if not all(isinstance(v, Polynomial) for v in variables):
         raise TypeError("Pass coordinate generators, for example variables=C.coordinates.")
-    space = variables[0]._space if variables else _scalar_space
+    space = variables[0]._space if variables else QQ
+    generators = tuple(v._value for v in space.coordinates) if space.has_relations else space.generators
     if (any(v._space is not space for v in variables) or
-            tuple(v._value for v in variables) != space.generators):
+            tuple(v._value for v in variables) != generators):
         raise ValueError("Use all coordinates in their declared order from one coordinate space.")
     return space
+
+
+def _declared_space(ring, variables):
+    if (ring is None) == (variables is None):
+        raise ValueError("Supply exactly one of ring=f.parent or variables=(x, y).")
+    if ring is not None and not isinstance(ring, _CoordinateSpace):
+        raise TypeError("Pass a polynomial parent ring, for example ring=f.parent.")
+    return ring if ring is not None else _coordinate_space(variables)
 
 
 def polynomial(source, *, ring=None, variables=None):
@@ -580,17 +622,14 @@ def polynomial(source, *, ring=None, variables=None):
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("polynomial expects a nonempty expression string.")
-    if (ring is None) == (variables is None):
-        raise ValueError("Supply exactly one of ring=f.parent or variables=(x, y).")
-    if ring is not None and not isinstance(ring, _CoordinateSpace):
-        raise TypeError("Pass a polynomial parent ring, for example ring=f.parent.")
-    space = ring if ring is not None else _coordinate_space(variables)
+    space = _declared_space(ring, variables)
     generators = space.polynomial_generators
     source = chart_source(source, space)
     names = [g.name for g in generators]
+    modulus = str(space.coeffs.minimal_polynomial) if space.coeffs is not QQ and "/" in source else None
     # Short, flat sums of monomials cannot expand products of sums. The
     # bounded parser also caps powers and intermediate coefficient sizes.
-    if len(source) <= 128 and "(" not in source and ")" not in source:
+    if modulus is None and len(source) <= 128 and "(" not in source and ")" not in source:
         try:
             terms = parse_expression(source, names, bounded=True)
         except LimitError:
@@ -599,38 +638,43 @@ def polynomial(source, *, ring=None, variables=None):
             return Polynomial(space, native.from_terms(generators, terms))
 
     request = {"source": source, "variables": names}
+    if modulus is not None:
+        request["coefficient_modulus"] = modulus
     status, record = run_worker(["engine.algebra_worker", "--polynomial"], request, None)
     if status != 200:
         raise ValueError(record["error"]["message"])
     return Polynomial(space, native.from_row(generators, record["terms"]))
 
 
-def _polynomial_inputs(values, order, variables, default_space=None):
-    # Coordinate expressions carry their space; computed results also carry
-    # the order used for their calculation.
+def _polynomial_inputs(values, order, variables, default_space=None, *, ring=None):
+    if variables is None and ring is None:
+        spaces = [f._space for f in values if isinstance(f, Polynomial)]
+        space = next((parent for parent in spaces if parent is not QQ), default_space)
+        if space is None and spaces:
+            space = QQ
+        if space is None:
+            raise ValueError("For a constant or empty ideal, supply ring=QQ, ring=f.parent, or variables=(x, y).")
+    else:
+        space = _declared_space(ring, variables)
+    if space.coeffs is not QQ:
+        raise ValueError("Algebra operations require polynomial coordinates over QQ.")
+    if space.has_relations:
+        raise ValueError("Algebra operations require polynomial coordinates with no quotient-ring relations.")
+    polynomials = tuple(_polynomial(f, space) for f in values)
+    # Only computations in this parent contribute a stored monomial order.
     if order is None:
-        orders = {f.order for f in values if isinstance(f, _OrderedPolynomial)}
+        orders = {f.order for f in polynomials if isinstance(f, _OrderedPolynomial)}
         if len(orders) > 1:
             raise ValueError("Choose an explicit monomial order for these polynomials.")
         order = next(iter(orders), "grevlex")
     if order not in ("lex", "grevlex"):
         raise ValueError("Unsupported monomial order. Choose lex or grevlex.")
-    if variables is None:
-        space = next((f._space for f in values if isinstance(f, Polynomial)), default_space)
-        if space is None:
-            raise ValueError("For a constant or empty ideal, supply variables=(x, y) or variables=() over QQ.")
-    else:
-        space = _coordinate_space(variables)
-    if space.coeffs is not QQ:
-        raise ValueError("Algebra operations require polynomial coordinates over QQ.")
-    if space.has_relations:
-        raise ValueError("Algebra operations require polynomial coordinates with no quotient-ring relations.")
-    return space, tuple(_polynomial(f, space) for f in values), order
+    return space, polynomials, order
 
 
-def ideal(*generators, order=None, variables=None):
-    """Declare an ideal. For scalar-only generators specify variables=(x, y)."""
-    space, generators, order = _polynomial_inputs(_unpack(generators), order, variables)
+def ideal(*generators, order=None, variables=None, ring=None):
+    """Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."""
+    space, generators, order = _polynomial_inputs(_unpack(generators), order, variables, ring=ring)
     return Ideal(space, generators, order)
 
 
@@ -638,6 +682,7 @@ def _typed(record, space, *, quotient_parent=None):
     result = record["result"]
     kind = result["type"]
     names = result["ring"]["variables"]
+    original_space = space
     # Tangent equations live in fresh displacement coordinates, even at the origin.
     space = (_CoordinateSpace.named(names) if kind in ("tangent-cone", "zariski-tangent-space")
              else _result_space(space, names))
@@ -653,6 +698,11 @@ def _typed(record, space, *, quotient_parent=None):
 
     def polynomials(expressions, coordinate_space=space):
         return tuple(Polynomial(coordinate_space, decode(text, coordinate_space)) for text in expressions)
+
+    def inclusion():
+        from .session_maps import hom
+        # The surviving generators retain their identities in the original ring.
+        return hom(space, original_space, images=[Polynomial(original_space, g) for g in space.generators])
 
     if kind in ("quotient-ring", "quotient-element"):
         from .session_quotient import QuotientElement, QuotientRing, quotient_ring
@@ -677,7 +727,7 @@ def _typed(record, space, *, quotient_parent=None):
         components = []
         for component in result["components"]:
             target_names = component["ring"]["variables"]
-            target = _CoordinateSpace.named(target_names) if target_names else _scalar_space
+            target = _CoordinateSpace.named(target_names)
             target_order = component["ring"]["order"]
             fractions = tuple(_NormalizationFraction(*polynomials((f["numerator"], f["denominator"])))
                               for f in component["fractions"])
@@ -686,6 +736,8 @@ def _typed(record, space, *, quotient_parent=None):
                 Ideal(target, polynomials(component["relations"], target), target_order),
                 polynomials(component["images"], target), fractions))
         return _Normalization(space, order, record, tuple(components))
+    if record["operation"] == "eliminate":
+        return _EliminatedIdeal(space, polynomials(result["generators"]), order, record, inclusion())
     if kind in ("basis", "ideal"):
         cls = _Basis if kind == "basis" else _IdealResult
         return cls(space, polynomials(result["generators"]), order, record)
@@ -716,6 +768,8 @@ def _typed(record, space, *, quotient_parent=None):
             return _JacobianAlgebra(space, order, record, basis, polynomials(result["generators"]))
         cls = _QuotientBasis if result["scope"] == "global" else _LocalQuotientBasis
         return cls(space, order, record, basis)
+    if record["operation"] == "resultant":
+        return _Resultant(space, decode(result["polynomial"]), order, record, inclusion())
     if kind == "polynomial":
         return _PolynomialResult(space, decode(result["polynomial"]), order, record)
     if kind == "factorization":
@@ -758,8 +812,8 @@ def algebra_request(source):
         raise TypeError("algebra_request expects a JSON request string.")
     request = json.loads(source)
     record = _evaluate(request)
-    names = record["result"]["ring"]["variables"]
-    space = _CoordinateSpace.named(names) if names else _scalar_space
+    names = request["ring"]["variables"]
+    space = _CoordinateSpace.named(names)
     return _typed(record, space)
 
 
@@ -818,7 +872,13 @@ def normal_form(polynomial, ideal, *, compute="auto"):
 def _local_point(point, dimension):
     if not isinstance(point, (list, tuple)):
         raise TypeError("Pass the point as a list or tuple in coordinate order.")
-    entries = [rational_text(value) if isinstance(value, Fraction) else value for value in point]
+    entries = []
+    for value in point:
+        if isinstance(value, Polynomial):
+            if value.parent is not QQ:
+                raise ValueError("A polynomial used as a point coordinate must have parent QQ.")
+            value = value._value.scalar
+        entries.append(rational_text(value) if isinstance(value, Fraction) else value)
     return normalize_point(entries, dimension)
 
 
@@ -846,7 +906,7 @@ def _elimination_name(variable, space):
 
 
 def _calculate_polynomials(operation, order, variables, compute, *, point=None, eliminate_variable=None, **operands):
-    default_space = eliminate_variable._space if isinstance(eliminate_variable, Polynomial) else _scalar_space
+    default_space = eliminate_variable._space if isinstance(eliminate_variable, Polynomial) else QQ
     space, values, order = _polynomial_inputs(operands.values(), order, variables, default_space)
     inputs = {key: str(f) for key, f in zip(operands, values)}
     if operation == "resultant":
@@ -899,7 +959,7 @@ def ae_codimension(*components, order=None, variables=None, compute="auto"):
     >>> r = ae_codimension(t^2, t^3)
     >>> print(r.finite, r.value)  # True 1
     """
-    space, values, order = _polynomial_inputs(_unpack(components), order, variables, _scalar_space)
+    space, values, order = _polynomial_inputs(_unpack(components), order, variables, QQ)
     request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},
                "operands": {"components": [str(f) for f in values]}, "compute": compute}
     # The source literals have already been parsed. Their exact products can

@@ -28,12 +28,27 @@ True
 
 The `Rings` row now shows `QQ[x, y] → x, y, f, g`. The names to the right
 of the arrow belong to that ring. Type `:workspace` for the full list.
+Type `help f` or `help f.parent` to inspect a saved polynomial or its ring.
+The same help command accepts a saved ideal, quotient ring, or ring map.
 
 Atlas uses the coefficient field and the generator names in the order you
-give them. Omitting `coeffs=QQ` selects the rationals. Declaring
-`x, y, z = coordinates("x", "y", "z")` binds those names to generators of
-`QQ[x, y, z]`. The saved polynomial `f` still belongs to `QQ[x, y]`.
-Arithmetic requires both polynomials to have the same parent. Asking for
+give them. Omitting `coeffs=QQ` selects the rationals. If a direct coordinate
+declaration would replace a saved value, Atlas rejects the whole assignment
+and suggests an available name. This also applies when selecting one of the
+new generators with an index. To also work
+in `QQ[x, z]`, use a different name on the left for its first generator.
+
+```text
+atlas> x2, z2 = coordinates("x", "z")
+atlas> x2.parent
+QQ[x, z]
+atlas> x.parent == f.parent
+True
+```
+
+Here `x2` and `z2` name the generators spelled `x` and `z` in the second ring. Similarly,
+`x3, y3, z3 = coordinates("x", "y", "z")` selects `QQ[x, y, z]` while `x`,
+`y`, and `f` still belong to `QQ[x, y]`. Asking for
 `coordinates("y", "x")` also selects a different parent because the order changed.
 
 To work with two independent copies of `QQ[x, y]`, request a fresh one
@@ -52,7 +67,46 @@ True
 ```
 
 Another ordinary call to `coordinates("x", "y")` returns the generators of
-`f.parent`.
+`f.parent`. A declaration with `fresh=True` explicitly requests a new ring
+and may reuse the names on the left. Ordinary assignment and unpacking a
+saved tuple also rebind names. To restore the original generators,
+assign `x, y = f.parent.coordinates`.
+
+## Move a polynomial between rings
+
+To add `z` to a polynomial in `QQ[x, y]`, declare the larger ring under
+available names and specify where each generator of the original ring goes.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 + x^3
+atlas> X, Y, z = coordinates("x", "y", "z")
+atlas> include = hom(f.parent, z.parent, images=(X, Y))
+atlas> g = include(f) + z
+atlas> g.parent
+QQ[x, y, z]
+atlas> g == Y^2 + X^3 + z
+True
+```
+
+`include.domain`, `include.codomain`, and `include.images` describe the map.
+The images follow the generator order of the domain and are substituted
+simultaneously. Between `QQ[x, y]` and `QQ[x, z]`, choosing images
+`(x2, z2)` sends `y` to the generator spelled `z`. This choice is explicit.
+
+Use `I.parent` for the live polynomial ring of an ideal. For example,
+`I = ideal(f)`, then `polynomial("x+y", ring=I.parent)` uses the same
+generators as `f`. The field `I.ring` contains the serializable description
+and monomial order. Use `ideal(ring=f.parent)` for the zero ideal and
+`polynomial("1/2", ring=QQ)` for a scalar. Both typed and quoted inputs to
+`resolve` can use an existing ring: `resolve(f)` and
+`resolve("y^2+x^3", ring=f.parent)` have the same original parent.
+
+For `A = quotient_ring(I)`, `A.ambient` is the original polynomial ring,
+`A.gens` are its residue classes, and `A.projection` sends ambient polynomials
+to their classes. Compare inside the quotient with `A(f) == A(0)`. For
+`J = eliminate(I, x)`, `J.inclusion` sends a polynomial in the surviving
+coordinates back into the original ring.
 
 ## Inspect a cusp
 
@@ -114,6 +168,10 @@ v-1
 ```
 
 `C.map` gives the original coordinates as polynomials in this chart.
+`C.pullback_map` is the corresponding ring homomorphism, with the chart's
+function ring `C.parent` as its codomain. In a chart with relations, read the
+defining polynomials through `C.ambient_ideal` in `C.ambient`; computations
+with `C.coordinates` respect these relations.
 `C.pullback(f)` substitutes those polynomials into `f`. The strict transform
 has equation `v-1 = 0`. The exceptional divisor `E3` has equation `u = 0`,
 so the branch meets it at `(u, v) = (0, 1)`.

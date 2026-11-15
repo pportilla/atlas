@@ -6,10 +6,11 @@ from pathlib import Path
 
 from .exact_json import result_json
 from .polynomial import rational_text
-from .session_algebra import algebra_bindings
+from .session_algebra import _coordinate_space, algebra_bindings
 from .session_expressions import Evaluator, SessionError
+from .session_maps import hom
 from .session_monodromy import check_resolution, unavailable_check
-from .session_polynomial import QQ, Polynomial, coordinates as coordinates, session_coordinates
+from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_coordinates
 from .session_quotient import QuotientElement, QuotientRing, quotient_ring
 from .session_values import Divisor, DualComplex, Resolution
 
@@ -156,49 +157,58 @@ def print_json(**fields):
     print(result_json(json_value(fields)), flush=True)
 
 
-def _resolution_input(polynomial, variables):
+def _resolution_input(polynomial, variables, ring, declare):
     if isinstance(polynomial, Polynomial):
-        if variables is not None:
+        if variables is not None or ring is not None:
             raise ValueError("A polynomial already carries its coordinates.")
-        if polynomial.coeffs is not QQ or polynomial._space.has_relations:
-            raise ValueError("resolve expects an equation in affine polynomial coordinates over QQ.")
-        return str(polynomial), list(polynomial.variables), polynomial
-    if isinstance(polynomial, str):
-        if not isinstance(variables, (list, tuple)):
-            raise ValueError('For a polynomial string, supply variables=["x", "y"].')
-        return polynomial, list(variables), None
-    raise ValueError("resolve expects a polynomial or a polynomial string with variables.")
+        ring = polynomial.parent
+    elif isinstance(polynomial, str):
+        if (ring is None) == (variables is None):
+            raise ValueError('For a polynomial string, supply ring=f.parent or variables=["x", "y"].')
+        if variables is not None:
+            if isinstance(variables, (tuple, list)) and variables and all(isinstance(v, str) for v in variables):
+                variables = declare(*variables)
+            ring = _coordinate_space(variables)
+    else:
+        raise ValueError("resolve expects a polynomial or a polynomial string with its ring.")
+    if not isinstance(ring, _CoordinateSpace) or ring.coeffs is not QQ or ring.has_relations or not ring.generators:
+        raise ValueError("resolve expects an equation in affine polynomial coordinates over QQ.")
+    return str(polynomial), list(ring.names), ring
 
 
 def new_session(calculate):
     """Register session operations here so both entry points return the same values."""
-    def resolve(polynomial, *, variables=None, mode="embedded", search="exhaustive",
+    declare = session_coordinates()
+
+    def resolve(polynomial, *, variables=None, ring=None, mode="embedded", search="exhaustive",
                 compute=None, monodromy=False):
-        expression, names, source_polynomial = _resolution_input(polynomial, variables)
+        expression, names, parent = _resolution_input(polynomial, variables, ring, declare)
         if type(monodromy) is not bool:
             raise ValueError("monodromy must be true or false.")
         options = {"monodromy": True} if monodromy else {}
         status, record = calculate(expression, names, mode=mode, search=search, compute=compute, **options)
         if status != 200:
             raise ValueError(record["error"])
-        return Resolution(record, source_polynomial=source_polynomial, _from_solver=True)
+        return Resolution(record, parent, source_polynomial=polynomial if isinstance(polynomial, Polynomial) else None,
+                          _from_solver=True)
 
-    def monodromy_check(polynomial, *, variables=None, search="quick", compute=None, check_isolation=False):
+    def monodromy_check(polynomial, *, variables=None, ring=None, search="quick", compute=None, check_isolation=False):
         if type(check_isolation) is not bool:
             raise ValueError("check_isolation must be true or false.")
         if isinstance(polynomial, Resolution):
-            if variables is not None:
+            if variables is not None or ring is not None:
                 raise ValueError("A resolution already carries its coordinates.")
             resolution = polynomial
         else:
-            expression, names, source_polynomial = _resolution_input(polynomial, variables)
+            expression, names, parent = _resolution_input(polynomial, variables, ring, declare)
             status, record = calculate(expression, names, mode="embedded", search=search,
                                        compute=compute, monodromy=True)
             if status == 400:
                 raise ValueError(record["error"])
             if status != 200:
                 return unavailable_check(record["error"])
-            resolution = Resolution(record, source_polynomial=source_polynomial, _from_solver=True)
+            resolution = Resolution(record, parent, source_polynomial=polynomial if isinstance(polynomial, Polynomial) else None,
+                                    _from_solver=True)
         return check_resolution(resolution, check_isolation=check_isolation, compute=compute)
 
     def dual_complex(resolution):
@@ -211,10 +221,11 @@ def new_session(calculate):
     def recompute_dual_complex(resolution):
         return DualComplex(resolution, dual_complex(resolution))
 
-    return Evaluator({"QQ": QQ, "coordinates": session_coordinates(), "resolve": resolve,
+    return Evaluator({"QQ": QQ, "coordinates": declare, "resolve": resolve,
                       "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                       "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
-                      "quotient_ring": quotient_ring, **algebra_bindings()}, reserved=("help", "quit", "exit"))
+                      "quotient_ring": quotient_ring, "hom": hom, **algebra_bindings()},
+                     reserved=("help", "quit", "exit"))
 
 
 def run_script(filename, calculate):

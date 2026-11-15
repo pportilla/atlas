@@ -21,7 +21,7 @@ class SessionCompletionTests(unittest.TestCase):
         list(self.session.run("roots = 42"))
         self.assertEqual(candidates("roo", self.session), ["roots"])
         self.assertEqual(candidates("roots.", self.session), [])
-        list(self.session.run('roots = coordinates("x")'))
+        list(self.session.run('roots = coordinates("x", fresh=True)'))
         self.assertEqual(candidates("roots.", self.session),
                          ["roots.coeffs", "roots.multiplicity(", "roots.parent", "roots.variables"])
 

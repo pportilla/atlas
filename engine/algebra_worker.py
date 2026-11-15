@@ -14,7 +14,8 @@ def _literal(request):
 
     names = request["variables"]
     generators = tuple(map(native.Symbol, names))
-    value = native.from_terms(generators, parse_expression(request["source"], names))
+    terms = parse_expression(request["source"], names, coefficient_modulus=request.get("coefficient_modulus"))
+    value = native.from_terms(generators, terms)
     return {"terms": native.row(generators, value)}
 
 

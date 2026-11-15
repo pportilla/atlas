@@ -73,16 +73,73 @@ class CliSessionTests(unittest.TestCase):
             x, y = coordinates("x", "y", fresh=True)
             g = polynomial("x^2+y", ring=F.parent)
             print(g.parent == F.parent, g == x^2+y)
-            x, y = coordinates("x", "y", coeffs=QQ)
-            print(g == x^2+y)
+            u, v = coordinates("x", "y", coeffs=QQ)
+            x, y = F.parent.coordinates
+            print(g == x^2+y, u.parent == F.parent)
         """)
-        expected = ["True True", "True False", "True"]
+        expected = ["True True", "True False", "True True"]
         script = run_script(source)
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(script.stdout.splitlines(), expected)
         status, out, err = run_prompt(source + "quit\n")
         self.assertEqual((status, err), (0, ""))
         self.assertEqual(out.replace("atlas> ", "").strip().splitlines(), expected)
+
+    def test_overlapping_coordinate_declarations_preserve_live_bindings(self):
+        setup = 'x,y = coordinates("x","y")\nf = y^2+x^3\n'
+        conflict = "x,z = coordinates('x','z')\n"
+        hint = "x2, z = coordinates('x', 'z')"
+        stopped = run_script(setup + conflict + 'print("continued")\n')
+        self.assertEqual(stopped.returncode, 2)
+        self.assertEqual(stopped.stdout, "")
+        self.assertIn("'x' in QQ[x, y]", stopped.stderr)
+        self.assertIn(hint, stopped.stderr)
+        status, out, err = run_prompt(setup + conflict + ":workspace\n"
+                                      "print(f.parent == x.parent, f-x^3 == y^2)\nquit\n")
+        self.assertEqual(status, 0)
+        self.assertIn(hint, err)
+        self.assertIn("QQ[x, y] → x, y, f", out)
+        self.assertNotIn("QQ[x, z]", out)
+        self.assertIn("True True", out)
+
+        source = setup + hint + '\nprint(x.parent == f.parent, x2.parent == z.parent, x.parent == x2.parent)'
+        script = run_script(source)
+        self.assertEqual((script.returncode, script.stdout.strip(), script.stderr), (0, "True True False", ""))
+
+    def test_coordinate_alias_checks_all_names_before_changing_any(self):
+        session = new_session(None)
+        list(session.run('a = coordinates("x")\na2 = 2\nmake = coordinates'))
+        with self.assertRaisesRegex(ValueError, r"z, a3 = make\('z', 'x'\)"):
+            list(session.run('z, a = make("z","x")'))
+        self.assertNotIn("z", session.variables)
+        self.assertEqual(session.variables["a"].variables, ("x",))
+        list(session.run('flag = True\nz, a = make("z", "x", fresh=flag)'))
+        self.assertEqual(session.variables["a"].variables, ("z", "x"))
+
+    def test_indexed_declarations_protect_every_kind_of_saved_binding(self):
+        session = new_session(None)
+        list(session.run('x, y = coordinates("x", "y")\nf = x+y\nn = 7\nA = quotient_ring(ideal(x))\n'
+                         'a = A(x)\nG = coordinates("x", "z")\nmake = coordinates'))
+        originals = session.variables.copy()
+        for name in ("x", "f", "n", "A", "a", "G", "make"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, rf"{name}2 = make\('x', 'z'\)\[0\]"):
+                list(session.run(f'{name} = (make("x","z"))[0]'))
+            self.assertIs(session.variables[name], originals[name])
+        # An ordinary assignment to an existing name is deliberate.
+        list(session.run('x, z = G\nf = make("x","z",fresh=True)[0]'))
+        self.assertIs(session.variables["x"].parent, originals["G"][0].parent)
+        self.assertIsNot(session.variables["f"].parent, session.variables["x"].parent)
+
+    def test_saved_coordinate_tuple_requires_generators_in_the_same_parent(self):
+        session = new_session(None)
+        list(session.run('G = coordinates("x","y")\nG = coordinates("x","y")'))
+        original = session.variables["G"]
+        with self.assertRaisesRegex(ValueError, r"G2 = coordinates\('x', 'z'\)"):
+            list(session.run('G = coordinates("x","z")'))
+        self.assertIs(session.variables["G"], original)
+        list(session.run('G = coordinates("x","y",fresh=True)'))
+        with self.assertRaisesRegex(ValueError, r"G2 = coordinates\('x', 'y'\)"):
+            list(session.run('G = coordinates("x","y")'))
 
     def test_quoted_polynomials_reuse_chart_and_elimination_coordinates_at_both_entry_points(self):
         source = """
@@ -289,6 +346,38 @@ class CliSessionTests(unittest.TestCase):
         self.assertEqual(polynomial("theta^2+b^2", variables=C.coordinates), 5)
         self.assertEqual(polynomial(str(C.strict_transform), variables=C.coordinates), C.strict_transform)
 
+    def test_quoted_and_typed_coefficient_division_at_both_entry_points(self):
+        source = dedent("""
+            x,y,z = coordinates("x","y","z")
+            C = resolve(x^4*y^2-2*z^6,mode="intrinsic",compute="cpu").chart("B4")
+            u,v,w = C.coordinates
+            theta = polynomial("theta", ring=C.parent)
+            print(polynomial("(u1+u2)/(theta+1)", ring=C.parent) == (u+v)/(theta+1))
+            print(polynomial("1/(theta+1)^3", ring=C.parent) == 1/(theta+1)^3)
+            print(polynomial("1/(2/(theta+1)-theta)", ring=C.parent) == 1/(2/(theta+1)-theta))
+            print(polynomial("u1^1180591620717411303424/(theta+1)", ring=C.parent)*(theta+1)==u^1180591620717411303424)
+        """).lstrip()
+        expected = ["True"] * 4
+        script = run_script(source)
+        self.assertEqual(script.returncode, 0, script.stderr)
+        self.assertEqual(script.stdout.splitlines(), expected)
+        status, output, error = run_prompt(source + "quit\n")
+        self.assertEqual((status, error), (0, ""))
+        self.assertEqual(output.replace("atlas> ", "").strip().splitlines(), expected)
+
+        from engine.session_algebra import polynomial
+        from engine.session_values import Resolution
+
+        field_chart = Resolution({
+            "variables": ["x"], "dual_complex": {"vertices": []},
+            "coefficient_field": {"generator": "theta", "exact_root": "sqrt(2)"},
+            "charts": [{"id": "C", "coordinates": ["u"], "map": {"x": "u"}, "strict_transform": "u+theta"}],
+        }).chart("C")
+        for denominator, error in (("theta^2-2", "nonzero"), ("u+theta", "coefficient field"),
+                                   ("unlisted", "Unknown chart variable")):
+            with self.subTest(denominator=denominator), self.assertRaisesRegex(ValueError, error):
+                polynomial("1/(" + denominator + ")", ring=field_chart.parent)
+
     def test_indexed_roots_define_distinct_polynomial_ideals_in_a_binomial_chart(self):
         result = run_script("""
             x, y, z = coordinates("x", "y", "z")
@@ -325,8 +414,11 @@ class CliSessionTests(unittest.TestCase):
             G = R.chart("G1")
             a, b = R.divisor("E1").ideal_in(G)
             X, Y, Z, t = G.coordinates
+            X0, Y0, Z0, t0 = G.ambient.coordinates
         """)))
-        self.assertEqual(list(session.run("G.ambient_ideal[0] == t*X-Y")),
+        self.assertEqual(list(session.run("G.ambient_ideal[0] == t0*X0-Y0")),
+                         [(True, True)])
+        self.assertEqual(list(session.run("t*X == Y")),
                          [(True, True)])
         self.assertEqual(list(session.run("G.strict_transform[0].variables == a.variables")),
                          [(True, True)])

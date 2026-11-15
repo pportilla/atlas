@@ -4,7 +4,7 @@
 .wordmark .ascii-art { font-weight: 800; line-height: 1.1; }
 .wordmark:hover .ascii-art { color: var(--brand-deep); }
 .workspace-name { padding-bottom: 1px; color: var(--ink-soft); font: 500 17px/1 var(--font-mono); letter-spacing: -.01em; }
-.workspace-name::before { content: "/"; margin-right: 14px; color: var(--rule-strong); font-weight: 400; }
+.workspace-name::before { content: "/" / ""; margin-right: 14px; color: var(--rule-strong); font-weight: 400; }
 .masthead .output-jump { margin-inline-start: auto; color: inherit; }
 .resolution .workbench { border-top: 0; }
 .resolution .input-pane, .resolution .output-pane { padding-top: clamp(20px, 2.5vw, 32px); }
@@ -58,7 +58,7 @@
 .resolution .graph-scroll svg { margin-inline: auto; }
 
 @media (max-width: 820px) {
-  .masthead-inner { padding-top: 14px; gap: 10px; }
+  .masthead-inner { flex-wrap: wrap; padding-top: 14px; gap: 10px; }
   .wordmark { --art-size: 6px; }
   .workspace-name { font-size: 15px; }
   .workspace-name::before { margin-right: 10px; }

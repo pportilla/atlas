@@ -74,8 +74,8 @@ def native_expression_source(source, variables):
     return " ".join(tokens)
 
 
-def parse_expression(source, variables, *, bounded=False, _reference=False):
-    """Read a polynomial in known names, also allowing constants in chart equations."""
+def parse_expression(source, variables, *, bounded=False, coefficient_modulus=None, _reference=False):
+    """Read a chart polynomial. An optional modulus defines its last generator as a field coefficient."""
     tokens = _expression_tokens(source, variables, bounded)
     from . import native_library
 
@@ -104,9 +104,15 @@ def parse_expression(source, variables, *, bounded=False, _reference=False):
     def native():
         # Preserve Unicode whitespace and separate tokens such as '* *'.
         # The input grammar and source/token budgets above see the original text.
-        lines = ["parse_quick" if bounded else "parse_input", " ".join(kernel_names)]
-        if bounded:
+        if coefficient_modulus is not None:
+            if bounded or not variables:
+                raise ValueError("Coefficient-field parsing requires an unrestricted ring with a named parameter.")
+            lines = ["parse_field_input", " ".join(kernel_names), coefficient_modulus]
+        elif bounded:
+            lines = ["parse_quick", " ".join(kernel_names)]
             lines.append(f"{MAX_DEGREE} {MAX_TERMS} {MAX_BITS} {MAX_PRODUCTS}")
+        else:
+            lines = ["parse_input", " ".join(kernel_names)]
         try:
             row, = native_library.affine_request([*lines, " ".join(kernel_tokens)])
         except native_library.Unavailable:
@@ -122,7 +128,7 @@ def parse_expression(source, variables, *, bounded=False, _reference=False):
         parsed = sparse_row(row)
         return parsed if variables else {(): value for value in parsed.values()}
 
-    return checked_native(native, reference)
+    return native() if coefficient_modulus is not None else checked_native(native, reference)
 
 
 def checked_native(native, reference):

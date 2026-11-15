@@ -120,11 +120,14 @@ class Expr:
         mapping = tuple(coerce(replacements.get(v,v)) for v in variables)
         # A bijective relabeling only permutes exponent columns.
         if all(f.is_Symbol for f in mapping) and len(set(mapping)) == len(mapping):
+            keys = tuple(f._coords[0] for f in mapping)
+            if keys == self._coords:
+                return self
+            if keys == tuple(sorted(keys)):
+                return Expr(keys, self._terms)
             return from_terms(mapping, dict(self._terms))
-        target_keys = tuple(sorted({k for f in mapping for k in f._coords}))
-        header, names = _names(target_keys)
-        source, src = _names(self._coords)
-        lines = affine_request(['pullbacks', header, source, *(f.text(names) for f in mapping), '0', self.text(src)])
+        target_keys, request, source_names = _substitution_request(self._coords, mapping)
+        lines = affine_request((*request, self.text(source_names)))
         return _decode(target_keys, lines[0])
 
     def text(self, names):
@@ -222,6 +225,16 @@ def _chart_positions(variables):
 def _names(keys):
     names = {v:f'v{j}' for j,v in enumerate(map(_symbol,keys))}
     return ' '.join(names.values()) or 'v0', names
+
+
+@lru_cache(maxsize=1024)
+def _substitution_request(source_keys, images):
+    """Reuse the native map description across distinct polynomial operands."""
+    target_keys = tuple(sorted({key for image in images for key in image._coords}))
+    header, target_names = _names(target_keys)
+    source, source_names = _names(source_keys)
+    request = ('pullbacks', header, source, *(f.text(target_names) for f in images), '0')
+    return target_keys, request, source_names
 
 
 def _decode(keys, line):

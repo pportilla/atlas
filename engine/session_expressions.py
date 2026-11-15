@@ -3,6 +3,7 @@
 import ast
 from fractions import Fraction
 from io import StringIO
+from itertools import count
 import operator
 from subprocess import TimeoutExpired
 import tokenize
@@ -88,6 +89,16 @@ def _field(value, name):
     return getter(value, name)
 
 
+def _same_coordinates(previous, value):
+    # A scalar, residue class, or computed result can compare equal to a
+    # generator while carrying a different parent or additional result data.
+    if type(previous) is not type(value):
+        return False
+    if isinstance(value, tuple):
+        return len(previous) == len(value) and all(_same_coordinates(a, b) for a, b in zip(previous, value))
+    return previous.parent is value.parent and previous._value == value._value
+
+
 class Evaluator:
     def __init__(self, builtins, *, reserved=()):
         self.builtins = dict(builtins)
@@ -120,7 +131,8 @@ class Evaluator:
             if isinstance(statement, ast.Expr):
                 return self._value(statement.value)
             if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-                self._bind(statement.targets[0], self._value(statement.value))
+                value, declared = self._assignment_value(statement.value)
+                self._bind(statement.targets[0], value, declaration=statement.value if declared else None)
             elif isinstance(statement, ast.For) and not statement.orelse:
                 items = self._value(statement.iter)
                 if not isinstance(items, (tuple, list, dict)):
@@ -142,7 +154,16 @@ class Evaluator:
         except _EVALUATION_ERRORS as error:
             raise SessionError(str(error), statement.lineno) from None
 
-    def _bind(self, target, value):
+    def _assignment_value(self, node):
+        """Track a direct coordinate declaration through indexing, without evaluating twice."""
+        if isinstance(node, ast.Call):
+            return self._call(node)
+        if isinstance(node, ast.Subscript):
+            value, declared = self._assignment_value(node.value)
+            return self._index(value, self._value(node.slice)), declared
+        return self._value(node), False
+
+    def _bind(self, target, value, *, declaration=None):
         if isinstance(target, ast.Name):
             targets, values = [target], [value]
         elif isinstance(target, (ast.Tuple, ast.List)):
@@ -161,7 +182,29 @@ class Evaluator:
             if item.id in names:
                 raise ValueError(f"Repeated assignment target {item.id!r}.")
             names.append(item.id)
+        if declaration is not None:
+            self._check_coordinate_bindings(names, values, declaration)
         self.variables.update(zip(names, values))
+
+    def _check_coordinate_bindings(self, names, values, declaration):
+        conflicts = {}
+        for name, value in zip(names, values):
+            if name in self.variables and not _same_coordinates(self.variables[name], value):
+                previous = self.variables[name]
+                label = repr(name)
+                if isinstance(previous, (Polynomial, QuotientElement)):
+                    label += f" in {previous.parent}"
+                conflicts[name] = label
+        if conflicts:
+            used = set(names) | self.variables.keys() | self.builtins.keys() | self.reserved
+            aliases = []
+            for name in names:
+                if name in conflicts:
+                    name = next(f"{name}{i}" for i in count(2) if f"{name}{i}" not in used)
+                    used.add(name)
+                aliases.append(name)
+            raise ValueError(f"This declaration would replace {', '.join(conflicts.values())}. "
+                             f"Use {', '.join(aliases)} = {ast.unparse(declaration)}.")
 
     def _value(self, node):
         if isinstance(node, ast.Constant):
@@ -181,16 +224,7 @@ class Evaluator:
         if isinstance(node, ast.Attribute):
             return _field(self._value(node.value), node.attr)
         if isinstance(node, ast.Subscript):
-            value, index = self._value(node.value), self._value(node.slice)
-            # Scripts can keep indexing the original complex and vertex records.
-            if isinstance(value, (DualComplex, Divisor)):
-                value = value._record
-            if isinstance(value, dict):
-                if index not in value:
-                    raise ValueError(f"This record has no key {index!r}.")
-            elif not isinstance(value, (tuple, list, str)) or type(index) is not int:
-                raise ValueError("Index a list or tuple by integer, or a record by key.")
-            return value[index]
+            return self._index(self._value(node.value), self._value(node.slice))
         if isinstance(node, ast.UnaryOp):
             value = self._value(node.operand)
             if isinstance(node.op, ast.Not):
@@ -220,27 +254,45 @@ class Evaluator:
                 left = right
             return True
         if isinstance(node, ast.Call):
-            if not isinstance(node.func, (ast.Name, ast.Attribute)):
-                raise ValueError("Call an Atlas function or method by name.")
-            function = self._value(node.func)
-            try:
-                return self._call(node, function)
-            except SessionError as error:
-                # Preserve a more specific failure from a nested call.
-                if error.function is None and isinstance(node.func, ast.Name):
-                    error.function = node.func.id
-                raise
-            except _EVALUATION_ERRORS as error:
-                # Methods can share a name with a different top-level operation.
-                message = "Division by zero." if isinstance(error, ZeroDivisionError) else str(error)
-                if isinstance(node.func, ast.Attribute):
-                    raise SessionError(message, node.lineno, function=ast.unparse(node.func), method=function) from None
-                raise SessionError(message, node.lineno, function=node.func.id) from None
+            return self._call(node)[0]
         raise ValueError(f"Unsupported Atlas expression: {type(node).__name__}.")
 
-    def _call(self, node, function):
-        if not callable(function):
-            raise ValueError("This value is not an Atlas function.")
+    @staticmethod
+    def _index(value, index):
+        # Scripts can keep indexing the original complex and vertex records.
+        if isinstance(value, (DualComplex, Divisor)):
+            value = value._record
+        if isinstance(value, dict):
+            if index not in value:
+                raise ValueError(f"This record has no key {index!r}.")
+        elif not isinstance(value, (tuple, list, str)) or type(index) is not int:
+            raise ValueError("Index a list or tuple by integer, or a record by key.")
+        return value[index]
+
+    def _call(self, node):
+        if not isinstance(node.func, (ast.Name, ast.Attribute)):
+            raise ValueError("Call an Atlas function or method by name.")
+        function = self._value(node.func)
+        try:
+            if not callable(function):
+                raise ValueError("This value is not an Atlas function.")
+            args, kwargs = self._arguments(node)
+            value = function(*args, **kwargs)
+        except SessionError as error:
+            # Preserve a more specific failure from a nested call.
+            if error.function is None and isinstance(node.func, ast.Name):
+                error.function = node.func.id
+            raise
+        except _EVALUATION_ERRORS as error:
+            # Methods can share a name with a different top-level operation.
+            message = "Division by zero." if isinstance(error, ZeroDivisionError) else str(error)
+            if isinstance(node.func, ast.Attribute):
+                raise SessionError(message, node.lineno, function=ast.unparse(node.func), method=function) from None
+            raise SessionError(message, node.lineno, function=node.func.id) from None
+        declared = function is self.builtins.get("coordinates") and not kwargs.get("fresh", False)
+        return value, declared
+
+    def _arguments(self, node):
         args = [self._value(arg) for arg in node.args]
         kwargs = {}
         for keyword in node.keywords:
@@ -249,4 +301,4 @@ class Evaluator:
             if keyword.arg in kwargs:
                 raise ValueError(f"Repeated keyword {keyword.arg!r}.")
             kwargs[keyword.arg] = self._value(keyword.value)
-        return function(*args, **kwargs)
+        return args, kwargs

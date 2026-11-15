@@ -121,6 +121,26 @@ class PromptHelpTests(unittest.TestCase):
         _, error = self.ask("K = 3\nhelp K.charts")
         self.assertIn("Unknown help topic", error)
 
+    def test_help_follows_live_algebra_values_and_function_aliases(self):
+        setup = ('x, y = coordinates("x", "y")\nf = x^2+y\nI = ideal(f)\nA = quotient_ring(I)\n'
+                 'a = A(x)\nphi = A.projection\nalias = factor\nd = dimension(I)\nring = x.parent\n')
+        for topic, example_part in (("ring", "ring.coordinates"), ("f", "ring=f.parent"),
+                                    ("f.parent", "f.parent.coordinates"), ("I", "I.generators"),
+                                    ("I.parent", "ring=I.parent"), ("A", "A.ambient.coordinates"),
+                                    ("a", "a.representative"), ("phi", "phi.images"), ("d", "d.value"),
+                                    ("phi.codomain", "phi.codomain.gens"), ("alias", "alias(")):
+            with self.subTest(topic=topic):
+                card, error = self.ask(setup + "help " + topic)
+                self.assertEqual(error, "")
+                self.assertIn(example_part, card)
+                self.assert_example_runs(setup, card)
+        from engine.app import make_parser
+        from engine.prompt_help import topic_names
+        session = new_session(None)
+        list(session.run(setup))
+        self.assertTrue({"f.parent", "I.ambient", "A", "phi.codomain", "phi.domain", "alias"} <=
+                        topic_names(session, make_parser()))
+
     def test_error_suggestions_help_the_user_recover(self):
         for command, expected in (
             ('coordintes("x")', "coordinates"),

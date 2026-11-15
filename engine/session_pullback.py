@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
+from functools import cached_property
 import re
 
 from . import native_polynomial as native
@@ -13,13 +14,30 @@ from .session_polynomial import Polynomial, QQ, _CoordinateSpace, _NumberField
 
 
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
-_COEFFICIENT_TOKEN = re.compile(r"/\s*(?P<denominator>[A-Za-z][A-Za-z0-9_]*)|[A-Za-z][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True, eq=False, repr=False)
 class _ChartSpace(_CoordinateSpace):
     # Record names (e.g. a3 and a6) can represent elements of the same field.
     aliases: dict[str, str] = field(default_factory=dict)
+    ambient_equations: tuple[str, ...] = ()
+
+    @cached_property
+    def ambient(self):
+        return replace(self, has_relations=False, ambient_equations=()) if self.has_relations else self
+
+    @cached_property
+    def presentation_relations(self):
+        return tuple(chart_polynomial(equation, self.ambient) for equation in self.ambient_equations)
+
+    @cached_property
+    def relation_basis(self):
+        from .algebra_groebner import reduced_basis
+
+        relations = [g._value for g in self.presentation_relations]
+        if self.coeffs is not QQ:
+            relations.append(self.coeffs.minimal_polynomial)
+        return reduced_basis(relations, self.polynomial_generators, order="lex")
 
 
 def _expressions(value):
@@ -50,7 +68,7 @@ def _local_field(data):
 
 def chart_space(resolution_record, chart_record):
     names = chart_record["coordinates"]
-    relations = bool(chart_record.get("ambient_ideal"))
+    equations = tuple(chart_record.get("ambient_ideal", ()))
     declared = resolution_record.get("coefficient_field", {})
     local_field = chart_record.get("coefficient_field")
     if local_field:
@@ -63,7 +81,8 @@ def chart_space(resolution_record, chart_record):
     if "root_definition" in dual:
         families["alpha"] = dual["root_definition"]
     if not (declared.get("generator") or constants or weights or families):
-        return _CoordinateSpace.named(names, has_relations=relations)
+        return _ChartSpace(tuple(native.Dummy(name) for name in names),
+                           has_relations=bool(equations), ambient_equations=equations)
 
     # Recover exactly the constants used in polynomial fields of this chart.
     texts = [expr for key in ("map", "strict_transform", "exceptional", "ambient_ideal",
@@ -108,7 +127,8 @@ def chart_space(resolution_record, chart_record):
         parameter += "_"
     field, aliases = record_field(declared, constants, texts, parameter)
     if not field:
-        return _CoordinateSpace.named(names, has_relations=relations)
+        return _ChartSpace(tuple(native.Dummy(name) for name in names),
+                           has_relations=bool(equations), ambient_equations=equations)
     if field["degree"] > 1 and parameter in aliases and aliases[parameter] != parameter:
         # The compositum has a different primitive element from the declared
         # generator. Its printed name must round-trip independently of that alias.
@@ -122,46 +142,35 @@ def chart_space(resolution_record, chart_record):
         theta = native.Dummy(parameter)
         modulus = native.from_terms((theta,), parse_expression(field["minimal_polynomial"], (parameter,)))
         coeffs = _NumberField(theta, modulus, field["embedding"])
-    space = _ChartSpace(tuple(native.Dummy(name) for name in names), coeffs=coeffs,
-                        has_relations=relations, aliases=aliases)
-    if local_field and relations:
+    space = _ChartSpace(tuple(native.Dummy(name) for name in names), coeffs=coeffs, aliases=aliases)
+    if local_field and equations:
         # In field-cover coordinates the minimal polynomial occurs as an
         # ambient equation. Moving its generator into the coefficient field
         # leaves only the other, genuinely geometric relations.
-        relations = any(chart_polynomial(g, space) for g in chart_record["ambient_ideal"])
-        space = replace(space, has_relations=relations)
-    return space
+        equations = tuple(g for g in equations if chart_polynomial(g, space))
+    return replace(space, has_relations=True, ambient_equations=equations) if equations else space
 
 
 def chart_source(expression, local_space):
     """Express recorded names in this chart's canonical coefficient parameter."""
-    if not isinstance(local_space, _ChartSpace):
+    if not isinstance(local_space, _ChartSpace) or not local_space.aliases:
         return expression
     aliases = local_space.aliases
-    coeffs = local_space.coeffs
 
     def substitute(match):
-        denominator = match["denominator"]
-        if denominator:
-            value = aliases.get(denominator, denominator)
-            if coeffs is not QQ and (denominator in aliases or denominator == coeffs.parameter.name):
-                from .plane_atlas import _inverse
-                inverse = _inverse(value, coeffs.parameter.name, coeffs.embedding)
-                # A following power binds to the reciprocal itself.
-                return "*(" + inverse + ")"
-            return "/(" + value + ")" if denominator in aliases else match[0]
         name = match[0]
         return "(" + aliases[name] + ")" if name in aliases else name
 
-    return _COEFFICIENT_TOKEN.sub(substitute, expression)
+    return _NAME.sub(substitute, expression)
 
 
 def chart_polynomial(expression, local_space):
     """Decode a recorded equation in this chart's generators and marked coefficients."""
     source = chart_source(expression, local_space)
     generators = local_space.polynomial_generators
+    modulus = str(local_space.coeffs.minimal_polynomial) if local_space.coeffs is not QQ and "/" in source else None
     try:
-        terms = parse_expression(source, tuple(g.name for g in generators))
+        terms = parse_expression(source, tuple(g.name for g in generators), coefficient_modulus=modulus)
     except InputError as error:
         raise ValueError(
             f"Cannot read {expression!r} as a polynomial over {local_space.coeffs} in "
@@ -176,7 +185,7 @@ def pullback(polynomial, source_space, chart_record, local_space):
         return Polynomial(local_space, native.coerce(polynomial))
     if not isinstance(polynomial, Polynomial):
         raise ValueError("Pass a polynomial in the original resolution coordinates to pullback.")
-    if polynomial._space is not source_space:
+    if polynomial._space is not source_space and polynomial._space is not QQ:
         raise ValueError("This polynomial belongs to a different coordinate space from the resolution input.")
 
     # Each map in the solver record is already composed through the parents.

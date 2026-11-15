@@ -1,0 +1,100 @@
+{
+  "conditions": "CPU, QQ[x,y] to QQ[u,v,w], prepared maps and distinct inputs f+i*x. Times include each public map application and materializing its image. Map construction, operand setup, one warmup, and agreement checks are untimed. System order alternates between trials.",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    3
+  ],
+  "unit": "microseconds per polynomial",
+  "trials": 5,
+  "inputs_per_trial": 64,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "cases": [
+    {
+      "name": "inclusion",
+      "polynomial": "(x+y)^5 + (1/7)*x^3",
+      "images": [
+        "u",
+        "v"
+      ],
+      "expected": "(u+v)^5 + (1/7)*u^3",
+      "samples": {
+        "atlas": [
+          7.1915625,
+          6.70675,
+          6.63425,
+          6.543453125,
+          7.3584375
+        ],
+        "singular": [
+          2.96875,
+          2.921875,
+          3.09375,
+          2.96875,
+          2.9375
+        ]
+      },
+      "median": {
+        "atlas": 6.70675,
+        "singular": 2.96875
+      }
+    },
+    {
+      "name": "nonlinear",
+      "polynomial": "(x-y)^2 + x^12*y",
+      "images": [
+        "u+v^2",
+        "u"
+      ],
+      "expected": "v^4 + (u+v^2)^12*u",
+      "samples": {
+        "atlas": [
+          85.516953125,
+          86.99303125,
+          84.189296875,
+          86.10025,
+          84.490015625
+        ],
+        "singular": [
+          4.34375,
+          4.671875,
+          4.390625,
+          4.359375,
+          5.875
+        ]
+      },
+      "median": {
+        "atlas": 85.516953125,
+        "singular": 4.390625
+      }
+    },
+    {
+      "name": "collision",
+      "polynomial": "x^512 + y^512",
+      "images": [
+        "2*u/3",
+        "u"
+      ],
+      "expected": "((2/3)^512+1)*u^512",
+      "samples": {
+        "atlas": [
+          61.58578125,
+          60.15228125,
+          58.117828125,
+          58.13190625,
+          58.77375
+        ],
+        "singular": [
+          4.609375,
+          4.9375,
+          4.53125,
+          4.46875,
+          4.625
+        ]
+      },
+      "median": {
+        "atlas": 58.77375,
+        "singular": 4.609375
+      }
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import textwrap
 from .cli_highlight import paint_card, paint_hint, paint_value
 from .cli_style import paint
 from .resolution_help import resolution_help, resolution_topics
-from .session_help import function_help
+from .session_help import algebra_help_values, algebra_value_help, function_help
 from .session_hints import closest_name
 
 
@@ -14,13 +14,20 @@ _TOPICS = {
     "variables": (
         "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
         "Repeating the same coordinate names in the same order reuses their ring.\n"
+        "A declaration protects saved names. Use aliases on the left, as in x2, z = coordinates('x', 'z').\n"
         "Use fresh=True for an independent copy. The Rings row groups saved names by ring.\n"
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),
     ":workspace": "Show which saved names belong to each ring and list their values.\n\nExample\n  :workspace",
+    "ring": (
+        "A polynomial keeps its live parent ring. An ideal exposes its ambient ring as I.parent. "
+        "Use hom to specify how generators map into another ring.\n\n"
+        'Example\n  x, y = coordinates("x", "y")\n  I = ideal(x, y)\n  polynomial("x^2+y", ring=I.parent)'
+    ),
     ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
-    "QQ": 'The rational coefficient field. Coordinates use QQ by default.\n\nExample\n  x = coordinates("x", coeffs=QQ)',
+    "QQ": ('The rational field is the parent ring for scalar polynomials. Coordinates use QQ by default.\n\n'
+           'Example\n  q = polynomial("1/2", ring=QQ)\n  q.parent == QQ'),
     "quit": "Leave the Atlas prompt.\n\nExample\n  quit",
 }
 _ALIASES = {"save": ":save", "workspace": ":workspace", "exit": "quit"}
@@ -46,7 +53,7 @@ def help_request(line):
 
 def topic_names(session, parser):
     return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, *resolution_topics(session.variables),
-            "functions", "script", "help"}
+            *algebra_help_values(session), "functions", "script", "help"}
 
 
 def _functions(session, color=False):
@@ -75,7 +82,8 @@ def show_help(words, session, parser, *, color=False):
 
     if not words or words == ["help"]:
         for line in ("Use help NAME, NAME help, or NAME -h for a short explanation and an example.",
-                     "Start with help variables, or type help script for a scripting walkthrough.",
+                     "Try help ring or help variables. Type help followed by a saved name to inspect its type.",
+                     "Type help script for a scripting walkthrough.",
                      "Use help resolution or help chart to explore a resolution and its local equations."):
             print(paint_hint(line, commands=commands, topics=topic_names(session, parser), color=color, rest=None))
         listing = ", ".join(paint(name, "command", color) for name in [*parser.command_names, ":workspace", ":save", "quit"])
@@ -95,17 +103,18 @@ def show_help(words, session, parser, *, color=False):
         return
 
     name = _ALIASES.get(words[0], words[0])
+    values = algebra_help_values(session)
     if name == "functions":
         _functions(session, color)
     elif name == "script":
         from .session import HELP
         print(HELP)
-    elif name in _TOPICS:
+    elif name in _TOPICS and not (name == "ring" and name in values):
         print(painted(_TOPICS[name]))
     elif card := resolution_help(name, session.variables):
         print(painted(card))
     else:
-        text = function_help(name, session.builtins)
+        text = algebra_value_help(name, values[name]) if name in values else function_help(name, session.builtins)
         if text:
             print(painted(text))
             if name == "resolve":

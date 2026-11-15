@@ -24,6 +24,16 @@ geometric objects. For operations on rational polynomials, default the input
 coefficient field to `QQ` and accept `coeffs=QQ` when declaring coordinates.
 The solver determines the geometric field of the result.
 
+In the shared session, use live parent objects to check ownership before
+serializing a polynomial or coordinate. Identically spelled generators can
+belong to independent rings. Reject a direct coordinate declaration that
+would replace a saved binding before changing any name. An explicit
+`fresh=True` requests an independent ring and permits rebinding. Reuse the
+parent for repeated ordinary declarations in one session, and use explicit
+maps with a domain, codomain and ordered generator images for transport.
+Test changes to these rules with independent same-named
+rings at the prompt and in scripts, including what survives a failed command.
+
 For each new mathematical operation that Singular supports, add repeatable
 timing tests on the same inputs in both systems. Check mathematical agreement,
 run multiple trials, and record both timings and the comparison conditions.

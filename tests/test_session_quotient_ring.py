@@ -19,7 +19,7 @@ class QuotientRingSessionTests(unittest.TestCase):
             A = quotient_ring(ideal(x*y-1, order="lex"))
             u, v = A.gens
             print(u.inverse() == v, (1/u).representative == y, u^-3 == v^3)
-            print(A(x^2*y) == u, (x-u).representative, (x+v)*u == x^2+1)
+            print(A(x^2*y) == u, (x-u).representative, (x+v)*u == A(x^2+1))
             print(u.parent == A, A.order, A.defining_ideal.generators == (x*y-1,))
             D = quotient_ring(ideal(x^2))
             t = D(x)
@@ -41,6 +41,9 @@ class QuotientRingSessionTests(unittest.TestCase):
         u, v = a(x), b(x)
         for mixed in (lambda: a(v), lambda: u+v, lambda: u == v):
             with self.assertRaisesRegex(ValueError, "different quotient rings"):
+                mixed()
+        for mixed in (lambda: x == u, lambda: u == x, lambda: x != u):
+            with self.assertRaisesRegex(ValueError, "A\\(f\\)"):
                 mixed()
         with self.assertRaisesRegex(ValueError, "different coordinate spaces"):
             a(coordinates("x"))

@@ -59,6 +59,13 @@ class SessionPanelTerminalTests(CliTerminalCase):
         for name in ("x", "y", "f"):
             self.assertRegex(names, rf"\b{name}\b")
 
+        rejected = self.command('x, z = coordinates("x", "z")')
+        self.assertIn(b"x2, z = coordinates('x', 'z')", rejected)
+        self.assertNotIn(SAVE + b"\x1b[1;1H\x1b[2K", rejected)
+        workspace = self.command(":workspace").decode()
+        self.assertIn("QQ[x, y] → x, y, f", workspace)
+        self.assertNotIn("QQ[x, z]", workspace)
+
         self.command('x, y = coordinates("x", "y")')
         workspace = self.command(":workspace").decode()
         self.assertEqual(workspace.count("QQ[x, y]"), 1)
