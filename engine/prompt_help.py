@@ -3,6 +3,7 @@
 import sys
 import textwrap
 
+from .resolution_help import resolution_help, resolution_topics
 from .session_help import function_help
 from .session_hints import closest_name
 
@@ -14,15 +15,6 @@ _TOPICS = {
         "Use fresh=True for an independent copy. The Rings row groups saved names by ring.\n"
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
-    ),
-    "resolution.dual_complex": (
-        "R.dual_complex is the exceptional dual complex recorded by resolve.\n"
-        "In embedded mode its vertices represent exceptional divisors in the ambient space. "
-        "In intrinsic mode they represent components of the exceptional locus on the smooth strict transform. "
-        "Qbar in the convention means components are distinguished over the algebraic closure of QQ.\n"
-        "Cells record intersections. Check .status for completeness and .record for the full data.\n\n"
-        'Example\n  x, y = coordinates("x", "y")\n  R = resolve(y^2-x^3)\n'
-        "  R.dual_complex.vertices\n  R.branches[0].meets"
     ),
     ":workspace": "Show which saved names belong to each ring and list their values.\n\nExample\n  :workspace",
     ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
@@ -51,7 +43,8 @@ def help_request(line):
 
 
 def topic_names(session, parser):
-    return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, "functions", "script", "help"}
+    return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, *resolution_topics(session.variables),
+            "functions", "script", "help"}
 
 
 def _functions(session):
@@ -73,6 +66,7 @@ def show_help(words, session, parser):
     if not words or words == ["help"]:
         print("Use help NAME, NAME help, or NAME -h for a short explanation and an example.")
         print("Start with help variables, or type help script for a scripting walkthrough.")
+        print("Use help resolution or help chart to explore a resolution and its local equations.")
         print("Prompt commands\n" + ", ".join([*parser.command_names, ":workspace", ":save", "quit"]))
         print()
         _functions(session)
@@ -89,10 +83,6 @@ def show_help(words, session, parser):
         return
 
     name = _ALIASES.get(words[0], words[0])
-    if name.endswith(".dual_complex"):
-        from .session_values import Resolution
-        if isinstance(session.variables.get(name.removesuffix(".dual_complex")), Resolution):
-            name = "resolution.dual_complex"
     if name == "functions":
         _functions(session)
     elif name == "script":
@@ -100,12 +90,15 @@ def show_help(words, session, parser):
         print(HELP)
     elif name in _TOPICS:
         print(_TOPICS[name])
+    elif card := resolution_help(name, session.variables):
+        print(card)
     else:
         card = function_help(name, session.builtins)
         if card:
             print(card)
             if name == "resolve":
-                print("\nUse help resolution.dual_complex to read the recorded vertices and cells.")
+                print("\nUse help resolution.charts to inspect a chart or help resolution.dual_complex "
+                      "to read the exceptional complex and find the branch attachments.")
                 print('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.')
         elif name in parser.command_names:
             parser.command_names[name].print_help()

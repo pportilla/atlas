@@ -16,7 +16,6 @@ def prompt_completion(session, parser, commands, *, on_tab):
 
     previous = readline.get_completer()
     delimiters = readline.get_completer_delims()
-    topics = topic_names(session, parser)
     matches = []
 
     def complete(text, state):
@@ -29,7 +28,7 @@ def prompt_completion(session, parser, commands, *, on_tab):
             words = head.split()
             prefix = words.pop() if words and not head[-1].isspace() else ""
             if words == ["help"]:
-                names = topics
+                names = topic_names(session, parser)
             elif words in (["algebra"], ["help", "algebra"]):
                 names = parser.command_names["algebra"].command_names
             elif not words and "-" in prefix and any(name.startswith(prefix) for name in commands):

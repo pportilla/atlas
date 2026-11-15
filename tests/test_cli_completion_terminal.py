@@ -46,6 +46,8 @@ class CliCompletionTerminalTests(CliTerminalCase):
         self.assertNotIn(b"_record", choices)
         self.send(b"sta\t\n")
         self.assertIn(b"resolved\r\n", self.read_until(PROMPT))
+        self.send(b"help R.bran\t\n")
+        self.assertIn(b"R.branches", self.read_until(PROMPT))
         self.send(b"cusp_sample = 72\n")
         self.read_until(PROMPT)
         self.send(b"print(cusp_sa\t)\n")

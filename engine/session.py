@@ -126,7 +126,8 @@ For an infinite-dimensional quotient, quotient_basis(I) has .finite = False
 and .basis = .dimension = None. The multiplicity(I) result has .finite = False
 and .value = None. For an infinite Milnor or Tjurina number, .value is None.
 
-Inspect R.charts and R.branches, or use print(...) for explicit output.
+Type help R.charts for chart lookup, help R.dual_complex for exceptional
+intersections, and help R.branches for branch attachments. Use print(...) for script output.
 Run the same expressions in a file with ./atlas run FILE.atlas."""
 
 

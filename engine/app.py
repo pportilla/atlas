@@ -312,7 +312,6 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     from .session_panel import print_workspace
     from .session_transcript import SessionTranscript
     transcript = SessionTranscript()
-    topics = topic_names(session, parser)
     # Only the line editor understands the markers around a prompt's colours.
     color = panel.enabled and panel.color and "readline" in sys.modules
     prompt = readline_prompt(("atlas", "brand"), (">", "muted"), (" ", None), color=color)
@@ -344,7 +343,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                     source = line.splitlines()
                     statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
                     print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
-                    hint = error_hint(error, statement, session, topics)
+                    hint = error_hint(error, statement, session, topic_names(session, parser))
                     if hint:
                         print(hint, file=sys.stderr)
                 except ValueError as error:
