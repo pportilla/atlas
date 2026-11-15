@@ -334,7 +334,6 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     from .session_panel import print_workspace
     from .session_transcript import SessionTranscript
     transcript = SessionTranscript()
-    topics = topic_names(session, parser)
     # Only the line editor understands the markers around a prompt's colours.
     color = panel.enabled and panel.color and "readline" in sys.modules
     prompt_pieces = (("atlas", "brand"), (">", "muted"), (" ", None))
@@ -346,7 +345,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     commands = shell_names | {"help"}
 
     def hint_text(text):
-        return paint_hint(text, commands=commands, topics=topics, names=session.variables,
+        return paint_hint(text, commands=commands, topics=topic_names(session, parser), names=session.variables,
                           functions=functions, color=rich)
 
     while True:
@@ -362,7 +361,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
             request = help_request(line)
             shell = request is not None or _is_shell_command(words, shell_names, session.variables)
             if rich:
-                pieces = (command_pieces(line, commands=commands, topics=topics) if shell else
+                pieces = (command_pieces(line, commands=commands, topics=topic_names(session, parser)) if shell else
                           expression_pieces(line, names=session.variables, functions=functions))
                 repaint_entry(sys.stdout, prompt_pieces, line, pieces, shutil.get_terminal_size().columns)
             if request is not None:
@@ -379,7 +378,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                     source = line.splitlines()
                     statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
                     print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
-                    hint = error_hint(error, statement, session, topics)
+                    hint = error_hint(error, statement, session, topic_names(session, parser))
                     if hint:
                         print(hint_text(hint), file=sys.stderr)
                 except ValueError as error:

@@ -59,7 +59,7 @@ class LocalStandardBasisSessionTests(unittest.TestCase):
         session = new_session(None)
         list(session.run(dedent("""
             x = coordinates("x")
-            s = coordinates("x")
+            s = coordinates("x", fresh=True)
             I = ideal(x*(x-1))
             B = local_standard_basis(I, point=[1])
         """)))

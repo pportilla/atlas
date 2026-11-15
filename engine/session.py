@@ -9,7 +9,7 @@ from .polynomial import rational_text
 from .session_algebra import algebra_bindings
 from .session_expressions import Evaluator, SessionError
 from .session_monodromy import check_resolution, unavailable_check
-from .session_polynomial import QQ, Polynomial, coordinates
+from .session_polynomial import QQ, Polynomial, coordinates as coordinates, session_coordinates
 from .session_quotient import QuotientElement, QuotientRing, quotient_ring
 from .session_values import Divisor, DualComplex, Resolution
 
@@ -126,7 +126,8 @@ For an infinite-dimensional quotient, quotient_basis(I) has .finite = False
 and .basis = .dimension = None. The multiplicity(I) result has .finite = False
 and .value = None. For an infinite Milnor or Tjurina number, .value is None.
 
-Inspect R.charts and R.branches, or use print(...) for explicit output.
+Type help R.charts for chart lookup, help R.dual_complex for exceptional
+intersections, and help R.branches for branch attachments. Use print(...) for script output.
 Run the same expressions in a file with ./atlas run FILE.atlas."""
 
 
@@ -210,7 +211,7 @@ def new_session(calculate):
     def recompute_dual_complex(resolution):
         return DualComplex(resolution, dual_complex(resolution))
 
-    return Evaluator({"QQ": QQ, "coordinates": coordinates, "resolve": resolve,
+    return Evaluator({"QQ": QQ, "coordinates": session_coordinates(), "resolve": resolve,
                       "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                       "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
                       "quotient_ring": quotient_ring, **algebra_bindings()}, reserved=("help", "quit", "exit"))

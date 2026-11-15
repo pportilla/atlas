@@ -54,7 +54,15 @@ class SessionPanelTerminalTests(CliTerminalCase):
             self.assertRegex(names, rf"\b{name}\b")
 
         self.command('x, y = coordinates("x", "y")')
+        workspace = self.command(":workspace").decode()
+        self.assertEqual(workspace.count("QQ[x, y]"), 1)
+        self.assertIn("QQ[x, y] → x, y, f", workspace)
         update = self.panel_update(self.command('g = polynomial("x^2+y", ring=f.parent)'))
+        rings = update.split("Variables", 1)[0]
+        self.assertEqual(rings.count("QQ[x, y]"), 1)
+        self.assertIn("QQ[x, y] → x, y, f, g", rings)
+
+        update = self.panel_update(self.command('x, y = coordinates("x", "y", fresh=True)'))
         for group in ("QQ[x, y] → x, y", "QQ[x, y] → f, g"):
             self.assertIn(group, update.split("Variables", 1)[0])
         workspace = self.command(":workspace").decode()

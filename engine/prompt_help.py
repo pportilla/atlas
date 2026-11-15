@@ -5,6 +5,7 @@ import textwrap
 
 from .cli_highlight import paint_card, paint_hint, paint_value
 from .cli_style import paint
+from .resolution_help import resolution_help, resolution_topics
 from .session_help import function_help
 from .session_hints import closest_name
 
@@ -12,18 +13,10 @@ from .session_hints import closest_name
 _TOPICS = {
     "variables": (
         "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
-        "Each declaration creates a fresh ring. The Rings row groups saved names by ring.\n"
+        "Repeating the same coordinate names in the same order reuses their ring.\n"
+        "Use fresh=True for an independent copy. The Rings row groups saved names by ring.\n"
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
-    ),
-    "resolution.dual_complex": (
-        "R.dual_complex is the exceptional dual complex recorded by resolve.\n"
-        "In embedded mode its vertices represent exceptional divisors in the ambient space. "
-        "In intrinsic mode they represent components of the exceptional locus on the smooth strict transform. "
-        "Qbar in the convention means components are distinguished over the algebraic closure of QQ.\n"
-        "Cells record intersections. Check .status for completeness and .record for the full data.\n\n"
-        'Example\n  x, y = coordinates("x", "y")\n  R = resolve(y^2-x^3)\n'
-        "  R.dual_complex.vertices\n  R.branches[0].meets"
     ),
     ":workspace": "Show which saved names belong to each ring and list their values.\n\nExample\n  :workspace",
     ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
@@ -52,7 +45,8 @@ def help_request(line):
 
 
 def topic_names(session, parser):
-    return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, "functions", "script", "help"}
+    return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, *resolution_topics(session.variables),
+            "functions", "script", "help"}
 
 
 def _functions(session, color=False):
@@ -76,12 +70,13 @@ def show_help(words, session, parser, *, color=False):
     functions = set(session.builtins)
     commands = {*parser.command_names, ":workspace", ":save", "quit", "help"}
 
-    def card(text):
+    def painted(text):
         return paint_card(text, names=session.variables, functions=functions, commands=commands, color=color)
 
     if not words or words == ["help"]:
         for line in ("Use help NAME, NAME help, or NAME -h for a short explanation and an example.",
-                     "Start with help variables, or type help script for a scripting walkthrough."):
+                     "Start with help variables, or type help script for a scripting walkthrough.",
+                     "Use help resolution or help chart to explore a resolution and its local equations."):
             print(paint_hint(line, commands=commands, topics=topic_names(session, parser), color=color, rest=None))
         listing = ", ".join(paint(name, "command", color) for name in [*parser.command_names, ":workspace", ":save", "quit"])
         print(paint("Prompt commands", "label", color) + "\n" + listing)
@@ -100,24 +95,24 @@ def show_help(words, session, parser, *, color=False):
         return
 
     name = _ALIASES.get(words[0], words[0])
-    if name.endswith(".dual_complex"):
-        from .session_values import Resolution
-        if isinstance(session.variables.get(name.removesuffix(".dual_complex")), Resolution):
-            name = "resolution.dual_complex"
     if name == "functions":
         _functions(session, color)
     elif name == "script":
         from .session import HELP
         print(HELP)
     elif name in _TOPICS:
-        print(card(_TOPICS[name]))
+        print(painted(_TOPICS[name]))
+    elif card := resolution_help(name, session.variables):
+        print(painted(card))
     else:
         text = function_help(name, session.builtins)
         if text:
-            print(card(text))
+            print(painted(text))
             if name == "resolve":
-                print("\nUse help resolution.dual_complex to read the recorded vertices and cells.")
-                print(card('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.'))
+                print(paint_hint("\nUse help resolution.charts to inspect a chart or help resolution.dual_complex "
+                                 "to read the exceptional complex and find the branch attachments.",
+                                 commands=commands, topics=topic_names(session, parser), color=color, rest=None))
+                print(painted('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.'))
         elif name in parser.command_names:
             parser.command_names[name].print_help()
         else:

@@ -51,12 +51,21 @@ starts on the parent’s `base_domain` before the parent’s `exclude_points`
 are applied. The parent still covers the complement of the replaced points.
 The `algebraic_numbers` entries specify centres over extensions of the rationals.
 
-A vertex identifies a geometric irreducible component. Each higher cell
+A vertex identifies a geometric irreducible component of the exceptional divisor. Each higher cell
 identifies a geometric component of an intersection. Two cells can therefore
 have the same vertex set. Use cell IDs and the supplied codimension-one faces
 to follow their attachments. The record reports the status of the complex.
 When the data do not certify all attachments, inspect the diagnostic before
 using the listed cells as a full complex. [How Atlas certifies and replays incidence](resolution-pipeline.md#what-the-record-certifies)
+
+In an embedded plane-curve resolution, the strict transform of a branch maps
+onto the original branch. The exceptional curves contract to points. In a
+decorated resolution graph, an arrowhead marks where the strict transform
+meets an exceptional curve. Atlas stores this attachment in the branch record.
+For the cusp `y^2-x^3`, `K.dual_complex` gives the chain `E1 — E3 — E2`,
+and `K.branches[0].meets` gives `[E3]`. To see that intersection in local
+coordinates, open `C = K.branches[0].chart`, then read `C.strict_transform`
+and `K.divisor("E3").equation_in(C)`. [Inspect a cusp at the prompt](sessions.md#inspect-a-cusp)
 
 ## Local monodromy zeta function
 

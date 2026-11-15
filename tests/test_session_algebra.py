@@ -11,6 +11,37 @@ from engine.session_algebra import (
 
 
 class AlgebraSessionTests(unittest.TestCase):
+    def test_coordinate_declarations_are_local_to_one_session_and_ordered_ring(self):
+        session = new_session(None)
+        list(session.run("""
+x, y = coordinates("x", "y")
+f = y^2 + x
+u = coordinates("x")
+a, b = coordinates("y", "x")
+x, y = coordinates("x", "y", coeffs=QQ)
+"""))
+        values = session.variables
+        for name in ("u", "a"):
+            self.assertIsNot(values[name].parent, values["f"].parent)
+        self.assertIs(values["x"].parent, values["f"].parent)
+        other = new_session(None)
+        list(other.run('x, y = coordinates("x", "y")'))
+        self.assertIsNot(other.variables["x"].parent, values["x"].parent)
+
+    def test_fresh_coordinate_requests_and_invalid_declarations_do_not_change_the_default(self):
+        session = new_session(None)
+        list(session.run('a = coordinates("x", fresh=True)\nx = coordinates("x")\nb = coordinates("x", fresh=True)'))
+        values = session.variables
+        self.assertEqual(len({values[name].parent for name in ("a", "x", "b")}), 3)
+        for invalid, message in (('coordinates("x", fresh=1)', "fresh"),
+                                 ('coordinates("x", coeffs=[])', "coefficient field"),
+                                 ('coordinates(["x"])', "coordinate names"),
+                                 ('coordinates("x", "x")', "distinct coordinate names")):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, message):
+                list(session.run(invalid))
+        list(session.run('same = coordinates("x")'))
+        self.assertIs(values["same"].parent, values["x"].parent)
+
     def test_gcd_reuses_polynomial_space_and_normalization_order(self):
         x, y = coordinates("x", "y")
         f = x + 2*y**2
