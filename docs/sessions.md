@@ -26,8 +26,11 @@ atlas> g.parent == f.parent
 True
 ```
 
-The `Rings` row now shows `QQ[x, y] → x, y, f, g`. The names to the right
-of the arrow belong to that ring. Type `:workspace` for the full list.
+The `Rings` row now shows `QQ[x, y] → x, y, f, g`. Here the four names
+are polynomials with that parent. If you save an ideal, Atlas lists it under
+its ambient ring. A resolution appears under the ring of its input equation.
+A map has two endpoints, so it appears in `Variables`. Inspect its `.domain`
+and `.codomain` to see them. Type `:workspace` for the full list.
 Type `help f` or `help f.parent` to inspect a saved polynomial or its ring.
 The same help command accepts a saved ideal, quotient ring, or ring map.
 

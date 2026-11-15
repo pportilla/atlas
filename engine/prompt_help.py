@@ -19,7 +19,10 @@ _TOPICS = {
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),
-    ":workspace": "Show which saved names belong to each ring and list their values.\n\nExample\n  :workspace",
+    ":workspace": (
+        "Group polynomials by parent, ideals by ambient ring, and resolutions by input ring.\n"
+        "List all saved names.\n\nExample\n  :workspace"
+    ),
     "ring": (
         "A polynomial keeps its live parent ring. An ideal exposes its ambient ring as I.parent. "
         "Use hom to specify how generators map into another ring.\n\n"
