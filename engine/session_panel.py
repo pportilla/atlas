@@ -2,7 +2,9 @@
 
 from fractions import Fraction
 import os
+import signal
 import sys
+import threading
 from unicodedata import combining, east_asian_width
 
 from .cli_highlight import expression_pieces
@@ -199,16 +201,40 @@ class SessionPanel:
         self.stream = stream
         self.size = None
         self.rows = None
+        self.variables = {}
         self.enabled = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
         self.color = not os.environ.get("NO_COLOR")
+        self._previous_resize = None
 
     def __enter__(self):
         self.refresh({})
+        self._follow_resizes()
         return self
+
+    def _follow_resizes(self):
+        """Redraw the frame as soon as the window changes size, as zooming the font does.
+
+        Without this the frame keeps its old width until the next prompt, and a
+        narrower window wraps it. The handler goes in before readline loads, so
+        readline's own handler calls it and still rewraps the line being edited.
+        """
+        if (not self.enabled or not hasattr(signal, "SIGWINCH") or "readline" in sys.modules
+                or threading.current_thread() is not threading.main_thread()):
+            return
+        previous = signal.signal(signal.SIGWINCH, self._resized)
+        # None stands for a handler set outside Python. Window changes are ignored by default.
+        self._previous_resize = signal.SIG_DFL if previous is None else previous
+
+    def _resized(self, signum, frame):
+        try:
+            self.refresh(self.variables)
+        except RuntimeError:
+            pass  # Output was being written. The next prompt redraws the frame.
 
     def refresh(self, variables):
         if not self.enabled:
             return
+        self.variables = variables
         try:
             size = os.get_terminal_size(self.stream.fileno())
         except (OSError, ValueError):
@@ -259,4 +285,7 @@ class SessionPanel:
             self.size = self.rows = None
 
     def __exit__(self, *exc):
+        if self._previous_resize is not None:
+            signal.signal(signal.SIGWINCH, self._previous_resize)
+            self._previous_resize = None
         self.close()

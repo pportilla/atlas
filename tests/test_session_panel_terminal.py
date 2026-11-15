@@ -1,5 +1,10 @@
+import fcntl
+import os
 import re
+import signal
+import struct
 import sys
+import termios
 import unittest
 
 from tests.cli_support import CliTerminalCase, PROMPT
@@ -8,6 +13,7 @@ from tests.cli_support import CliTerminalCase, PROMPT
 SAVE = b"\x1b7"
 RESTORE = b"\x1b8"
 ANSI = re.compile(rb"\x1b\[[0-?]*[ -/]*[@-~]")
+HEADER_TOP = 5  # The first row below the pinned frame.
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Uses a Linux pseudo-terminal.")
@@ -85,3 +91,26 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.startup = self.read_until(PROMPT)
         self.assertRegex(self.startup, rb"\x1b\[5;(?:32)?r")
         self.check_exit(b"\x04")
+
+    def resize(self, rows, columns):
+        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+        # The child has no controlling terminal, so deliver the window change ourselves.
+        os.kill(self.child.pid, signal.SIGWINCH)
+
+    def test_frame_follows_the_window_while_waiting_for_input(self):
+        # Zooming the font changes the window size while Atlas waits at the prompt.
+        self.startup = self.read_until(PROMPT)
+        self.command("f = 1")
+        for rows, columns in ((32, 64), (24, 30), (40, 132)):
+            with self.subTest(columns=columns):
+                self.resize(rows, columns)
+                bottom = "╰" + "─" * (columns - 2) + "╯"
+                update = self.read_until(bottom.encode())
+                self.assertIn(f"\x1b[{HEADER_TOP};r".encode(), update)
+                frame = ANSI.sub(b"\n", update[update.rindex(SAVE + b"\x1b[1;1H"):]).decode()
+                top = next(line for line in frame.splitlines() if line.startswith("╭"))
+                self.assertEqual(len(top), columns)
+        # Readline redraws the entry after a resize; the next command still runs.
+        self.send(b"1 + 1\n")
+        self.read_until(b"\r\n2\r\n")
+        self.check_exit(b"quit\n")
