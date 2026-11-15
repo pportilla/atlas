@@ -11,7 +11,7 @@ same timeouts apply.
 
 A fork copies only the calling thread. The child runs system calls and the
 native entry, never Python objects of other threads, and it resolves no
-symbols: the parent loads the entry, the C stream purge and the thread-count
+symbols: the parent loads the entry, the C stream reset and the thread-count
 setters first. Atlas's other threads wait on pipes (a lane's coordinator
 watch, a verifier's reader). Without the library, or off Linux, the program
 is started as before.
@@ -41,13 +41,17 @@ _THREAD_SETTINGS = {"OMP_NUM_THREADS": "omp_set_num_threads", "OPENBLAS_NUM_THRE
 
 @lru_cache(maxsize=1)
 def _process_symbols():
-    """The C stream purge and the BLAS/OpenMP thread-count setters, resolved before any fork."""
+    """The C stream reset calls and the BLAS/OpenMP thread-count setters, resolved before any fork."""
     libc = ctypes.CDLL(None)
-    purge = getattr(libc, "__fpurge", None)
-    streams = []
-    if purge is not None:
-        purge.argtypes = [ctypes.c_void_p]
+    # Discard buffered data, then clear the end-of-file and error indicators:
+    # a solver started as `python3 -` has read its C stdin to the end.
+    calls = []
+    purge, clear = getattr(libc, "__fpurge", None), getattr(libc, "clearerr", None)
+    if purge is not None and clear is not None:
         streams = [ctypes.c_void_p.in_dll(libc, name) for name in ("stdin", "stdout")]
+        for function in (purge, clear):
+            function.argtypes, function.restype = [ctypes.c_void_p], None
+            calls += [(function, stream) for stream in streams]
     setters = {}
     for variable, setter in _THREAD_SETTINGS.items():
         for library in ("libgomp.so.1", "libopenblas.so.0"):
@@ -57,7 +61,20 @@ def _process_symbols():
                 continue
             function.argtypes = [ctypes.c_int]
             setters.setdefault(variable, []).append(function)
-    return purge, streams, setters
+    return calls, setters
+
+
+def c_stream_reset():
+    """A call that gives a fork of this process fresh C standard streams: no data, no end of file.
+
+    Resolve it before forking: the child then resolves no symbols.
+    """
+    calls, _ = _process_symbols()
+
+    def child():
+        for call, stream in calls:
+            call(stream)
+    return child
 
 
 @lru_cache(maxsize=None)
@@ -90,7 +107,7 @@ def available(name):
 def _start(name, args, stdin, stdout, stderr, env):
     """Fork a child that runs the helper's entry on these descriptors. Return its pid."""
     function, reset = _entry(name)
-    purge, streams, setters = _process_symbols()
+    calls, setters = _process_symbols()
     argv = [str(BUILD / name).encode(), *(str(a).encode() for a in args)]
     array = (ctypes.c_char_p * (len(argv) + 1))(*argv, None)
     threads = [] if env is None else [(function, int(env[variable])) for variable, functions in setters.items()
@@ -118,8 +135,8 @@ def _start(name, args, stdin, stdout, stderr, env):
                 except OSError:
                     pass
         # Buffered C stream data belongs to the solver, not to the program.
-        for stream in streams:
-            purge(stream)
+        for call, stream in calls:
+            call(stream)
         if env is not None:
             os.environ.clear()
             os.environ.update(env)

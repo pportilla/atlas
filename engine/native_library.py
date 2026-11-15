@@ -102,6 +102,26 @@ def current_replay_scope():
     return scope if scope is not None and scope.thread == get_ident() else None
 
 
+def fork_reset():
+    """A call giving this thread, in a fork of this process, the replay hooks of a fresh engine.
+
+    The native reset clears the thread's scoped hooks and activity counters
+    and the default hook. Loading the kernel then installs the dispatcher.
+    Resolve the call before forking, so the child calls no dynamic linker.
+    """
+    library = _kernel() if _kernel.cache_info().currsize else None
+    reset = getattr(library, "atlas_groebner_reset_fork_child", None) if library is not None else None
+    if reset is None:
+        return lambda: None
+    reset.argtypes, reset.restype = [], None
+    hook = ctypes.cast(_dispatch_batch, ctypes.c_void_p)
+
+    def child():
+        reset()
+        library.atlas_groebner_use_batch(hook)
+    return child
+
+
 @lru_cache(maxsize=1)
 def _opencl_replay():
     path = _LIBRARY.with_name(_LIBRARY.name.replace("libgroebner", "libgroebner_opencl"))

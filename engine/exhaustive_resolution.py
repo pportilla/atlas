@@ -15,10 +15,11 @@ from .polynomial import LimitError, NonReducedError, integer_from_decimal, ratio
 from .resolution_progress import report
 
 
+_ROOT = Path(__file__).resolve().parents[1]
 NEWTON_GRACE_SECONDS = 2
-# With lanes forked from a preloaded engine, the later lanes start with the
-# first one. Their answers wait until the first lane answers or its grace
-# ends, so the first lane keeps its priority.
+# With forked lanes, from a preloaded engine or from this solver, the later
+# lanes start with the first one. Their answers wait until the first lane
+# answers or its grace ends, so the first lane keeps its priority.
 SPECULATIVE_LANES = True
 # A short wall-clock prefix for the canonical rule only when the native
 # proof excludes Newton and the early identity/origin/coordinate graphs.
@@ -61,11 +62,180 @@ def _processors():
     return os.sched_getaffinity(0) if hasattr(os, "sched_getaffinity") else range(os.cpu_count() or 1)
 
 
+def _forkable(scope, compute):
+    """Whether this process can fork its lanes instead of starting an interpreter for each.
+
+    A fork copies only the calling thread, so no other thread may exist,
+    Python or native. A GPU runtime does not survive a fork, so the request
+    must use the CPU. A process with a fork server starts its lanes there.
+    """
+    if not sys.platform.startswith("linux") or fork_server.attached():
+        return False
+    if (scope.compute if scope is not None else compute) != "cpu":
+        return False
+    try:
+        return threading.active_count() == 1 and len(os.listdir("/proc/self/task")) == 1
+    except OSError:
+        return False
+
+
+class _ForkedLane:
+    """A lane forked from this process, with the part of Popen that `search` uses.
+
+    The lane leads its own session and waits for its request on standard
+    input. It reads the whole request before it answers on standard output.
+    """
+
+    def __init__(self, method, coordinator):
+        from .native_library import fork_reset
+        from .native_process import c_stream_reset
+        reset, streams = fork_reset(), c_stream_reset()
+        for stream in {sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__}:
+            try:
+                stream.flush()
+            except (AttributeError, OSError, ValueError):
+                pass
+        fds = [*os.pipe(), *os.pipe(), *os.pipe()]
+        request_r, request_w, reply_r, reply_w, ready_r, ready_w = fds
+        try:
+            pid = os.fork()
+        except BaseException:
+            for fd in fds:
+                os.close(fd)
+            raise
+        if pid == 0:
+            _lane(method, request_r, reply_w, coordinator, ready_w, reset, streams)
+        try:
+            for fd in (request_r, reply_w, ready_w):
+                os.close(fd)
+            # Like Popen(start_new_session=True), return once the child leads
+            # its session, so its process group can be signalled.
+            os.read(ready_r, 1)
+            os.close(ready_r)
+        except BaseException:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+            for fd in (request_w, reply_r):
+                os.close(fd)
+            raise
+        self.pid, self.returncode = pid, None
+        self.stdin, self.stdout = open(request_w, "wb", buffering=0), open(reply_r, "rb", buffering=0)
+        self._lock = threading.Lock()
+
+    def _reap(self, options):
+        # Like Popen, a child reaped elsewhere (SIGCHLD ignored) exited with 0.
+        try:
+            pid, status = os.waitpid(self.pid, options)
+        except ChildProcessError:
+            pid, status = self.pid, 0
+        if pid:
+            self.returncode = os.waitstatus_to_exitcode(status)
+
+    def poll(self):
+        # Another thread waiting for the lane holds the lock: still running.
+        if self.returncode is None and self._lock.acquire(False):
+            try:
+                if self.returncode is None:
+                    self._reap(os.WNOHANG)
+            finally:
+                self._lock.release()
+        return self.returncode
+
+    def wait(self):
+        with self._lock:
+            if self.returncode is None:
+                self._reap(0)
+        return self.returncode
+
+    def communicate(self, message):
+        data = memoryview(message.encode())
+        try:
+            while data:
+                data = data[self.stdin.write(data):]
+        except BrokenPipeError:
+            pass  # The lane stopped early; its exit status reports why.
+        self.stdin.close()
+        output = self.stdout.read()
+        self.stdout.close()
+        self.wait()
+        return output.decode(), None
+
+
+def _lane(method, request, reply, coordinator, ready, reset, streams):
+    """Run one lane in a fork of the coordinator, as an interpreter started for it would. Never returns."""
+    code = 1
+    try:
+        os.setsid()
+        os.write(ready, b"1")
+        # Like Popen(close_fds=True) and exec: keep the request and reply as
+        # standard input and output, an inheritable standard error and the
+        # coordinator pipe. Close every other inherited descriptor.
+        import fcntl
+        try:
+            stderr = os.get_inheritable(2)
+        except OSError:
+            stderr = False
+        parked = [fcntl.fcntl(fd, fcntl.F_DUPFD_CLOEXEC, 3) for fd in (request, reply, coordinator)]
+        keep = {*parked, *((2,) if stderr else ())}
+        for name in os.listdir("/proc/self/fd"):
+            if int(name) not in keep:
+                try:
+                    os.close(int(name))
+                except OSError:
+                    pass
+        for fd, target in zip(parked[:2], (0, 1)):
+            os.dup2(fd, target)
+            os.close(fd)
+        threading.Thread(target=_watch_coordinator, args=(parked[2],), daemon=True).start()
+        # The state of a fresh interpreter: inherited objects whose descriptors
+        # are closed are never collected here, no handler of the coordinator
+        # runs, the native replay hooks are cleared and C buffers are empty.
+        import gc
+        gc.freeze()
+        for sig in signal.valid_signals():
+            handler = signal.getsignal(sig)
+            if callable(handler) and handler is not signal.default_int_handler:
+                signal.signal(sig, signal.default_int_handler if sig == signal.SIGINT else signal.SIG_DFL)
+        reset()
+        streams()
+        if hasattr(sys, "set_int_max_str_digits"):
+            sys.set_int_max_str_digits(0)
+        os.chdir(_ROOT)
+        if os.getenv("ATLAS_PROGRESS_FILE"):
+            os.environ["ATLAS_PROGRESS_METHOD"] = method
+        sys.stdin, sys.stdout = open(0, closefd=False), open(1, "w", closefd=False)
+        sys.stderr = open(2, "w", buffering=1, errors="backslashreplace", closefd=False) if stderr else None
+        # Fresh face_search and replay_scope contexts, as in a new process.
+        import contextvars
+        answer = contextvars.Context().run(_run, method, json.load(sys.stdin))
+        sys.stdout.write(json.dumps(answer, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+        code = 0
+    except SystemExit as stop:
+        code = stop.code if isinstance(stop.code, int) else 0 if stop.code is None else 1
+    except BaseException:
+        try:
+            import traceback
+            traceback.print_exc()
+        except BaseException:
+            pass
+    finally:
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except BaseException:
+                pass
+        os._exit(code & 0xff)
+
+
 def search(poly, variables, mode, *, compute=None, integrals=False, verified=None):
     """Give the first eligible method a short head start, then race the remaining workers.
 
     Each method has its own process group. Its inherited pipe closes if
     the outer job is killed, so cancellation also reaches native descendants.
+    Without a fork server, a single-threaded CPU solver forks every lane
+    before any reader thread exists. A lane then waits for its request until
+    its turn to race. Otherwise each lane starts an interpreter when it races.
     """
     scope = current_replay_scope()
     request = {
@@ -76,7 +246,9 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
     }
     payload = json.dumps(request)
     replies = queue.SimpleQueue()
-    children, readers = [], []
+    # Every lane process with its coordinator pipe, the lanes that received
+    # their request, and forked lanes still waiting for it.
+    children, readers, started, waiting = [], [], [], {}
 
     def collect(method, child, message):
         try:
@@ -92,27 +264,43 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
 
     errors = []
 
-    def start(method):
-        message = payload
-        if method == "certificates" and any(peer.poll() is None for peer, _ in children):
-            message = json.dumps(dict(request, defer_spare=True))
+    def spawn(method, fork):
+        """A lane process waiting for its request, or None after recording why it could not start."""
         read_fd, write_fd = os.pipe()
         try:
-            environment = {**os.environ, "ATLAS_PROGRESS_METHOD": method} if os.getenv("ATLAS_PROGRESS_FILE") else None
-            child = fork_server.popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
-                                     cwd=Path(__file__).resolve().parents[1],
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=environment,
-                                     start_new_session=True, pass_fds=(read_fd,))
+            child = None
+            if fork:
+                try:
+                    child = _ForkedLane(method, read_fd)
+                except OSError:
+                    pass  # Start an interpreter instead.
+            if child is None:
+                environment = {**os.environ, "ATLAS_PROGRESS_METHOD": method} if os.getenv("ATLAS_PROGRESS_FILE") else None
+                child = fork_server.popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
+                                         cwd=_ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                         env=environment, start_new_session=True, pass_fds=(read_fd,))
         except OSError as error:
             os.close(write_fd)
             errors.append(f"{method}: {error}")
-            return
+            return None
         finally:
             os.close(read_fd)
         children.append((child, write_fd))
+        return child
+
+    def start(method):
+        """Send a lane its request, starting it unless it is waiting. Return whether it races."""
+        child = waiting.pop(method) if method in waiting else spawn(method, False)
+        if child is None:
+            return False
+        message = payload
+        if method == "certificates" and any(peer.poll() is None for peer in started):
+            message = json.dumps(dict(request, defer_spare=True))
+        started.append(child)
         reader = threading.Thread(target=collect, args=(method, child, message), daemon=True)
         reader.start()
         readers.append(reader)
+        return True
 
     try:
         if _canonical_head_start(poly, variables, mode):
@@ -133,17 +321,21 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
                 errors.append(f"{method}: {reply['error']}")
             return None
 
-        start(first)
-        head_start = bool(children)
+        forked = _forkable(scope, compute)
+        if forked:
+            # Fork every lane while this is the process's only thread.
+            for method in (first, *others):
+                waiting[method] = spawn(method, True)
+        head_start = start(first)
         speculative = (head_start and SPECULATIVE_LANES and len(_processors()) > len(others)
-                       and fork_server.available())
+                       and (forked or fork_server.available()))
         if not head_start or speculative:
             for method in others:
                 start(method)
         held = []
         received = 0
         end = time.monotonic() + grace
-        while received < len(children):
+        while received < len(started):
             try:
                 method, reply = replies.get(timeout=max(0, end - time.monotonic()) if head_start else None)
             except queue.Empty:
@@ -181,6 +373,11 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
             child.wait()
         for reader in readers:
             reader.join()
+        # Lanes that never raced still hold their pipes.
+        for child, _ in children:
+            for stream in (child.stdin, child.stdout):
+                if stream is not None:
+                    stream.close()
 
 
 def _run(method, payload):

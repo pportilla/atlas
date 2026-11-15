@@ -222,6 +222,11 @@ def _server_for(env):
     return server if server.is_ready() else None
 
 
+def attached():
+    """Whether this process starts workers from a fork server: its own, or the one that forked it."""
+    return _enabled or _inherited is not None
+
+
 def available(env=None):
     """Whether popen() would fork an engine module with this environment from a server."""
     return _server_for(dict(os.environ if env is None else env)) is not None

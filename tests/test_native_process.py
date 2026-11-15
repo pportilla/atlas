@@ -72,6 +72,20 @@ class ForkedHelperPrograms(unittest.TestCase):
             forked = native_process.run("graph_verify", input=request)
         self.assertEqual((forked.returncode, forked.stdout), (expected.returncode, expected.stdout))
 
+    def test_solver_that_read_its_c_stdin_to_the_end(self):
+        # `python3 -` reads its program through C stdin and leaves its
+        # end-of-file indicator set. The forked helper still reads its request.
+        import sys
+        from pathlib import Path
+        request = json.dumps({"exponents": [[2, 0, 0], [0, 3, 0], [0, 0, 5]], "exhaustive": False})
+        source = ("import sys\nfrom engine import native_process\n"
+                  f"answer = native_process.run('newton_fan', input={request!r})\n"
+                  "print(answer.returncode, answer.stdout, end='')\n")
+        out = subprocess.run([sys.executable, "-"], input=source, capture_output=True, text=True, timeout=60,
+                             cwd=Path(native_process.__file__).resolve().parents[1])
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout, f"0 {program('newton_fan', request).stdout}")
+
     def test_long_running_helper_uses_the_given_descriptors(self):
         import socket
         ours, theirs = socket.socketpair()
