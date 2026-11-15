@@ -75,6 +75,8 @@ class DocsSiteTests(unittest.TestCase):
         self.assertTrue(set(names) <= self.parsed["reference/functions.html"].ids)
         html = (self.out / "reference/functions.html").read_text(encoding="utf-8")
         self.assertIn("Compute the dimension over QQ of the Jacobian algebra", html)
+        entry = html.split('<section class="api-entry" id="polynomial">', 1)[1].split("</section>", 1)[0]
+        self.assertIn('href="../docs/sessions.html#choose-the-ring-of-a-polynomial"', entry)
 
     def test_inline_calls_link_to_the_reference_and_back(self):
         sessions = self.parsed["docs/sessions.html"].hrefs

@@ -71,7 +71,7 @@ class AeCodimensionInterface(unittest.TestCase):
                                            'print(r.finite, r.value, r.scope)\nquit\n')
         self.assertEqual((status, error), (0, ""))
         self.assertIn("ae_codimension(*components", output)
-        self.assertIn("r.lower_bound", output)
+        self.assertIn("examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ", output)
         self.assertIn("True 1 origin", output)
 
     def test_command_help_example_and_weighted_result_field(self):

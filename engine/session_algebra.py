@@ -1183,6 +1183,8 @@ def ae_codimension(*components, order=None, variables=None, compute="auto"):
     >>> t = coordinates("t", coeffs=QQ)
     >>> r = ae_codimension(t^2, t^3)
     >>> print(r.finite, r.value)  # True 1
+
+    Docs: examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ
     """
     space, values, order = _polynomial_inputs(_unpack(components), order, variables, QQ)
     request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},
@@ -1233,6 +1235,8 @@ def ideal_sum(left, right, *, compute="auto"):
     >>> I, J = ideal(x^2, y), ideal(x, y^2)
     >>> S = ideal_sum(I, J)
     >>> membership(x, S).value
+
+    Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
     """
     return _binary_ideals("ideal-sum", left, right, compute)
 
@@ -1244,6 +1248,8 @@ def ideal_product(left, right, *, compute="auto"):
     >>> I, J = ideal(x^2, y), ideal(x, y^2)
     >>> P = ideal_product(I, J)
     >>> membership(x*y, P).value
+
+    Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
     """
     return _binary_ideals("ideal-product", left, right, compute)
 

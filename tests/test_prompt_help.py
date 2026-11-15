@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from engine.session import new_session
-from tests.cli_support import run_prompt
+from tests.cli_support import run_prompt, run_script
 
 
 class PromptHelpTests(unittest.TestCase):
@@ -52,6 +52,11 @@ class PromptHelpTests(unittest.TestCase):
         self.assertEqual(error, "")
         self.assertIn("coordinates(", script)
         self.assertIn("./atlas run", script)
+        self.assertIn("docs/sessions.md#run-or-save-a-calculation", script)
+        example = "\n".join(line[2:] for line in script.splitlines() if line.startswith("  "))
+        replay = run_script(example)
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(replay.stdout.strip(), "x^2+1")
 
     def test_recorded_complex_help_explains_its_convention(self):
         for request in ("help K.dual_complex", "K.dual_complex -h"):
@@ -126,12 +131,12 @@ class PromptHelpTests(unittest.TestCase):
                  'a = A(x)\nphi = A.projection\nalias = factor\nd = dimension(I)\nring = x.parent\n')
         for topic, example_part in (("ring", "ring.coordinates"), ("f", "ring=f.parent"),
                                     ("f.parent", "f.parent.coordinates"), ("I", "I.generators"),
-                                    ("I.parent", "ring=I.parent"), ("I.quotient_ring", "K = I.quotient_ring"),
+                                    ("I.parent", "ring=I.parent"), ("I.quotient_ring", "I.quotient_ring.coordinates"),
                                     ("A", "A.ambient.coordinates"), ("A.coordinates", "residue classes"),
                                     ("A.ambient.coordinates", "polynomial generators"),
                                     ("A.declaration_executions", "A.execution"),
                                     ("a", "a.representative"), ("phi", "phi.images"), ("d", "d.value"),
-                                    ("phi.codomain", "phi.codomain.gens"), ("alias", "alias(")):
+                                    ("phi.codomain", "phi.codomain.coordinates"), ("alias", "alias(")):
             with self.subTest(topic=topic):
                 card, error = self.ask(setup + "help " + topic)
                 self.assertEqual(error, "")
@@ -143,6 +148,62 @@ class PromptHelpTests(unittest.TestCase):
         list(session.run(setup))
         self.assertTrue({"f.parent", "I.ambient", "A", "phi.codomain", "phi.domain", "alias"} <=
                         topic_names(session, make_parser()))
+
+    def test_polynomial_help_identifies_its_live_ring_and_links_to_the_guide(self):
+        setup = 'x,y=coordinates("x","y")\nf=x^2+y\n'
+        guide = "docs/sessions.md#choose-the-ring-of-a-polynomial"
+        for command in ("help f", "f -h", "f help"):
+            output, err = self.ask(setup + command)
+            self.assertEqual(err, "")
+            card = output.rsplit("atlas> ", 1)[-1]
+            self.assertEqual(card.split("\n\n")[0], "f is a polynomial in QQ[x, y].")
+            self.assertTrue(card.endswith(guide))
+            self.assert_example_runs(setup, card)
+        setup += 'A=f.parent\nX,Y=coordinates("x","y",fresh=True)\nB=X.parent\ng=X+Y\n'
+        for name, expected in (("f", "A"), ("g", "B")):
+            card, _ = self.ask(setup + "help " + name)
+            self.assertIn(f"{name} is a polynomial in {expected} (QQ[x, y]).", card)
+        card, _ = self.ask('q=polynomial("1/2",ring=QQ)\nhelp q')
+        self.assertIn("q is a polynomial in QQ.", card)
+        for polynomial in ("x^2+y", "0*x"):
+            setup = f'x,y=coordinates("x","y")\nf={polynomial}\n'
+            card, err = self.ask(setup + "help f.multiplicity")
+            self.assertEqual(err, "")
+            self.assertIn("factor", card)
+            self.assert_example_runs(setup, card)
+
+    def test_saved_names_take_precedence_over_prompt_topics(self):
+        setup = 't=coordinates("t")\nworkspace=t+1\nchart=workspace\nscript=[chart]\n'
+        for command, expected in (("help workspace", "workspace is a polynomial in QQ[t]."),
+                                  ("chart -h", "chart is a polynomial in QQ[t]."),
+                                  ("help script", "script is a list."), ("help :workspace", "grouped by")):
+            with self.subTest(command=command):
+                card, err = self.ask(setup + command)
+                self.assertEqual(err, "")
+                self.assertIn(expected, card)
+        _, err = self.ask(setup + "help chart.divisors")
+        self.assertIn("Unknown help topic", err)
+
+    def test_help_only_reads_quotient_metadata(self):
+        from unittest.mock import patch
+        from engine.session_quotient import QuotientRing
+        from engine.session_help import algebra_help_values, algebra_value_help
+
+        session = new_session(None)
+        list(session.run('x,y=coordinates("x","y")\nf=y^2+x^5\nI=ideal(f)\nK=I.quotient_ring\n'
+                         'J=ideal((y,x^5),ring=K)\n'))
+        ring, ideal = session.variables["K"], session.variables["J"]
+        self.assertNotIn("gens", vars(ring))
+        with patch.object(QuotientRing, "apply", side_effect=AssertionError("help computed a quotient class")):
+            values = algebra_help_values(session)
+            for name in ("f", "K", "K.projection", "K.coordinates", "J", "J.generators", "J.quotient_ring"):
+                card = algebra_value_help(name, values[name], session.variables)
+                self.assertIn("\n\nDocs  ", card)
+                if name == "J":
+                    self.assertIn("J is an ideal in K (QQ[x, y]/(x^5+y^2)).", card)
+        self.assertNotIn("gens", vars(ring))
+        self.assertNotIn("generators", vars(ideal))
+        self.assertNotIn("quotient_ring", vars(ideal))
 
     def test_error_suggestions_help_the_user_recover(self):
         for command, expected in (

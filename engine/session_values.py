@@ -184,7 +184,7 @@ class DualComplex(_RecordView):
 
     def __init__(self, resolution, record):
         super().__init__(record)
-        self._mode = resolution._record.get("mode")
+        self._resolution = resolution
         self._vertices = {v["id"]: Divisor(resolution, v) for v in record["vertices"]}
 
     @property
@@ -206,7 +206,8 @@ class DualComplex(_RecordView):
     def __repr__(self):
         cells = self._record["cells"]
         nv, nc = len(self._vertices), len(cells)
-        scope = f"{self._mode}, " if self._mode else ""
+        mode = self._resolution._record.get("mode")
+        scope = f"{mode}, " if mode else ""
         edges_only = bool(cells) and all(c.get("dimension", 1) == 1 and len(c["vertices"]) == 2 for c in cells)
         kind = "edge" if edges_only else "higher cell"
         summary = (f"Dual complex ({scope}{self.status}): "

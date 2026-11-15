@@ -1,190 +1,98 @@
-"""Short usage cards for the callables exposed in an Atlas session."""
-from inspect import Parameter, getdoc, signature
-from textwrap import fill, indent
+"""Contextual help for saved session values, using their live parents."""
+
+from fractions import Fraction
 from typing import NamedTuple
 
-from .algebra_cli import OPERATION_DESCRIPTIONS
-from .session_algebra import Ideal, _Result, _ScalarResult
+from .help_card import usage_card
+from .session_algebra import Ideal, _NormalizedComponent, _Result, _ScalarResult
+from .session_function_help import function_documentation, function_help
 from .session_maps import RingHomomorphism
-from .session_polynomial import Polynomial, _Coordinates, _CoordinateSpace
+from .session_panel import workspace
+from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace, _NumberField
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing
 
 
-_COORDINATES = 'x, y = coordinates("x", "y")'
-# Algebra examples share a setup so each can be copied into a fresh session.
-_RING_EXAMPLES = {
-    "resolve": "f = y^2 - x^3\nR = resolve(f)\nR.polynomial == f\nR.dual_complex",
-    "recompute_dual_complex": "R = resolve(y^2 - x^3)\nD = recompute_dual_complex(R)\nD.vertices",
-    "dual_complex": "R = resolve(y^2 - x^3)\ndual_complex(R).vertices",
-    "monodromy_check": "monodromy_check(y^2 - x^3).status",
-    "polynomial": ('f = y^2 - x^3\ng = polynomial("x^2+y", ring=f.parent)\ng.parent == f.parent\n'
-                   'K = ideal(f).quotient_ring\npolynomial("y^2-x^3", ring=K) == 0'),
-    "ideal": "I = ideal(y^2+x^5)\nK = I.quotient_ring\nJ = ideal((y, x^5), ring=K)\nJ.parent == K\nmembership(K(x^5), J).value",
-    "groebner": "groebner(ideal(x^2, x*y + y))",
-    "gcd": "gcd(x*y, x^2)",
-    "factor": "factor(x^2 - y^2)",
-    "resultant": "resultant(y^2 - x, y - 2, y)",
-    "normal_form": "normal_form(x^2 + y, ideal(x^2))",
-    "membership": "membership(x*y, ideal(x)).value",
-    "local_standard_basis": "local_standard_basis(ideal(x^2, y), point=(0, 0))",
-    "local_normal_form": "local_normal_form(x + y, ideal(x), point=(0, 0)).remainder",
-    "eliminate": "eliminate(ideal(x - y, y^2), y)",
-    "intersection": "intersection(ideal(x), ideal(y))",
-    "quotient_ring": "I = ideal(y^2 + x^5)\nK = quotient_ring(I)\nK == I.quotient_ring\nu, v = K.coordinates\nv^2 + u^5 == 0",
-    "quotient": "quotient(ideal(x*y), ideal(x))",
-    "saturation": "saturation(ideal(x*y), x)",
-    "radical": "radical(ideal(x^2, y))",
-    "dimension": "dimension(ideal(x*y)).value",
-    "ideal_power": "ideal_power(ideal(x, y), 2)",
-    "symbolic_power": "symbolic_power(ideal(x, y), 2)",
-    "primary_decomposition": "primary_decomposition(ideal(x*y)).components",
-    "localize": "localize(ideal(x*y), ideal(x))",
-    "normalization": "normalization(ideal(y^2 - x^3)).components",
-    "quotient_basis": "quotient_basis(ideal(x^2, y)).basis",
-    "local_quotient_basis": "local_quotient_basis(ideal(x^2, y)).basis",
-    "multiplicity": "multiplicity(ideal(x^2, y)).value",
-    "hilbert_series": "hilbert_series(ideal(x^2, y^3))",
-    "hilbert_samuel_function": "hilbert_samuel_function(ideal(y^2 - x^3), degrees=[0, 1, 2]).values",
-    "hilbert_samuel_multiplicity": "hilbert_samuel_multiplicity(ideal(y^2 - x^3)).value",
-    "tangent_cone": "tangent_cone(ideal(y^2 - x^3)).generators",
-    "tangent_cone_hilbert_series": "tangent_cone_hilbert_series(ideal(y^2 - x^3))",
-    "zariski_tangent_space": "zariski_tangent_space(ideal(y - x^2)).basis",
-    "embedding_dimension": "embedding_dimension(ideal(y^2 - x^3)).value",
-    "local_dimension": "local_dimension(ideal(y^2 - x^3)).value",
-    "local_smoothness": "local_smoothness(ideal(y - x^2)).value",
-    "local_jacobian_algebra": "local_jacobian_algebra(y^2 - x^3).basis",
-    "milnor_number": "milnor_number(y^2 - x^3).value",
-    "tjurina_number": "tjurina_number(y^2 - x^3).value",
-}
-
-_EXAMPLES = {
-    "coordinates": _COORDINATES + '\nf = y^2 + x\nx, y = coordinates("x", "y")\nx.parent == f.parent',
-    "len": "len([2, 3, 5])",
-    "print": 'print("multiplicity", 6)',
-    "print_json": 'print_json(divisor="E3", multiplicity=6)',
-    "algebra_request": (
-        """request = '{"operation":"ideal","ring":{"variables":["x"]},"operands":{"ideal":["x^2"]}}'\n"""
-        "algebra_request(request)"
-    ),
-}
-
-_PURPOSES = {
-    "ideal": ("Create an ideal in its generators' parent ring. With ring=K, generators from K's "
-              "ambient polynomial ring are projected into K. Use ideal(ring=K) for its zero ideal."),
-    "quotient_ring": ("Return the parent ring of the given ideal modulo that ideal. "
-                      "The default reuses I.quotient_ring. Use fresh=True for an independent parent. "
-                      "An explicit CPU or GPU request reruns the declaration and keeps the same parent. "
-                      "K.declaration_executions gives the latest execution report for each requested mode."),
-    "resolve": "Resolve a hypersurface at the origin and return its charts and divisors.",
-    "recompute_dual_complex": ("Rebuild exceptional incidence from the charts of a resolution. "
-                               "R.dual_complex holds the complex saved by resolve."),
-    "dual_complex": ("Compatibility function returning the raw recomputed record. "
-                     "Use R.dual_complex to inspect a resolution or recompute_dual_complex(R) to rebuild incidence."),
-    "monodromy_check": "Check the poles of the local topological zeta function for monodromy witnesses.",
-    "print": "Display values at the prompt or write them to a script's output.",
-}
-
-
-# The order matters for computed polynomials and ideals, which are also results.
-_VALUE_CARDS = {
-    _Coordinates: (
-        "The generators of {n}.parent in declaration order. Unpack this tuple to give its coordinates names.",
-        '{n}.parent\npolynomial("1", variables={n})',
-    ),
-    _CoordinateSpace: (
-        "A live parent ring. Its coordinates are the generators in declaration order. "
-        "Pass this ring to polynomial to read an expression in it.",
-        '{n}.coordinates\npolynomial("1", ring={n})',
-    ),
-    Polynomial: (
-        "A polynomial in {n}.parent. When both parents have generators, two polynomials in distinct "
-        "parents compare unequal, even if both are constant. A rational number or a polynomial "
-        "in QQ is compared by its value in the other polynomial's ring.",
-        '{n}.parent\n{n}.parent.coordinates\npolynomial("1", ring={n}.parent)',
-    ),
-    Ideal: (
-        "An ideal generated by {n}.generators in the live ring {n}.parent. "
-        "Use {n}.quotient_ring for the quotient by this ideal. "
-        "Use + or * with another ideal in the same parent ring. Use ^ for an ordinary power. "
-        "Its order is the monomial order for basis calculations.",
-        '{n}.parent\n{n}.generators\n{n}.quotient_ring\n{n}^2',
-    ),
-    QuotientRing: (
-        "The quotient of {n}.defining_ideal.parent by {n}.defining_ideal. "
-        "Its coordinates are the residue classes of the generators in {n}.ambient.coordinates. "
-        "Call {n}(f) to project an ambient polynomial. Its relations give a reduced basis "
-        "for all relations in the ambient polynomial ring.",
-        "{n}.coordinates\n{n}.ambient.coordinates\n{n}.gens\n{n}.relations\n{n}(1)",
-    ),
-    QuotientElement: (
-        "A residue class in {n}.parent. Its representative is a polynomial in the ambient ring. "
-        "Project that polynomial to recover its class.",
-        "{n}.parent\n{n}.representative\n{n}.parent({n}.representative) == {n}",
-    ),
-    RingHomomorphism: (
-        "A ring map from {n}.domain to {n}.codomain. The images follow the order of the domain "
-        "generators. Apply the map to a domain element by calling {n}.",
-        "{n}.domain\n{n}.codomain\n{n}.images\n{n}(1)",
-    ),
-    _ScalarResult: (
-        "A calculation result. Read its scalar with {n}.value and use {n}.status to inspect its status.",
-        "{n}.value\n{n}.status\n{n}.result",
-    ),
-    _Result: (
-        "A calculation result in the ambient ring {n}.ambient. Its result and status fields "
-        "describe the output of the operation.",
-        "{n}.operation\n{n}.ambient\n{n}.status\n{n}.result",
-    ),
-}
+POLYNOMIALS = "docs/sessions.md#choose-the-ring-of-a-polynomial"
+QUOTIENTS = "docs/sessions.md#name-a-quotient-and-its-coordinates"
+IDEALS = "docs/sessions.md#add-multiply-and-raise-ideals-to-powers"
+QUOTIENT_IDEALS = "docs/sessions.md#create-an-ideal-in-a-quotient-ring"
+MAPS = "docs/sessions.md#move-a-polynomial-between-rings"
+SAVED_VALUES = "docs/sessions.md#inspect-a-saved-value"
+CHARTS = "docs/sessions.md#look-inside-a-chart"
 
 
 class _FieldHelp(NamedTuple):
     description: str
-    example: str
+    examples: str
+    reference: str
 
 
-_IDEAL_QUOTIENT = _FieldHelp(
-    "The default quotient ring for this ideal. Repeated access returns the same live parent as quotient_ring({owner}).",
-    "K = {n}\nK.defining_ideal\nK.coordinates",
-)
-_RESIDUE_COORDINATES = _FieldHelp(
-    "The residue classes of the ambient generators in declaration order. Each class has parent {owner}.",
-    "{n}\n{owner}.ambient.coordinates",
-)
-_AMBIENT_COORDINATES = _FieldHelp(
-    "The polynomial generators of the ambient ring, in declaration order.",
-    "{n}",
-)
-_DECLARATION_EXECUTIONS = _FieldHelp(
-    "Execution reports keyed by the requested compute mode. Each entry describes the latest successful "
-    "declaration in that mode. {owner}.execution describes the original declaration.",
-    "{owner}.execution\n{n}",
-)
-_QUOTIENT_PRESENTATION = _FieldHelp(
-    "The coefficient field, ordered variable names, monomial order and defining relations of the quotient.",
-    "{n}",
-)
+_IDEAL_QUOTIENT = _FieldHelp("{n} is the quotient of {owner}.parent by {owner}.",
+                             "{n}.defining_ideal\n{n}.coordinates", QUOTIENTS)
+_FURTHER_QUOTIENT = _IDEAL_QUOTIENT._replace(reference=QUOTIENT_IDEALS)
+_RESIDUE_COORDINATES = _FieldHelp("{n} contains the ordered residue classes of the generators in {owner}.",
+                                  "{n}\n{owner}.ambient.coordinates", QUOTIENTS)
+_AMBIENT_COORDINATES = _FieldHelp("{n} contains the ordered polynomial generators of {owner}.", "{n}", POLYNOMIALS)
+_DECLARATION_EXECUTIONS = _FieldHelp("{n} records the latest quotient declaration for each compute mode.",
+                                     "{n}\n{owner}.execution", QUOTIENTS)
+_QUOTIENT_PRESENTATION = _FieldHelp("{n} records the variables, monomial order and relations of the quotient.",
+                                    "{n}.variables\n{n}.relations", QUOTIENTS)
+_PROJECTION = _FieldHelp("{n} maps the parent of {owner}.defining_ideal to {owner}.",
+                         "{n}.domain\n{n}.images", MAPS)
+_RELATIONS = _FieldHelp("{n} contains the defining relations in {owner}.ambient.",
+                        "{n}\n{owner}.defining_ideal.generators", QUOTIENTS)
+_VARIABLE_NAMES = _FieldHelp("{n} gives the ordered variable names of {owner}.", "{n}", POLYNOMIALS)
+_MULTIPLICITY = _FieldHelp("{n}(factor) gives the largest power of a nonconstant factor that divides {owner}.",
+                           "{n}({owner}.parent.coordinates[0])", CHARTS)
+_GENERATORS = _FieldHelp("{n} contains the generators of the ideal {owner}.",
+                         "{n}\n{owner}.parent", IDEALS)
+_QUOTIENT_GENERATORS = _FieldHelp("{n} contains residue classes generating {owner} in its quotient ring.",
+                                  "{n}\n{owner}.parent", QUOTIENT_IDEALS)
+
+_SIMPLE_TYPES = {bool: "a boolean", int: "an integer", Fraction: "a rational number", str: "a string",
+                 list: "a list", tuple: "a tuple", dict: "a record", type(None): "None"}
+_RING_VALUES = (Polynomial, Ideal, _Result, _NormalizedComponent, _Coordinates, _CoordinateSpace, RingHomomorphism)
 
 
 def algebra_help_values(session):
-    """Collect live help topics using stored parents and map endpoints."""
+    """Index help topics without evaluating any mathematical fields."""
     values = {}
-    kinds = tuple(_VALUE_CARDS)
     functions = {id(value) for value in session.builtins.values() if callable(value)}
     for name, value in session.variables.items():
-        if isinstance(value, kinds) or id(value) in functions:
+        if (isinstance(value, (*_RING_VALUES, _NumberField, tuple))
+                or type(value) in _SIMPLE_TYPES or id(value) in functions):
             values[name] = value
         if isinstance(value, (Polynomial, Ideal, QuotientElement, _Coordinates)):
             values[name + ".parent"] = value.parent
+        if isinstance(value, (Polynomial, _CoordinateSpace, Ideal, QuotientRing)):
+            values[name + ".variables"] = _VARIABLE_NAMES
+            values[name + ".coeffs"] = value.coeffs
+        if isinstance(value, Polynomial):
+            method = _MULTIPLICITY
+            if value.parent.has_relations:
+                method = _FieldHelp("{n} requires a polynomial ring without chart relations.", "{owner}.parent", CHARTS)
+            elif not value._value._terms:
+                method = _FieldHelp("{owner} is zero and has no finite factor multiplicity.", "{owner}", CHARTS)
+            elif not value.parent.generators:
+                method = _FieldHelp("{n} requires a nonconstant factor in the parent ring.", "{owner}.parent", CHARTS)
+            values[name + ".multiplicity"] = method
         if isinstance(value, (Ideal, _Result)):
             values[name + ".ambient"] = value.ambient
         if isinstance(value, Ideal):
-            values[name + ".quotient_ring"] = _IDEAL_QUOTIENT
+            values[name + ".quotient_ring"] = _FURTHER_QUOTIENT if isinstance(value, QuotientIdeal) else _IDEAL_QUOTIENT
+            values[name + ".generators"] = _QUOTIENT_GENERATORS if isinstance(value, QuotientIdeal) else _GENERATORS
+        if isinstance(value, _CoordinateSpace):
+            values[name + ".coordinates"] = _AMBIENT_COORDINATES
+        if isinstance(value, QuotientElement):
+            values[name + ".representative"] = value.representative
         if isinstance(value, QuotientRing):
             for field in ("coordinates", "gens", "generators"):
                 values[name + "." + field] = _RESIDUE_COORDINATES
             values[name + ".ambient.coordinates"] = _AMBIENT_COORDINATES
+            values[name + ".defining_ideal"] = value.defining_ideal
             values[name + ".declaration_executions"] = _DECLARATION_EXECUTIONS
+            values[name + ".relations"] = _RELATIONS
+            values[name + ".projection"] = _PROJECTION
         if isinstance(value, (QuotientRing, QuotientElement, QuotientIdeal)):
             values[name + ".ring"] = _QUOTIENT_PRESENTATION
         if isinstance(value, RingHomomorphism):
@@ -193,50 +101,86 @@ def algebra_help_values(session):
     return values
 
 
-def algebra_value_help(name, value):
-    card = value if isinstance(value, _FieldHelp) else next(
-        (card for kind, card in _VALUE_CARDS.items() if isinstance(value, kind)), None)
-    if card is None:
-        return function_help(name, {name: value})
-    names = {"n": name, "owner": name.rpartition(".")[0]}
-    description, example = card
-    summary = fill(description.format(**names), width=80, break_long_words=False, break_on_hyphens=False)
-    return f"{name}\n{summary}\n\nExample\n{indent(example.format(**names), '  ')}"
-
-
-def function_help(name, builtins):
-    """Describe a registered function. Future functions can include a >>> example in their docstring."""
-    function = builtins.get(name)
-    if not callable(function):
-        return None
-
-    canonical = getattr(function, "__name__", name)
-    doc_lines = (getdoc(function) or "").splitlines()
-    doc_examples = [line[4:] for line in doc_lines if line.startswith((">>> ", "... "))]
-    operation = canonical.replace("_", "-") if canonical != "localize" else "localization"
-    if doc_examples:
-        example_start = next(i for i, line in enumerate(doc_lines) if line.startswith((">>> ", "... ")))
-        purpose = "\n".join(doc_lines[:example_start]).strip()
+def _basic_card(name, value):
+    kind = type(value)
+    fields = getattr(kind, "_fields", ()) if isinstance(value, tuple) else ()
+    examples = [name]
+    if fields and isinstance(fields, tuple):
+        examples = [f"{name}.{field}" for field in fields[:2]]
+        label = "a record"
     else:
-        summary = doc_lines[0] if doc_lines else ""
-        purpose = _PURPOSES.get(canonical) or OPERATION_DESCRIPTIONS.get(operation) or summary
-    purpose = (purpose or f"Call the registered Atlas function {name}").rstrip(".") + "."
-    purpose = purpose[0].upper() + purpose[1:]
+        label = _SIMPLE_TYPES[kind]
+        if isinstance(value, (tuple, list, dict)):
+            examples = [f"len({name})"]
+            if value:
+                key = repr(next(iter(value))) if isinstance(value, dict) else "0"
+                examples.append(f"{name}[{key}]")
+        elif kind in (int, Fraction):
+            examples.append(f"{name}^2")
+        elif kind is bool:
+            examples.append(f"not {name}")
+        elif kind is str:
+            examples.append(f"len({name})")
+    return usage_card(f"{name} is {label}.", "\n".join(examples), SAVED_VALUES)
 
-    sig = signature(function)
-    # Opaque sentinels mark omitted arguments. Keep their addresses out of the UI.
-    display = str(sig.replace(parameters=[
-        p.replace(default=Ellipsis) if type(p.default) is object else p for p in sig.parameters.values()
-    ])).replace("=Ellipsis", "=...")
-    if canonical in _RING_EXAMPLES:
-        example = _COORDINATES + "\n" + _RING_EXAMPLES[canonical].replace(canonical + "(", name + "(", 1)
-    elif canonical in _EXAMPLES:
-        example = _EXAMPLES[canonical].replace(canonical + "(", name + "(", 1)
-    elif doc_examples:
-        example = "\n".join(doc_examples)
-    else:
-        arguments = [f"{p.name}={p.name}" if p.kind == Parameter.KEYWORD_ONLY else p.name
-                     for p in sig.parameters.values() if p.default is Parameter.empty
-                     and p.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)]
-        example = f"{name}({', '.join(arguments)})"
-    return f"{name}{display}\n{purpose}\n\nExample\n{indent(example, '  ')}"
+
+def algebra_value_help(name, value, variables=None):
+    if isinstance(value, _FieldHelp):
+        context = {"n": name, "owner": name.rpartition(".")[0]}
+        return usage_card(value.description.format(**context), value.examples.format(**context), value.reference)
+    if isinstance(value, _NumberField):
+        return usage_card(f"{name} is the coefficient field {value}.", name, CHARTS)
+    if not isinstance(value, _RING_VALUES):
+        if callable(value):
+            return function_help(name, {name: value})
+        return _basic_card(name, value)
+
+    # Use the workspace's ring names so independent copies of QQ[x, y] remain distinguishable.
+    inventory = workspace(variables if variables is not None else {name: value})
+
+    def ring_name(parent):
+        if parent in inventory.references:
+            return inventory.ring_name(parent)
+        # A field can expose a parent whose only reference is through another value.
+        return workspace({name: parent}).presentations[parent]
+
+    if isinstance(value, (QuotientRing, _CoordinateSpace)):
+        presentation = inventory.presentations.get(value) or ring_name(value)
+        if isinstance(value, QuotientRing):
+            return usage_card(f"{name} is the quotient ring {presentation}.",
+                              f"{name}.coordinates\n{name}.ambient.coordinates\n{name}.defining_ideal", QUOTIENTS)
+        if value is QQ:
+            return usage_card(f"{name} is the rational field QQ.", f'polynomial("1/2", ring={name})', POLYNOMIALS)
+        kind = "coordinate ring" if value.has_relations else "polynomial ring"
+        return usage_card(f"{name} is the {kind} {presentation}.",
+                          f'{name}.coordinates\npolynomial("1", ring={name})', POLYNOMIALS)
+    if isinstance(value, _Coordinates):
+        reference = QUOTIENTS if isinstance(value.parent, QuotientRing) else POLYNOMIALS
+        return usage_card(f"{name} contains the ordered coordinates of {ring_name(value.parent)}.",
+                          f'{name}.parent\npolynomial("1", variables={name})', reference)
+    if isinstance(value, Polynomial):
+        variable = value.variables[0] + "+1" if value.variables else "1/2"
+        return usage_card(f"{name} is a polynomial in {ring_name(value.parent)}.",
+                          f'{name}.parent\n{name}^2\npolynomial("{variable}", ring={name}.parent)', POLYNOMIALS)
+    if isinstance(value, Ideal):
+        if isinstance(value, _Result) and value.operation == "groebner":
+            return usage_card(f"{name} is a Gröbner basis in {ring_name(value.parent)}.",
+                              f"{name}.generators\n{name}.order", function_documentation("groebner"))
+        reference = QUOTIENT_IDEALS if isinstance(value, QuotientIdeal) else IDEALS
+        return usage_card(f"{name} is an ideal in {ring_name(value.parent)}.",
+                          f"{name}.generators\n{name}^2\n{name}.quotient_ring", reference)
+    if isinstance(value, QuotientElement):
+        return usage_card(f"{name} is a residue class in {ring_name(value.parent)}.",
+                          f"{name}.representative\n{name}.parent\n{name}^2", QUOTIENTS)
+    if isinstance(value, RingHomomorphism):
+        return usage_card(f"{name} is a ring map from {ring_name(value.domain)} to {ring_name(value.codomain)}.",
+                          f"{name}.images\n{name}(1)", MAPS)
+    if isinstance(value, _Result):
+        operation = value.operation.replace("-", "_")
+        fields = ("value", "finite", "point") if isinstance(value, _ScalarResult) else (
+            "factors", "basis", "remainder", "components", "values", "numerator", "generators", "dimension", "point")
+        examples = [f"{name}.{field}" for field in fields if field in value._fields][:2]
+        return usage_card(f"{name} holds the result of {operation} in {ring_name(value.ambient)}.",
+                          "\n".join(examples or [f"{name}.result"]), function_documentation(operation) or SAVED_VALUES)
+    return usage_card(f"{name} is a normalization component over {ring_name(value.ambient)}.",
+                      f"{name}.map\n{name}.relations", function_documentation("normalization"))

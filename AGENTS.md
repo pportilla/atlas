@@ -48,3 +48,19 @@ run multiple trials, and record both timings and the comparison conditions.
 Use slower cases to guide optimization and rerun the original cases after
 each change, aiming to beat Singular consistently across the comparison
 suite. Report any remaining slower cases.
+
+## Prompt help and public docstrings
+
+Give each new public session function a docstring with a one-sentence first
+line describing what it returns. Follow it with a short, runnable Atlas
+example using `>>>` lines, including any setup it needs in a fresh session.
+End with `Docs: path/to/guide.md#section` pointing to the exact section of
+the user guide. Put extended explanations, conventions and exceptions in
+that section. Command help uses the real signature and these three parts.
+
+For a new public value type, add a saved-value help card. Identify the
+actual value and its parent or owner from existing session metadata. Give
+short expressions using the queried name and its public fields. Showing
+help must leave bindings and cached mathematical results untouched.
+Exercise the card at the prompt, run its examples, and check its documentation
+anchor. Aliases must describe the same object or operation.

@@ -93,6 +93,10 @@ Z_{\mathrm{top},0}(s)=\sum_I \chi_c(E_I^\circ\cap\pi^{-1}(0))
 \prod_{i\in I}\frac{1}{N_i s+\nu_i}.
 $$
 
+At the Atlas prompt, `M = monodromy_check(f)` checks the actual poles for
+monodromy witnesses. Inspect `M.status` for the outcome and `M.poles` for the
+individual poles and their witnesses.
+
 For the cusp this gives $(4s+5)/((s+1)(6s+5))$. The `topological_zeta`
 record includes the numerical data, strata, and poles. For an intrinsic
 resolution that needs further blowups to compute the zetas, a new solve can

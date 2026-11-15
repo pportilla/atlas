@@ -5,38 +5,50 @@ import textwrap
 
 from .cli_highlight import paint_card, paint_hint, paint_value
 from .cli_style import paint
+from .help_card import usage_card
 from .resolution_help import resolution_help, resolution_topics
 from .session_help import algebra_help_values, algebra_value_help, function_help
 from .session_hints import closest_name
 
 
+_SESSION_GUIDE = "docs/sessions.md#"
+
 _TOPICS = {
     "variables": (
-        "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
-        "Repeating the same coordinate names in the same order reuses their ring.\n"
-        "A declaration protects saved names. Use aliases on the left, as in x2, z = coordinates('x', 'z').\n"
-        "Use fresh=True for an independent copy. Assigning from a saved ring's .coordinates "
-        "explicitly binds its existing generators to the names you choose.\n"
-        "For a quotient ring K, use u, v = K.coordinates to name its residue classes.\n"
-        "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
-        'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
+        "Declare coordinates with coordinates(), then assign an expression to a name.",
+        'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
+        _SESSION_GUIDE + "reuse-and-rebind-coordinate-names",
     ),
     ":workspace": (
-        "Show each live ring once, with its aliases and its saved coordinates, polynomials and ideals. "
-        "A resolution appears under its input ring. A map shows its domain and codomain. "
-        "Under a quotient ring, [x] means the residue class of x.\n\n"
-        'Example\n  x, y = coordinates("x", "y")\n  I = ideal(y^2+x^5)\n'
-        "  K = I.quotient_ring\n  u, v = K.coordinates\n  :workspace"
+        "Show saved values grouped by their parent ring.",
+        'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
+        _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
     ),
     "ring": (
-        "A polynomial keeps its live parent ring. An ideal exposes its ambient ring as I.parent. "
-        "Use hom to specify how generators map into another ring.\n\n"
-        'Example\n  x, y = coordinates("x", "y")\n  I = ideal(x, y)\n  polynomial("x^2+y", ring=I.parent)'
+        "A polynomial’s parent is the ring in which its coordinates and arithmetic are defined.",
+        'x, y = coordinates("x", "y")\nf = x^2 + y\nf.parent\ng = polynomial("x+y", ring=f.parent)',
+        _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
     ),
-    ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
-    "QQ": ('The rational field is the parent ring for scalar polynomials. Coordinates use QQ by default.\n\n'
-           'Example\n  q = polynomial("1/2", ring=QQ)\n  q.parent == QQ'),
-    "quit": "Leave the Atlas prompt.\n\nExample\n  quit",
+    "QQ": (
+        "QQ is the field of rational numbers.",
+        'q = polynomial("1/2", ring=QQ)\nq.parent == QQ',
+        _SESSION_GUIDE + "move-a-polynomial-between-rings",
+    ),
+    ":save": (
+        "Write the successful statements from this session to an Atlas script.",
+        'x = coordinates("x")\nprint(x^2 + 1)\n:save square.atlas',
+        _SESSION_GUIDE + "run-or-save-a-calculation",
+    ),
+    "script": (
+        "Save these lines in square.atlas and run ./atlas run square.atlas from the shell.",
+        'x = coordinates("x")\nf = x^2 + 1\nprint(f)',
+        _SESSION_GUIDE + "run-or-save-a-calculation",
+    ),
+    "quit": (
+        "Leave the Atlas prompt.",
+        "quit",
+        _SESSION_GUIDE + "run-or-save-a-calculation",
+    ),
 }
 _ALIASES = {"save": ":save", "workspace": ":workspace", "exit": "quit"}
 _FLAGS = {"-h", "--help", "help"}
@@ -61,14 +73,16 @@ def help_request(line):
 
 def topic_names(session, parser):
     return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, *resolution_topics(session.variables),
-            *algebra_help_values(session), "functions", "script", "help"}
+            *algebra_help_values(session), "functions", "help"}
 
 
 def _functions(session, color=False):
     names = sorted(name for name, value in session.builtins.items() if callable(value))
     listing = paint_value(textwrap.fill(", ".join(names), width=76), functions=names, color=color)
     print(paint("Session functions", "label", color) + "\n" + listing)
-    print(paint_hint("\nUse help NAME for a signature and an example.", commands={"help"}, color=color, rest=None))
+    card = usage_card("Use help NAME to see a function’s signature and examples.",
+                      "help coordinates", _SESSION_GUIDE + "inspect-a-saved-value")
+    print("\n" + paint_card(card, commands={"help"}, functions=names, color=color))
 
 
 def _unknown(topic, choices, prefix="", color=False):
@@ -89,11 +103,8 @@ def show_help(words, session, parser, *, color=False):
         return paint_card(text, names=session.variables, functions=functions, commands=commands, color=color)
 
     if not words or words == ["help"]:
-        for line in ("Use help NAME, NAME help, or NAME -h for a short explanation and an example.",
-                     "Try help ring or help variables. Type help followed by a saved name to inspect its type.",
-                     "Type help script for a scripting walkthrough.",
-                     "Use help resolution or help chart to explore a resolution and its local equations."):
-            print(paint_hint(line, commands=commands, topics=topic_names(session, parser), color=color, rest=None))
+        print(paint_hint("Enter help NAME or NAME -h to inspect a saved value, function or command.",
+                         commands=commands, color=color, rest=None))
         listing = ", ".join(paint(name, "command", color) for name in [*parser.command_names, ":workspace", ":save", "quit"])
         print(paint("Prompt commands", "label", color) + "\n" + listing)
         print()
@@ -110,26 +121,26 @@ def show_help(words, session, parser, *, color=False):
         print("Use help NAME or help algebra OPERATION.", file=sys.stderr)
         return
 
-    name = _ALIASES.get(words[0], words[0])
+    name = words[0]
     values = algebra_help_values(session)
+    if name in values:
+        print(painted(algebra_value_help(name, values[name], session.variables)))
+        return
+    if card := resolution_help(name, session.variables):
+        print(painted(card))
+        return
+
+    name = _ALIASES.get(name, name)
     if name == "functions":
         _functions(session, color)
-    elif name == "script":
-        from .session import HELP
-        print(HELP)
-    elif name in _TOPICS and not (name == "ring" and name in values):
-        print(painted(_TOPICS[name]))
-    elif card := resolution_help(name, session.variables):
-        print(painted(card))
+    elif name in _TOPICS:
+        print(painted(usage_card(*_TOPICS[name])))
     else:
-        text = algebra_value_help(name, values[name]) if name in values else function_help(name, session.builtins)
+        text = function_help(name, session.builtins)
         if text:
             print(painted(text))
             if name == "resolve":
-                print(paint_hint("\nUse help resolution.charts to inspect a chart or help resolution.dual_complex "
-                                 "to read the exceptional complex and find the branch attachments.",
-                                 commands=commands, topics=topic_names(session, parser), color=color, rest=None))
-                print(painted('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.'))
+                print(painted('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help'))
         elif name in parser.command_names:
             parser.command_names[name].print_help()
         else:

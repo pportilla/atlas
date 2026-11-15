@@ -10,6 +10,31 @@ For a polynomial map germ, type `help ae_codimension`. The returned object's
 `.finite` field tells you how to interpret `.value`.
 [Map-germ inputs, results, and an example](../examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ)
 
+## Inspect a saved value
+
+Type `help` followed by the name you saved. The first line identifies the value.
+For a polynomial, it names the parent ring. The examples use your binding, so
+you can enter them directly at the prompt. The documentation link opens the
+section for that kind of value.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> help f
+f is a polynomial in QQ[x, y].
+
+Example
+  f.parent
+  f^2
+  polynomial("x+1", ring=f.parent)
+
+Docs  https://github.com/pportilla/atlas/blob/main/docs/sessions.md#choose-the-ring-of-a-polynomial
+```
+
+`f -h` and `f help` open the same card. Use `help f.parent` to inspect the
+ring, `help polynomial` for the constructor, and `:workspace` to see all your
+saved names.
+
 ## Choose the ring of a polynomial
 
 `coordinates("x", "y")` gives you the generators of `QQ[x, y]`. Repeating
@@ -320,3 +345,8 @@ At the prompt a blank line finishes an indented block. Use
 order, including explicit prints. Saving again replaces the file. A failed or
 interrupted block restores the previous variable bindings. Replay the file with
 `./atlas run "my session.atlas"`, or use `./atlas run -` to read standard input.
+
+Use `len(I.generators)` to count the generators. To write the count as a JSON
+record, use `print_json(count=len(I.generators))`.
+
+Use `quit` or `exit` to leave the prompt.

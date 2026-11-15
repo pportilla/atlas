@@ -40,7 +40,7 @@ from markdown_it import MarkdownIt  # noqa: E402
 from engine.app import make_parser, shell_command_names  # noqa: E402
 from engine.cli_highlight import assigned_names, command_pieces, expression_pieces  # noqa: E402
 from engine.session import new_session  # noqa: E402
-from engine.session_help import function_help  # noqa: E402
+from engine.session_function_help import function_documentation, function_help  # noqa: E402
 from engine.web_brand import lettered_map_html, wordmark_html  # noqa: E402
 from engine.welcome import atlas_version  # noqa: E402
 
@@ -396,11 +396,15 @@ def reference_page(renderer, session, highlighter):
         rows.append(f'<tr><td><a class="api-ref" href="#{name}"><code>{name}</code></a></td>'
                     f"<td>{escape(summary)}</td></tr>")
         lines = "\n".join("atlas> " + line for line in example)
+        source, section = function_documentation(name, session.builtins).split("#", 1)
+        guide = renderer.pages[source]
+        guide_url = page.root + guide.out + "#" + section
+        guide_title = next((title for _, anchor, title in guide.headings if anchor == section), guide.title)
         mentions = renderer.mentions.get(name, [])
         links = ", ".join(
             f'<a href="{page.root}{p.out}{"#" + anchor if anchor else ""}">{escape(title)}</a>'
             + (f' <span class="api-page">({escape(p.title)})</span>' if title != p.title else "")
-            for p, anchor, title in mentions)
+            for p, anchor, title in mentions if (p, anchor) != (guide, section))
         entries.append(
             f'<section class="api-entry" id="{name}">\n'
             f'<h2 class="api-signature"><code><span class="api-name">{name}</span>{params_html}</code>'
@@ -408,6 +412,7 @@ def reference_page(renderer, session, highlighter):
             f'{renderer.prose(purpose_md, page)}'
             f'<p class="api-label">Example</p>\n'
             f'<pre class="code"><code>{highlighter.block(lines, "text")}</code></pre>\n'
+            f'<p class="api-mentions"><span>Guide</span> <a href="{escape(guide_url)}">{escape(guide_title)}</a></p>\n'
             + (f'<p class="api-mentions"><span>Used in</span> {links}</p>\n' if links else "")
             + "</section>")
         page.headings.append((2, name, name))

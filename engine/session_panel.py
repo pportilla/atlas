@@ -166,6 +166,13 @@ class _Workspace:
     bindings: list[_Binding]
     other: list[_Binding]
     references: dict[object, str]
+    presentations: dict[object, str]
+
+    def ring_name(self, parent):
+        """Include the workspace name when it distinguishes a live ring."""
+        label = self.presentations[parent]
+        reference = self.references[parent]
+        return label if reference == label else f"{reference} ({label})"
 
     def header(self):
         rings = [ring.title + (" → " + ", ".join(b.name for b in ring.members) if ring.members else "")
@@ -233,7 +240,7 @@ def workspace(variables):
 
     for binding, mapping in maps:
         binding.preview = f"{endpoint(mapping.domain)} → {endpoint(mapping.codomain)}"
-    return _Workspace(rings, bindings, other, references)
+    return _Workspace(rings, bindings, other, references, presentations)
 
 
 def _binding(entry, role, names=()):

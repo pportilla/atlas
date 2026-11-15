@@ -1,163 +1,239 @@
-"""Prompt help for inspecting saved resolutions and charts."""
+"""Short prompt help for linked views of a saved resolution."""
 import json
-from textwrap import fill, indent
 
-from .session_values import Chart, Resolution
+from .help_card import usage_card
+from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
 
 
-_CHART_LOOKUP = "{name}.charts[0].strict_transform\n{name}.chart({chart_id}).coordinates"
-_RESOLUTION = {
-    "": (
-        "A resolution holds the original polynomial, its charts and its exceptional dual complex. "
-        "Type help {name}.charts or help {name}.dual_complex to inspect either one.",
-        "{name}.polynomial\n{name}.charts\n{name}.dual_complex",
-    ),
-    "dual_complex": (
-        "The complex records intersections of the exceptional divisors in the chosen mode. "
-        "For an embedded plane curve, each vertex represents an exceptional curve in the blown-up "
-        "plane and each edge an intersection point of two such curves.\nThe strict transform maps onto "
-        "the original curve. When branch data are available, {name}.branches records their attachments. "
-        "An arrowhead in a decorated resolution graph marks the divisor a branch meets. "
-        "For the cusp y^2-x^3, that divisor is E3.\n"
-        "In intrinsic mode the complex describes the exceptional locus on the resolved variety. "
-        "For the intrinsic cusp its vertex represents a point on the smooth curve.\n"
-        "Qbar is the algebraic closure of QQ. Atlas distinguishes components over this field. "
-        "Check {name}.dual_complex.status for completeness.",
-        "{name}.dual_complex.vertices\n{name}.dual_complex.cells",
-    ),
-    "dual_complex.vertices": (
-        "The vertices are the exceptional divisors in the recorded complex. Each is a linked object. "
-        "Its .id gives its label and .charts gives the charts where it has recorded equations.",
-        "{name}.dual_complex.vertices",
-    ),
-    "dual_complex.cells": (
-        "Each positive-dimensional cell records a component of an intersection. Its dimension, "
-        "vertices and faces give the dimension, incident divisors and boundary. For an embedded "
-        "plane curve the cells are edges. The zero-dimensional cells are listed in .vertices.",
-        "{name}.dual_complex.cells",
-    ),
-    "charts": (
-        "{name}.charts lists chart objects. Each prints its ID. Select one by index or pass a "
-        'displayed ID to {name}.chart, for example {name}.chart("B3.u") for the cusp. '
-        "Save a chart as C and type help C for its coordinates, map and equations.",
-        _CHART_LOOKUP,
-    ),
-    "chart": (
-        "{name}.chart(id) opens the chart with that ID in this resolution. "
-        'For the cusp, {name}.chart("B3.u") is the chart recorded for its branch. '
-        "Use {name}.charts to see the available IDs.",
-        _CHART_LOOKUP,
-    ),
-    "branches": (
-        "When branch data are available, {name}.branches lists the recorded branches of the strict "
-        "transform over the origin. Each .chart locates a branch, and .meets gives the exceptional "
-        "divisors it meets there. For the embedded cusp the branch meets E3 in B3.u.",
-        "{name}.branches\n{name}.branches[0].chart\n{name}.branches[0].meets",
-    ),
+_CHART_DOC = "docs/sessions.md#look-inside-a-chart"
+_CUSP_DOC = "docs/sessions.md#inspect-a-cusp"
+_COMPLEX_DOC = "docs/resolution-records.md#chart-and-complex-conventions"
+_MODE_DOC = "docs/resolution-records.md#resolution-modes"
+
+# Examples use the requested binding. The saved record selects IDs and supplies
+# alternatives for empty lists and partial charts without computing equations.
+_PAGES = {
+    Resolution: {
+        "": ("A resolution records the charts and exceptional divisors above the origin.",
+             "{n}.polynomial\n{n}.charts\n{n}.dual_complex", _MODE_DOC),
+        "polynomial": ("{n}.polynomial is the input equation in {ring}.",
+                       "{n}.polynomial\n{n}.polynomial.parent", _CUSP_DOC),
+        "coordinates": ("{n}.coordinates gives the ordered generators of the input ring {ring}.",
+                        "{n}.coordinates\n{n}.coordinates.parent", _CUSP_DOC),
+        "mode": ("{n}.mode gives the chosen resolution mode.", "{n}.mode", _MODE_DOC),
+        "status": ("{n}.status gives the recorded outcome of the resolution.", "{n}.status",
+                   "docs/resolution-pipeline.md#what-the-record-certifies"),
+        "charts": ("{n}.charts lists the local charts of this resolution.",
+                   "{n}.charts[0].strict_transform\n{n}.chart({chart_id}).coordinates", _CHART_DOC),
+        "chart": ("{n}.chart(id) retrieves a chart by its recorded ID.",
+                  "{n}.charts\n{n}.chart({chart_id}).coordinates", _CHART_DOC),
+        "branches": ("{n}.branches lists the recorded branches of the strict transform.",
+                     "{n}.branches\n{n}.branches[0].chart\n{n}.branches[0].meets", _CUSP_DOC),
+        "divisors": ("{n}.divisors lists the exceptional divisors of this resolution.",
+                     "{n}.divisors\n{n}.divisors[0].charts", _COMPLEX_DOC),
+        "divisor": ("{n}.divisor(id) retrieves an exceptional divisor by its recorded ID.",
+                    "{n}.divisors\n{n}.divisor({divisor_id}).charts", _COMPLEX_DOC),
+        "record": ("{n}.record contains the saved resolution data.",
+                   "{n}.record.polynomial\n{n}.record.mode", _MODE_DOC),
+    },
+    Chart: {
+        "": ("A chart is a local coordinate patch of a resolution.",
+             "{n}.coordinates\n{n}.strict_transform\n{n}.map\n{n}.divisors", _CHART_DOC),
+        "id": ("{n}.id is the chart's ID in its resolution.", "{n}.id", _CHART_DOC),
+        "coordinates": ("{n}.coordinates gives the ordered generators of this chart's ring.",
+                        "{n}.coordinates\n{n}.coordinates.parent", _CHART_DOC),
+        "strict_transform": ("{n}.strict_transform gives the local equation or equations of the strict transform.",
+                             "{n}.strict_transform", _CHART_DOC),
+        "map": ("{n}.map gives each recorded original coordinate as a polynomial on this chart.",
+                "{n}.map", _CHART_DOC),
+        "pullback_map": ("{n}.pullback_map is the ring map from the input ring to this chart.",
+                         "{n}.pullback_map.domain\n{n}.pullback_map.codomain\n{n}.pullback_map.images", _CHART_DOC),
+        "pullback": ("{n}.pullback(f) gives the image of an input polynomial in the chart.",
+                     "{n}.pullback({source})", _CHART_DOC),
+        "parent": ("{n}.parent is the ring of functions on the chart.",
+                   "{n}.parent\n{n}.parent.coordinates", _CHART_DOC),
+        "ambient": ("{n}.ambient is the polynomial ring in which the chart relations are written.",
+                    "{n}.ambient.coordinates", _CHART_DOC),
+        "divisors": ("{n}.divisors lists the exceptional divisors recorded in this chart.",
+                     "{n}.divisors\nfor E in {n}.divisors: print(E.id, E.ideal_in({n}))", _CHART_DOC),
+    },
+    Divisor: {
+        "": ("A divisor is a geometric exceptional component in the resolution.",
+             "{n}.id\n{n}.charts", _COMPLEX_DOC),
+        "charts": ("{n}.charts lists the charts with local equations for this divisor.",
+                   "{n}.charts", _CHART_DOC),
+        "ideal_in": ("{n}.ideal_in(chart) gives the generators defining the divisor on that chart.",
+                     "{n}.ideal_in({local_chart})", _CHART_DOC),
+        "equation_in": ("{n}.equation_in(chart) gives the local equation in a chart with one recorded generator.",
+                        "{n}.equation_in({local_chart})", _CHART_DOC),
+        "id": ("{n}.id is the divisor's label in this resolution.", "{n}.id", _COMPLEX_DOC),
+    },
+    Branch: {
+        "": ("A branch records a component of the strict transform over the origin.",
+             "{n}.chart\n{n}.meets", _CUSP_DOC),
+        "id": ("{n}.id is the branch's label in this resolution.", "{n}.id", _CUSP_DOC),
+        "chart": ("{n}.chart is the chart containing the recorded branch point.",
+                  "{n}.chart.id\n{n}.chart.strict_transform", _CHART_DOC),
+        "meets": ("{n}.meets gives the exceptional divisors meeting the strict transform along this branch.",
+                  "{n}.meets", _CUSP_DOC),
+        "point": ("{n}.point gives the recorded coordinates of the branch point.", "{n}.point", _CUSP_DOC),
+    },
+    DualComplex: {
+        "": ("The exceptional dual complex records intersections over the algebraic closure of QQ.",
+             "{n}.vertices\n{n}.cells", _COMPLEX_DOC),
+        "vertices": ("{n}.vertices lists the exceptional components as linked divisors.",
+                     "{n}.vertices", _COMPLEX_DOC),
+        "cells": ("{n}.cells records the vertices and boundary faces of each positive-dimensional cell.",
+                  "{n}.cells", _COMPLEX_DOC),
+        "status": ("{n}.status reports the completeness of the incidence data.",
+                   "{n}.status", _COMPLEX_DOC),
+        "record": ("{n}.record contains the saved incidence data.", "{n}.record.vertices\n{n}.record.cells", _COMPLEX_DOC),
+    },
 }
-_CHART = {
-    "": (
-        "A chart is a local coordinate patch of the resolution. Its ID is its display name. "
-        "Use its fields to inspect the local equations and the map to the original space.",
-        "{name}.coordinates\n{name}.strict_transform\n{name}.map\n{name}.divisors",
-    ),
-    "id": (
-        "This is the chart's ID in its resolution. Pass it to the resolution's chart(id) method "
-        "to retrieve the same chart.",
-        "{name}.id",
-    ),
-    "coordinates": (
-        "The generators of the chart's coordinate ring. Use them to write a polynomial in this chart.",
-        "{name}.coordinates\n{name}.coordinates[0].parent",
-    ),
-    "strict_transform": (
-        "The local equation of the strict transform in this chart, or a list of equations when "
-        "several are needed. For the plane cusp in B3.u it is v-1, so the strict transform is v=1.",
-        "{name}.strict_transform",
-    ),
-    "map": (
-        "The map to the original coordinates. Each key is an original coordinate name and its "
-        "value is the corresponding polynomial in this chart. The ring map {name}.pullback_map "
-        "carries its domain, codomain, and ordered images.",
-        "{name}.map",
-    ),
-    "pullback_map": (
-        "The ring homomorphism from the original polynomial ring to this chart. "
-        "Apply it to a polynomial in its domain to substitute the chart coordinates.",
-        "{name}.pullback_map.domain\n{name}.pullback_map.codomain\n{name}.pullback_map.images",
-    ),
-    "parent": (
-        "The ring of functions on the chart. The defining equations of its ambient presentation "
-        "vanish in this ring.",
-        "{name}.parent\n{name}.parent.coordinates",
-    ),
-    "ambient": (
-        "The polynomial ring in which the chart's defining relations are written. "
-        "Chart functions belong to {name}.parent.",
-        "{name}.ambient.coordinates",
-    ),
-    "divisors": (
-        "The exceptional divisors with a recorded local equation or ideal in this chart. "
-        "For a listed divisor E, E.ideal_in({name}) gives its local generators.",
-        "{name}.divisors\nfor E in {name}.divisors: print(E.id, E.ideal_in({name}))",
-    ),
-    "pullback": (
-        "{name}.pullback(f) substitutes this chart's coordinate map into a polynomial f in the "
-        "original ring. Pulling back the original equation gives the total transform.",
-        "{name}.pullback({source})",
-    ),
-}
-_PAGES = {Resolution: _RESOLUTION, Chart: _CHART}
-_GENERIC = {"resolution": Resolution, "chart": Chart}
+_GENERIC = {"resolution": Resolution, "chart": Chart, "divisor": Divisor, "branch": Branch}
+_SETUP = {Resolution: ("R", ""), Chart: ("C", 'C = R.chart("B3.u")\n'),
+          Divisor: ("E", 'E = R.divisor("E3")\n'), Branch: ("b", "b = R.branches[0]\n")}
 
 
 def resolution_topics(variables):
-    """List documented topics without reading any chart equations."""
-    owners = {**_GENERIC, **{name: type(value) for name, value in variables.items() if type(value) in _PAGES}}
-    return {f"{name}.{field}" if field else name for name, kind in owners.items() for field in _PAGES[kind]}
+    """List documented topics using types alone, including the saved complex of a resolution."""
+    owners = {name: kind for name, kind in _GENERIC.items() if name not in variables}
+    owners.update((name, type(value)) for name, value in variables.items() if type(value) in _PAGES)
+    topics = set()
+    for name, kind in owners.items():
+        topics.update(f"{name}.{field}" if field else name for field in _PAGES[kind])
+        if kind is Resolution:
+            topics.update(f"{name}.dual_complex" + (f".{field}" if field else "") for field in _PAGES[DualComplex])
+    return topics
 
 
-def _resolution_example(field, value, description, example):
-    # With no saved value, the example setup resolves the embedded cusp.
-    if field == "dual_complex" and (value is None or value._branches):
-        example += "\n{name}.branches[0].meets"
-    elif field == "dual_complex.vertices" and (value is None or value._divisors):
-        example += "\n{name}.dual_complex.vertices[0].charts"
-    elif field == "branches" and value is not None and not value._branches:
-        if "branches" in value._record:
-            return "The recorded branch list for this resolution is empty.", "{name}.branches"
-        return ("This resolution has no recorded branch data. Inspect its recorded charts for local "
-                "strict-transform equations.", "{name}.charts")
-    elif field in ("chart", "charts") and value is not None and not value._charts:
-        return "The recorded chart list for this resolution is empty.", "{name}.charts"
-    return description, example
+def _saved_name(value, variables):
+    return next((name for name, saved in variables.items() if saved is value), None)
+
+
+def _source_label(resolution, variables):
+    source = vars(resolution).get("polynomial")
+    if source is not None and (name := _saved_name(source, variables)):
+        return name
+    equation = resolution._record.get("polynomial", "")
+    return equation if equation and len(equation) <= 72 else "the input polynomial"
+
+
+def _divisor_chart(divisor, name, field, variables):
+    """Find a chart that supports the method without reading its local polynomials."""
+    for index, chart in enumerate(divisor.charts):
+        component = chart._exceptional[divisor.id]
+        generators = component.get("ideal")
+        if generators is None:
+            if "equation" not in component:
+                continue
+        elif not generators or (field == "equation_in" and len(generators) != 1):
+            continue
+        return _saved_name(chart, variables) or f"{name}.charts[{index}]"
+    return None
+
+
+def _resolution_card(value, field, summary, example, context, variables):
+    if not field:
+        context.update(mode=value._record.get("mode", ""), equation=_source_label(value, variables))
+        return "{n} is the {mode} resolution record for {equation} in {ring}.", example
+    if field in ("chart", "charts"):
+        if not value._charts:
+            return "{n} has no recorded charts.", "{n}.charts"
+        context["chart_id"] = json.dumps(next(iter(value._charts)), ensure_ascii=False)
+        if field == "charts":
+            count = len(value._charts)
+            summary = f"{{n}}.charts contains {count} recorded chart{'s' if count != 1 else ''}."
+    if field in ("divisor", "divisors"):
+        if not value._divisors:
+            return "{n} has no recorded exceptional divisors.", "{n}.divisors"
+        context["divisor_id"] = json.dumps(next(iter(value._divisors)), ensure_ascii=False)
+        if field == "divisors":
+            count = len(value._divisors)
+            summary = f"{{n}}.divisors contains {count} exceptional divisor{'s' if count != 1 else ''}."
+    if field == "branches":
+        if not value._branches:
+            return "{n} has no recorded branches.", "{n}.branches" if "branches" in value._record else "{n}.charts"
+        count = len(value._branches)
+        summary = f"{{n}}.branches contains {count} recorded {'branch' if count == 1 else 'branches'} of the strict transform."
+    return summary, example
+
+
+def _complex_card(value, field, summary, example, context, resolution, owner):
+    if not field:
+        if value is not None:
+            context["status"] = value.status
+            rebuilt = "recomputed " if value is not resolution.dual_complex else ""
+            summary = "{n} is the {status} " + rebuilt + "exceptional dual complex"
+            if owner:
+                summary += " of {owner}"
+            field_name = resolution._record.get("geometric_field")
+            if field_name:
+                context["geometric_field"] = ("the algebraic closure of QQ"
+                                               if field_name in ("algebraic closure of Q", "Qbar") else field_name)
+                summary += " over {geometric_field}"
+            summary += "."
+        if owner and (value is None or resolution._branches):
+            example += "\n{owner}.branches[0].meets  # strict transform attachment"
+    elif field == "vertices" and (value is None or value._vertices):
+        example += "\n{n}.vertices[0].charts"
+    return summary, example
+
+
+def _component_card(value, field, summary, example, context, variables):
+    if not field:
+        context["id"] = value.id
+        context["kind"] = {Chart: "chart", Branch: "branch", Divisor: "exceptional divisor"}[type(value)]
+        summary = "{n} is {kind} {id} of {origin}."
+    if isinstance(value, Divisor) and field in ("", "ideal_in", "equation_in"):
+        chart = _divisor_chart(value, context["n"], field, variables)
+        if chart:
+            context["local_chart"] = chart
+            if not field:
+                example += "\n{n}.ideal_in({local_chart})"
+        elif field:
+            summary = ("No chart of {n} records a single local equation." if field == "equation_in"
+                       else "No chart of {n} records a local ideal.")
+            example = "{n}.charts"
+    elif isinstance(value, Chart) and field == "pullback_map":
+        if not set(value._resolution._source_space.names).issubset(value._record.get("map", {})):
+            summary, example = "{n} records a partial chart map.", "{n}.map"
+    elif isinstance(value, Branch) and field == "point" and "point" not in value._record:
+        summary, example = "{n} has no recorded point coordinates.", "{n}.chart"
+    return summary, example
 
 
 def resolution_help(topic, variables):
     root, _, field = topic.partition(".")
     value = variables.get(root)
-    kind = type(value) if type(value) in _PAGES else _GENERIC.get(root)
-    entry = _PAGES.get(kind, {}).get(field)
-    if entry is None:
+    kind = type(value) if root in variables else _GENERIC.get(root)
+    if kind not in _PAGES:
         return None
-    live = type(value) is kind
-    if kind is Resolution:
-        entry = _resolution_example(field, value if live else None, *entry)
-    description, example = entry
-    name, setup, source, chart_id = root, "", "1", "B3.u"
-    if not live:
-        name = "R" if kind is Resolution else "C"
-        setup = 'x, y = coordinates("x", "y")\nR = resolve(y^2-x^3)\n'
-        if kind is Chart:
-            setup += 'C = R.chart("B3.u")\n'
-            source = "R.polynomial"
-    elif kind is Chart and field == "pullback":
-        owner = next((n for n, obj in variables.items() if obj is value._resolution), None)
-        if owner:
-            source = f"{owner}.polynomial"
-    elif kind is Resolution and field in ("chart", "charts") and value._charts:
-        chart_id = next(iter(value._charts))
-    commands = setup + example.format(name=name, source=source, chart_id=json.dumps(chart_id, ensure_ascii=False))
-    paragraphs = "\n".join(fill(line, width=80, break_long_words=False, break_on_hyphens=False)
-                           for line in description.format(name=name).splitlines())
-    return f"{topic}\n{paragraphs}\n\nExample\n{indent(commands, '  ')}"
+    if value is None:
+        name, binding = _SETUP[kind]
+        resolution, owner = None, "R"
+        setup = 'x, y = coordinates("x", "y")\nR = resolve(y^2-x^3)\n' + binding
+    else:
+        name, setup = root, ""
+        resolution = value if kind is Resolution else value._resolution
+        owner = root if kind is Resolution else _saved_name(resolution, variables)
+    if kind is Resolution and (field == "dual_complex" or field.startswith("dual_complex.")):
+        field = field.partition(".")[2]
+        name += ".dual_complex"
+        kind = DualComplex
+        value = resolution.dual_complex if resolution else None
+    page = _PAGES[kind].get(field)
+    if page is None:
+        return None
+    summary, example, reference = page
+    context = dict(n=name, owner=owner, ring=resolution._source_space if resolution else "QQ[x, y]",
+                   source=f"{owner}.polynomial" if owner else "1", local_chart=name + ".charts[0]",
+                   chart_id='"B3.u"', divisor_id='"E3"')
+    if kind is DualComplex:
+        summary, example = _complex_card(value, field, summary, example, context, resolution, owner)
+    elif value is not None and kind is Resolution:
+        summary, example = _resolution_card(value, field, summary, example, context, variables)
+    elif value is not None:
+        context["origin"] = owner or f"the resolution of {_source_label(resolution, variables)}"
+        summary, example = _component_card(value, field, summary, example, context, variables)
+    return usage_card(summary.format(**context), setup + example.format(**context), reference)
