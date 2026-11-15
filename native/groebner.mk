@@ -79,11 +79,15 @@ $(GROEBNER_LIB): $(KERNEL_OBJECTS)
 
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient
+test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient build/test_chart_expr
 	./build/test_groebner_verify
 	./build/test_local_dimension_graph
 	./build/test_small_prime_rank
 	./build/test_ae_weighted_quotient
+	./build/test_chart_expr
+
+build/test_chart_expr: test_chart_expr.cpp chart_expr.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lflint -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp)
 
 build/test_ae_weighted_quotient: test_ae_weighted_quotient.cpp ae_weighted_ranks.hpp ae_graded.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp)

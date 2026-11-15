@@ -12,6 +12,10 @@
 #include "local_io.hpp"
 #include "rational_sparse_json.hpp"
 
+#include <gmp.h>
+#include <flint/fmpq.h>
+#include <flint/fmpq_mpoly.h>
+
 #include <algorithm>
 #include <cctype>
 #include <exception>
@@ -210,6 +214,117 @@ inline std::vector<Coord> union_coords(const Expr& a, const Expr& b) {
     return out;
 }
 
+// Exact arithmetic of large values in FLINT. A value is loaded over a sorted
+// list of coordinates containing its own, as a primitive integer polynomial
+// times a rational content, so products and compositions cost integer
+// operations instead of one rational normalization per partial product. The
+// stored result is the value `normal` gives for the same polynomial.
+namespace flint_q {
+struct Context {
+    fmpq_mpoly_ctx_t ctx;
+    explicit Context(size_t variables) { fmpq_mpoly_ctx_init(ctx, static_cast<slong>(variables), ORD_LEX); }
+    ~Context() { fmpq_mpoly_ctx_clear(ctx); }
+    Context(const Context&) = delete;
+    Context& operator=(const Context&) = delete;
+};
+
+struct Poly {
+    fmpq_mpoly_t p;
+    const Context& c;
+    explicit Poly(const Context& context) : c(context) { fmpq_mpoly_init(p, c.ctx); }
+    ~Poly() { fmpq_mpoly_clear(p, c.ctx); }
+    Poly(const Poly&) = delete;
+    Poly& operator=(const Poly&) = delete;
+};
+
+struct Integers {
+    std::vector<fmpz> values;
+    std::vector<fmpz*> at;
+    explicit Integers(size_t n) : values(n), at(n) {
+        for (size_t i = 0; i < n; ++i) {
+            fmpz_init(&values[i]);
+            at[i] = &values[i];
+        }
+    }
+    ~Integers() {
+        for (auto& v : values) fmpz_clear(&v);
+    }
+    Integers(const Integers&) = delete;
+    Integers& operator=(const Integers&) = delete;
+};
+
+// False, leaving `out` zero, when an exponent is negative.
+inline bool load(Poly& out, const Expr& f, const std::vector<Coord>& over) {
+    std::vector<size_t> at;
+    for (const auto& c : f.coords()) {
+        auto it = std::lower_bound(over.begin(), over.end(), c);
+        if (it == over.end() || *it != c) throw Raise{"ValueError", "Polynomial uses coordinates outside the declared ring."};
+        at.push_back(static_cast<size_t>(it - over.begin()));
+    }
+    Z denominator = 1;
+    for (const auto& [e, c] : f.terms()) {
+        for (const auto& x : e)
+            if (sgn(x) < 0) return false;
+        if (c.get_den() != 1) mpz_lcm(denominator.get_mpz_t(), denominator.get_mpz_t(), c.get_den_mpz_t());
+    }
+    if (f.zero()) return true;
+    Integers exponents(over.size());
+    fmpz_t coefficient;
+    fmpz_init(coefficient);
+    Z numerator;
+    const auto zctx = out.c.ctx->zctx;
+    // The map is increasing in the lexicographic order of `over`, so pushing it
+    // backwards gives FLINT's decreasing order.
+    for (auto term = f.terms().rbegin(); term != f.terms().rend(); ++term) {
+        for (size_t i = 0; i < at.size(); ++i) fmpz_set_mpz(&exponents.values[at[i]], term->first[i].get_mpz_t());
+        if (denominator == 1) {
+            fmpz_set_mpz(coefficient, term->second.get_num_mpz_t());
+        } else {
+            mpz_divexact(numerator.get_mpz_t(), denominator.get_mpz_t(), term->second.get_den_mpz_t());
+            numerator *= term->second.get_num();
+            fmpz_set_mpz(coefficient, numerator.get_mpz_t());
+        }
+        fmpz_mpoly_push_term_fmpz_ffmpz(out.p->zpoly, coefficient, exponents.values.data(), zctx);
+    }
+    fmpz_clear(coefficient);
+    fmpz_one(fmpq_numref(out.p->content));
+    fmpz_set_mpz(fmpq_denref(out.p->content), denominator.get_mpz_t());
+    fmpq_mpoly_reduce(out.p, out.c.ctx);
+    return true;
+}
+
+inline Expr store(const Poly& a, const std::vector<Coord>& over) {
+    const slong length = fmpq_mpoly_length(a.p, a.c.ctx);
+    if (length == 0) return Expr{};
+    Integers exponents(over.size());
+    fmpq_mpoly_degrees_fmpz(exponents.at.data(), a.p, a.c.ctx);
+    std::vector<size_t> active;
+    std::vector<Coord> kept;
+    for (size_t i = 0; i < over.size(); ++i)
+        if (fmpz_sgn(&exponents.values[i]) > 0) {
+            active.push_back(i);
+            kept.push_back(over[i]);
+        }
+    std::map<Powers, Q> terms;
+    fmpq_t coefficient;
+    fmpq_init(coefficient);
+    for (slong k = length - 1; k >= 0; --k) {
+        fmpq_mpoly_get_term_coeff_fmpq(coefficient, a.p, k, a.c.ctx);
+        fmpq_mpoly_get_term_exp_fmpz(exponents.at.data(), a.p, k, a.c.ctx);
+        Powers e(active.size());
+        for (size_t i = 0; i < active.size(); ++i) fmpz_get_mpz(e[i].get_mpz_t(), &exponents.values[active[i]]);
+        Q value;
+        fmpq_get_mpq(value.get_mpq_t(), coefficient);
+        terms.emplace_hint(terms.end(), std::move(e), std::move(value));
+    }
+    fmpq_clear(coefficient);
+    return Expr(std::move(kept), std::move(terms));
+}
+
+// Below this many partial products the term-by-term route is cheaper.
+constexpr size_t PRODUCT_TERMS = 256;
+}  // namespace flint_q
+
 inline Expr operator+(const Expr& a, const Expr& b) {
     if (b.zero()) return a;
     if (a.zero()) return b;
@@ -236,6 +351,14 @@ inline Expr operator*(const Expr& a, const Expr& b) {
     if (a.number()) return scaled(b, a.scalar());
     if (b.number()) return scaled(a, b.scalar());
     const auto coords = union_coords(a, b);
+    if (a.terms().size() * b.terms().size() >= flint_q::PRODUCT_TERMS) {
+        flint_q::Context context(coords.size());
+        flint_q::Poly left(context), right(context), out(context);
+        if (flint_q::load(left, a, coords) && flint_q::load(right, b, coords)) {
+            fmpq_mpoly_mul(out.p, left.p, right.p, context.ctx);
+            return flint_q::store(out, coords);
+        }
+    }
     const auto left = spread(a, coords), right = spread(b, coords);
     std::map<Powers, Q> terms;
     for (const auto& [ea, ca] : left)
@@ -262,25 +385,58 @@ inline Expr product(const std::vector<Expr>& values) {
 // Simultaneous substitution of coordinates by values (engine/native_polynomial.py `xreplace`).
 inline Expr substitute(const Expr& f, const std::vector<std::pair<Coord, Expr>>& images) {
     if (std::none_of(images.begin(), images.end(), [&](const auto& p) { return f.has(p.first); })) return f;
-    Expr out;
-    std::map<std::pair<size_t, Z>, Expr> powers;
     const auto& coords = f.coords();
+    std::vector<Expr> bases;
+    std::vector<Coord> all = coords;
+    for (const auto& c : coords) {
+        auto image = std::find_if(images.begin(), images.end(), [&](const auto& p) { return p.first == c; });
+        bases.push_back(image == images.end() ? symbol(c) : image->second);
+        all.insert(all.end(), bases.back().coords().begin(), bases.back().coords().end());
+    }
+    std::sort(all.begin(), all.end());
+    all.erase(std::unique(all.begin(), all.end()), all.end());
+    if (f.terms().size() * coords.size() >= flint_q::PRODUCT_TERMS) {
+        flint_q::Context source(coords.size()), target(all.size());
+        flint_q::Poly g(source);
+        std::vector<std::unique_ptr<flint_q::Poly>> loaded;
+        std::vector<fmpq_mpoly_struct*> at;
+        bool fits = flint_q::load(g, f, coords);
+        for (size_t i = 0; fits && i < bases.size(); ++i) {
+            loaded.push_back(std::make_unique<flint_q::Poly>(target));
+            fits = flint_q::load(*loaded.back(), bases[i], all);
+            at.push_back(loaded.back()->p);
+        }
+        if (fits) {
+            flint_q::Poly out(target);
+            if (fmpq_mpoly_compose_fmpq_mpoly(out.p, g.p, at.data(), source.ctx, target.ctx))
+                return flint_q::store(out, all);
+        }
+    }
+    // Powers of each image, each one obtained from the largest known power below it.
+    std::map<std::pair<size_t, Z>, Expr> powers;
+    auto power_of = [&](size_t i, const Z& n) -> const Expr& {
+        auto found = powers.find({i, n});
+        if (found != powers.end()) return found->second;
+        auto below = powers.lower_bound({i, n});
+        Z k = 0;
+        Expr value = constant(1);
+        if (below != powers.begin() && std::prev(below)->first.first == i) {
+            k = std::prev(below)->first.second;
+            value = std::prev(below)->second;
+        }
+        for (; k < n; ++k) value = value * bases[i];
+        return powers.emplace(std::make_pair(i, n), std::move(value)).first->second;
+    };
+    // One sum over all coordinates involved, normalized once: the same
+    // polynomial as adding the images of the terms one after another.
+    std::map<Powers, Q> sum;
     for (const auto& [e, c] : f.terms()) {
         Expr term = constant(c);
-        for (size_t i = 0; i < coords.size(); ++i) {
-            if (e[i] == 0) continue;
-            auto found = powers.find({i, e[i]});
-            if (found == powers.end()) {
-                auto image = std::find_if(images.begin(), images.end(),
-                                          [&](const auto& p) { return p.first == coords[i]; });
-                const Expr base = image == images.end() ? symbol(coords[i]) : image->second;
-                found = powers.emplace(std::make_pair(i, e[i]), power(base, e[i])).first;
-            }
-            term = term * found->second;
-        }
-        out = out + term;
+        for (size_t i = 0; i < coords.size(); ++i)
+            if (e[i] != 0) term = term * power_of(i, e[i]);
+        for (auto& [p, value] : spread(term, all)) sum[p] += value;
     }
-    return out;
+    return normal(all, sum);
 }
 
 // ---------------------------------------------------------------- rings
