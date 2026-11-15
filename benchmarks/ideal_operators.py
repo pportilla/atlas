@@ -20,7 +20,7 @@ from engine import native_polynomial
 from engine.native_library import _LIBRARY, affine_request
 from engine.session import new_session
 from engine.session_algebra import ideal, polynomial
-from engine.session_polynomial import coordinates
+from engine.session_polynomial import Polynomial, coordinates
 from engine.session_transcript import SessionTranscript
 
 
@@ -134,6 +134,28 @@ def fresh_sample(left, right, apply, square, batch, *, include_declaration=False
     return (perf_counter_ns() - start) / (1000 * batch), result
 
 
+def fresh_polynomial_pairs(left, right, batch):
+    """The first ideal declaration in each ring starts with already constructed polynomials."""
+    terms = [[native_polynomial.terms(g.parent.generators, g._value) for g in operand.generators]
+             for operand in (left, right)]
+    pairs = []
+    for _ in range(batch):
+        parent = coordinates("x", "y")[0].parent
+        groups = [tuple(Polynomial(parent, native_polynomial.from_terms(parent.generators, row)) for row in group)
+                  for group in terms]
+        pairs.append((parent, *groups))
+    return pairs
+
+
+def fresh_declaration_sample(left, right, apply, square, batch):
+    pairs = fresh_polynomial_pairs(left, right, batch)
+    start = perf_counter_ns()
+    for parent, a, b in pairs:
+        first = ideal(a, ring=parent, order=left.order)
+        result = apply(first, 2 if square else ideal(b, ring=parent, order=right.order))
+    return (perf_counter_ns() - start) / (1000 * batch), result
+
+
 def check(declarations, calculation, results):
     # Input and output lists may differ by order, scalar multiples or redundant generators.
     source = declarations + f"ideal expected=std({calculation});\n"
@@ -172,9 +194,21 @@ def measure(left_source, right_source, operation, batch, trials, kernel):
         ids = [f"p{label}{i}" for i in range(len(polys))]
         poly_declarations += "".join(f"poly {var}={poly};\n" for var, poly in zip(ids, polys))
         assignments.append(f"{label}={','.join(ids)};")
+    script = "I = ideal(a, b)\n"
+    if operation != "square":
+        script += "J = ideal(c, d)\n"
+    script += line
+    session.variables.update(zip(("a", "b", "c", "d"), left.generators + right.generators))
+
+    def declare_in_script():
+        for _ in session.run(script):
+            pass
+        return session.variables["answer"]
+
     methods = ("atlas_session", "atlas_prompt", "atlas_cli", "atlas_cli_infix", "atlas_first_use", "atlas_declare_and_first_use",
                "atlas_export_record", "atlas_native_wire",
-               *(("atlas_native",) if kernel else ()), "singular", "singular_declare_and_first_use")
+               *(("atlas_native",) if kernel else ()), "singular", "singular_declare_and_first_use",
+               "atlas_first_declare_fresh_polynomials", "atlas_script_declare_and_first_use")
     samples = {name: [] for name in methods}
     for trial in range(trials):
         generators = []
@@ -192,6 +226,12 @@ def measure(left_source, right_source, operation, batch, trials, kernel):
             elif method in ("atlas_first_use", "atlas_declare_and_first_use"):
                 elapsed, result = fresh_sample(left, right, apply, operation == "square", batch,
                                                include_declaration=method == "atlas_declare_and_first_use")
+                generators.append([str(f) for f in result.generators])
+            elif method == "atlas_first_declare_fresh_polynomials":
+                elapsed, result = fresh_declaration_sample(left, right, apply, operation == "square", batch)
+                generators.append([str(f) for f in result.generators])
+            elif method == "atlas_script_declare_and_first_use":
+                elapsed, result = atlas_sample(declare_in_script, batch)
                 generators.append([str(f) for f in result.generators])
             elif method == "atlas_export_record":
                 pending = [apply(left, operand) for _ in range(batch)]
@@ -251,6 +291,9 @@ def main():
             "panel disabled. It includes routing, multiline detection, evaluation, and transcript updates. "
             "First use takes newly declared ideals of the same initialized polynomials without a warm-up per ideal. "
             "Declare and first use includes construction of the input ideals from those polynomials. "
+            "First declaration on fresh polynomials excludes creation of the separate rings and polynomial values, "
+            "and includes their very first ideal construction. Script with declarations evaluates named functions "
+            "and binds I, J as needed and answer through the shared script evaluator. "
             "Record measures first export of a complete record from an already computed result. Native wire includes "
             "sparse input decoding and JSON output. Prepared native measures C++ arithmetic on parsed inputs and "
             "the completed result stays in memory. Singular measures an assignment on initialized ideals in its "

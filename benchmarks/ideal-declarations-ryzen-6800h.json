@@ -5,11 +5,12 @@
   ],
   "python": "3.14.4",
   "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
-  "kernel_sha256": "cb20f5b6e85fe09b636e66b5b9e077b835ad0e9f39165a20d096967c1fe7132f",
-  "binding_sha256": "00d6a9a9b7b9762c3116c20ee2ceb01b77f148f966b9168618ee7b88f80bc5d0",
+  "kernel_sha256": "ea0b7022c26965f9bfbb2277cec546b7e55356602f2148bdeb0e93436b7d14f4",
+  "binding_sha256": "7b482826cc7b99015b7c49498d985faa0f8df4fb69e7e8ed7c7e56f5c3a5d23e",
   "trials": 7,
   "pairs_per_trial": 256,
-  "conditions": "Microseconds per pair of ideal declarations on previously expanded polynomials, including release. Python stage timings replay the eligible public path with a clock at each boundary. Actual public declarations are timed separately without that instrumentation. Each first-row trial uses independent live parents built outside the timer. Cached rows use the same live polynomials. The wrappers-only control performs validation and creates the Python ideal values without a native allocation. Singular uses a fresh single-threaded process per sample, starts its clock after creating four native polynomials and both ideals, and checks the ordered generators after the loop. Native sparse-row decoding and FLINT packing are included together in the native_prepare_and_own stage. No ideal arithmetic is timed.",
+  "creation_pairs_per_trial": 32,
+  "conditions": "Microseconds per pair of ideals. The positional call is ideal(f,g). The explicit call also supplies ring and order. Repeated declarations use the same live polynomials. For first declarations, each pair of ideals is the first ever constructed from its polynomials, in a fresh parent. Both conditions exclude ring creation and polynomial construction. Creation samples evaluate and assign the four polynomial expressions from x and y in Atlas scripts or the Singular interpreter, optionally including both ideal declarations. Each Atlas script runs in a separately created QQ[x,y] ring with a fresh session. Singular reassigns the same four names in an existing ring, one thread. Both systems verify all four ordered generators outside the timer. Each condition discards a warm-up batch of the same size. No sum, product or ideal power is timed.",
   "cases": {
     "plane_monomials": {
       "left": [
@@ -20,409 +21,142 @@
         "x",
         "y^2"
       ],
-      "atlas_wrappers_only": {
-        "median_us": 1.895,
+      "ordered_generators_verified_in_singular": true,
+      "repeated_declarations": {
+        "positional": {
+          "median_us": 1.455,
+          "samples_us": [
+            1.445,
+            1.472,
+            1.444,
+            1.43,
+            1.455,
+            1.462,
+            1.531
+          ]
+        },
+        "explicit": {
+          "median_us": 1.58,
+          "samples_us": [
+            1.582,
+            1.569,
+            1.563,
+            1.584,
+            1.567,
+            1.592,
+            1.58
+          ]
+        }
+      },
+      "first_declarations": {
+        "positional": {
+          "median_us": 1.645,
+          "samples_us": [
+            1.892,
+            1.647,
+            1.728,
+            1.645,
+            1.618,
+            1.585,
+            1.591
+          ]
+        },
+        "explicit": {
+          "median_us": 1.755,
+          "samples_us": [
+            1.725,
+            1.755,
+            1.745,
+            1.808,
+            1.754,
+            1.977,
+            1.9
+          ]
+        }
+      },
+      "create_polynomials": {
+        "median_us": 80.839,
         "samples_us": [
-          2.0,
-          1.898,
-          1.895,
-          1.863,
-          1.948,
-          1.853,
-          1.852
+          80.886,
+          79.796,
+          80.211,
+          127.734,
+          79.212,
+          80.839,
+          81.946
         ]
       },
-      "abi3": {
-        "cached_row_encoding": {
-          "public_declarations": {
-            "median_us": 12.777,
-            "samples_us": [
-              13.245,
-              12.777,
-              12.703,
-              12.935,
-              12.747,
-              12.691,
-              13.192
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 2.429,
-              "samples_us": [
-                2.538,
-                2.436,
-                2.375,
-                2.345,
-                2.451,
-                2.429,
-                2.35
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 2.528,
-              "samples_us": [
-                2.613,
-                2.546,
-                2.528,
-                2.521,
-                2.506,
-                2.581,
-                2.516
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 2.058,
-              "samples_us": [
-                2.103,
-                2.061,
-                2.058,
-                2.031,
-                2.044,
-                2.113,
-                1.994
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 5.431,
-              "samples_us": [
-                5.579,
-                5.446,
-                5.392,
-                5.359,
-                5.431,
-                5.514,
-                5.369
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 0.753,
-              "samples_us": [
-                0.778,
-                0.753,
-                0.754,
-                0.745,
-                0.753,
-                0.766,
-                0.741
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 13.185,
-              "samples_us": [
-                13.611,
-                13.242,
-                13.108,
-                13.0,
-                13.185,
-                13.404,
-                12.971
-              ]
-            }
-          }
-        },
-        "first_row_encoding": {
-          "public_declarations": {
-            "median_us": 22.066,
-            "samples_us": [
-              22.284,
-              22.066,
-              23.708,
-              20.9,
-              21.834,
-              22.577,
-              20.943
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 3.023,
-              "samples_us": [
-                2.882,
-                2.898,
-                3.227,
-                3.023,
-                3.062,
-                2.891,
-                3.058
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 3.322,
-              "samples_us": [
-                2.995,
-                2.789,
-                3.509,
-                3.439,
-                3.346,
-                3.188,
-                3.322
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 9.833,
-              "samples_us": [
-                9.595,
-                20.494,
-                10.508,
-                10.091,
-                9.785,
-                9.59,
-                9.833
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 5.834,
-              "samples_us": [
-                5.834,
-                5.691,
-                5.853,
-                6.087,
-                5.735,
-                5.678,
-                5.896
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 0.867,
-              "samples_us": [
-                0.868,
-                0.843,
-                0.867,
-                0.887,
-                0.859,
-                0.816,
-                0.874
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 22.983,
-              "samples_us": [
-                22.175,
-                32.714,
-                23.965,
-                23.527,
-                22.787,
-                22.163,
-                22.983
-              ]
-            }
-          }
-        }
-      },
-      "ctypes": {
-        "cached_row_encoding": {
-          "public_declarations": {
-            "median_us": 15.37,
-            "samples_us": [
-              15.615,
-              14.809,
-              15.37,
-              15.396,
-              14.833,
-              15.396,
-              15.102
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 2.566,
-              "samples_us": [
-                2.646,
-                2.509,
-                2.616,
-                2.539,
-                2.566,
-                2.725,
-                2.522
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 2.653,
-              "samples_us": [
-                2.723,
-                2.615,
-                2.682,
-                2.62,
-                2.653,
-                2.792,
-                2.646
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 2.222,
-              "samples_us": [
-                2.303,
-                2.143,
-                2.246,
-                2.172,
-                2.222,
-                2.354,
-                2.203
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 6.634,
-              "samples_us": [
-                6.687,
-                6.515,
-                6.738,
-                6.541,
-                6.634,
-                6.932,
-                6.535
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 1.687,
-              "samples_us": [
-                1.756,
-                1.654,
-                1.726,
-                1.649,
-                1.673,
-                1.816,
-                1.687
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 15.748,
-              "samples_us": [
-                16.115,
-                15.435,
-                16.008,
-                15.522,
-                15.748,
-                16.619,
-                15.593
-              ]
-            }
-          }
-        },
-        "first_row_encoding": {
-          "public_declarations": {
-            "median_us": 25.706,
-            "samples_us": [
-              24.228,
-              31.749,
-              25.94,
-              24.918,
-              25.943,
-              25.451,
-              25.706
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 3.116,
-              "samples_us": [
-                3.116,
-                3.282,
-                2.954,
-                3.272,
-                3.087,
-                3.099,
-                3.13
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 3.181,
-              "samples_us": [
-                3.524,
-                3.796,
-                3.13,
-                3.325,
-                3.181,
-                3.167,
-                3.171
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 10.9,
-              "samples_us": [
-                10.311,
-                11.551,
-                10.513,
-                14.127,
-                11.062,
-                10.9,
-                10.855
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 7.078,
-              "samples_us": [
-                7.295,
-                7.052,
-                6.968,
-                7.134,
-                7.078,
-                7.057,
-                7.181
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 1.811,
-              "samples_us": [
-                1.818,
-                1.72,
-                1.738,
-                1.854,
-                1.777,
-                1.812,
-                1.811
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 26.149,
-              "samples_us": [
-                26.065,
-                27.4,
-                25.303,
-                29.712,
-                26.186,
-                26.034,
-                26.149
-              ]
-            }
-          }
-        }
+      "create_polynomials_and_ideals": {
+        "median_us": 89.616,
+        "samples_us": [
+          89.616,
+          88.301,
+          109.72,
+          95.237,
+          92.488,
+          88.886,
+          86.419
+        ]
       },
       "singular": {
         "empty_loop": {
-          "median_us": 1.141,
+          "median_us": 1.863,
           "samples_us": [
-            1.141,
-            1.152,
-            1.191,
-            1.133,
-            1.145,
-            1.125,
-            1.133
+            1.109,
+            1.852,
+            1.832,
+            1.891,
+            1.887,
+            1.871,
+            1.863
           ]
         },
         "one_ideal": {
-          "median_us": 1.625,
+          "median_us": 2.73,
           "samples_us": [
-            1.609,
-            1.645,
-            1.621,
-            1.617,
-            1.738,
-            1.645,
-            1.625
+            2.789,
+            2.707,
+            2.715,
+            2.82,
+            2.73,
+            2.797,
+            2.684
           ]
         },
         "both_ideals": {
-          "median_us": 2.172,
+          "median_us": 3.562,
           "samples_us": [
-            2.102,
-            2.285,
-            2.223,
-            2.141,
-            2.172,
-            2.148,
-            2.176
+            3.547,
+            3.637,
+            3.594,
+            3.555,
+            3.594,
+            3.531,
+            3.562
+          ]
+        },
+        "create_polynomials": {
+          "median_us": 5.219,
+          "samples_us": [
+            5.219,
+            5.25,
+            5.438,
+            5.031,
+            5.219,
+            5.375,
+            5.062
+          ]
+        },
+        "create_polynomials_and_ideals": {
+          "median_us": 6.812,
+          "samples_us": [
+            6.656,
+            7.188,
+            6.906,
+            6.688,
+            6.812,
+            6.75,
+            6.844
           ]
         }
       }
@@ -436,409 +170,142 @@
         "(2*x-y)^7",
         "(1/13)*x*y^5"
       ],
-      "atlas_wrappers_only": {
-        "median_us": 1.914,
+      "ordered_generators_verified_in_singular": true,
+      "repeated_declarations": {
+        "positional": {
+          "median_us": 1.413,
+          "samples_us": [
+            1.444,
+            1.479,
+            1.443,
+            1.413,
+            1.386,
+            1.412,
+            1.385
+          ]
+        },
+        "explicit": {
+          "median_us": 1.542,
+          "samples_us": [
+            1.542,
+            1.531,
+            1.542,
+            1.552,
+            1.555,
+            1.538,
+            1.534
+          ]
+        }
+      },
+      "first_declarations": {
+        "positional": {
+          "median_us": 2.733,
+          "samples_us": [
+            2.165,
+            2.628,
+            2.733,
+            2.729,
+            3.497,
+            2.861,
+            2.791
+          ]
+        },
+        "explicit": {
+          "median_us": 2.205,
+          "samples_us": [
+            2.359,
+            2.205,
+            2.036,
+            1.946,
+            1.893,
+            2.705,
+            2.582
+          ]
+        }
+      },
+      "create_polynomials": {
+        "median_us": 604.756,
         "samples_us": [
-          1.972,
-          1.896,
-          1.914,
-          1.903,
-          1.909,
-          1.925,
-          1.933
+          604.756,
+          600.02,
+          597.88,
+          671.375,
+          600.149,
+          613.293,
+          637.655
         ]
       },
-      "abi3": {
-        "cached_row_encoding": {
-          "public_declarations": {
-            "median_us": 21.2,
-            "samples_us": [
-              21.69,
-              21.67,
-              21.2,
-              21.774,
-              21.171,
-              21.196,
-              21.178
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 2.548,
-              "samples_us": [
-                2.54,
-                2.548,
-                2.662,
-                2.645,
-                2.517,
-                2.53,
-                2.604
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 6.676,
-              "samples_us": [
-                6.662,
-                6.666,
-                6.689,
-                6.835,
-                6.676,
-                6.682,
-                6.66
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 2.247,
-              "samples_us": [
-                2.274,
-                2.242,
-                2.259,
-                2.326,
-                2.183,
-                2.247,
-                2.225
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 9.164,
-              "samples_us": [
-                9.202,
-                9.164,
-                9.144,
-                9.287,
-                9.142,
-                9.239,
-                9.091
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 1.514,
-              "samples_us": [
-                1.518,
-                1.498,
-                1.518,
-                1.571,
-                1.482,
-                1.514,
-                1.494
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 22.196,
-              "samples_us": [
-                22.196,
-                22.119,
-                22.271,
-                22.663,
-                22.0,
-                22.212,
-                22.074
-              ]
-            }
-          }
-        },
-        "first_row_encoding": {
-          "public_declarations": {
-            "median_us": 46.28,
-            "samples_us": [
-              45.803,
-              45.274,
-              46.089,
-              46.508,
-              47.323,
-              46.554,
-              46.28
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 3.492,
-              "samples_us": [
-                3.492,
-                3.544,
-                3.513,
-                3.484,
-                3.508,
-                3.403,
-                3.472
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 8.084,
-              "samples_us": [
-                7.719,
-                7.773,
-                8.032,
-                8.084,
-                8.549,
-                8.136,
-                8.09
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 24.983,
-              "samples_us": [
-                24.127,
-                23.68,
-                24.825,
-                24.983,
-                25.75,
-                25.159,
-                24.983
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 9.97,
-              "samples_us": [
-                9.95,
-                9.974,
-                9.97,
-                10.021,
-                9.894,
-                9.938,
-                10.023
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 1.695,
-              "samples_us": [
-                1.687,
-                1.713,
-                1.695,
-                1.69,
-                1.646,
-                1.745,
-                1.699
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 48.263,
-              "samples_us": [
-                46.975,
-                46.684,
-                48.035,
-                48.263,
-                49.347,
-                48.381,
-                48.266
-              ]
-            }
-          }
-        }
-      },
-      "ctypes": {
-        "cached_row_encoding": {
-          "public_declarations": {
-            "median_us": 23.568,
-            "samples_us": [
-              23.859,
-              23.94,
-              23.648,
-              23.541,
-              23.511,
-              23.526,
-              23.568
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 2.671,
-              "samples_us": [
-                2.671,
-                2.683,
-                2.68,
-                2.734,
-                2.62,
-                2.571,
-                2.613
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 6.762,
-              "samples_us": [
-                6.888,
-                6.762,
-                6.77,
-                6.895,
-                6.76,
-                6.754,
-                6.714
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 2.327,
-              "samples_us": [
-                2.349,
-                2.331,
-                2.327,
-                2.372,
-                2.286,
-                2.262,
-                2.22
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 10.427,
-              "samples_us": [
-                10.48,
-                10.368,
-                10.427,
-                10.567,
-                10.402,
-                10.43,
-                10.368
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 2.415,
-              "samples_us": [
-                2.435,
-                2.415,
-                2.438,
-                2.517,
-                2.4,
-                2.389,
-                2.409
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 24.558,
-              "samples_us": [
-                24.823,
-                24.558,
-                24.641,
-                25.084,
-                24.468,
-                24.407,
-                24.325
-              ]
-            }
-          }
-        },
-        "first_row_encoding": {
-          "public_declarations": {
-            "median_us": 50.981,
-            "samples_us": [
-              51.53,
-              51.795,
-              50.981,
-              53.134,
-              50.63,
-              49.725,
-              49.852
-            ]
-          },
-          "stages": {
-            "validate_and_wrap": {
-              "median_us": 3.672,
-              "samples_us": [
-                3.672,
-                3.753,
-                3.441,
-                3.502,
-                3.755,
-                3.601,
-                3.798
-              ]
-            },
-            "extract_and_check_sizes": {
-              "median_us": 8.544,
-              "samples_us": [
-                8.386,
-                8.915,
-                8.544,
-                8.287,
-                9.434,
-                8.291,
-                8.809
-              ]
-            },
-            "encode_rows_and_payload": {
-              "median_us": 26.668,
-              "samples_us": [
-                25.87,
-                26.668,
-                28.982,
-                26.543,
-                26.897,
-                26.423,
-                28.215
-              ]
-            },
-            "native_prepare_and_own": {
-              "median_us": 11.59,
-              "samples_us": [
-                11.527,
-                11.59,
-                11.503,
-                11.536,
-                11.654,
-                11.68,
-                12.399
-              ]
-            },
-            "bind_and_release": {
-              "median_us": 2.742,
-              "samples_us": [
-                2.688,
-                2.742,
-                2.641,
-                2.753,
-                2.696,
-                2.807,
-                2.953
-              ]
-            },
-            "instrumented_total": {
-              "median_us": 53.668,
-              "samples_us": [
-                52.143,
-                53.668,
-                55.11,
-                52.622,
-                54.435,
-                52.801,
-                56.174
-              ]
-            }
-          }
-        }
+      "create_polynomials_and_ideals": {
+        "median_us": 617.727,
+        "samples_us": [
+          637.077,
+          617.727,
+          633.431,
+          644.516,
+          596.517,
+          595.943,
+          614.427
+        ]
       },
       "singular": {
         "empty_loop": {
-          "median_us": 1.145,
+          "median_us": 1.125,
           "samples_us": [
-            1.168,
+            1.125,
+            1.105,
+            1.105,
+            1.113,
             1.145,
             1.145,
-            1.547,
-            1.141,
-            1.152,
-            1.133
+            1.16
           ]
         },
         "one_ideal": {
-          "median_us": 1.699,
+          "median_us": 1.758,
           "samples_us": [
-            1.828,
-            1.699,
-            1.695,
-            1.695,
-            1.797,
-            1.746,
-            1.699
+            1.758,
+            1.742,
+            1.77,
+            1.781,
+            1.742,
+            1.793,
+            1.738
           ]
         },
         "both_ideals": {
-          "median_us": 2.289,
+          "median_us": 2.316,
           "samples_us": [
-            2.25,
-            2.391,
-            2.289,
-            2.297,
-            2.262,
-            2.242,
+            2.293,
+            2.43,
+            2.332,
+            2.281,
+            2.293,
+            2.324,
             2.316
+          ]
+        },
+        "create_polynomials": {
+          "median_us": 7.594,
+          "samples_us": [
+            7.812,
+            7.75,
+            7.562,
+            7.594,
+            7.469,
+            7.75,
+            7.5
+          ]
+        },
+        "create_polynomials_and_ideals": {
+          "median_us": 8.812,
+          "samples_us": [
+            8.812,
+            8.719,
+            8.906,
+            9.0,
+            8.75,
+            8.719,
+            8.875
           ]
         }
       }

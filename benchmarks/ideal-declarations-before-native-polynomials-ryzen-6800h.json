@@ -1,0 +1,314 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    6
+  ],
+  "python": "3.14.4",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "kernel_sha256": "cb20f5b6e85fe09b636e66b5b9e077b835ad0e9f39165a20d096967c1fe7132f",
+  "binding_sha256": "00d6a9a9b7b9762c3116c20ee2ceb01b77f148f966b9168618ee7b88f80bc5d0",
+  "trials": 7,
+  "pairs_per_trial": 256,
+  "creation_pairs_per_trial": 32,
+  "conditions": "Microseconds per pair of ideals. The positional call is ideal(f,g). The explicit call also supplies ring and order. Repeated declarations use the same live polynomials. For first declarations, each pair of ideals is the first ever constructed from its polynomials, in a fresh parent. Both conditions exclude ring creation and polynomial construction. Creation samples evaluate and assign the four polynomial expressions from x and y in Atlas scripts or the Singular interpreter, optionally including both ideal declarations. Each Atlas script runs in a separately created QQ[x,y] ring with a fresh session. Singular reassigns the same four names in an existing ring, one thread. Both systems verify all four ordered generators outside the timer. Each condition discards a warm-up batch of the same size. No sum, product or ideal power is timed.",
+  "cases": {
+    "plane_monomials": {
+      "left": [
+        "x^2",
+        "y"
+      ],
+      "right": [
+        "x",
+        "y^2"
+      ],
+      "ordered_generators_verified_in_singular": true,
+      "repeated_declarations": {
+        "positional": {
+          "median_us": 14.231,
+          "samples_us": [
+            14.231,
+            15.041,
+            20.304,
+            14.284,
+            13.537,
+            13.589,
+            13.515
+          ]
+        },
+        "explicit": {
+          "median_us": 12.812,
+          "samples_us": [
+            12.812,
+            13.189,
+            15.888,
+            12.696,
+            12.684,
+            12.698,
+            12.931
+          ]
+        }
+      },
+      "first_declarations": {
+        "positional": {
+          "median_us": 22.707,
+          "samples_us": [
+            23.614,
+            23.329,
+            22.352,
+            22.791,
+            22.707,
+            22.077,
+            22.333
+          ]
+        },
+        "explicit": {
+          "median_us": 21.533,
+          "samples_us": [
+            21.278,
+            22.942,
+            21.839,
+            22.081,
+            21.533,
+            21.294,
+            21.42
+          ]
+        }
+      },
+      "create_polynomials": {
+        "median_us": 65.472,
+        "samples_us": [
+          65.472,
+          66.265,
+          65.534,
+          64.71,
+          64.339,
+          65.781,
+          64.662
+        ]
+      },
+      "create_polynomials_and_ideals": {
+        "median_us": 108.638,
+        "samples_us": [
+          109.198,
+          108.638,
+          106.764,
+          106.442,
+          109.211,
+          109.259,
+          107.588
+        ]
+      },
+      "singular": {
+        "empty_loop": {
+          "median_us": 1.137,
+          "samples_us": [
+            1.137,
+            1.141,
+            1.137,
+            1.148,
+            1.141,
+            1.133,
+            1.137
+          ]
+        },
+        "one_ideal": {
+          "median_us": 1.637,
+          "samples_us": [
+            1.637,
+            1.633,
+            1.613,
+            1.637,
+            1.699,
+            1.621,
+            1.648
+          ]
+        },
+        "both_ideals": {
+          "median_us": 2.133,
+          "samples_us": [
+            2.113,
+            2.133,
+            2.148,
+            2.148,
+            2.117,
+            2.176,
+            2.133
+          ]
+        },
+        "create_polynomials": {
+          "median_us": 3.094,
+          "samples_us": [
+            3.094,
+            3.062,
+            3.094,
+            3.312,
+            3.125,
+            3.094,
+            3.125
+          ]
+        },
+        "create_polynomials_and_ideals": {
+          "median_us": 4.125,
+          "samples_us": [
+            4.031,
+            4.375,
+            4.062,
+            4.125,
+            4.344,
+            4.062,
+            4.125
+          ]
+        }
+      }
+    },
+    "rational_forms": {
+      "left": [
+        "(x+2*y)^8",
+        "(18446744073709551629/7)*x^6*y"
+      ],
+      "right": [
+        "(2*x-y)^7",
+        "(1/13)*x*y^5"
+      ],
+      "ordered_generators_verified_in_singular": true,
+      "repeated_declarations": {
+        "positional": {
+          "median_us": 23.246,
+          "samples_us": [
+            22.965,
+            23.348,
+            23.227,
+            23.319,
+            23.309,
+            23.246,
+            23.213
+          ]
+        },
+        "explicit": {
+          "median_us": 22.283,
+          "samples_us": [
+            22.255,
+            22.149,
+            22.376,
+            22.184,
+            22.559,
+            22.283,
+            22.34
+          ]
+        }
+      },
+      "first_declarations": {
+        "positional": {
+          "median_us": 48.136,
+          "samples_us": [
+            48.047,
+            52.959,
+            48.06,
+            50.738,
+            47.879,
+            48.136,
+            48.939
+          ]
+        },
+        "explicit": {
+          "median_us": 46.788,
+          "samples_us": [
+            46.788,
+            45.427,
+            45.679,
+            46.228,
+            46.804,
+            47.01,
+            47.39
+          ]
+        }
+      },
+      "create_polynomials": {
+        "median_us": 511.399,
+        "samples_us": [
+          512.134,
+          508.662,
+          601.932,
+          511.399,
+          511.211,
+          506.235,
+          518.74
+        ]
+      },
+      "create_polynomials_and_ideals": {
+        "median_us": 584.309,
+        "samples_us": [
+          610.354,
+          578.247,
+          615.586,
+          584.309,
+          577.267,
+          580.346,
+          590.627
+        ]
+      },
+      "singular": {
+        "empty_loop": {
+          "median_us": 1.156,
+          "samples_us": [
+            1.156,
+            1.137,
+            1.203,
+            1.148,
+            1.16,
+            1.137,
+            1.16
+          ]
+        },
+        "one_ideal": {
+          "median_us": 1.754,
+          "samples_us": [
+            2.754,
+            1.754,
+            1.746,
+            1.738,
+            1.777,
+            1.754,
+            1.73
+          ]
+        },
+        "both_ideals": {
+          "median_us": 2.285,
+          "samples_us": [
+            2.27,
+            2.387,
+            2.285,
+            2.309,
+            2.266,
+            2.293,
+            2.285
+          ]
+        },
+        "create_polynomials": {
+          "median_us": 7.531,
+          "samples_us": [
+            7.469,
+            7.531,
+            7.844,
+            7.656,
+            7.5,
+            7.688,
+            7.438
+          ]
+        },
+        "create_polynomials_and_ideals": {
+          "median_us": 8.719,
+          "samples_us": [
+            8.594,
+            8.562,
+            8.719,
+            8.75,
+            8.719,
+            8.688,
+            8.906
+          ]
+        }
+      }
+    }
+  }
+}
