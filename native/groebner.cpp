@@ -15,12 +15,18 @@
 #include <cstring>
 #include <memory>
 #include <thread>
+#include <iterator>
+#include <type_traits>
+#include <utility>
 
 namespace atlas {
 
+namespace {
 // out = ca * x^shift_a * a[ia..] + cb * x^shift_b * b[ib..]; a null factor is one.
-void merge(const Ring& R, Poly& out, const Poly& a, size_t ia, const fmpz* ca, const u64* shift_a,
-           const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) {
+// With take, the coefficients of a are moved into out (scaled in place).
+template<bool take>
+void merge_terms(const Ring& R, Poly& out, std::conditional_t<take, Poly&, const Poly&> a, size_t ia,
+                 const fmpz* ca, const u64* shift_a, const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) {
     const int S = R.stride;
     const size_t na = a.size(), nb = b.size();
     out.clear();
@@ -43,21 +49,91 @@ void merge(const Ring& R, Poly& out, const Poly& a, size_t ia, const fmpz* ca, c
         out.c.emplace_back();
         if (factor) fmpz_mul(&out.c.back().v, value, factor); else fmpz_set(&out.c.back().v, value);
     };
+    // A term of a: taken from a when it is discarded, otherwise copied.
+    auto emit_a = [&](const u64* mono) {
+        if constexpr (take) {
+            out.m.insert(out.m.end(), mono, mono + S);
+            out.c.emplace_back();
+            fmpz* value = &a.c[ia].v;
+            if (ca) fmpz_mul(value, value, ca);
+            fmpz_swap(&out.c.back().v, value);
+        } else {
+            emit(mono, &a.c[ia].v, ca);
+        }
+    };
     load_a(); load_b();
+    if (!shift_a && na - std::min(ia, na) > 8 * (nb - std::min(ib, nb))) {
+        // A short b against a long, unshifted a (a reduction step): find the
+        // place of each term of b in a by galloping, and pass the run of a
+        // before it on as one block. The terms and their order are those of
+        // the term-by-term merge below.
+        auto first_not_above = [&](const u64* mono) {
+            size_t lo = ia, hi = na, probe = ia, step = 1;
+            while (probe < na) {
+                if (R.compare(a.m.data() + probe * S, mono) > 0) { lo = probe + 1; probe += step; step <<= 1; }
+                else { hi = probe; break; }
+            }
+            while (lo < hi) {
+                const size_t middle = lo + (hi - lo) / 2;
+                if (R.compare(a.m.data() + middle * S, mono) > 0) lo = middle + 1; else hi = middle;
+            }
+            return lo;
+        };
+        auto run = [&](size_t end) {
+            if (end <= ia) return;
+            out.m.insert(out.m.end(), a.m.begin() + ia * S, a.m.begin() + end * S);
+            if constexpr (take) {
+                if (ca) for (size_t k = ia; k < end; ++k) fmpz_mul(&a.c[k].v, &a.c[k].v, ca);
+                out.c.insert(out.c.end(), std::make_move_iterator(a.c.begin() + ia),
+                             std::make_move_iterator(a.c.begin() + end));
+            } else {
+                for (size_t k = ia; k < end; ++k) {
+                    out.c.emplace_back();
+                    if (ca) fmpz_mul(&out.c.back().v, &a.c[k].v, ca); else fmpz_set(&out.c.back().v, &a.c[k].v);
+                }
+            }
+            ia = end;
+        };
+        for (; ib < nb; ++ib, load_b()) {
+            run(first_not_above(mb));
+            if (ia < na && R.compare(a.m.data() + ia * S, mb) == 0) {
+                emit_a(a.m.data() + ia * S);
+                fmpz* sum = &out.c.back().v;
+                if (cb) fmpz_addmul(sum, &b.c[ib].v, cb); else fmpz_add(sum, sum, &b.c[ib].v);
+                if (fmpz_is_zero(sum)) { out.c.pop_back(); out.m.resize(out.m.size() - S); }
+                ++ia;
+            } else {
+                emit(mb, &b.c[ib].v, cb);
+            }
+        }
+        run(na);
+        return;
+    }
     while (ia < na && ib < nb) {
         const int order = R.compare(ma, mb);
-        if (order > 0) { emit(ma, &a.c[ia].v, ca); ++ia; load_a(); }
+        if (order > 0) { emit_a(ma); ++ia; load_a(); }
         else if (order < 0) { emit(mb, &b.c[ib].v, cb); ++ib; load_b(); }
         else {
-            emit(ma, &a.c[ia].v, ca);
+            emit_a(ma);
             fmpz* sum = &out.c.back().v;
             if (cb) fmpz_addmul(sum, &b.c[ib].v, cb); else fmpz_add(sum, sum, &b.c[ib].v);
             if (fmpz_is_zero(sum)) { out.c.pop_back(); out.m.resize(out.m.size() - S); }
             ++ia; ++ib; load_a(); load_b();
         }
     }
-    for (; ia < na; ++ia, load_a()) emit(ma, &a.c[ia].v, ca);
+    for (; ia < na; ++ia, load_a()) emit_a(ma);
     for (; ib < nb; ++ib, load_b()) emit(mb, &b.c[ib].v, cb);
+}
+} // namespace
+
+void merge(const Ring& R, Poly& out, const Poly& a, size_t ia, const fmpz* ca, const u64* shift_a,
+           const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) {
+    merge_terms<false>(R, out, a, ia, ca, shift_a, b, ib, cb, shift_b);
+}
+
+void merge(const Ring& R, Poly& out, Poly&& a, size_t ia, const fmpz* ca, const u64* shift_a,
+           const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) {
+    merge_terms<true>(R, out, a, ia, ca, shift_a, b, ib, cb, shift_b);
 }
 
 void primitive(Poly& f, fmpz* num) {
@@ -148,7 +224,7 @@ bool Engine::reduce_terms(Poly& f, size_t keep, fmpz* num, fmpz* den, long* suga
             if (fmpz_sgn(&scale.v) < 0) fmpz_neg(&scale.v, &scale.v); else fmpz_neg(&negative.v, &negative.v);
             one = fmpz_is_one(&scale.v);
         }
-        merge(next, f, at + 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
+        merge(next, std::move(f), at + 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
         f.swap(next);
         at = 0;
         if (!one) {
@@ -210,7 +286,7 @@ std::string Engine::division(Poly& f, Rational& scale) {
         fmpz_divexact(&left.v, &g.c[0].v, &common.v);
         fmpz_divexact(&right.v, &f.c[at].v, &common.v);
         fmpz_neg(&right.v, &right.v);
-        merge(next, f, at+1, &left.v, nullptr, g, 1, &right.v, term.m.data());
+        merge(next, std::move(f), at+1, &left.v, nullptr, g, 1, &right.v, term.m.data());
         f.swap(next);
         // Multiplying the held remainder by left is offset in its denominator.
         if (!fmpz_is_one(&left.v)) {
@@ -584,7 +660,7 @@ Engine::Outcome Engine::head(Poly& f, long& sugar) {
         fmpz_divexact(&negative.v, a, &common.v);
         if (fmpz_sgn(&scale.v) < 0) fmpz_neg(&scale.v, &scale.v); else fmpz_neg(&negative.v, &negative.v);
         const bool one = fmpz_is_one(&scale.v);
-        merge(next, f, 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
+        merge(next, std::move(f), 1, one ? nullptr : &scale.v, nullptr, r, 1, &negative.v, shift);
         f.swap(next);
         guard_work();
         if ((!one && ++scalings >= 4) || over_bit_limit(f)) {
@@ -685,7 +761,7 @@ Poly multiply(const Ring& R, const Poly& a, const Poly& b) {
     const Poly& many = a.size() <= b.size() ? b : a;
     Poly sum, merged;
     for (size_t i = 0; i < few.size(); ++i) {
-        merge(R, merged, sum, 0, nullptr, nullptr, many, 0, &few.c[i].v, few.m.data() + i * R.stride);
+        merge(R, merged, std::move(sum), 0, nullptr, nullptr, many, 0, &few.c[i].v, few.m.data() + i * R.stride);
         sum.swap(merged);
     }
     return sum;

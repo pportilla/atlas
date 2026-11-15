@@ -170,6 +170,11 @@ struct Rational {
 // out = ca * x^shift_a * a[ia..] + cb * x^shift_b * b[ib..]; a null factor is one.
 void merge(const Ring& R, Poly& out, const Poly& a, size_t ia, const fmpz* ca, const u64* shift_a,
            const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b);
+// The same sum for an a that the caller discards: the coefficients of
+// a[ia..] are taken (scaled in place by ca) instead of copied. Reducing a
+// long polynomial by a short one then moves its untouched coefficients.
+void merge(const Ring& R, Poly& out, Poly&& a, size_t ia, const fmpz* ca, const u64* shift_a,
+           const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b);
 // Divide f by its content, signed so that the leading coefficient becomes
 // positive; num, when given, is multiplied by what was divided out.
 void primitive(Poly& f, fmpz* num);
@@ -332,6 +337,11 @@ protected:
     void merge(Poly& out, const Poly& a, size_t ia, const fmpz* ca, const u64* shift_a,
                const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) const {
         atlas::merge(R, out, a, ia, ca, shift_a, b, ib, cb, shift_b);
+        if (work_limit_ > 0) work_ += static_cast<double>(out.size()) + 1;  // no write without a limit: see is_basis
+    }
+    void merge(Poly& out, Poly&& a, size_t ia, const fmpz* ca, const u64* shift_a,
+               const Poly& b, size_t ib, const fmpz* cb, const u64* shift_b) const {
+        atlas::merge(R, out, std::move(a), ia, ca, shift_a, b, ib, cb, shift_b);
         if (work_limit_ > 0) work_ += static_cast<double>(out.size()) + 1;  // no write without a limit: see is_basis
     }
     Poly spoly(const Pair& pair) const;

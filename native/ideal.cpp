@@ -322,7 +322,7 @@ private:
             quotient.m.insert(quotient.m.end(), shift, shift + S);
             quotient.c.emplace_back();
             fmpz_neg(&quotient.c.back().v, &negative.v);
-            merge(R, next, f, 1, one ? nullptr : &scale.v, nullptr, g, 1, &negative.v, shift);
+            merge(R, next, std::move(f), 1, one ? nullptr : &scale.v, nullptr, g, 1, &negative.v, shift);
             f.swap(next);
         }
         primitive(quotient, nullptr);
@@ -530,7 +530,7 @@ private:
                     const auto found = minors_[d - 1].find(set ^ (1ULL << v));
                     if (found == minors_[d - 1].end()) continue;
                     const Poly term = multiply(R_, row[v], found->second);
-                    merge(R_, merged, sum, 0, nullptr, nullptr, term, 0, ((place + d) & 1) ? &minus_.v : nullptr, nullptr);
+                    merge(R_, merged, std::move(sum), 0, nullptr, nullptr, term, 0, ((place + d) & 1) ? &minus_.v : nullptr, nullptr);
                     sum.swap(merged);
                 }
                 if (!sum.empty()) minors_[d].emplace(set, std::move(sum));
@@ -635,7 +635,7 @@ bool full_rank(const Ring& R, const std::vector<Poly>& generators, const std::ve
                 if (!column_alive[j] || j == pivot_column || pivot[j].empty()) continue;
                 const Poly product = multiply(R, factor, pivot[j]);
                 Poly merged;
-                merge(R, merged, row[j], 0, u, nullptr, product, 0, &minus.v, nullptr);
+                merge(R, merged, std::move(row[j]), 0, u, nullptr, product, 0, &minus.v, nullptr);
                 row[j].swap(merged);
             }
             // The other entries of the row are multiplied by u as well.
@@ -2791,27 +2791,38 @@ std::string op_crossings(Reader& in) {
             if (faces) {
                 std::vector<Poly> gens = ambient;
                 for (size_t j : subset) gens = joined(std::move(gens), divisors[j]);
-                std::vector<Poly> locus = joined(gens, fibre);
-                if (!unit_basis(R, locus)) {
+                // One basis per ideal. Each later ideal contains the previous
+                // one, so its computation starts from that basis, declared
+                // known: the ideals, their unit tests and their reduced bases
+                // are those of the generators themselves.
+                Basis basis(R, joined(gens, fibre));
+                if (!basis.unit()) {
                     found.push_back(subset);
                     const long rank = codimension + static_cast<long>(size);
+                    std::unique_ptr<Basis> with_minors;
                     bool failing = true;
                     if (rank <= R.n) {
-                        Basis basis(R, locus);
                         Matrix J = jacobian(R, gens);
                         for (size_t i = 0; i < J.rows; ++i) reduce_row(basis, J.row(i), J.columns);
+                        std::vector<Poly> locus = basis.elements();
+                        const size_t known = locus.size();
                         if (static_cast<long>(J.rows) >= rank && rank >= 1) {
                             Minors minors(R, std::move(J), static_cast<int>(rank));
                             do {
-                                for (Poly& m : remainders(basis, minors)) locus.push_back(std::move(m));
+                                for (Poly& m : remainders(basis, minors))
+                                    if (!m.empty()) locus.push_back(std::move(m));
                             } while (minors.next());
                         }
-                        failing = !unit_basis(R, locus);
+                        with_minors = std::make_unique<Basis>(R, locus, known);
+                        failing = !with_minors->unit();
                     }
                     if (failing) {
-                        Basis bad(R, locus);
+                        const Basis& bad = with_minors ? *with_minors : basis;
                         const Ideal generators = bad.monic();
-                        const bool inside = !unit_basis(R, joined(locus, region));
+                        std::vector<Poly> owned = bad.elements();
+                        const size_t known = owned.size();
+                        for (const Poly& g : region) owned.push_back(g);
+                        const bool inside = !Basis(R, owned, known).unit();
                         out += "bad " + std::to_string(size);
                         for (size_t j : subset) out += " " + std::to_string(j);
                         out += std::string(inside ? " 1 " : " 0 ") + std::to_string(generators.size()) + "\n";
@@ -2873,7 +2884,7 @@ Poly substitute(const Ring& R, const Poly& f, int v, const Poly& image, const fm
         const auto part = parts.find(d);
         if (part == parts.end()) continue;
         Poly next;
-        merge(R, next, sum, 0, nullptr, nullptr, part->second, 0, plain ? nullptr : &power.v, nullptr);
+        merge(R, next, std::move(sum), 0, nullptr, nullptr, part->second, 0, plain ? nullptr : &power.v, nullptr);
         sum.swap(next);
     }
     if (scale && !plain) fmpz_mul(scale, scale, &power.v);
