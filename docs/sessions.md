@@ -3,9 +3,9 @@
 Run `./atlas` at a terminal. Assignments bind names quietly. Enter a name or
 expression to inspect it. Tab completes names, fields such as `R.divisors`,
 and methods such as `R.chart(`. Use `:workspace` to inspect the rings and
-variables in use. Create a ring with `R = ring("x", "y")`. Every ring has a
-name, and `use_ring` selects the ring that new polynomials use by default. Type `help functions` to list operations or
-`help resolve` for its arguments and an example.
+variables in use. `R = ring("x", "y")` declares a polynomial ring and gives
+you `x` and `y` to use in expressions. Type `help functions` to list operations
+or `help resolve` for its arguments and an example.
 
 For a polynomial map germ, type `help ae_codimension`. The returned object's
 `.finite` field tells you how to interpret `.value`.
@@ -20,7 +20,6 @@ section for that kind of value.
 
 ```text
 atlas> R = ring("x", "y")
-atlas> x, y = R.coordinates
 atlas> f = y^2 - x^3
 atlas> help f
 f is a polynomial in R (QQ[x, y]).
@@ -39,18 +38,16 @@ see all your saved names.
 
 ## Choose the ring of a polynomial
 
-`ring("x", "y")` returns the polynomial ring `QQ[x, y]`, and assigning it to
-`R` names the ring. `R.coordinates` gives its generators in order, and
-`polynomial("x^2", ring=R)` reads a formula in it. `coordinates("x", "y")`
-declares the same ring and returns its generators directly. Repeating either
-declaration in the same session gives you the same ring and generators.
+`R = ring("x", "y")` names the ring `QQ[x, y]` and binds `x` and `y` to its
+generators at the prompt or in a script. `R.coordinates` gives those same
+generators in order. `polynomial("x^2", ring=R)` reads a formula in the ring.
+Repeating the declaration or calling `coordinates("x", "y")` in the same
+session reuses the ring and its generators.
 
 ```text
 atlas> R = ring("x", "y")
-atlas> x, y = R.coordinates
-atlas> f = y^2 + x
-atlas> x, y = coordinates("x", "y")
-atlas> x.parent == R
+atlas> f = y^2 + x^5
+atlas> f.parent == R
 True
 atlas> g = f + polynomial("x^2", ring=R)
 atlas> g.parent == f.parent
@@ -142,23 +139,25 @@ still live in `L.ambient`, the original ring `QQ[x, y]`.
 ### Reuse and rebind coordinate names
 
 Atlas uses the coefficient field and the generator names in the order you
-give them. Omitting `coeffs=QQ` selects the rationals. If a direct coordinate
-declaration would replace a saved value, Atlas rejects the whole assignment
-and suggests an available name. This also applies when selecting one of the
-new generators with an index. To also work
-in `QQ[x, z]`, use a different name on the left for its first generator.
+give them. Omitting `coeffs=QQ` selects the rationals. If a generator would
+replace a saved value, Atlas rejects the whole declaration. For example, with
+`x` already in `R = QQ[x, y]`, `S = ring("x", "z")` would give `x` a
+different parent. Atlas reports the conflict before assigning `S` or `z`.
+Use `coordinates` to choose available names for the generators of the second
+ring.
 
 ```text
 atlas> x2, z2 = coordinates("x", "z")
-atlas> x2.parent
+atlas> S = x2.parent
+atlas> S
 QQ[x, z]
 atlas> x.parent == f.parent
 True
 ```
 
-Here `x2` and `z2` name the generators spelled `x` and `z` in the second ring.
-The workspace lists that ring under the next free name, such as `R1`, and
-`S = ring("x", "z")` names it `S`. Similarly,
+Here `x2` and `z2` name the generators spelled `x` and `z` in `S`. Direct
+`coordinates` assignments also check the names you choose, including when
+you select a generator by index. For example,
 `x3, y3, z3 = coordinates("x", "y", "z")` selects `QQ[x, y, z]` while `x`,
 `y`, and `f` still belong to `QQ[x, y]`. Asking for
 `coordinates("y", "x")` also selects a different parent because the order changed.
@@ -179,9 +178,9 @@ True
 ```
 
 Another ordinary call to `coordinates("x", "y")` returns the generators of
-`f.parent`. A declaration with `fresh=True` explicitly requests a new ring
-and may reuse the names on the left. The two copies of `QQ[x, y]` have
-different names in the workspace. Ordinary assignment and unpacking a
+`f.parent`. To deliberately rebind `x` and `y` to an independent copy, use
+`T = ring("x", "y", fresh=True)`. Then `x.parent == T` and `f.parent == R`.
+Each copy of `QQ[x, y]` has its own name in the workspace. Ordinary assignment and unpacking a
 saved tuple also rebind names. To restore the original generators,
 assign `x, y = f.parent.coordinates`.
 
@@ -226,8 +225,10 @@ True
 ```
 
 Polynomials and coordinates keep their own parent, so `ideal(u)` lies in `P`.
-`use_ring` returns its ring, so `S = use_ring(ring("s", "t"))` creates, names
-and selects a ring in one line.
+`S = ring("s", "t")` binds the generators, and `use_ring(S)` selects the
+ring. A call nested inside an expression returns only the ring. For example,
+`S = use_ring(ring("s", "t"))` selects the ring in one line, and
+`s, t = S.coordinates` then binds its generators.
 `resolve("y^2-x^3")` and `monodromy_check` also read a string in the active
 ring when it is a polynomial ring over QQ. The workspace marks the active ring
 with `(active)`. `active_ring()` returns it, and `use_ring(None)` clears the

@@ -84,19 +84,57 @@ class RingNameTests(unittest.TestCase):
 
     def test_ring_returns_the_session_parent_of_the_declared_coordinates(self):
         self.check_at_both_entry_points("""
-            R = ring("x", "y")
-            x, y = R.coordinates
+            R = ring('x','y')
+            f = y^2+x^5
+            print(f.parent == R, f == polynomial("y^2+x^5", ring=R), active_ring() == None)
+            R = ring("x", "y", coeffs=QQ)
             X, Y = coordinates("x", "y")
             print(X == x, x.parent == R, ring("x", "y") == R, ring("y", "x") == R)
             S = ring("x", "y", fresh=True)
-            u, v = S.coordinates
-            f = polynomial("x^2+y", ring=S)
-            print(S == R, f == u^2 + v, f.parent == S)
+            print(S == R, x.parent == S, y.parent == S, f.parent == R, X.parent == R)
             a = "s"
             b = "t"
-            T = ring(a, b, coeffs=QQ)
-            print(T.variables, T.coordinates[1].parent == T)
-        """, ["True True True False", "False True True", "('s', 't') True"])
+            make = ring
+            T = make(a, b)
+            print(T.variables, (s+t).parent == T)
+        """, ["True True True", "True True True False", "False True True True True", "('s', 't') True"])
+        status, out, err = run_prompt("R = ring('x','y')\nf = y^2+x^5\n:workspace\nquit\n")
+        self.assertEqual((status, err), (0, ""))
+        self.assertRegex(out, r"R = QQ\[x, y\]\s+Coordinates\s+x, y\s+Polynomials\s+f = x\^5\+y\^2")
+
+    def test_conflicting_ring_declaration_preserves_bindings_and_accepts_coordinate_aliases(self):
+        setup = "R = ring('x','y')\nf = y^2+x^5\n"
+        conflict = "S = ring('z','x')\n"
+        failed = run_script(setup + conflict)
+        self.assertEqual(failed.returncode, 2)
+        self.assertIn("'x'", failed.stderr)
+        recovery = "z, x2 = coordinates('z', 'x')\nS = z.parent\n"
+        for command in recovery.splitlines():
+            self.assertIn(command, failed.stderr)
+
+        verify = "print(f.parent == R, x.parent == R, x2.parent == S, R == S)\n"
+        status, out, err = run_prompt(setup + conflict + recovery + verify + "quit\n")
+        self.assertEqual(status, 0)
+        self.assertIn("coordinates(", err)
+        self.assertIn("True True True False", out)
+        replay = run_script(setup + recovery + verify)
+        self.assertEqual((replay.returncode, replay.stdout, replay.stderr), (0, "True True True False\n", ""))
+
+    def test_ring_preflights_all_names_before_binding(self):
+        session = session_with('R = ring("x","y")\nf = x+y\nn = 1\nuse_ring(R)')
+        original = session.variables.copy()
+        ring_state = session.rings.state()
+        for command in ('R = ring("z","x")', 'S = ring("z","n")', 'S = ring("z","f")',
+                        'S = ring("z","R")', 'S = ring("z","S", fresh=True)',
+                        'S = ring("z","ideal", fresh=True)', 'S = ring("z","for")',
+                        'S = ring("z","help")'):
+            with self.subTest(command=command):
+                with self.assertRaises(SessionError):
+                    list(session.run(command))
+                self.assertEqual(session.variables.keys(), original.keys())
+                for name, value in original.items():
+                    self.assertIs(session.variables[name], value)
+                self.assertEqual(session.rings.state(), ring_state)
 
     def test_ring_names_the_ring_it_creates(self):
         session = session_with('x, y = coordinates("x", "y")\nR = ring("x", "y")\nT = use_ring(ring("s", "t"))')
@@ -107,12 +145,20 @@ class RingNameTests(unittest.TestCase):
         self.assertEqual(workspace(names, session.rings.active).header()[0],
                          ["R = QQ[x, y] → x, y", "T = QQ[s, t] (active)"])
         # Rebinding R to another ring leaves QQ[x, y] with a free name for its coordinates.
-        list(session.run('R = ring("x", "z")'))
+        list(session.run('R = ring("u", "z")'))
         self.assertIs(names["R1"], names["x"].parent)
+        self.assertIs(names["R"], names["u"].parent)
         for command, message in (("ring()", "coordinate names"), ('ring("x", "x")', "distinct"),
                                  ('ring("x", fresh=1)', "fresh must be"), ('ring = 1', "reserved")):
             with self.subTest(command=command), self.assertRaisesRegex(SessionError, message):
                 list(session.run(command))
+
+    def test_generated_ring_name_is_available_as_a_coordinate(self):
+        self.check_at_both_entry_points("""
+            t = coordinates("t")
+            S = ring("R1", "R2")
+            print(R1.parent == S, R2.parent == S, R3 == t.parent)
+        """, ["True True True"])
 
     def test_independent_same_named_rings_keep_their_own_names_in_both_entry_points(self):
         self.check_at_both_entry_points("""

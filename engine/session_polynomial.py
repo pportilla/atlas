@@ -351,12 +351,12 @@ def session_declarations():
         return _declare_coordinates(names, coeffs, parent_maker(fresh))
 
     def ring(*names, coeffs=QQ, fresh=False):
-        """Return the polynomial ring over QQ with these ordered coordinate names.
+        """Return the polynomial ring over QQ and bind its coordinates on direct assignment.
 
         >>> R = ring("x", "y")
-        >>> x, y = R.coordinates
-        >>> f = polynomial("x^2 + y", ring=R)
+        >>> f = y^2 + x^5
         >>> f.parent == R
+        >>> R.coordinates
 
         Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
         """

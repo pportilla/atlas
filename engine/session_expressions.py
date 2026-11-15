@@ -188,7 +188,7 @@ def _assign_pair(session, pair, line):
         return False  # An argument may be built-in, or require an unknown-name diagnostic.
     if type(operation) is str:
         function = variables.get(operation, builtins.get(operation))
-        if not callable(function) or function is builtins.get("coordinates"):
+        if not callable(function) or function is builtins.get("coordinates") or function is builtins.get("ring"):
             return False
         try:
             result = function(left, right)
@@ -206,7 +206,7 @@ def _assign_pair(session, pair, line):
         raise SessionError(f"{target!r} is a reserved Atlas name.", line)
     session.variables[target] = result
     # Arithmetic and ring-preserving calls stay in their operands' named rings.
-    # Any other call, such as ring(a, b), is a direct assignment that may name a ring.
+    # Any other call is a direct assignment that may name a ring.
     rings = session.rings
     if (type(operation) is str and operation not in RING_PRESERVING_CALLS) or target in rings.names:
         rings.note(target, result, naming=True)
@@ -355,9 +355,13 @@ class Evaluator:
             if isinstance(statement, ast.Expr):
                 return self._value(statement.value)
             if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-                value, declared = self._assignment_value(statement.value)
-                self._bind(statement.targets[0], value, declaration=statement.value if declared else None,
-                           naming=True)
+                target = statement.targets[0]
+                value, function, fresh = self._assignment_value(statement.value)
+                if isinstance(target, ast.Name) and function is not None and function is self.builtins.get("ring"):
+                    self._bind_ring(target, value, fresh)
+                else:
+                    protected = function is not None and function is self.builtins.get("coordinates") and not fresh
+                    self._bind(target, value, declaration=statement.value if protected else None, naming=True)
             elif isinstance(statement, ast.For) and not statement.orelse:
                 items = self._value(statement.iter)
                 if not isinstance(items, (tuple, list, dict)):
@@ -385,13 +389,19 @@ class Evaluator:
                 self._statement(child)
 
     def _assignment_value(self, node):
-        """Track a direct coordinate declaration through indexing, without evaluating twice."""
+        """Keep the called constructor and its fresh flag without evaluating the expression twice."""
         if isinstance(node, ast.Call):
             return self._call(node)
         if isinstance(node, ast.Subscript):
-            value, declared = self._assignment_value(node.value)
-            return self._index(value, self._value(node.slice)), declared
-        return self._value(node), False
+            value, function, fresh = self._assignment_value(node.value)
+            return self._index(value, self._value(node.slice)), function, fresh
+        return self._value(node), None, False
+
+    def _bind_ring(self, target, ring, fresh):
+        name = self._target_name(target)
+        generators = ring.coordinates
+        self._check_coordinate_bindings(ring.variables, generators, None, ring_name=name, fresh=fresh)
+        self._store_bindings((name, *ring.variables), (ring, *generators), naming=True)
 
     def _bind(self, target, value, *, declaration=None, naming=False):
         # naming marks a direct assignment, which renames a ring that Atlas named.
@@ -414,8 +424,12 @@ class Evaluator:
             names.append(name)
         if declaration is not None:
             self._check_coordinate_bindings(names, value, declaration)
-        self.variables.update(zip(names, value))
-        for name, item in zip(names, value):
+        self._store_bindings(names, value, naming=naming)
+
+    def _store_bindings(self, names, values, *, naming):
+        # Reserve every name together before the registry allocates any automatic ring names.
+        self.variables.update(zip(names, values))
+        for name, item in zip(names, values):
             self.rings.note(name, item, naming=naming)
 
     def _target_name(self, item):
@@ -425,11 +439,15 @@ class Evaluator:
             raise ValueError(f"{item.id!r} is a reserved Atlas name.")
         return item.id
 
-    def _check_coordinate_bindings(self, names, values, declaration):
+    def _check_coordinate_bindings(self, names, values, declaration, *, ring_name=None, fresh=False):
         conflicts = {}
         for name, value in zip(names, values):
             # A name that Atlas chose for a ring is free. The ring receives another name.
-            if (name in self.variables and not _same_coordinates(self.variables[name], value)
+            if name == ring_name:
+                conflicts[name] = f"{name!r} (the name of the ring)"
+            elif iskeyword(name) or name in self.reserved or name in self.builtins:
+                conflicts[name] = f"{name!r} (a reserved name)"
+            elif (not fresh and name in self.variables and not _same_coordinates(self.variables[name], value)
                     and not self.rings.is_automatic(name)):
                 previous = self.variables[name]
                 label = repr(name)
@@ -438,14 +456,21 @@ class Evaluator:
                 conflicts[name] = label
         if conflicts:
             used = set(names) | self.variables.keys() | self.builtins.keys() | self.reserved
+            if ring_name is not None:
+                used.add(ring_name)
             aliases = []
             for name in names:
                 if name in conflicts:
                     name = next(f"{name}{i}" for i in count(2) if f"{name}{i}" not in used)
                     used.add(name)
                 aliases.append(name)
+            if ring_name is None:
+                source = ast.unparse(declaration)
+            else:
+                args = ", ".join(map(repr, names))
+                source = f"coordinates({args}{', fresh=True' if fresh else ''}), then {ring_name} = {aliases[0]}.parent"
             raise ValueError(f"This declaration would replace {', '.join(conflicts.values())}. "
-                             f"Use {', '.join(aliases)} = {ast.unparse(declaration)}.")
+                             f"Use {', '.join(aliases)} = {source}.")
 
     def _value(self, node):
         if isinstance(node, ast.Constant):
@@ -523,8 +548,7 @@ class Evaluator:
             if isinstance(node.func, ast.Attribute):
                 raise _call_error(ast.unparse(node.func), node.lineno, error, method=function) from None
             raise _call_error(node.func.id, node.lineno, error) from None
-        declared = function is self.builtins.get("coordinates") and not kwargs.get("fresh", False)
-        return value, declared
+        return value, function, kwargs.get("fresh", False)
 
     def _arguments(self, node):
         args = [self._value(arg) for arg in node.args]

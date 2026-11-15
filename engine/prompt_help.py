@@ -26,7 +26,7 @@ _TOPICS = {
     ),
     "rings": (
         "Name a ring when you create it with ring(), or Atlas names it R1, R2, … until you name it.",
-        'R = ring("x", "y")\nuse_ring(R)\nf = polynomial("x^2 + y")\nx, z = coordinates("x", "z")\nR1\ndelete_ring(R1)',
+        'R = ring("x", "y")\nf = y^2 + x^5\nuse_ring(R)\nx2, z = coordinates("x", "z")\nR1\ndelete_ring(R1)',
         _SESSION_GUIDE + "name-select-and-delete-rings",
     ),
     "QQ": (
