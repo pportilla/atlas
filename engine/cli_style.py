@@ -9,7 +9,7 @@ import sys
 # Teal marks Atlas itself and what it recognises, amber what you saved,
 # green settled results; each family has a few tones.
 _ROLES = {
-    "brand": ("1;36", "1;38;5;37"),   # wordmark, header title, prompt
+    "brand": ("1;36", "1;38;5;37"),   # wordmark and prompt
     "label": ("36", "38;5;37"),       # row labels and help headings
     "command": ("1;36", "1;38;5;73"),  # prompt commands such as help, :save and quit
     "function": ("36", "38;5;73"),    # registered functions and QQ

@@ -116,7 +116,7 @@ class SessionPanelTerminalTests(CliTerminalCase):
                 self.assertIn(f"\x1b[{HEADER_TOP};r".encode(), update)
                 frame = ANSI.sub(b"\n", update[update.rindex(SAVE + b"\x1b[1;1H"):]).decode()
                 top = next(line for line in frame.splitlines() if line.startswith("╭"))
-                self.assertEqual(len(top), columns)
+                self.assertEqual(top, "╭─ Workspace " + "─" * (columns - 14) + "╮")
         # Readline redraws the entry after a resize; the next command still runs.
         self.send(b"1 + 1\n")
         self.read_until(b"\r\n2\r\n")

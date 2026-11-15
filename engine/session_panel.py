@@ -189,7 +189,6 @@ def _header_row(label, entries, width, role=None, names=()):
 
 
 HEADER_ROWS = 4
-_HINT = (("help", "field"), ("  ·  ", "frame"), (":workspace", "field"), ("  ·  ", "frame"), ("quit", "field"))
 
 
 class SessionPanel:
@@ -265,11 +264,10 @@ class SessionPanel:
         def ink(text, role):
             return paint(text, role, self.color)
 
-        # The standing commands, then the title, give way as the terminal narrows.
-        title = [("─ ", "frame"), ("Atlas", "brand"), (" ", None)] if columns >= 24 else []
-        hint = [(" ", None), *_HINT, (" ─", "frame")] if columns >= 60 else []
-        fill = columns - 2 - sum(len(text) for text, _ in title + hint)
-        top = [("╭", "frame"), *title, ("─" * fill, "frame"), *hint, ("╮", "frame")]
+        # The panel needs 16 columns, enough for the title in plain text.
+        title = [("─ ", "frame"), ("Workspace", None), (" ", None)]
+        fill = columns - 2 - sum(len(text) for text, _ in title)
+        top = [("╭", "frame"), *title, ("─" * fill, "frame"), ("╮", "frame")]
         lines = ["".join(ink(text, role) for text, role in top)]
         side = ink("│", "frame")
         for row in rows:
