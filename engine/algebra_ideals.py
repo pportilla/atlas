@@ -1,13 +1,14 @@
 """Ideal operations for validated rational algebra requests."""
 
 import json
+from functools import lru_cache
 
 from . import ideal_operations as ideals
 from . import native_polynomial as polynomial
 from .algebra_execution import cpu_stage, current_execution, stage_label
 from .algebra_groebner import reduced_basis
 from .native_library import affine_request
-from .polynomial import InputError, format_poly, sparse_row
+from .polynomial import InputError, LimitError, format_poly, parse_expression, sparse_row
 
 
 def _basis(name, variables, generators, order):
@@ -30,6 +31,48 @@ def _primary_decomposition(ring, variables, generators):
         nq, np = map(int, next(rows).split())
         components.append({"primary": generators_from_rows(nq), "prime": generators_from_rows(np)})
     return {"type": "primary-decomposition", "ring": ring, "components": components}
+
+
+@lru_cache(maxsize=128)
+def _live_quotient_row(names, source):
+    # Only bounded calls from live session objects use this cache. The row
+    # depends on the ordered coordinate names, independently of ideal ownership.
+    row = parse_expression(source, names, as_row=True, bounded=True)
+    if len(row) > 1024:
+        raise LimitError("Quotient operand exceeds the in-process row budget.")
+    return row
+
+
+def quotient_ideal(operation, ring, operands, *, known_relations, try_bounded):
+    names = ring["variables"]
+    relations = ring["relations"]
+    left, right = operands["ideal"], operands.get("other_ideal", ())
+    opcode = "quotient_ideal_prepared" if known_relations else "quotient_ideal"
+    if try_bounded:
+        if not known_relations:
+            raise ValueError("A bounded quotient calculation requires a trusted reduced relation basis.")
+        opcode = "quotient_ideal_bounded"
+    request = [opcode, " ".join(names), ring["order"], operation, operands.get("exponent", "0"),
+               f"{len(relations)} {len(left)} {len(right)}"]
+    rows = [*relations, *left, *right]
+    if "polynomial" in operands:
+        rows.append(operands["polynomial"])
+    with cpu_stage("quotient_ideal", action=operation, generators=len(left)):
+        if try_bounded:
+            coordinates = tuple(names)
+            try:
+                request.extend(_live_quotient_row(coordinates, source) for source in rows)
+            except (InputError, LimitError):
+                return None
+        else:
+            request.extend(parse_expression(source, names, as_row=True) for source in rows)
+        reply, = affine_request(request)
+    result = json.loads(reply)
+    if try_bounded and result.get("deferred"):
+        return None
+    if "error" in result:
+        raise InputError(result["error"]["message"])
+    return result
 
 
 def handle(operation, ring, operands, *, known_basis=False):

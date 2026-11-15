@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from weakref import WeakValueDictionary
 
 from . import native_polynomial as native
+from .algebra import QUOTIENT_IDEAL_OPERATIONS
 from .exact_json import result_json
 from .native_library import affine_request, current_replay_scope
 from .polynomial import LimitError, integer_text, parse_expression, rational_text, sparse_row
@@ -482,6 +483,22 @@ class _ScalarResult(_Result):
         return self.value == other
 
 
+class _QuotientMembership(_ScalarResult):
+    _fields = _ScalarResult._fields | {"parent"}
+
+    @property
+    def parent(self):
+        return self._space
+
+    @property
+    def variables(self):
+        return self.parent.variables
+
+    @property
+    def ring(self):
+        return self.parent.ring
+
+
 class _QuotientData:
     _fields = {"scope", "finite"}
 
@@ -813,12 +830,31 @@ def _assemble_ideal(space, generators):
 
 
 def ideal(*generators, order=None, variables=None, ring=None):
-    """Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."""
-    space, generators, order = _polynomial_inputs(_unpack(generators), order, variables, ring=ring)
+    """Declare an ideal in a polynomial or quotient ring, using ring= to select its parent explicitly."""
+    from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing
+    generators = _unpack(generators)
+    explicit_parent = variables is not None or ring is not None
+    if explicit_parent:
+        ring = _declared_space(ring, variables)
+    else:
+        ring = next((f.parent for f in generators if isinstance(f, QuotientElement)), None)
+    if isinstance(ring, QuotientRing):
+        if order is not None and order != ring.order:
+            raise ValueError(f"This quotient ring uses the monomial order {ring.order!r}.")
+        return QuotientIdeal.declare(ring, generators, project=explicit_parent)
+    space, generators, order = _polynomial_inputs(generators, order, None, ring=ring)
     return Ideal(space, generators, order, _assemble_ideal(space, generators))
 
 
 ideal = ideal_constructor(ideal, Polynomial, Ideal)
+
+
+def _decode_algebra_polynomial(text, space):
+    # Native arithmetic output can exceed the session's input-literal limits.
+    if not space.generators:
+        return native.coerce(sparse_row(text).get((), 0))
+    row, = affine_request(["decode", " ".join(space.names), text])
+    return native.from_kernel_row(space.generators, row)
 
 
 def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_generators=None):
@@ -832,12 +868,7 @@ def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_g
     order = result["ring"]["order"]
 
     def decode(text, coordinate_space=space):
-        # Kernel output is already canonical. Decode its exact coefficients as
-        # arithmetic results, which can exceed the session's input-literal limit.
-        if not coordinate_space.generators:
-            return native.coerce(sparse_row(text).get((), 0))
-        row, = affine_request(["decode", " ".join(coordinate_space.names), text])
-        return native.from_kernel_row(coordinate_space.generators, row)
+        return _decode_algebra_polynomial(text, coordinate_space)
 
     def polynomials(expressions, coordinate_space=space):
         return tuple(Polynomial(coordinate_space, decode(text, coordinate_space)) for text in expressions)
@@ -847,6 +878,22 @@ def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_g
         # The surviving generators retain their identities in the original ring.
         return hom(space, original_space, images=[Polynomial(original_space, g) for g in space.generators])
 
+    if "relations" in result["ring"] and record["operation"] != "quotient-ring":
+        from .session_quotient import QuotientIdeal
+        if quotient_parent is None:
+            # Public replay creates a fresh owner. Preserve the caller's defining
+            # equations even when the native operation normalized those equations.
+            ambient = {key: value for key, value in result["ring"].items() if key != "relations"}
+            normalized = result["ring"]["relations"]
+            equations = normalized if replay_generators is None else replay_generators
+            declaration = dict(operation="quotient-ring", ring=ambient, compute=record["execution"]["requested"],
+                               operands=dict(action="declare", ideal=equations))
+            receipt = _evaluate(declaration, known_basis=equations == normalized)
+            quotient_parent = _typed(receipt, space, replay_generators=equations)
+        if kind == "quotient-ideal":
+            return QuotientIdeal(quotient_parent, order, record)
+        if kind == "boolean":
+            return _QuotientMembership(quotient_parent, order, result["value"], record)
     if kind in ("quotient-ring", "quotient-element"):
         from .session_quotient import QuotientElement, quotient_parent_from_record
         if quotient_parent is None:
@@ -946,6 +993,25 @@ def _evaluate(request, *, known_basis=False, typed_map=False):
     return record
 
 
+def _evaluate_live_quotient_ideal(request):
+    """Evaluate already-serialized live operands; the kernel may decline in-process work."""
+    from .algebra import dispatch
+
+    if request["compute"] in ("cpu", "auto") and current_replay_scope() is None:
+        ring, operands = request["ring"], request["operands"]
+        groups = (ring["variables"], ring["relations"], operands["ideal"], operands.get("other_ideal", ()),
+                  (operands.get("polynomial", ""),))
+        exponent = operands.get("exponent", 0)
+        short_exponent = exponent.bit_length() <= 64 if type(exponent) is int else len(exponent) <= 32
+        # Bound parsing before the native work gate. Every polynomial here is
+        # already expanded by Atlas; a public request can contain arbitrary expressions.
+        if short_exponent and all(len(group) <= 16 and all(len(row) <= 256 for row in group) for group in groups):
+            result = dispatch(request, known_basis=True, try_bounded_quotient=True)
+            if result is not None:
+                return result
+    return _evaluate(request, known_basis=True)
+
+
 def algebra_request(source):
     """Replay an algebra JSON request in a fresh coordinate space."""
     if not isinstance(source, str):
@@ -954,17 +1020,34 @@ def algebra_request(source):
     record = _evaluate(request)
     names = request["ring"]["variables"]
     space = _CoordinateSpace.named(names)
-    generators = request["operands"]["ideal"] if record["operation"] == "quotient-ring" else None
+    if record["operation"] == "quotient-ring" and "relations" in request["ring"]:
+        from .session_quotient import replay_further_quotient
+        return replay_further_quotient(request, record, space)
+    generators = (request["operands"]["ideal"] if record["operation"] == "quotient-ring"
+                  else request["ring"].get("relations"))
     return _typed(record, space, replay_generators=generators)
 
 
-def _require_ideal(value):
+def _require_ideal(value, *, allow_quotient=False):
     if not isinstance(value, Ideal):
         raise TypeError("Pass an ideal or a Gröbner basis.")
+    if not allow_quotient and not isinstance(value.parent, _CoordinateSpace):
+        raise ValueError("This operation currently requires an ideal in a polynomial ring.")
     return value
 
 
 def _calculate(operation, left, compute, **operands):
+    from .session_quotient import QuotientIdeal
+    if isinstance(left, QuotientIdeal) and operation in QUOTIENT_IDEAL_OPERATIONS:
+        parent = left.parent
+        if "other_ideal" in operands:
+            # _binary_ideals checked both live parents before serializing.
+            operands["other_ideal"] = operands["other_ideal"]._record["result"]["generators"]
+        if "polynomial" in operands:
+            operands["polynomial"] = str(parent._lift(operands["polynomial"]))
+        operands["ideal"] = left._record["result"]["generators"]
+        request = dict(operation=operation, ring=parent.ring, operands=operands, compute=compute)
+        return _typed(_evaluate_live_quotient_ideal(request), parent.ambient, quotient_parent=parent)
     accepts_cone = operation in ("tangent-cone-hilbert-series", "zariski-tangent-space", "embedding-dimension",
                                  "local-dimension", "local-smoothness")
     local_basis = (isinstance(left, _LocalStandardBasis)
@@ -1174,14 +1257,14 @@ def saturation(ideal, polynomial, *, compute="auto"):
 
 
 def ideal_power(ideal, n, *, compute="auto"):
-    """Return the ordinary n-th power of this ideal in its original polynomial ring."""
+    """Return the ordinary n-th power of this ideal in its parent ring."""
     if isinstance(n, Fraction) and n.denominator == 1:
         n = n.numerator
     if type(n) is not int and not isinstance(n, str):
         raise TypeError("The exponent must be a nonnegative integer or an unsigned decimal string.")
     if type(n) is int and 0 <= n <= 4 and compute in ("auto", "cpu") and current_replay_scope() is None:
         started = perf_counter_ns()
-        source = _require_ideal(ideal)._native_ideal
+        source = _require_ideal(ideal, allow_quotient=True)._native_ideal
         if source is not None:
             result = source.power(n, ideal.order == "lex")
             if result is not None:

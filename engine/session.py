@@ -11,7 +11,7 @@ from .session_expressions import Evaluator, SessionError
 from .session_maps import hom
 from .session_monodromy import check_resolution, unavailable_check
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_coordinates
-from .session_quotient import QuotientElement, QuotientRing, quotient_ring
+from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing, quotient_ring
 from .session_values import Divisor, DualComplex, Resolution
 
 
@@ -137,7 +137,7 @@ Run the same expressions in a file with ./atlas run FILE.atlas."""
 def json_value(value):
     if isinstance(value, (DualComplex, Divisor)):
         return json_value(value._record)
-    if isinstance(value, (QuotientElement, QuotientRing)):
+    if isinstance(value, (QuotientElement, QuotientIdeal, QuotientRing)):
         return value.result
     if isinstance(value, Polynomial):
         return str(value)

@@ -1,0 +1,496 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    5
+  ],
+  "python": "3.14.4",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "atlas_library_sha256": "6018784891a03207ed63ccd8162b422ec1b5d68ef2252cd934b378fa157d0808",
+  "trials": 5,
+  "operations_per_trial": 32,
+  "ring": "QQ[x,y], grevlex, modulo the recorded relations",
+  "conditions": "Time one named script assignment per iteration in a running interpreter. Both use the same fixed parent, polynomials and prepared input ideals. Exclude process startup, input setup, one warm-up, display and all agreement checks. Alternate timing order across trials. Singular uses one thread, rtimer in microseconds, short=0, option(redSB), and explicit quotient reduction for raw ideal generators. Each trial checks both ideal containments, equality of quotient classes, or equality of booleans in Singular. Atlas native-wire timings call the shared library directly with prepared sparse inputs and include sparse decoding, mathematics and JSON output.",
+  "cases": {
+    "cusp": {
+      "relations": [
+        "x^5+y^2"
+      ],
+      "left": [
+        "y",
+        "x^5"
+      ],
+      "right": [
+        "x",
+        "x*y"
+      ],
+      "probe": "x^5",
+      "operations": {
+        "declare": {
+          "atlas_us": [
+            200.83490625,
+            210.36484375,
+            193.58275,
+            195.8223125,
+            197.833625
+          ],
+          "singular_us": [
+            3.53125,
+            3.1875,
+            3.5625,
+            3.15625,
+            4.125
+          ],
+          "atlas_native_wire_us": [
+            11.26853125,
+            11.76290625,
+            11.22153125,
+            11.43790625,
+            10.93884375
+          ],
+          "atlas_native_wire_median_us": 11.26853125,
+          "atlas_median_us": 197.833625,
+          "singular_median_us": 3.53125,
+          "atlas_over_singular": 56.02,
+          "agreement": true
+        },
+        "sum": {
+          "atlas_us": [
+            206.26115625,
+            186.1239375,
+            219.07321875,
+            184.78546875,
+            207.85415625
+          ],
+          "singular_us": [
+            3.71875,
+            3.375,
+            3.3125,
+            3.375,
+            3.3125
+          ],
+          "atlas_native_wire_us": [
+            12.6395625,
+            16.39415625,
+            12.2773125,
+            12.4986875,
+            13.11953125
+          ],
+          "atlas_native_wire_median_us": 12.6395625,
+          "atlas_median_us": 206.26115625,
+          "singular_median_us": 3.375,
+          "atlas_over_singular": 61.11,
+          "agreement": true
+        },
+        "product": {
+          "atlas_us": [
+            183.407875,
+            192.3964375,
+            188.50784375,
+            184.8318125,
+            189.4515
+          ],
+          "singular_us": [
+            3.28125,
+            3.28125,
+            3.28125,
+            3.25,
+            3.25
+          ],
+          "atlas_native_wire_us": [
+            15.15809375,
+            14.3628125,
+            14.53565625,
+            15.03909375,
+            15.16903125
+          ],
+          "atlas_native_wire_median_us": 15.03909375,
+          "atlas_median_us": 188.50784375,
+          "singular_median_us": 3.28125,
+          "atlas_over_singular": 57.45,
+          "agreement": true
+        },
+        "square": {
+          "atlas_us": [
+            215.72215625,
+            250.83396875,
+            209.54390625,
+            223.1471875,
+            224.00096875
+          ],
+          "singular_us": [
+            9.0,
+            9.0,
+            8.71875,
+            8.8125,
+            8.9375
+          ],
+          "atlas_native_wire_us": [
+            29.95296875,
+            30.9608125,
+            32.592,
+            30.4006875,
+            36.43584375
+          ],
+          "atlas_native_wire_median_us": 30.9608125,
+          "atlas_median_us": 223.1471875,
+          "singular_median_us": 8.9375,
+          "atlas_over_singular": 24.97,
+          "agreement": true
+        },
+        "groebner": {
+          "atlas_us": [
+            212.622875,
+            214.7303125,
+            209.69609375,
+            207.99471875,
+            201.05940625
+          ],
+          "singular_us": [
+            8.5,
+            8.15625,
+            9.40625,
+            7.90625,
+            7.75
+          ],
+          "atlas_native_wire_us": [
+            25.382125,
+            23.08525,
+            23.95596875,
+            22.6153125,
+            21.96565625
+          ],
+          "atlas_native_wire_median_us": 23.08525,
+          "atlas_median_us": 209.69609375,
+          "singular_median_us": 8.15625,
+          "atlas_over_singular": 25.71,
+          "agreement": true
+        },
+        "membership": {
+          "atlas_us": [
+            215.05684375,
+            233.3251875,
+            210.765625,
+            222.31653125,
+            210.1916875
+          ],
+          "singular_us": [
+            9.1875,
+            9.53125,
+            10.3125,
+            10.34375,
+            9.25
+          ],
+          "atlas_native_wire_us": [
+            21.99446875,
+            22.26278125,
+            24.90934375,
+            23.24121875,
+            22.1845
+          ],
+          "atlas_native_wire_median_us": 22.26278125,
+          "atlas_median_us": 215.05684375,
+          "singular_median_us": 9.53125,
+          "atlas_over_singular": 22.56,
+          "agreement": true
+        },
+        "normal_form": {
+          "atlas_us": [
+            248.33046875,
+            245.171375,
+            252.98709375,
+            237.75484375,
+            231.47075
+          ],
+          "singular_us": [
+            9.59375,
+            8.90625,
+            9.65625,
+            9.5,
+            8.53125
+          ],
+          "atlas_native_wire_us": [
+            21.86265625,
+            24.15571875,
+            24.160125,
+            22.4775625,
+            22.42059375
+          ],
+          "atlas_native_wire_median_us": 22.4775625,
+          "atlas_median_us": 245.171375,
+          "singular_median_us": 9.5,
+          "atlas_over_singular": 25.81,
+          "agreement": true
+        },
+        "further_quotient": {
+          "atlas_us": [
+            277.72678125,
+            300.96953125,
+            285.3493125,
+            283.5621875,
+            285.3064375
+          ],
+          "singular_us": [
+            15.125,
+            15.28125,
+            15.28125,
+            26.59375,
+            14.40625
+          ],
+          "atlas_native_wire_us": [
+            24.008875,
+            23.29128125,
+            20.7649375,
+            20.87859375,
+            20.1099375
+          ],
+          "atlas_native_wire_median_us": 20.87859375,
+          "atlas_median_us": 285.3064375,
+          "singular_median_us": 15.28125,
+          "atlas_over_singular": 18.67,
+          "agreement": true
+        }
+      }
+    },
+    "nilpotents": {
+      "relations": [
+        "x^4",
+        "y^3"
+      ],
+      "left": [
+        "(18446744073709551629/7)*x*y",
+        "y^2"
+      ],
+      "right": [
+        "x+y",
+        "x^2"
+      ],
+      "probe": "x+x*y",
+      "operations": {
+        "declare": {
+          "atlas_us": [
+            202.7833125,
+            258.22703125,
+            190.73515625,
+            191.166,
+            212.1858125
+          ],
+          "singular_us": [
+            3.34375,
+            3.15625,
+            3.125,
+            3.09375,
+            3.125
+          ],
+          "atlas_native_wire_us": [
+            11.463875,
+            11.1924375,
+            11.65928125,
+            11.2569375,
+            11.28165625
+          ],
+          "atlas_native_wire_median_us": 11.28165625,
+          "atlas_median_us": 202.7833125,
+          "singular_median_us": 3.125,
+          "atlas_over_singular": 64.89,
+          "agreement": true
+        },
+        "sum": {
+          "atlas_us": [
+            200.09853125,
+            181.791375,
+            185.32525,
+            185.556625,
+            187.6014375
+          ],
+          "singular_us": [
+            3.4375,
+            3.46875,
+            3.4375,
+            3.46875,
+            3.59375
+          ],
+          "atlas_native_wire_us": [
+            14.01965625,
+            13.84934375,
+            13.68715625,
+            14.4464375,
+            13.55034375
+          ],
+          "atlas_native_wire_median_us": 13.84934375,
+          "atlas_median_us": 185.556625,
+          "singular_median_us": 3.46875,
+          "atlas_over_singular": 53.49,
+          "agreement": true
+        },
+        "product": {
+          "atlas_us": [
+            192.749,
+            227.75371875,
+            195.38025,
+            198.15515625,
+            196.879
+          ],
+          "singular_us": [
+            4.375,
+            4.15625,
+            3.90625,
+            3.875,
+            3.8125
+          ],
+          "atlas_native_wire_us": [
+            17.68409375,
+            18.35696875,
+            17.3973125,
+            19.8356875,
+            36.604625
+          ],
+          "atlas_native_wire_median_us": 18.35696875,
+          "atlas_median_us": 196.879,
+          "singular_median_us": 3.90625,
+          "atlas_over_singular": 50.4,
+          "agreement": true
+        },
+        "square": {
+          "atlas_us": [
+            202.1245625,
+            200.7481875,
+            240.57078125,
+            205.33596875,
+            219.91325
+          ],
+          "singular_us": [
+            9.75,
+            9.625,
+            9.3125,
+            9.03125,
+            9.96875
+          ],
+          "atlas_native_wire_us": [
+            19.64125,
+            19.1785,
+            34.6355625,
+            19.68353125,
+            21.54015625
+          ],
+          "atlas_native_wire_median_us": 19.68353125,
+          "atlas_median_us": 205.33596875,
+          "singular_median_us": 9.625,
+          "atlas_over_singular": 21.33,
+          "agreement": true
+        },
+        "groebner": {
+          "atlas_us": [
+            197.76346875,
+            214.44790625,
+            202.985875,
+            200.5735,
+            209.584625
+          ],
+          "singular_us": [
+            9.125,
+            9.34375,
+            8.75,
+            8.03125,
+            8.46875
+          ],
+          "atlas_native_wire_us": [
+            17.324375,
+            15.6258125,
+            15.974625,
+            15.354375,
+            15.5134375
+          ],
+          "atlas_native_wire_median_us": 15.6258125,
+          "atlas_median_us": 202.985875,
+          "singular_median_us": 8.75,
+          "atlas_over_singular": 23.2,
+          "agreement": true
+        },
+        "membership": {
+          "atlas_us": [
+            218.9216875,
+            207.8203125,
+            205.27115625,
+            202.489,
+            204.58671875
+          ],
+          "singular_us": [
+            9.5625,
+            10.78125,
+            9.09375,
+            9.4375,
+            9.6875
+          ],
+          "atlas_native_wire_us": [
+            16.31590625,
+            16.97059375,
+            14.84965625,
+            15.35909375,
+            15.38725
+          ],
+          "atlas_native_wire_median_us": 15.38725,
+          "atlas_median_us": 205.27115625,
+          "singular_median_us": 9.5625,
+          "atlas_over_singular": 21.47,
+          "agreement": true
+        },
+        "normal_form": {
+          "atlas_us": [
+            244.86296875,
+            249.790125,
+            248.52740625,
+            326.7595625,
+            251.54090625
+          ],
+          "singular_us": [
+            8.96875,
+            8.71875,
+            9.03125,
+            9.125,
+            9.25
+          ],
+          "atlas_native_wire_us": [
+            15.583875,
+            22.3510625,
+            15.908875,
+            23.692375,
+            16.34753125
+          ],
+          "atlas_native_wire_median_us": 16.34753125,
+          "atlas_median_us": 249.790125,
+          "singular_median_us": 9.03125,
+          "atlas_over_singular": 27.66,
+          "agreement": true
+        },
+        "further_quotient": {
+          "atlas_us": [
+            288.13740625,
+            292.75678125,
+            294.1535,
+            289.437375,
+            291.6115
+          ],
+          "singular_us": [
+            16.53125,
+            14.625,
+            15.03125,
+            16.0,
+            14.6875
+          ],
+          "atlas_native_wire_us": [
+            15.1415,
+            14.8950625,
+            13.7438125,
+            14.54253125,
+            13.06596875
+          ],
+          "atlas_native_wire_median_us": 14.54253125,
+          "atlas_median_us": 291.6115,
+          "singular_median_us": 15.03125,
+          "atlas_over_singular": 19.4,
+          "agreement": true
+        }
+      }
+    }
+  }
+}

@@ -159,6 +159,34 @@ class QuotientRingSessionTests(unittest.TestCase):
         external["relations"].clear()
         self.assertEqual(value.parent(value.parent.coordinates[0]).representative, 0)
 
+    def test_further_quotient_replay_preserves_both_parents_and_workspace(self):
+        from engine.session import new_session
+        from engine.session_panel import workspace
+
+        request = {"operation": "quotient-ring", "ring": {"variables": ["x", "y"], "relations": ["2*x^5+2*y^2"]},
+                   "operands": {"ideal": ["y", "x^5"]}}
+        first = algebra_request(json.dumps(request))
+        session = new_session(None)
+        list(session.run(first.record["replay"]["script"].splitlines()[0]))
+        result = session.variables["result"]
+        defining = result.defining_ideal
+        source = defining.parent
+        x, y = source.ambient.coordinates
+        self.assertIsNot(result, first)
+        self.assertIs(result, defining.quotient_ring)
+        self.assertIs(result.ambient, source.ambient)
+        self.assertIs(source, result.projection.domain)
+        self.assertEqual(source.defining_ideal.generators, (2*x**5 + 2*y**2,))
+        self.assertEqual(defining.generators, (source(y), -source(y)**2))
+        self.assertEqual(result.projection(source(y)), 0)
+        self.assertEqual(ideal(source(y), ring=result).generators, (result(0),))
+        self.assertIn("L = K/J", workspace(dict(K=source, J=defining, L=result)).header()[0])
+        sibling = quotient_ring(source.defining_ideal, fresh=True)
+        for call in (lambda: result(sibling(x)), lambda: ideal(sibling(x), ring=result),
+                     lambda: ideal(result(x), source(y)), lambda: ideal(source(y), result(x))):
+            with self.assertRaisesRegex(ValueError, "different quotient rings"):
+                call()
+
     def test_quotient_coordinates_satisfy_the_relation_at_prompt_and_in_scripts(self):
         source = dedent("""
             x, y = coordinates("x", "y")
@@ -210,6 +238,5 @@ class QuotientRingSessionTests(unittest.TestCase):
             with self.subTest(coords=coords), self.assertRaisesRegex(SessionError, "declared order"):
                 list(session.run(f'keep=polynomial("x", variables={coords})'))
             self.assertEqual(session.variables["keep"], 17)
-        with self.assertRaisesRegex(SessionError, "ambient polynomial"):
-            list(session.run("keep=ideal(u,v)"))
-        self.assertEqual(session.variables["keep"], 17)
+        list(session.run("J=ideal(u,v)"))
+        self.assertIs(session.variables["J"].parent, session.variables["K"])

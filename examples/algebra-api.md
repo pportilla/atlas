@@ -77,6 +77,15 @@ Submitting the same request with `"order": "local"` returns HTTP 400.
 
 The ideal operations below take an `ideal`, an array of polynomial strings. Use `[]` or `["0"]` for the zero ideal. Constant generators and generators with nonzero constant terms are valid. Use `ring.variables: []` for the field itself. Polynomial strings accept integer literals, rational division by a nonzero constant, multiplication with `*`, and powers with `^` or `**`.
 
+Supply `ring.relations` to work in a quotient. For example, with
+`"ring": {"variables": ["x","y"], "relations": ["y^2+x^5"]}`,
+the `ideal` operation on `{"ideal": ["y","x^5"]}` returns a
+`quotient-ideal` with generators `["y","-y^2"]`. The same presentation
+works for `ideal-sum`, `ideal-product`, `ideal-power`, `groebner`,
+`membership`, `normal-form` and a further `quotient-ring` declaration.
+At the shell, use one `--relation` per equation, or `--quotient-ring` for
+a quotient by the zero ideal.
+
 | Operation | Additional operand | Result in its recorded ring |
 | --- | --- | --- |
 | `ideal` | | Ideal declaration with the original generator sequence, written as exact polynomials |

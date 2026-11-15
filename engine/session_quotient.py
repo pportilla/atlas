@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cached_property
 
-from .session_algebra import Ideal, _Result, _evaluate, _polynomial, _require_ideal, _typed, polynomial
+from .session_algebra import (Ideal, _IdealResult, _OrderedPolynomial, _Result, _decode_algebra_polynomial, _evaluate,
+                              _evaluate_live_quotient_ideal, _polynomial, _require_ideal, _typed, polynomial)
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
 
 
@@ -44,7 +45,7 @@ class QuotientRing(_Result):
     @cached_property
     def projection(self):
         from .session_maps import hom
-        return hom(self.ambient, self, images=self.gens)
+        return hom(self.defining_ideal.parent, self, images=self.gens)
 
     @property
     def generators(self):
@@ -63,11 +64,16 @@ class QuotientRing(_Result):
         ambient = f"QQ[{', '.join(self.variables)}]" if self.variables else "QQ"
         return f"{ambient}/({', '.join(map(str, self.relations)) or '0'}) ({self.order})"
 
-    def _lift(self, value):
+    def _lift(self, value, *, project=False):
         if isinstance(value, QuotientElement):
-            if value.parent is not self:
-                raise ValueError("These elements belong to different quotient rings.")
-            return value.representative
+            source = self
+            while isinstance(source, QuotientRing):
+                if value.parent is source:
+                    return value.representative
+                if not project:
+                    break
+                source = source.defining_ideal.parent
+            raise ValueError("These elements belong to different quotient rings.")
         return _polynomial(value, self._space)
 
     def apply(self, action, *values, exponent=None, compute=None):
@@ -93,8 +99,10 @@ class QuotientRing(_Result):
         if isinstance(polynomial, str):
             raise TypeError("Use polynomial(source, ring=K) to read a string in the quotient K, "
                             "or K(f) to project an ambient polynomial f.")
-        if isinstance(polynomial, QuotientElement) and polynomial.parent is self:
-            return polynomial
+        if isinstance(polynomial, QuotientElement):
+            if polynomial.parent is self:
+                return polynomial
+            polynomial = self._lift(polynomial, project=True)
         return self.apply("reduce", polynomial)
 
     __call__ = element
@@ -180,6 +188,89 @@ class QuotientElement(_Result):
         return self.parent.apply("power", self, exponent=exponent)
 
 
+class _QuotientIdealGenerator(QuotientElement):
+    """A residue class already reduced by the native operation that produced its ideal."""
+
+    status = "ok"
+    type = "quotient-element"
+    operation = "quotient-ring"
+
+    def __init__(self, parent, representative, text, compute):
+        self.__dict__.update(parent=parent, representative=representative, _text=text, _compute=compute)
+
+    def __str__(self):
+        return self._text
+
+    @property
+    def result(self):
+        return dict(self.parent.result, type=self.type, representative=self._text)
+
+    @cached_property
+    def _record(self):
+        # A generator's own replay receipt needs a single-class projection.
+        # Only compute it when explicitly asked for that receipt or its timing.
+        return self.parent.apply("reduce", self.representative, compute=self._compute)._record
+
+
+class QuotientIdeal(_IdealResult):
+    """An ideal of a particular quotient. Its recorded generator rows are reduced in that quotient."""
+
+    # Ambient polynomial-ideal handles do not carry quotient relations.
+    _native_ideal = None
+
+    def __init__(self, parent, order, record):
+        self.__dict__.update(_space=parent, order=order, _record=record)
+
+    @cached_property
+    def generators(self):
+        parent = self.parent
+        compute = self._record["execution"]["requested"]
+        values = []
+        for row in self._record["result"]["generators"]:
+            representative = _OrderedPolynomial(parent.ambient, _decode_algebra_polynomial(row, parent.ambient), self.order)
+            values.append(_QuotientIdealGenerator(parent, representative, row, compute))
+        return tuple(values)
+
+    @classmethod
+    def declare(cls, parent, generators, *, project):
+        if not project and any(isinstance(f, Polynomial) and f.parent is not QQ for f in generators):
+            raise ValueError("These ideal generators have different parent rings. "
+                             "Use ring=K to project ambient polynomials into the quotient K.")
+        representatives = tuple(parent._lift(f, project=project) for f in generators)
+        request = dict(operation="ideal", ring=parent.ring,
+                       operands={"ideal": [str(f) for f in representatives]},
+                       compute=parent._record["execution"]["requested"])
+        return _typed(_evaluate_live_quotient_ideal(request), parent.ambient, quotient_parent=parent)
+
+    @property
+    def variables(self):
+        return self.parent.variables
+
+    @property
+    def ring(self):
+        return self.parent.ring
+
+    def __repr__(self):
+        generators = ", ".join(f"[{row}]" for row in self._record["result"]["generators"]) or "0"
+        return f"ideal({generators}) over {self.parent}"
+
+
+def replay_further_quotient(request, record, space):
+    """Restore the intermediate ring and its defining ideal from the two sets of generators."""
+    ambient = record["result"]["ring"]
+    compute = record["execution"]["requested"]
+    relations = request["ring"]["relations"]
+    declaration = dict(operation="quotient-ring", ring=ambient, compute=compute,
+                       operands=dict(action="declare", ideal=relations))
+    parent = _typed(_evaluate(declaration), space, replay_generators=relations)
+    source = dict(operation="ideal", ring=parent.ring, compute=compute,
+                  operands={"ideal": request["operands"]["ideal"]})
+    defining = _typed(_evaluate(source, known_basis=True), space, quotient_parent=parent)
+    result = _typed(record, space, defining_ideal=defining)
+    defining.__dict__["quotient_ring"] = result
+    return result
+
+
 def quotient_parent_from_record(record, space, relations, defining_ideal, replay_generators):
     result = record["result"]
     order = result["ring"]["order"]
@@ -210,17 +301,19 @@ def quotient_parent_from_record(record, space, relations, defining_ideal, replay
 
 def quotient_ring(ideal, *, compute="auto", fresh=False):
     """Return the default quotient for this ideal. Use fresh=True for an independent ring."""
-    ideal = _require_ideal(ideal)
+    ideal = _require_ideal(ideal, allow_quotient=True)
     if type(fresh) is not bool:
         raise ValueError("fresh must be True or False.")
     existing = ideal.__dict__.get("quotient_ring")
     if existing is not None and not fresh and compute == "auto":
         return existing
+    rows = ideal._record["result"]["generators"] if isinstance(ideal, QuotientIdeal) else [str(f) for f in ideal.generators]
     request = dict(operation="quotient-ring", ring=ideal.ring, compute=compute,
-                   operands=dict(action="declare", ideal=[str(f) for f in ideal.generators]))
-    record = _evaluate(request)
+                   operands=dict(action="declare", ideal=rows))
+    record = _evaluate_live_quotient_ideal(request) if isinstance(ideal, QuotientIdeal) else _evaluate(request)
     if fresh or existing is None:
-        declared = _typed(record, ideal._space, defining_ideal=ideal)
+        space = ideal.parent.ambient if isinstance(ideal, QuotientIdeal) else ideal.parent
+        declared = _typed(record, space, defining_ideal=ideal)
         if fresh:
             return declared
         # Concurrent first declarations may finish together. The first parent

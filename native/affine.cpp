@@ -1562,6 +1562,8 @@ std::string affine(std::istream& in) {
         const auto op = line(in), left = line(in), right = line(in);
         return scalar_arithmetic(op, left, right);
     }
+    if (operation == "quotient_ideal" || operation == "quotient_ideal_prepared" || operation == "quotient_ideal_bounded")
+        return quotient_ring::ideal_request(in, operation != "quotient_ideal", operation == "quotient_ideal_bounded");
     if (operation == "quotient_ring" || operation == "quotient_ring_prepared")
         return quotient_ring::operation(in,operation == "quotient_ring_prepared");
     if (operation == "ideal_power" || operation == "symbolic_power")

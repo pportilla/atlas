@@ -76,6 +76,8 @@ OPERATION_OPERANDS = {
     **LOCAL_DIMENSION_OPERANDS,
 }
 BASIS_OPERATIONS = ("groebner", "normal-form", "membership")
+QUOTIENT_IDEAL_OPERATIONS = frozenset((*BASIS_OPERATIONS, "ideal", "ideal-sum", "ideal-product",
+                                       "ideal-power", "quotient-ring"))
 
 
 def error_record(code, message):
@@ -129,7 +131,7 @@ def _request(data):
         raise InputError("Choose cpu, auto or gpu for compute.")
 
     ring = data["ring"]
-    _fields(ring, "ring", ("variables",), ("field", "order"))
+    _fields(ring, "ring", ("variables",), ("field", "order", "relations"))
     names = _names(ring["variables"])
     if operation == "ae-codimension" and not names:
         raise InputError("A map germ requires at least one source coordinate.")
@@ -188,16 +190,26 @@ def _request(data):
         elif not removed or any(v not in names for v in removed):
             raise InputError("Choose one or more declared variables to eliminate.")
 
-    return {"operation": operation, "ring": {"field": "QQ", "variables": names, "order": order},
-            "operands": operands, "compute": compute}
+    parent = {"field": "QQ", "variables": names, "order": order}
+    if "relations" in ring:
+        if operation not in QUOTIENT_IDEAL_OPERATIONS:
+            raise InputError(f"{operation} is not yet available over a quotient ring.")
+        if operation == "quotient-ring" and operands["action"] != "declare":
+            raise InputError("Use the declare action to take the quotient by an ideal of a quotient ring.")
+        relations = ring["relations"]
+        if not isinstance(relations, list) or not all(isinstance(f, str) for f in relations):
+            raise InputError("ring.relations must be an array of polynomial strings.")
+        parent["relations"] = relations
+    return {"operation": operation, "ring": parent, "operands": operands, "compute": compute}
 
 
-def dispatch(data, *, known_basis=False):
+def dispatch(data, *, known_basis=False, try_bounded_quotient=False):
     """Compute a structured success record, raising for invalid or unfinished work.
 
     known_basis is private worker metadata supplied only for a basis previously
-    returned to a session or retained by the HTTP server. Public generator
-    arrays always require a fresh basis calculation.
+    returned to a session or retained by the HTTP server. For a quotient parent
+    it certifies only the defining relations, never the input ideal. Public
+    generator arrays always require a fresh basis calculation.
     """
     from . import native_polynomial as native
     from .algebra_execution import algebra_execution
@@ -227,6 +239,17 @@ def dispatch(data, *, known_basis=False):
             result, observed = calculate_cpu(operation, ring, operands, canonical=True, started=started)
             return {"status": "ok", "operation": operation, "result": result,
                     "execution": observed, "replay": make_replay(request, operands)}
+
+    if "relations" in ring:
+        from .algebra_ideals import quotient_ideal
+        with algebra_execution(request["compute"]) as execution:
+            result = quotient_ideal(operation, ring, operands, known_relations=known_basis,
+                                   try_bounded=try_bounded_quotient)
+            if result is None:
+                return None
+            observed = execution.report()
+        return {"status": "ok", "operation": operation, "result": result,
+                "execution": observed, "replay": make_replay(request, operands)}
 
     with algebra_execution(request["compute"]) as execution:
         for key in ("ideal", "other_ideal", "prime"):

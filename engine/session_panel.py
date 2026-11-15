@@ -20,12 +20,14 @@ from .session_quotient import QuotientElement, QuotientRing
 from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
 
 
-def _ring_label(space, references, ideal_names):
+def _ring_label(space, references, ideal_names, paths):
     if isinstance(space, QuotientRing):
         ambient = references[space.ambient]
+        ideal = ideal_names.get(space.defining_ideal)
+        if ideal and isinstance(space.defining_ideal.parent, QuotientRing):
+            return f"{paths[space.defining_ideal.parent]}/{ideal}"
         relations = space._record["result"]["relations"]
         if len(relations) > 3 or sum(map(len, relations)) > 36:
-            ideal = ideal_names.get(space.defining_ideal)
             return f"{ambient}/{ideal}" if ideal else f"{ambient} (quotient)"
         return f"{ambient}/({', '.join(relations) or '0'})"
     if isinstance(space, _CoordinateSpace):
@@ -82,7 +84,7 @@ def _describe(value):
     if coordinate is not None:
         return "Coordinates", coordinate
     if isinstance(value, QuotientElement):
-        representative = value._record["result"]["representative"]
+        representative = str(value)
         return "Residue classes", f"[{representative}]" if len(representative) <= 36 else "residue class"
     if isinstance(value, Polynomial):
         terms = value._value._terms
@@ -211,7 +213,7 @@ def workspace(variables):
     references, presentations = {}, {}
     # First name the ambient rings, then use those names to describe their quotients.
     for quotient in (False, True):
-        labels = {parent: _ring_label(parent, references, ideal_names) for parent in paths
+        labels = {parent: _ring_label(parent, references, ideal_names, paths) for parent in paths
                   if isinstance(parent, QuotientRing) == quotient}
         presentations.update(labels)
         counts = Counter(labels.values())

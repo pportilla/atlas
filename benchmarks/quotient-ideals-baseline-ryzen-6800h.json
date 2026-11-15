@@ -1,0 +1,272 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    5
+  ],
+  "python": "3.14.4",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "atlas_library_sha256": "9cfa77a48eca6284e708f4b758e72b448ddc3ba348f6a44ed51205a97588dcc2",
+  "trials": 3,
+  "operations_per_trial": 12,
+  "ring": "QQ[x,y], grevlex, modulo the recorded relations",
+  "conditions": "Time one named script assignment per iteration in a running interpreter. Both use the same fixed parent, polynomials and prepared input ideals. Exclude process startup, input setup, one warm-up, display and all agreement checks. Alternate timing order across trials. Singular uses one thread, rtimer in microseconds, short=0, option(redSB), and explicit quotient reduction for raw ideal generators. Each trial checks both ideal containments, equality of quotient classes, or equality of booleans in Singular.",
+  "cases": {
+    "cusp": {
+      "relations": [
+        "x^5+y^2"
+      ],
+      "left": [
+        "y",
+        "x^5"
+      ],
+      "right": [
+        "x",
+        "x*y"
+      ],
+      "probe": "x^5",
+      "operations": {
+        "declare": {
+          "atlas_us": [
+            57017.17966666666,
+            58445.83825,
+            59270.592
+          ],
+          "singular_us": [
+            3.8333333333333335,
+            4.0,
+            3.9166666666666665
+          ],
+          "atlas_median_us": 58445.83825,
+          "singular_median_us": 3.9166666666666665,
+          "atlas_over_singular": 14922.34,
+          "agreement": true
+        },
+        "sum": {
+          "atlas_us": [
+            58982.95416666667,
+            59751.45816666666,
+            57384.505833333336
+          ],
+          "singular_us": [
+            4.0,
+            4.0,
+            3.8333333333333335
+          ],
+          "atlas_median_us": 58982.95416666667,
+          "singular_median_us": 4.0,
+          "atlas_over_singular": 14745.74,
+          "agreement": true
+        },
+        "product": {
+          "atlas_us": [
+            57184.40791666666,
+            56968.62775,
+            56792.15625
+          ],
+          "singular_us": [
+            4.0,
+            4.0,
+            3.9166666666666665
+          ],
+          "atlas_median_us": 56968.62775,
+          "singular_median_us": 4.0,
+          "atlas_over_singular": 14242.16,
+          "agreement": true
+        },
+        "square": {
+          "atlas_us": [
+            58380.030333333336,
+            60736.88183333333,
+            59967.35433333334
+          ],
+          "singular_us": [
+            9.416666666666666,
+            9.666666666666666,
+            9.5
+          ],
+          "atlas_median_us": 59967.35433333334,
+          "singular_median_us": 9.5,
+          "atlas_over_singular": 6312.35,
+          "agreement": true
+        },
+        "groebner": {
+          "atlas_us": [
+            59239.99491666667,
+            59206.605083333336,
+            59680.84775
+          ],
+          "singular_us": [
+            8.75,
+            8.833333333333334,
+            9.583333333333334
+          ],
+          "atlas_median_us": 59239.99491666667,
+          "singular_median_us": 8.833333333333334,
+          "atlas_over_singular": 6706.41,
+          "agreement": true
+        },
+        "membership": {
+          "atlas_us": [
+            58943.835166666664,
+            59841.602166666664,
+            59147.498166666664
+          ],
+          "singular_us": [
+            10.75,
+            10.25,
+            10.333333333333334
+          ],
+          "atlas_median_us": 59147.498166666664,
+          "singular_median_us": 10.333333333333334,
+          "atlas_over_singular": 5723.95,
+          "agreement": true
+        },
+        "normal_form": {
+          "atlas_us": [
+            59842.04708333333,
+            59064.51016666667,
+            58736.98525
+          ],
+          "singular_us": [
+            9.583333333333334,
+            9.5,
+            9.666666666666666
+          ],
+          "atlas_median_us": 59064.51016666667,
+          "singular_median_us": 9.583333333333334,
+          "atlas_over_singular": 6163.25,
+          "agreement": true
+        }
+      }
+    },
+    "nilpotents": {
+      "relations": [
+        "x^4",
+        "y^3"
+      ],
+      "left": [
+        "(18446744073709551629/7)*x*y",
+        "y^2"
+      ],
+      "right": [
+        "x+y",
+        "x^2"
+      ],
+      "probe": "x+x*y",
+      "operations": {
+        "declare": {
+          "atlas_us": [
+            58892.629,
+            59314.99441666667,
+            59687.35675
+          ],
+          "singular_us": [
+            4.0,
+            4.0,
+            4.583333333333333
+          ],
+          "atlas_median_us": 59314.99441666667,
+          "singular_median_us": 4.0,
+          "atlas_over_singular": 14828.75,
+          "agreement": true
+        },
+        "sum": {
+          "atlas_us": [
+            61522.63766666667,
+            61734.188916666666,
+            61281.3675
+          ],
+          "singular_us": [
+            4.583333333333333,
+            4.5,
+            4.166666666666667
+          ],
+          "atlas_median_us": 61522.63766666667,
+          "singular_median_us": 4.5,
+          "atlas_over_singular": 13671.7,
+          "agreement": true
+        },
+        "product": {
+          "atlas_us": [
+            61335.9225,
+            61972.978416666665,
+            61595.337666666666
+          ],
+          "singular_us": [
+            4.5,
+            4.75,
+            4.666666666666667
+          ],
+          "atlas_median_us": 61595.337666666666,
+          "singular_median_us": 4.666666666666667,
+          "atlas_over_singular": 13199.0,
+          "agreement": true
+        },
+        "square": {
+          "atlas_us": [
+            60525.71208333333,
+            61056.05691666667,
+            60844.14241666667
+          ],
+          "singular_us": [
+            10.0,
+            9.833333333333334,
+            9.833333333333334
+          ],
+          "atlas_median_us": 60844.14241666667,
+          "singular_median_us": 9.833333333333334,
+          "atlas_over_singular": 6187.54,
+          "agreement": true
+        },
+        "groebner": {
+          "atlas_us": [
+            57280.37875,
+            57721.85525,
+            53541.097
+          ],
+          "singular_us": [
+            9.75,
+            8.5,
+            8.5
+          ],
+          "atlas_median_us": 57280.37875,
+          "singular_median_us": 8.5,
+          "atlas_over_singular": 6738.87,
+          "agreement": true
+        },
+        "membership": {
+          "atlas_us": [
+            55867.44075,
+            57675.18191666667,
+            57416.09725
+          ],
+          "singular_us": [
+            9.833333333333334,
+            10.083333333333334,
+            10.166666666666666
+          ],
+          "atlas_median_us": 57416.09725,
+          "singular_median_us": 10.083333333333334,
+          "atlas_over_singular": 5694.16,
+          "agreement": true
+        },
+        "normal_form": {
+          "atlas_us": [
+            57451.94266666667,
+            58241.78283333333,
+            56887.18275
+          ],
+          "singular_us": [
+            9.5,
+            9.5,
+            9.416666666666666
+          ],
+          "atlas_median_us": 57451.94266666667,
+          "singular_median_us": 9.5,
+          "atlas_over_singular": 6047.57,
+          "agreement": true
+        }
+      }
+    }
+  }
+}

@@ -59,7 +59,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--component", "--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
+                if (tokens and tokens[-1] in ("--relation", "--component", "--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -74,7 +74,7 @@ def _comma_list(value):
 
 
 def register_parser(subparsers):
-    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS, QUOTIENT_ACTION_OPERANDS
+    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS, QUOTIENT_ACTION_OPERANDS, QUOTIENT_IDEAL_OPERATIONS
 
     command = subparsers.add_parser("algebra", help="compute with polynomials and ideals over QQ")
     operations = command.add_subparsers(dest="operation", required=True, parser_class=_OperandParser)
@@ -98,6 +98,11 @@ def register_parser(subparsers):
         order_help = ("tie-breaker among terms of lowest degree in translated coordinates (default: grevlex)"
                       if name in POINT_OPERATIONS else "monomial order (default: grevlex)")
         parser.add_argument("--order", metavar="{lex,grevlex}", help=order_help)
+        if name in QUOTIENT_IDEAL_OPERATIONS:
+            parser.add_argument("--relation", dest="relations", action="append", metavar="POLY",
+                                help="defining relation of the parent quotient ring (repeatable)")
+            parser.add_argument("--quotient-ring", action="store_true",
+                                help="use a quotient parent even with no defining relations")
         if "ideal" in keys:
             parser.add_argument("--gen", dest="ideal", action="append", default=[], metavar="POLY",
                                 help="ideal generator (repeatable; omit for the zero ideal)")
@@ -184,6 +189,8 @@ def _show(record):
     ring = result["ring"]
     names = ", ".join(ring["variables"])
     ring_name = f"{ring['field']}[{names}]" if names else ring["field"]
+    if "relations" in ring:
+        ring_name += "/(" + (", ".join(ring["relations"]) or "0") + ")"
     print(f"{ring_name}   {ring['order']}")
     if "scope" in result:
         print("Scope:", result["scope"])
@@ -217,7 +224,7 @@ def _show(record):
             print("Embedding dimension:", result["embedding_dimension"])
             print("Jacobian rank:", result["jacobian_rank"])
             print("Smooth at point:", "yes" if result["value"] else "no")
-    elif result["type"] in ("basis", "ideal", "local-standard-basis"):
+    elif result["type"] in ("basis", "ideal", "quotient-ideal", "local-standard-basis"):
         print("Generators:", ", ".join(result["generators"]) or "(zero ideal)")
     elif result["type"] == "localization":
         print("\n".join(localization_lines(result)))
@@ -241,6 +248,8 @@ def _show(record):
                 term += f"^{factor['multiplicity']}"
             product.append(term)
         print("Factorization:", " * ".join(product))
+    elif result["type"] == "quotient-element":
+        print("Representative:", result["representative"])
     elif result["type"] == "polynomial":
         label = {"gcd": "GCD", "resultant": "Resultant"}.get(record["operation"], "Remainder")
         print(f"{label}:", result["polynomial"])
@@ -286,6 +295,8 @@ def run(args):
     from .algebra import OPERATION_OPERANDS, calculate_algebra
 
     ring = {"variables": args.vars}
+    if getattr(args, "quotient_ring", False) or getattr(args, "relations", None) is not None:
+        ring["relations"] = args.relations or []
     if args.field is not None:
         ring["field"] = args.field
     if args.order is not None:

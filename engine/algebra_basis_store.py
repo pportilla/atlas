@@ -68,7 +68,9 @@ class AlgebraBasisStore:
             return status, record
 
         status, record = calculate_algebra(request, timeout=timeout, owner=owner)
-        if status == 200 and record["result"]["type"] in ("basis", "quotient-ring", "quotient-element"):
+        if status == 200 and (record["result"]["type"] == "basis" or
+                              (record["operation"] == "quotient-ring" and
+                               record["result"]["type"] in ("quotient-ring", "quotient-element"))):
             result = record["result"]
             key = "relations" if record["operation"] == "quotient-ring" else "generators"
             ref = self._remember(result["ring"], result[key])

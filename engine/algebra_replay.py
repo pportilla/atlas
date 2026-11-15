@@ -27,6 +27,13 @@ def _command(request):
     ring, operands = request["ring"], request["operands"]
     args = ["./atlas", "algebra", request["operation"], "--vars", ",".join(ring["variables"]),
             "--field", ring["field"], "--order", ring["order"], "--compute", request["compute"]]
+    if "relations" in ring and not ring["relations"]:
+        args.append("--quotient-ring")
+    for relation in ring.get("relations", ()):
+        if relation.startswith("-"):
+            args.append("--relation=" + relation)
+        else:
+            args.extend(["--relation", relation])
     for key, flag in (("components", "--component"), ("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
                       ("numerator", "--numerator"), ("denominator", "--denominator"),
                       ("polynomial", "--poly"), ("other_polynomial", "--other-poly")):
@@ -63,7 +70,7 @@ def _reserved_names():
 
 
 def _script(request, prepared, generator_text):
-    if request["operation"] in ("ideal", "quotient-ring", "ae-codimension"):
+    if "relations" in request["ring"] or request["operation"] in ("ideal", "quotient-ring", "ae-codimension"):
         # Preserve the original operands for one-shot declarations, quotient
         # operations and ordered maps without expanding polynomials for presentation.
         return None

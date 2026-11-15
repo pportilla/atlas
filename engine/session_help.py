@@ -7,7 +7,7 @@ from .algebra_cli import OPERATION_DESCRIPTIONS
 from .session_algebra import Ideal, _Result, _ScalarResult
 from .session_maps import RingHomomorphism
 from .session_polynomial import Polynomial, _Coordinates, _CoordinateSpace
-from .session_quotient import QuotientElement, QuotientRing
+from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing
 
 
 _COORDINATES = 'x, y = coordinates("x", "y")'
@@ -19,7 +19,7 @@ _RING_EXAMPLES = {
     "monodromy_check": "monodromy_check(y^2 - x^3).status",
     "polynomial": ('f = y^2 - x^3\ng = polynomial("x^2+y", ring=f.parent)\ng.parent == f.parent\n'
                    'K = ideal(f).quotient_ring\npolynomial("y^2-x^3", ring=K) == 0'),
-    "ideal": "I = ideal(x^2, y)\nJ = ideal(x, y^2)\nS = I + J\nP = I * J\nK = I^2",
+    "ideal": "I = ideal(y^2+x^5)\nK = I.quotient_ring\nJ = ideal((y, x^5), ring=K)\nJ.parent == K\nmembership(K(x^5), J).value",
     "groebner": "groebner(ideal(x^2, x*y + y))",
     "gcd": "gcd(x*y, x^2)",
     "factor": "factor(x^2 - y^2)",
@@ -69,7 +69,9 @@ _EXAMPLES = {
 }
 
 _PURPOSES = {
-    "quotient_ring": ("Return the ambient polynomial ring modulo the given ideal. "
+    "ideal": ("Create an ideal in its generators' parent ring. With ring=K, generators from K's "
+              "ambient polynomial ring are projected into K. Use ideal(ring=K) for its zero ideal."),
+    "quotient_ring": ("Return the parent ring of the given ideal modulo that ideal. "
                       "The default reuses I.quotient_ring. Use fresh=True for an independent parent. "
                       "An explicit CPU or GPU request reruns the declaration and keeps the same parent. "
                       "K.declaration_executions gives the latest execution report for each requested mode."),
@@ -108,9 +110,10 @@ _VALUE_CARDS = {
         '{n}.parent\n{n}.generators\n{n}.quotient_ring\n{n}^2',
     ),
     QuotientRing: (
-        "A quotient of {n}.ambient by {n}.defining_ideal. Its coordinates are the residue "
-        "classes of the ordered generators in {n}.ambient.coordinates. Call {n}(f) to project "
-        "an ambient polynomial. Its relations give the reduced basis of the defining ideal.",
+        "The quotient of {n}.defining_ideal.parent by {n}.defining_ideal. "
+        "Its coordinates are the residue classes of the generators in {n}.ambient.coordinates. "
+        "Call {n}(f) to project an ambient polynomial. Its relations give a reduced basis "
+        "for all relations in the ambient polynomial ring.",
         "{n}.coordinates\n{n}.ambient.coordinates\n{n}.gens\n{n}.relations\n{n}(1)",
     ),
     QuotientElement: (
@@ -182,7 +185,7 @@ def algebra_help_values(session):
                 values[name + "." + field] = _RESIDUE_COORDINATES
             values[name + ".ambient.coordinates"] = _AMBIENT_COORDINATES
             values[name + ".declaration_executions"] = _DECLARATION_EXECUTIONS
-        if isinstance(value, (QuotientRing, QuotientElement)):
+        if isinstance(value, (QuotientRing, QuotientElement, QuotientIdeal)):
             values[name + ".ring"] = _QUOTIENT_PRESENTATION
         if isinstance(value, RingHomomorphism):
             values[name + ".domain"] = value.domain
