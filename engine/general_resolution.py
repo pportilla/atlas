@@ -516,7 +516,7 @@ _workers = _Workers()
 atexit.register(_workers.close)
 
 
-def _attempt(variables, f, candidate, mode, effort, seconds):
+def _attempt(variables, f, candidate, mode, effort, seconds, *, spare=True):
     """An independently killable proof attempt. Does not depend on process signals
     in the calling thread. The worker shares the outer job's cancellation group.
     """
@@ -525,7 +525,7 @@ def _attempt(variables, f, candidate, mode, effort, seconds):
         info = _wire_candidate(variables,f,candidate,mode,effort)
     except Exception:
         return "undecided", None
-    return _run_attempt(info, seconds-(monotonic()-start))
+    return _run_attempt(info, seconds-(monotonic()-start), spare=spare)
 
 
 def _reduced_graph_record(names, mode, centre, proof, *, exceptional=None):
@@ -608,7 +608,7 @@ def _isolated_graph_prefix(variables, active, candidates, seconds):
                             count,coordinate_line=True)
 
 
-def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
+def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,prewarm_spare=True):
     from .affine_kernel import _sparse_expression, _sparse_terms, frame_function, rational_factor_rows
     from .resolution_search import priority_candidates, scheduled_candidates
     api = runtime_expressions()
@@ -657,7 +657,12 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None):
         attempts+=1
         report(f"Checking blow-up candidate {attempts} at the proposed centre")
         if transverse_centre is None:
-            state,result = _attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left)
+            state,result = _attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left,
+                                    spare=prewarm_spare)
+            # A racing search already has its first verifier. A timeout or
+            # undecided proof enables the replacement for subsequent attempts.
+            if state == "undecided":
+                prewarm_spare = True
         else:
             if attempts > len(expected) or (candidate.center, candidate.source) != expected[attempts-1]:
                 return None

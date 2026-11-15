@@ -105,6 +105,7 @@ if method=='origin':
     if outcome=='error': sys.exit(3)
     if outcome=='nonreduced': print(json.dumps({'nonreduced':'repeated factor'}));sys.exit(0)
 elif method=='certificates':
+    assert bool(args.get('defer_spare')) == (outcome=='slow')
     (p/'racing').touch()
 else:
     raise AssertionError('proven Newton failure should never start')
@@ -160,6 +161,8 @@ method, winner, root = sys.argv[1:]
 root = Path(root)
 args = json.load(sys.stdin)
 assert args['replay'] == {'compute': 'gpu', 'backend': 'opencl', 'index': 1}
+if method=='certificates':
+    assert args['defer_spare']
 (root / method).write_text(str(os.getpid()))
 if method == 'newton' and winner == 'fast':
     pass

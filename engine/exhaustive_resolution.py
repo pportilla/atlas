@@ -44,17 +44,18 @@ def search(poly, variables, mode, *, compute=None):
     the outer job is killed, so cancellation also reaches native descendants.
     """
     scope = current_replay_scope()
-    payload = json.dumps({
+    request = {
         "terms": [[list(e), rational_text(c)] for e, c in poly.items()],
         "variables": variables, "mode": mode, "compute": compute,
         "replay": scope.settings() if scope else {"compute": compute},
-    })
+    }
+    payload = json.dumps(request)
     replies = queue.SimpleQueue()
     children, readers = [], []
 
-    def collect(method, child):
+    def collect(method, child, message):
         try:
-            output, _ = child.communicate(payload)
+            output, _ = child.communicate(message)
             if child.returncode:
                 raise RuntimeError(f"{method} worker exited with status {child.returncode}")
             reply = json.loads(output, parse_int=integer_from_decimal)
@@ -67,6 +68,9 @@ def search(poly, variables, mode, *, compute=None):
     errors = []
 
     def start(method):
+        message = payload
+        if method == "certificates" and any(peer.poll() is None for peer, _ in children):
+            message = json.dumps(dict(request, defer_spare=True))
         read_fd, write_fd = os.pipe()
         try:
             environment = {**os.environ, "ATLAS_PROGRESS_METHOD": method} if os.getenv("ATLAS_PROGRESS_FILE") else None
@@ -81,7 +85,7 @@ def search(poly, variables, mode, *, compute=None):
         finally:
             os.close(read_fd)
         children.append((child, write_fd))
-        reader = threading.Thread(target=collect, args=(method, child), daemon=True)
+        reader = threading.Thread(target=collect, args=(method, child, message), daemon=True)
         reader.start()
         readers.append(reader)
 
@@ -154,7 +158,8 @@ def _run(method, payload):
             elif method == "certificates":
                 from .general_resolution import search as certificates
                 report("Searching for a certified blow-up centre")
-                record = certificates(terms, payload["variables"], payload["mode"], exhaustive=True)
+                record = certificates(terms, payload["variables"], payload["mode"], exhaustive=True,
+                                      prewarm_spare=not payload.get("defer_spare", False))
             else:
                 raise ValueError("Unknown resolution method.")
         except NonReducedError as error:
