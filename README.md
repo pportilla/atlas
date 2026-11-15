@@ -63,3 +63,8 @@ Finished rows offer the recorded complex, charts, and follow-up zeta calculation
 - [HTTP API and optional GPU support](docs/http-and-compute.md)
 - [Kernel algorithms and proofs](native/KERNEL.md) and [benchmarks](benchmarks/README.md)
 - [Lean verification roadmap](docs/lean-verification-roadmap.md)
+
+Run `make docs` to build these pages as a website in `build/docs`, with a
+function reference read from the session's help cards. The build needs
+`markdown-it-py`. [docs/site](docs/site/build.py) holds the generator, its
+template and its stylesheet.

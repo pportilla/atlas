@@ -5,6 +5,7 @@ from contextlib import nullcontext
 import json
 from pathlib import Path
 import shlex
+import shutil
 import signal
 import sys
 import threading
@@ -18,6 +19,9 @@ from .resolve_cli import (MAX_SECONDS, add_resolution_options, calculate_resolut
 ROOT=Path(__file__).resolve().parents[1]
 WEB=ROOT/'web'
 MAX_REQUEST=32768
+WEB_FONTS = frozenset(f'/fonts/{face}.woff2' for face in (
+    'source-code-pro', 'source-code-pro-italic', 'source-sans-3', 'source-sans-3-italic',
+    'stix-two-text', 'stix-two-text-italic'))
 CAPACITY=threading.BoundedSemaphore(2)
 
 
@@ -62,8 +66,9 @@ class Handler(BaseHTTPRequestHandler):
                 '/resolution.css':('resolution.css','text/css'),'/runs.css':('runs.css','text/css'),
                 '/complex.css':('complex.css','text/css'),
                 '/atlas-mark.svg':('atlas-mark.svg','image/svg+xml'),
+                '/identity.css':('identity.css','text/css'),
                 '/style.css':('style.css','text/css'),'/app.js':('app.js','text/javascript')}
-        if path in ('/fonts/stix-two-text.woff2', '/fonts/stix-two-text-italic.woff2', '/fonts/instrument-sans.woff2'):
+        if path in WEB_FONTS:
             return self.send(200, (WEB / path[1:]).read_bytes(), 'font/woff2')
         if path=='/api/health': return self.obj(200,{'status':'ok'})
         if path=='/api/searches':
@@ -75,6 +80,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.obj(200,job) if job else self.obj(404,{'error':'Search no longer available.'})
         if path not in static: return self.obj(404,{'error':'Unknown endpoint.'})
         name,mime=static[path]
+        if name == 'index.html':
+            from .web_brand import fill_brand
+            return self.send(200, fill_brand((WEB / name).read_text()).encode(), mime + '; charset=utf-8')
         self.send(200,(WEB/name).read_bytes(),mime+'; charset=utf-8')
 
     def do_POST(self):
@@ -292,20 +300,34 @@ def read_expression(line, prompt='... '):
     return line
 
 
+def shell_command_names(parser):
+    """The words that start a shell command at the prompt rather than an expression."""
+    return {*parser.command_names, ":save", ":workspace", "quit", "exit"}
+
+
 def run_session(parser, panel):
     from .cli_style import tinted_errors
     from .prompt_readline import prompt_completion
     from .session import new_session
     from .welcome import interactive_welcome
     session = new_session(calculate_resolution)
-    shell_names = {*parser.command_names, ":save", ":workspace", "quit", "exit"}
+    shell_names = shell_command_names(parser)
     with interactive_welcome(panel) as finish_welcome, tinted_errors(panel.enabled and panel.color):
         with prompt_completion(session, parser, shell_names | {"help"}, on_tab=finish_welcome):
             return _session_loop(parser, panel, session, shell_names, finish_welcome)
 
 
+def _is_shell_command(words, shell_names, variables):
+    """Read a line as a shell command unless its first word starts an expression."""
+    tail = words[1] if len(words) == 2 else ""
+    expression_tail = words[0].isidentifier() and tail.startswith(("(", "=", "."))
+    return words[0] in shell_names and words[0] not in variables and not expression_tail
+
+
 def _session_loop(parser, panel, session, shell_names, finish_welcome):
-    from .cli_style import readline_prompt
+    from .cli_highlight import (command_pieces, expression_pieces, live_terminal, paint_hint,
+                                paint_value, repaint_entry)
+    from .cli_style import paint, readline_prompt
     from .prompt_help import command_hint, help_request, show_help, topic_names
     from .session import SessionError
     from .session_hints import error_hint
@@ -315,8 +337,18 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     topics = topic_names(session, parser)
     # Only the line editor understands the markers around a prompt's colours.
     color = panel.enabled and panel.color and "readline" in sys.modules
-    prompt = readline_prompt(("atlas", "brand"), (">", "muted"), (" ", None), color=color)
+    prompt_pieces = (("atlas", "brand"), (">", "muted"), (" ", None))
+    prompt = readline_prompt(*prompt_pieces, color=color)
     more = readline_prompt(("...", "muted"), (" ", None), color=color)
+    # Colouring entries and values needs the terminal that echoed the entry.
+    rich = color and live_terminal()
+    functions = set(session.builtins)
+    commands = shell_names | {"help"}
+
+    def hint_text(text):
+        return paint_hint(text, commands=commands, topics=topics, names=session.variables,
+                          functions=functions, color=rich)
+
     while True:
         try:
             panel.refresh(session.variables)
@@ -328,25 +360,28 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
             if not words:
                 continue
             request = help_request(line)
+            shell = request is not None or _is_shell_command(words, shell_names, session.variables)
+            if rich:
+                pieces = (command_pieces(line, commands=commands, topics=topics) if shell else
+                          expression_pieces(line, names=session.variables, functions=functions))
+                repaint_entry(sys.stdout, prompt_pieces, line, pieces, shutil.get_terminal_size().columns)
             if request is not None:
-                show_help(request, session, parser)
+                show_help(request, session, parser, color=rich)
                 continue
-            tail = words[1] if len(words) == 2 else ""
-            is_variable = words[0] in session.variables
-            expression_tail = words[0].isidentifier() and tail.startswith(("(", "=", "."))
-            if words[0] not in shell_names or is_variable or expression_tail:
+            if not shell:
                 line = read_expression(line, more)
                 try:
                     for display, value in session.run(line, transcript=transcript):
                         if display:
-                            print(value)
+                            print(paint_value(str(value), names=session.variables, functions=functions,
+                                              color=rich) if rich else value)
                 except SessionError as error:
                     source = line.splitlines()
                     statement = source[error.line - 1].strip() if 0 < error.line <= len(source) else ""
                     print(f"{statement}: {error}" if statement else str(error), file=sys.stderr)
                     hint = error_hint(error, statement, session, topics)
                     if hint:
-                        print(hint, file=sys.stderr)
+                        print(hint_text(hint), file=sys.stderr)
                 except ValueError as error:
                     # Rendering a numeric preview can exceed an explicitly
                     # configured interpreter digit limit.
@@ -356,7 +391,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                 argv = shlex.split(line)
             except ValueError as error:
                 print(f'Cannot read command: {error}', file=sys.stderr)
-                print(command_hint(words[:1], parser), file=sys.stderr)
+                print(hint_text(command_hint(words[:1], parser)), file=sys.stderr)
                 continue
             if not argv:
                 continue
@@ -374,7 +409,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                     continue
                 try:
                     transcript.save(argv[1])
-                    print(f'Saved session to {argv[1]}')
+                    print(f"{paint('Saved session to', 'ok', rich)} {paint(argv[1], 'string', rich)}")
                 except (OSError, ValueError) as error:
                     print(f'Cannot save session: {error}', file=sys.stderr)
                 continue
@@ -382,10 +417,10 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
                 status = run_command(parser, argv)
             except SystemExit as error:
                 if error.code == 2:  # argparse already printed the original usage error.
-                    print(command_hint(argv, parser), file=sys.stderr)
+                    print(hint_text(command_hint(argv, parser)), file=sys.stderr)
                 continue
             if status == 2 and argv[0] != "run":
-                print(command_hint(argv, parser), file=sys.stderr)
+                print(hint_text(command_hint(argv, parser)), file=sys.stderr)
         except EOFError:
             print()
             return 0

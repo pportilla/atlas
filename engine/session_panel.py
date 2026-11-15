@@ -5,6 +5,7 @@ import os
 import sys
 from unicodedata import combining, east_asian_width
 
+from .cli_highlight import expression_pieces
 from .cli_style import paint, use_color
 from .session_algebra import Ideal, _RingValue, _Result
 from .session_polynomial import Polynomial, QQ, _CoordinateSpace
@@ -97,20 +98,33 @@ def workspace(variables):
     return rings, bindings
 
 
-def _binding(entry, role):
+def _binding(entry, role, names=()):
     """Split "name = preview" so that the name can carry its own colour."""
     name, equals, preview = entry.partition(" = ")
-    return [(name, role), (equals, "muted"), (preview, None)]
+    return [(name, role), (equals, "muted"), *expression_pieces(preview, names=names, verdicts=True)]
+
+
+def _ring(entry, names=()):
+    """Split "QQ[x, y] → x, f" into the ring, its arrow and the names it holds."""
+    ring, arrow, members = entry.partition(" → ")
+    return [*expression_pieces(ring, names=names, functions={"QQ"}), (arrow, "muted"),
+            *expression_pieces(members, names=names)]
+
+
+def _names(variables):
+    return {name for name in variables if name.isidentifier()}
 
 
 def print_workspace(variables):
     rings, bindings = workspace(variables)
     color = use_color(sys.stdout)
+    known = _names(variables)
 
     def ink(text, role):
         return paint(text, role, color)
 
-    names = ["".join(ink(text, role) for text, role in _binding(entry, "name")) for entry in bindings]
+    names = ["".join(ink(text, role) for text, role in _binding(entry, "name", known)) for entry in bindings]
+    rings = ["".join(ink(text, role) for text, role in _ring(entry, known)) for entry in rings]
     print(ink("Rings", "label") + "     " + ("\n          ".join(rings) if rings else ink("—", "muted")))
     print(ink("Variables", "label") + " " + ("\n          ".join(names) if names else ink("—", "muted")))
 
@@ -145,7 +159,7 @@ def _take(pieces, width):
     return kept, False
 
 
-def _header_row(label, entries, width, role=None):
+def _header_row(label, entries, width, role=None, names=()):
     """Fit a labelled row into width cells as (text, role) pieces."""
     narrow = width < 26
     prefix = label + " " if narrow else f"{label:<10}"
@@ -167,13 +181,13 @@ def _header_row(label, entries, width, role=None):
     for entry in entries[first:]:
         if len(pieces) > 1:
             pieces.append((separator, "muted"))
-        pieces += _binding(entry, role)
+        pieces += _binding(entry, role, names) if role else _ring(entry, names)
     kept, cut = _take(pieces, width)
     return _take(pieces, width - 1)[0] + [("…", "muted")] if cut else kept
 
 
 HEADER_ROWS = 4
-_HINT = "help  ·  :workspace  ·  quit"
+_HINT = (("help", "field"), ("  ·  ", "frame"), (":workspace", "field"), ("  ·  ", "frame"), ("quit", "field"))
 
 
 class SessionPanel:
@@ -211,7 +225,9 @@ class SessionPanel:
         self.size = size
         rings, bindings = workspace(variables)
         inner = size.columns - 4
-        rows = (_header_row("Rings", rings, inner), _header_row("Variables", bindings, inner, "name"))
+        known = _names(variables)
+        rows = (_header_row("Rings", rings, inner, names=known),
+                _header_row("Variables", bindings, inner, "name", known))
         plain = tuple("".join(text for text, _ in row) for row in rows)
         if resized or plain != self.rows:
             self.rows = plain
@@ -225,7 +241,7 @@ class SessionPanel:
 
         # The standing commands, then the title, give way as the terminal narrows.
         title = [("─ ", "frame"), ("Atlas", "brand"), (" ", None)] if columns >= 24 else []
-        hint = [(" ", None), (_HINT, "muted"), (" ─", "frame")] if columns >= 60 else []
+        hint = [(" ", None), *_HINT, (" ─", "frame")] if columns >= 60 else []
         fill = columns - 2 - sum(len(text) for text, _ in title + hint)
         top = [("╭", "frame"), *title, ("─" * fill, "frame"), *hint, ("╮", "frame")]
         lines = ["".join(ink(text, role) for text, role in top)]

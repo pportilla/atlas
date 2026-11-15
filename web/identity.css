@@ -1,0 +1,124 @@
+/* Atlas identity: the faces, colours and roles shared by the web workspace
+   and the documentation site. The role colours follow the terminal palette in
+   engine/cli_style.py, so the wordmark, prompt and names read the same in a
+   terminal, in the browser and in the docs. */
+
+@font-face {
+  font-family: "Source Code Pro";
+  src: url("fonts/source-code-pro.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Code Pro";
+  src: url("fonts/source-code-pro-italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("fonts/source-sans-3.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("fonts/source-sans-3-italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("fonts/stix-two-text.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("fonts/stix-two-text-italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Faces. The monospace carries the wordmark, headings and code, as in the
+     terminal. Text runs in its humanist companion. Mathematics stays in STIX. */
+  --font-mono: "Source Code Pro", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-text: "Source Sans 3", "Source Sans Pro", "Segoe UI", system-ui, sans-serif;
+  --font-math: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
+
+  /* Paper and ink. Light is survey paper, dark is the terminal. */
+  --paper:       light-dark(#f6f7f3, #121816);
+  --surface:     light-dark(#fdfdfb, #182020);
+  --wash:        light-dark(#ebeee8, #1e2826);
+  --ink:         light-dark(#1b2321, #e1e7e4);
+  --ink-soft:    light-dark(#4b5753, #a9b4b0);
+  --ink-faint:   light-dark(#626e6a, #8a9591);
+  --rule:        light-dark(#d3d9d4, #2b3532);
+  --rule-strong: light-dark(#a3aea9, #4a5652);
+
+  /* Terminal roles. Each one keeps its terminal hue and gains the contrast
+     that reading text on paper needs. */
+  --brand:       light-dark(#00767a, #45c3c1);   /* brand: wordmark, prompt, links */
+  --brand-deep:  light-dark(#00575b, #82dbd8);
+  --brand-wash:  light-dark(#dcefec, #15302f);
+  --name:        light-dark(#965500, #e6a443);   /* name: saved names and commands */
+  --name-wash:   light-dark(#f6ead5, #30271a);
+  --map:         light-dark(#3c7a39, #7cc275);   /* paper: the unfolding map */
+  --map-wash:    light-dark(#e3efdf, #1b2d1d);
+  --error:       light-dark(#b03a2b, #ec7d70);   /* error */
+  --error-wash:  light-dark(#fbebe7, #34201d);
+
+  /* Tones for highlighted code. Dark values are the terminal's 256 colours. */
+  --tone-function: light-dark(#1f7575, #5fafaf);  /* function: registered functions */
+  --tone-field:    light-dark(#4a7676, #87afaf);  /* field, option */
+  --tone-keyword:  light-dark(#365f5f, #7fa7a7);  /* keyword */
+  --tone-number:   light-dark(#87602c, #af875f);  /* number */
+  --tone-string:   light-dark(#4d7a1e, #87af5f);  /* string */
+  --tone-ok:       light-dark(#2a7a58, #5faf87);  /* ok: True and settled verdicts */
+  --tone-false:    light-dark(#a8512b, #d7875f);  /* false: False and open verdicts */
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* Spans that carry a terminal role, as engine/web_brand.py writes them. */
+.t-brand { color: var(--brand); font-weight: 650; }
+.t-label { color: var(--brand); }
+.t-name { color: var(--name); }
+.t-paper { color: var(--map); }
+.t-frame { color: var(--rule-strong); }
+.t-muted { color: var(--ink-faint); }
+.t-strong { font-weight: 650; }
+.t-error { color: var(--error); }
+.t-command { color: var(--tone-function); font-weight: 650; }
+.t-function { color: var(--tone-function); }
+.t-field, .t-option { color: var(--tone-field); }
+.t-keyword { color: var(--tone-keyword); font-weight: 650; }
+.t-number { color: var(--tone-number); }
+.t-string { color: var(--tone-string); }
+.t-ok { color: var(--tone-ok); }
+.t-false { color: var(--tone-false); }
+.t-comment { color: var(--ink-faint); font-style: italic; }
+
+/* Terminal art: the wordmark and the lettered map, set cell for cell. */
+.ascii-art {
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: none;
+  font: 500 var(--art-size, 13px)/1.18 var(--font-mono);
+  letter-spacing: 0;
+  white-space: pre;
+  overflow-wrap: normal;
+  font-variant-ligatures: none;
+}

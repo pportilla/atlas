@@ -1,5 +1,6 @@
 """The cartographic wordmark shown when opening Atlas from a terminal."""
 from contextlib import contextmanager
+from itertools import islice
 import os
 from pathlib import Path
 import re
@@ -126,12 +127,16 @@ def render_welcome(columns, *, color, interactive, art_rows=None):
     hint = len(lines)
     paragraph("Tab completes names. Type help for topics, help NAME for an example, or quit." if interactive
               else "Run ./atlas --help for all commands.")
-    lines[hint:] = [_COMMANDS.sub(lambda word: paint(word[0], "name", color), row) for row in lines[hint:]]
+    lines[hint:] = [_COMMANDS.sub(lambda word: paint(word[0], "name" if word[0] == "Tab" else "command", color), row)
+                    for row in lines[hint:]]
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"
 
 
-def _animation_frames(color, rest=0):
-    """Yield the rows of each frame and its delay. The wordmark settles rest rows down."""
+def _animation_frames(color, rest=0, painter=paint):
+    """Yield the rows of each frame and its delay. The wordmark settles rest rows down.
+
+    The painter colours each run of text by its role. The web workspace and the
+    documentation pass one that writes HTML spans instead of terminal codes."""
     # The slanted T and L share columns on different rows. Two blank
     # cells before the L's top keep its strokes on their original diagonal.
     starts = (1, 9, 15, 23, 31)
@@ -145,25 +150,25 @@ def _animation_frames(color, rest=0):
     pitch = (width - 1) // len(glyphs)
     for frame in FOLDS:
         indent = " " * (2 + (width - max(map(len, frame))) // 2)
-        yield [paint(indent + row, "paper", color) for row in frame], 0.4 if frame is sheet else 0.25
+        yield [painter(indent + row, "paper", color) for row in frame], 0.4 if frame is sheet else 0.25
 
     positions = [i * pitch + (pitch + 1 - max(len(row.rstrip()) for row in glyph)) // 2
                  for i, glyph in enumerate(glyphs)]
     body = next(i for i, row in enumerate(sheet) if row.count(":") == 4)
-    seam = paint(":", "paper", color)
-    side = paint("|", "paper", color)
+    seam = painter(":", "paper", color)
+    side = painter("|", "paper", color)
     # Start the next letter as the preceding one receives its last stroke.
     stagger = len(WORDMARK) - 1
     last_stroke = (len(glyphs) - 1) * stagger + len(WORDMARK) - 1
     for stroke in range(last_stroke + 1):
-        rows = ["  " + paint(row, "paper", color) for row in sheet]
+        rows = ["  " + painter(row, "paper", color) for row in sheet]
         for y in range(len(WORDMARK)):
             cells = []
             for i, glyph in enumerate(glyphs):
                 left = positions[i] - i * pitch - 1
                 ink = glyph[y] if stroke >= i * stagger + y else ""
                 cells.append((" " * left + ink).ljust(pitch - 1))
-            rows[body + y] = "  " + side + seam.join(paint(cell, "brand", color) for cell in cells) + side
+            rows[body + y] = "  " + side + seam.join(painter(cell, "brand", color) for cell in cells) + side
         yield rows, 0.4 if stroke == last_stroke else 0.085
 
     for remaining in (1, 0.78, 0.54, 0.32, 0.15, 0):
@@ -175,8 +180,16 @@ def _animation_frames(color, rest=0):
                 for dx, stroke in enumerate(glyph[y]):
                     if stroke != " ":
                         line[x + dx] = stroke
-            rows.append("  " + paint("".join(line).rstrip(), "brand", color))
+            rows.append("  " + painter("".join(line).rstrip(), "brand", color))
         yield rows, 0.20 if remaining == 1 else 0.095
+
+
+def lettered_map(painter=paint, color=True):
+    """Rows of the unfolded map once each letter of the wordmark is drawn in its panel."""
+    letters, stagger = 5, len(WORDMARK) - 1
+    last_stroke = (letters - 1) * stagger + len(WORDMARK) - 1
+    frames = _animation_frames(color, painter=painter)
+    return next(islice(frames, len(FOLDS) + last_stroke, None))[0]
 
 
 @contextmanager

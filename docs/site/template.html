@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{title}}</title>
+  <link rel="icon" href="{{root}}_static/atlas-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{{root}}_static/identity.css">
+  <link rel="stylesheet" href="{{root}}_static/docs.css">
+  <script>try { const theme = localStorage.getItem("atlas-theme"); if (theme) document.documentElement.dataset.theme = theme; } catch (error) {}</script>
+  {{head}}
+  <script src="{{root}}_static/search-index.js" defer></script>
+  <script src="{{root}}_static/docs.js" defer></script>
+</head>
+<body data-root="{{root}}">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <button class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Show navigation"><span></span></button>
+    <a class="brand" href="{{root}}index.html" aria-label="Atlas documentation home"><pre class="ascii-art" aria-hidden="true">{{wordmark}}</pre></a>
+    <span class="brand-label">docs</span>
+    <span class="version" title="Version">{{version}}</span>
+    <nav class="topnav" aria-label="Sections">{{topnav}}</nav>
+    <div class="search" role="search">
+      <input id="search" type="search" placeholder="Search" aria-label="Search the documentation" aria-controls="search-results" autocomplete="off" spellcheck="false">
+      <kbd aria-hidden="true">/</kbd>
+      <ol id="search-results" role="listbox" hidden></ol>
+    </div>
+    <button class="theme-toggle" type="button" aria-label="Colour theme"><span aria-hidden="true"></span></button>
+  </header>
+  <div class="layout">
+    <nav id="sidebar" class="sidebar" aria-label="Documentation">{{sidebar}}</nav>
+    <main id="content" class="content" tabindex="-1">
+      <article class="prose">
+{{content}}
+      </article>
+      {{pager}}
+      <footer class="page-footer">{{footer}}</footer>
+    </main>
+    <aside class="local-toc" aria-label="On this page">{{toc}}</aside>
+  </div>
+</body>
+</html>

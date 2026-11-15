@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>Resolution Atlas</title>
   <link rel="icon" href="/atlas-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/identity.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/resolution.css">
   <link rel="stylesheet" href="/runs.css">
@@ -17,8 +18,7 @@
   <a class="skip-link" href="#workspace">Skip to workspace</a>
   <header class="masthead">
     <div class="page masthead-inner">
-      <a class="wordmark" href="/" aria-label="Atlas home"><img src="/atlas-mark.svg" width="36" height="36" alt="">Atlas</a>
-      <span class="masthead-separator" aria-hidden="true">/</span>
+      <a class="wordmark" href="/" aria-label="Atlas home"><pre class="ascii-art" aria-hidden="true"><!--atlas:wordmark--></pre></a>
       <h1 class="workspace-name">Resolution</h1>
       <a class="output-jump" href="#output">View results <span aria-hidden="true">↓</span></a>
     </div>
@@ -78,7 +78,9 @@
 
         <div id="runs" aria-label="Resolution history"></div>
         <div id="workspace-logo">
-          <img src="/atlas-mark.svg" width="84" height="84" alt="Atlas">
+          <pre class="ascii-art welcome-map" aria-hidden="true"><!--atlas:map--></pre>
+          <p class="welcome-title">Welcome to Atlas.</p>
+          <p class="welcome-hint">Enter a polynomial and press Resolve. Each run gets a row here that you can open to follow the search.</p>
         </div>
         <article id="result" hidden aria-label="Selected resolution">
           <header class="result-head">

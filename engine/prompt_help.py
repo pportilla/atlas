@@ -3,6 +3,8 @@
 import sys
 import textwrap
 
+from .cli_highlight import paint_card, paint_hint, paint_value
+from .cli_style import paint
 from .session_help import function_help
 from .session_hints import closest_name
 
@@ -53,35 +55,45 @@ def topic_names(session, parser):
     return {*session.builtins, *parser.command_names, *_TOPICS, *_ALIASES, "functions", "script", "help"}
 
 
-def _functions(session):
+def _functions(session, color=False):
     names = sorted(name for name, value in session.builtins.items() if callable(value))
-    print("Session functions\n" + textwrap.fill(", ".join(names), width=76))
-    print("\nUse help NAME for a signature and an example.")
+    listing = paint_value(textwrap.fill(", ".join(names), width=76), functions=names, color=color)
+    print(paint("Session functions", "label", color) + "\n" + listing)
+    print(paint_hint("\nUse help NAME for a signature and an example.", commands={"help"}, color=color, rest=None))
 
 
-def _unknown(topic, choices, prefix=""):
+def _unknown(topic, choices, prefix="", color=False):
     print(f"Unknown help topic {topic!r}.", file=sys.stderr)
     match = closest_name(topic, choices)
     if match:
-        print(f"Did you mean {match!r}? Type help {prefix}{match}.", file=sys.stderr)
+        hint = f"Did you mean {match!r}? Type help {prefix}{match}."
     else:
-        print("Type help algebra for operations." if prefix else "Type help for a list of topics.", file=sys.stderr)
+        hint = "Type help algebra for operations." if prefix else "Type help for a list of topics."
+    print(paint_hint(hint, commands={"help"}, topics=choices, functions=choices, color=color), file=sys.stderr)
 
 
-def show_help(words, session, parser):
+def show_help(words, session, parser, *, color=False):
+    functions = set(session.builtins)
+    commands = {*parser.command_names, ":workspace", ":save", "quit", "help"}
+
+    def card(text):
+        return paint_card(text, names=session.variables, functions=functions, commands=commands, color=color)
+
     if not words or words == ["help"]:
-        print("Use help NAME, NAME help, or NAME -h for a short explanation and an example.")
-        print("Start with help variables, or type help script for a scripting walkthrough.")
-        print("Prompt commands\n" + ", ".join([*parser.command_names, ":workspace", ":save", "quit"]))
+        for line in ("Use help NAME, NAME help, or NAME -h for a short explanation and an example.",
+                     "Start with help variables, or type help script for a scripting walkthrough."):
+            print(paint_hint(line, commands=commands, topics=topic_names(session, parser), color=color, rest=None))
+        listing = ", ".join(paint(name, "command", color) for name in [*parser.command_names, ":workspace", ":save", "quit"])
+        print(paint("Prompt commands", "label", color) + "\n" + listing)
         print()
-        _functions(session)
+        _functions(session, color)
         return
     if len(words) == 2 and words[0] == "algebra":
         operations = parser.command_names["algebra"].command_names
         if words[1] in operations:
             operations[words[1]].print_help()
         else:
-            _unknown(words[1], operations, "algebra ")
+            _unknown(words[1], operations, "algebra ", color)
         return
     if len(words) != 1:
         print("Use help NAME or help algebra OPERATION.", file=sys.stderr)
@@ -93,23 +105,23 @@ def show_help(words, session, parser):
         if isinstance(session.variables.get(name.removesuffix(".dual_complex")), Resolution):
             name = "resolution.dual_complex"
     if name == "functions":
-        _functions(session)
+        _functions(session, color)
     elif name == "script":
         from .session import HELP
         print(HELP)
     elif name in _TOPICS:
-        print(_TOPICS[name])
+        print(card(_TOPICS[name]))
     else:
-        card = function_help(name, session.builtins)
-        if card:
-            print(card)
+        text = function_help(name, session.builtins)
+        if text:
+            print(card(text))
             if name == "resolve":
                 print("\nUse help resolution.dual_complex to read the recorded vertices and cells.")
-                print('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.')
+                print(card('\nCommand form\n  resolve "y^2-x^3" --vars x,y\n  resolve --help lists all command options.'))
         elif name in parser.command_names:
             parser.command_names[name].print_help()
         else:
-            _unknown(name, topic_names(session, parser))
+            _unknown(name, topic_names(session, parser), color=color)
 
 
 def command_hint(argv, parser):

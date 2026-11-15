@@ -1,4 +1,4 @@
-.PHONY: all ordinary plane chain toric newton groebner gpu test check-native-boundary test-gpu test-triton bench clean
+.PHONY: all ordinary plane chain toric newton groebner gpu test check-native-boundary test-gpu test-triton bench docs clean
 all: ordinary plane chain toric newton groebner
 ordinary:
 	$(MAKE) -C native
@@ -30,5 +30,7 @@ test: all
 	python3 -m unittest discover -s tests -v
 bench: all
 	python3 benchmarks/resolve.py
+docs:
+	python3 docs/site/build.py --out build/docs
 clean:
 	$(MAKE) -C native clean
