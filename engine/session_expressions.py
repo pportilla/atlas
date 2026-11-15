@@ -9,6 +9,7 @@ from subprocess import TimeoutExpired
 import tokenize
 
 from .native_polynomial import scalar_arithmetic
+from .session_algebra import Ideal
 from .session_polynomial import Polynomial
 from .session_quotient import QuotientElement
 from .session_values import Divisor, DualComplex
@@ -61,6 +62,14 @@ def _numeric(value):
 
 def _arithmetic(op, left, right):
     operation = _OPERATORS.get(type(op))
+    if isinstance(left, Ideal) or isinstance(right, Ideal):
+        if isinstance(op, (ast.Add, ast.Mult)):
+            if not (isinstance(left, Ideal) and isinstance(right, Ideal)):
+                name = "addition" if isinstance(op, ast.Add) else "multiplication"
+                raise TypeError(f"Ideal {name} requires two ideals in the same parent ring.")
+        elif not (isinstance(op, ast.Pow) and isinstance(left, Ideal)):
+            raise TypeError("Use I + J or I * J for two ideals, or I^n for an ordinary ideal power.")
+        return operation(left, right)
     if operation is None or not (_numeric(left) and _numeric(right)):
         raise ValueError("Arithmetic requires rational numbers or polynomials and +, -, *, / or ^.")
     if isinstance(op, ast.Pow):

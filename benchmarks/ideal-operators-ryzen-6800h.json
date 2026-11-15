@@ -1,0 +1,236 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    5
+  ],
+  "atlas_native_sha256": "9b1c691e18730c115f510d9c1960e05e6d3a507c137b8ce79150f974068216ea",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "ring": "QQ[x,y], grevlex",
+  "trials": 5,
+  "operations_per_trial": 16,
+  "conditions": "Each trial repeats an operation on the same prepared pair. One preceding invocation per method is discarded. Trial order rotates. Warm session timings use the same typed operators as the Atlas prompt, including construction of their complete results. Native wire timings include sparse input decoding, computation and output serialization; rows are prepared before timing. Singular runs the indicated expression on parsed ideals on one thread. Times exclude top-level program startup, ring creation, initial input construction and verification. Each trial compares the generated ideals from both Atlas paths by mutual reduction in Singular. Ordinary power returns a reduced basis in Atlas, so Singular uses std(I^2) with option(redSB).",
+  "cases": {
+    "plane_monomials": {
+      "left": [
+        "x^2",
+        "y"
+      ],
+      "right": [
+        "x",
+        "y^2"
+      ],
+      "operations": {
+        "sum": {
+          "atlas_operation": "I + J",
+          "singular_operation": "I+J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 416.1,
+            "atlas_native_wire": 7.562,
+            "singular": 2.938
+          },
+          "samples_us": {
+            "atlas_session": [
+              498.51,
+              416.1,
+              410.422,
+              420.894,
+              410.957
+            ],
+            "atlas_native_wire": [
+              8.226,
+              7.562,
+              7.728,
+              7.352,
+              7.427
+            ],
+            "singular": [
+              3.062,
+              2.938,
+              2.938,
+              2.938,
+              2.938
+            ]
+          }
+        },
+        "product": {
+          "atlas_operation": "I * J",
+          "singular_operation": "I*J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 423.107,
+            "atlas_native_wire": 9.191,
+            "singular": 2.938
+          },
+          "samples_us": {
+            "atlas_session": [
+              487.488,
+              421.951,
+              443.027,
+              417.084,
+              423.107
+            ],
+            "atlas_native_wire": [
+              10.706,
+              9.191,
+              8.856,
+              9.052,
+              11.26
+            ],
+            "singular": [
+              3.0,
+              2.938,
+              2.938,
+              2.875,
+              2.938
+            ]
+          }
+        },
+        "square": {
+          "atlas_operation": "I^2",
+          "singular_operation": "std(I^2)",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 73452.492,
+            "atlas_native_wire": 11.662,
+            "singular": 8.938
+          },
+          "samples_us": {
+            "atlas_session": [
+              72767.92,
+              74436.068,
+              73452.492,
+              75062.243,
+              72304.187
+            ],
+            "atlas_native_wire": [
+              10.999,
+              11.662,
+              11.412,
+              12.3,
+              12.068
+            ],
+            "singular": [
+              13.125,
+              7.875,
+              8.5,
+              9.062,
+              8.938
+            ]
+          }
+        }
+      }
+    },
+    "rational_forms": {
+      "left": [
+        "(x+2*y)^8",
+        "(18446744073709551629/7)*x^6*y"
+      ],
+      "right": [
+        "(2*x-y)^7",
+        "(1/13)*x*y^5"
+      ],
+      "operations": {
+        "sum": {
+          "atlas_operation": "I + J",
+          "singular_operation": "I+J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 693.319,
+            "atlas_native_wire": 20.05,
+            "singular": 3.062
+          },
+          "samples_us": {
+            "atlas_session": [
+              706.9,
+              693.193,
+              693.319,
+              707.398,
+              681.403
+            ],
+            "atlas_native_wire": [
+              20.05,
+              25.96,
+              19.3,
+              19.917,
+              24.691
+            ],
+            "singular": [
+              3.062,
+              3.062,
+              3.062,
+              3.062,
+              3.0
+            ]
+          }
+        },
+        "product": {
+          "atlas_operation": "I * J",
+          "singular_operation": "I*J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 797.185,
+            "atlas_native_wire": 40.169,
+            "singular": 4.938
+          },
+          "samples_us": {
+            "atlas_session": [
+              835.4,
+              797.185,
+              815.138,
+              743.343,
+              762.687
+            ],
+            "atlas_native_wire": [
+              41.167,
+              70.324,
+              40.169,
+              39.137,
+              39.544
+            ],
+            "singular": [
+              4.938,
+              4.938,
+              5.312,
+              4.812,
+              4.75
+            ]
+          }
+        },
+        "square": {
+          "atlas_operation": "I^2",
+          "singular_operation": "std(I^2)",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 75740.705,
+            "atlas_native_wire": 70.32,
+            "singular": 66.062
+          },
+          "samples_us": {
+            "atlas_session": [
+              73457.721,
+              75740.705,
+              76810.97,
+              78007.883,
+              75607.348
+            ],
+            "atlas_native_wire": [
+              123.771,
+              74.365,
+              69.595,
+              70.32,
+              67.173
+            ],
+            "singular": [
+              121.938,
+              66.062,
+              70.125,
+              64.688,
+              66.0
+            ]
+          }
+        }
+      }
+    }
+  }
+}

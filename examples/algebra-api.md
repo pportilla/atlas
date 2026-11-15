@@ -85,6 +85,7 @@ The ideal operations below take an `ideal`, an array of polynomial strings. Use 
 | `membership` | `polynomial` | Boolean `value` |
 | `eliminate` | `variables`, an array of names to remove | Ideal, in the surviving variables |
 | `radical` | | Radical ideal, given by its reduced Gröbner basis in the original ring and order |
+| `ideal-sum`, `ideal-product` | `other_ideal`, an array of polynomials | Ideal, in `generators` |
 | `ideal-power` | `exponent`, a nonnegative integer | Ordinary ideal power, as a reduced basis |
 | `symbolic-power` | `exponent`, a nonnegative integer | Symbolic power of a prime or radical ideal, as a reduced basis |
 | `localization` | `prime` ideal, optional `numerator` and `denominator` | Contracted ideal, verified prime and optional fraction membership and unit flags |

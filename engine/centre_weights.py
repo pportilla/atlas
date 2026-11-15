@@ -64,6 +64,14 @@ def cover_products(variables, holes):
     return list(exprs(variables, rows))
 
 
+def component_ideal_product(variables, ideals):
+    """Exact products of chart generators, retaining their order and rational scale."""
+    from .kernel import exprs
+    rows = level_weights("component_ideal_product", (), width=len(variables),
+                         factors=[centre_rows(variables, ideal) for ideal in ideals])
+    return exprs(variables, rows)
+
+
 def order_fields(variables, parts):
     """Align chart coordinate identities with the order of expression presentation."""
     from .chart_expressions import chart_expressions

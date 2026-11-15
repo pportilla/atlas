@@ -9,6 +9,26 @@ from engine.local_blowups import Chart, _blow_up, _eliminate, _strict_ideal
 
 
 class LocalGraphChart(unittest.TestCase):
+    def test_strict_component_product_in_the_marked_chart_ring(self):
+        from engine import native_polynomial as np
+        from engine.centre_weights import component_ideal_product
+        from engine.local_blowups import _hypersurface
+
+        for symbols in (np, sp):
+            with self.subTest(expressions=symbols.__name__):
+                x, y, a = symbols.Dummy("u"), symbols.Dummy("u"), symbols.Dummy("a")
+                variables = (y, a, x)
+                field = (a, a**2 - 2, 2, 0)
+                components = (("S1", 1, 1, (3*a*x,)), ("S2", 1, 1, (a*y,)), ("E1", 2, 2, (x,)))
+                chart = Chart(variables, (field[1],), components, (), (), (), (), coefficient_field=field)
+                self.assertEqual(_hypersurface(chart), (6*x*y,))
+
+                f = x**(2**70) * symbols.Rational(2**130 + 1, 3)
+                self.assertEqual(component_ideal_product(variables, [(f, 0, f), (2, y)]),
+                                 (2*f, f*y, 0, 0, 2*f, f*y))
+                self.assertEqual(component_ideal_product(variables, []), (1,))
+                self.assertEqual(component_ideal_product(variables, [(x,), ()]), ())
+
     def test_unavailable_native_operations_on_external_symbols(self):
         from engine import kernel, local_blowups as local
         from engine.native_library import _MODE

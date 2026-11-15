@@ -21,6 +21,8 @@ OPERATION_DESCRIPTIONS = {
     "eliminate": "eliminate variables from an ideal",
     "radical": "compute the radical of a polynomial ideal over QQ",
     "quotient-ring": "declare a quotient ring over QQ and compute with its residue classes",
+    "ideal-sum": "form the sum of two polynomial ideals over QQ",
+    "ideal-product": "form the product of two polynomial ideals over QQ",
     "ideal-power": "compute an ordinary power of a polynomial ideal over QQ",
     "symbolic-power": "compute a symbolic power of a prime or radical ideal over QQ",
     "localization": "localize an ideal at a prime and optionally test a fraction",

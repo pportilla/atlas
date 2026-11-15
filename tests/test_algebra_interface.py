@@ -223,6 +223,25 @@ class AlgebraInterfaceTests(unittest.TestCase):
             self.assertEqual(repeated.returncode, 0, repeated.stderr)
             self.assertEqual(json.loads(repeated.stdout)["result"], record["result"])
 
+    def test_ideal_sum_and_product_replay_wide_inputs(self):
+        degree, coeff = 2**69 + 3, 2**142 + 1
+        left, right = f"{coeff}*x^{degree}", "x^2"
+        for operation, expected in (
+            ("ideal-sum", [left, right]),
+            ("ideal-product", [f"{coeff}*x^{degree+2}"]),
+        ):
+            with self.subTest(operation=operation):
+                status, record = self.post({"operation": operation, "ring": RING,
+                                            "operands": {"ideal": [left], "other_ideal": [right]}})
+                self.assertEqual(status, 200, record)
+                self.assertEqual(record["result"], {"type": "ideal", "ring": RING, "generators": expected})
+                self.assertIn(f"result = {operation.replace('-', '_')}(I, J", record["replay"]["script"])
+                shell = self.shell(*shlex.split(record["replay"]["command"])[1:])
+                script = run_script(record["replay"]["script"])
+                for run in (shell, script):
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    self.assertEqual(json.loads(run.stdout)["result"], record["result"])
+
     def test_roadmap_operations_dispatch_with_their_own_operands_and_result_rings(self):
         cases = [
             ("groebner", {"ideal": IDEAL}, "basis", "generators", ["x-y", "y^2-1"]),

@@ -29,6 +29,7 @@ const char* atlas_groebner_error() noexcept;
 
 namespace atlas {
 std::string scalar_arithmetic(const std::string&, const std::string&, const std::string&);
+std::string ideal_arithmetic_request(std::istream& in, bool product);
 std::string fan_cover(std::istream& in);
 std::string monomial_quotient(std::istream&, const std::string&);
 std::string field_factorization(std::istream&);
@@ -1565,6 +1566,8 @@ std::string affine(std::istream& in) {
         return quotient_ring::operation(in,operation == "quotient_ring_prepared");
     if (operation == "ideal_power" || operation == "symbolic_power")
         return ideal_powers::operation(in,operation == "symbolic_power");
+    if (operation == "ideal_sum" || operation == "ideal_product")
+        return ideal_arithmetic_request(in, operation == "ideal_product");
     if (operation == "localization") return localization::operation(in);
     if (operation == "normalization") return normalization::operation(in);
     if (operation == "primary_decomposition" || operation == "ideal_radical" || operation == "ideal_radical_gpu")

@@ -34,7 +34,7 @@ build/local_algebra: $(LOCAL_SOURCES) ae_codimension.hpp local_io.hpp local_basi
 build/primary_decomposition build/normalization build/localization build/ideal_power build/symbolic_power build/quotient_ring: build/local_algebra
 	ln -sf local_algebra $@
 
-KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
+KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
   graph_replay.cpp graph_wide.cpp field_wide.cpp field_coefficient.cpp common_field.cpp field_factorization.cpp marked_scalar.cpp lattice_volume.cpp toric_graph.cpp fan_cover.cpp centre_weights.cpp centre_search.cpp centre_affine_maximum.cpp surface_centre_choice.cpp binomial_fan.cpp newton_repair.cpp repair_geometry.cpp \
   atlas_incidence.cpp graph_centre_incidence.cpp graph_regular.cpp torus_sections.cpp fan_surface.cpp owned_chart_incidence.cpp chart_gluing.cpp marked_chart_geometry.cpp ordered_ideals.cpp monomial_resolution.cpp component_projection.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \

@@ -60,7 +60,9 @@ HELP = """Define coordinates and keep the results of calculations:
   u, v = A.gens                         # residue classes of x and y
   u.inverse() == v                      # True in A
   (u^3 / u).representative              # x^2 in the ambient coordinates
-  K = ideal_power(I, 2)                  # ordinary square
+  S = ideal_sum(I, J)                   # I + J at the prompt
+  P = ideal_product(I, J)               # I * J
+  K = ideal_power(I, 2)                 # I^2
   S = symbolic_power(J, 2)               # symbolic square of the radical ideal
   D = primary_decomposition(I)           # each component has a primary ideal and its prime
   Q, P = D.components[0].primary, D.components[0].prime

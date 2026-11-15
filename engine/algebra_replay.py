@@ -103,7 +103,7 @@ def _script(request, prepared):
     elif op == "localization":
         args.append("J")
         args.extend(f"{key}={prepared[key]}" for key in ("numerator", "denominator") if key in prepared)
-    elif op in ("intersection", "quotient"):
+    elif op in ("intersection", "quotient", "ideal-sum", "ideal-product"):
         args.append("J")
     elif op == "eliminate":
         args.extend(prepared["variables"])

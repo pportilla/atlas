@@ -1,0 +1,11 @@
+x, y = coordinates("x", "y")
+I = ideal(x^2, y)
+J = ideal(x, y^2)
+
+S = ideal_sum(I, J)
+P = ideal_product(I, J)
+K = ideal_power(I, 2)
+
+print(groebner(S).generators)
+print(groebner(P).generators)
+print(K.generators)

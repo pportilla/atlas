@@ -53,6 +53,8 @@ OPERATION_OPERANDS = {
     "membership": ("ideal", "polynomial"),
     "eliminate": ("ideal", "variables"),
     "radical": ("ideal",),
+    "ideal-sum": ("ideal", "other_ideal"),
+    "ideal-product": ("ideal", "other_ideal"),
     "ideal-power": ("ideal", "exponent"),
     "symbolic-power": ("ideal", "exponent"),
     "primary-decomposition": ("ideal",),

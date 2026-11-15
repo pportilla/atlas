@@ -4,6 +4,7 @@
 #include "groebner.hpp"
 #include "sparse_flint.hpp"
 #include <algorithm>
+#include <charconv>
 #include <sstream>
 #include <cstdint>
 #include <limits>
@@ -33,23 +34,60 @@ std::string ring_line(const std::vector<std::string>& names) {
     return text + "\n";
 }
 
+std::string_view next_token(std::string_view& input) {
+    constexpr auto whitespace = " \t\r\n\v\f";
+    const auto start = input.find_first_not_of(whitespace);
+    if (start == input.npos) {
+        input = {};
+        return {};
+    }
+    input.remove_prefix(start);
+    const auto end = input.find_first_of(whitespace);
+    const auto token = input.substr(0, end);
+    input.remove_prefix(token.size());
+    return token;
+}
+
+bool decimal_integer(mpz_ptr out, std::string_view token) {
+    if (!token.empty() && token.front() == '+') {
+        token.remove_prefix(1);
+        if (token.empty() || token.front() < '0' || token.front() > '9') return false;
+    }
+    if (token.empty()) return false;
+    long value;
+    const char* end = token.data() + token.size();
+    auto result = std::from_chars(token.data(), end, value);
+    if (result.ptr != end) return false;
+    if (result.ec == std::errc::result_out_of_range)
+        return mpz_set_str(out, std::string(token).c_str(), 10) == 0;
+    if (result.ec != std::errc{}) return false;
+    mpz_set_si(out, value);
+    return true;
+}
+
 }
 
 Polynomial decode_row(std::string_view row, size_t width) {
     Polynomial result;
     while (!row.empty()) {
         const auto end = row.find(';');
-        std::istringstream in(std::string{row.substr(0, end)});
+        auto term = row.substr(0, end);
+        const auto rational = next_token(term);
+        const auto slash = rational.find('/');
         mpq_class coefficient;
-        if (!(in >> coefficient) || coefficient.get_den() == 0)
+        if (!decimal_integer(mpq_numref(coefficient.get_mpq_t()), rational.substr(0, slash)))
             throw std::invalid_argument("Invalid sparse coefficient.");
-        coefficient.canonicalize();
+        if (slash != rational.npos) {
+            auto denominator = mpq_denref(coefficient.get_mpq_t());
+            if (!decimal_integer(denominator, rational.substr(slash + 1)) || mpz_sgn(denominator) == 0)
+                throw std::invalid_argument("Invalid sparse coefficient.");
+            coefficient.canonicalize();
+        }
         Powers powers(width);
         for (auto& exponent : powers)
-            if (!(in >> exponent) || exponent < 0)
+            if (!decimal_integer(exponent.get_mpz_t(), next_token(term)) || exponent < 0)
                 throw std::invalid_argument("Invalid sparse exponent.");
-        std::string extra;
-        if (in >> extra) throw std::invalid_argument("Invalid sparse exponent vector.");
+        if (!next_token(term).empty()) throw std::invalid_argument("Invalid sparse exponent vector.");
         if (coefficient != 0 && !result.emplace(std::move(powers), std::move(coefficient)).second)
             throw std::invalid_argument("Repeated monomial in sparse input.");
         if (end == row.npos) break;
@@ -196,7 +234,7 @@ std::string format_polynomial(const Polynomial& f, const std::vector<std::string
         bool factor = c != "1" || degree == 0;
         if (factor) text += c;
         for (size_t i = 0; i < names.size(); ++i) {
-            const auto k = entry->first[i];
+            const auto& k = entry->first[i];
             if (!k) continue;
             if (factor) text += '*';
             text += names[i];

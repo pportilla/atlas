@@ -1,6 +1,7 @@
 // Primary decomposition over QQ by zero-dimensional extension and contraction.
 // Block lex bases implement arithmetic over QQ(U) without building fractions.
 #include "primary_decomposition.hpp"
+#include "ideal_arithmetic.hpp"
 #include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "local_dimension.hpp"
@@ -953,9 +954,7 @@ bool geometrically_prime(const Basis& prime, size_t n, bool marked, int dim) {
         right[coordinates+j] = j;
     }
     if (marked) left.back() = right.back() = n-1;
-    Basis square = remap(prime,left);
-    auto second = remap(prime,right);
-    square.insert(square.end(),second.begin(),second.end());
+    auto square = ideal_arithmetic::sum(remap(prime,left),remap(prime,right));
     return decompose(square,width,true).size() == 1;
 }
 

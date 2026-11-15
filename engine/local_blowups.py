@@ -46,7 +46,8 @@ from .native_polynomial import native_ring
 from .blowup_ideal import (blowup_charts, empty_locus, ideal_basis, ideal_subset, radical_subset, saturate,
                            smooth_locus)
 from .affine_kernel import frame_function, frame_linear, pullbacks
-from .centre_weights import centre_rows, centre_search, cover_products, level_weights, maximum_indices, order_fields, ordered_parts, surface_maxima
+from .centre_weights import (centre_rows, centre_search, component_ideal_product, cover_products, level_weights,
+                             maximum_indices, order_fields, ordered_parts, surface_maxima)
 from .centres import GiveUp, maximum
 from .groebner import _MODE, colon, groebner
 from .incidence import dual_cells, stratum_dimension
@@ -527,10 +528,8 @@ def _is_strict(label):
 
 def _hypersurface(chart):
     """Generators of the ideal of the strict transform: the product of the ideals of its components."""
-    gens = (chart_expressions(chart.variables).sympify(1),)
-    for label, _, _, ideal in chart.components:
-        if _is_strict(label):
-            gens = tuple(_expanded(chart.variables, a*b) for a in gens for b in ideal)
+    ideals = [ideal for label, _, _, ideal in chart.components if _is_strict(label)]
+    gens = component_ideal_product(chart.variables, ideals)
     return _generators(chart.variables, chart.ambient, gens)
 
 

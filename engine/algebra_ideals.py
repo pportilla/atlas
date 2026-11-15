@@ -35,11 +35,16 @@ def _primary_decomposition(ring, variables, generators):
 def handle(operation, ring, operands, *, known_basis=False):
     variables = tuple(map(polynomial.Symbol, ring["variables"]))
     generators = operands["ideal"]
-    if operation in ("normalization", "localization", "quotient-ring", "ideal-power", "symbolic-power"):
+    if operation in ("normalization", "localization", "quotient-ring", "ideal-power", "symbolic-power",
+                     "ideal-sum", "ideal-product"):
         opcode = operation.replace("-", "_")
         request = [opcode, " ".join(ring["variables"]), ring["order"]]
         rows = generators
-        if operation == "localization":
+        if operation in ("ideal-sum", "ideal-product"):
+            right = operands["other_ideal"]
+            request.append(f"{len(generators)} {len(right)}")
+            rows = [*generators, *right]
+        elif operation == "localization":
             prime = operands["prime"]
             query = "numerator" in operands or "denominator" in operands
             request.append(f"{len(generators)} {len(prime)} {int(query)}")

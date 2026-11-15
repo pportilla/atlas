@@ -112,6 +112,7 @@ extern "C" int atlas_centre_weights_abi() noexcept { return 1; }
 
 // Weight updates used when passing to maximal contact and to the next level.
 #include "rational_sparse_json.hpp"
+#include "ideal_arithmetic.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
 #include "local_monomial.hpp"
@@ -496,11 +497,16 @@ Json::Value level_weights(const Json::Value& request) {
         for (const auto& value : values) if (value!=values[0]) return {};
         return values[0];
     }
-    if (op == "cover_products") {
+    if (op == "cover_products" || op == "component_ideal_product") {
+        const bool cover = op == "cover_products";
         const size_t width=request["width"].asUInt();
         Basis products{{{Powers(width),1}}};
-        for (const auto& rows:request["holes"]) {
+        for (const auto& rows:request[cover ? "holes" : "factors"]) {
             const auto generators=equations(rows,width);
+            if (!cover) {
+                products = atlas::ideal_arithmetic::generator_products(products, generators, width);
+                continue;
+            }
             std::set<Polynomial> seen;
             Basis next;
             for(const auto& p:products) for(const auto& g:generators) {

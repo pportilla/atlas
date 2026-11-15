@@ -1,5 +1,6 @@
 // Integral closure of affine QQ domains by the Grauert–Remmert criterion.
 #include "normalization.hpp"
+#include "ideal_arithmetic.hpp"
 #include "local_monomial.hpp"
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
@@ -184,12 +185,11 @@ std::optional<Fraction> enlargement(const Basis& relations, const Basis& test, s
     });
     const auto& g = J.front();
     if (g == one(n)) return std::nullopt;
-    Basis principal = relations;
-    principal.push_back(g);
-    principal = primary::reduced(principal,n,true);
+    const auto principal = primary::reduced(ideal_arithmetic::sum(relations,{g}),n,true);
     QuotientRing modulo_g(principal,n);
-    Basis product = relations;
-    for (const auto& h : J) product.push_back(A.reduce(multiply(g,h)));
+    auto multiples = ideal_arithmetic::product({g},J,n);
+    for (auto& h : multiples) h = A.reduce(h);
+    auto product = ideal_arithmetic::sum(relations,std::move(multiples));
     // End_A(J) = (gJ :_A J)/g. A numerator outside gA witnesses strict
     // enlargement. A single such fraction suffices: the integral closure is
     // a finite A-module, so an ascending chain of strict extensions terminates.
