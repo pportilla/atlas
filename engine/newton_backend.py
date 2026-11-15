@@ -272,7 +272,8 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     return result
 
 
-def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False):
+def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False,
+                   construct=True):
     """A regular Newton modification, completed by blowups where a face is
     degenerate. Those blowups may use `seconds` in all, over the coordinate
     choices tried; past that the degenerate choices give no answer."""
@@ -290,7 +291,8 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 centres = _boundary_centres(poly, variables, fan)
                 if centres is None:
                     from .newton_trials import resolve_trials
-                    trial = resolve_trials(poly, variables, verified=verified, integrals=integrals)
+                    trial = resolve_trials(poly, variables, verified=verified, integrals=integrals,
+                                           construct=construct)
                     if trial is not None:
                         return trial
                 else:

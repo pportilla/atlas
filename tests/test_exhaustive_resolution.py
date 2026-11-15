@@ -1,4 +1,6 @@
+import json
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -52,7 +54,10 @@ class ExhaustiveFallback(unittest.TestCase):
                        compute="cpu", replay={"compute": "cpu"})
         with patch("engine.newton_backend.resolve_newton", side_effect=LimitError("fan limit")) as newton:
             self.assertIsNone(exhaustive._run("newton", payload)["record"])
-        self.assertEqual(newton.call_args.kwargs, {"compute": "cpu", "seconds": 1200, "defer_outputs": True})
+        # The lane keeps the fan path of the race and collects a certificate
+        # its coordinator can attach. Zeta requests verify again with integrals.
+        self.assertEqual(newton.call_args.kwargs, {"compute": "cpu", "seconds": 1200, "defer_outputs": True,
+                                                   "verified": [], "integrals": False, "construct": False})
 
     def test_canonical_head_start_covers_only_certified_newton_failures(self):
         from engine.newton_backend import coordinate_choices, resolve_newton
@@ -270,3 +275,50 @@ print(e.search({(2,0,0): 1}, list('xyz'), 'embedded'))
                     process.wait()
                     for fd in (ready, live, go_w):
                         os.close(fd)
+
+
+class SpeculativeLanes(unittest.TestCase):
+    """Forked lanes start together; the first lane keeps its priority."""
+
+    def test_first_lane_keeps_priority_over_earlier_answers(self):
+        from subprocess import Popen
+        script = """
+import json, sys, time
+from pathlib import Path
+method, plan, root = sys.argv[1:]
+args = json.load(sys.stdin)
+(Path(root) / method).write_text("started")
+delay, wins = json.loads(plan)[method]
+time.sleep(delay)
+print(json.dumps({'record': {'engine': method} if wins else None}))
+"""
+        # Each lane's (delay in seconds, whether it finds a record).
+        plans = {
+            "newton wins after origin": ({"newton": (.6, True), "origin": (.05, True), "certificates": (5, False)},
+                                         "newton"),
+            "origin waits for newton": ({"newton": (.6, False), "origin": (.05, True), "certificates": (5, False)},
+                                        "origin"),
+        }
+        for name, (plan, expected) in plans.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as root:
+                started = {}
+
+                def spawn(argv, **kwargs):
+                    method = argv[-2]
+                    started[method] = time.monotonic()
+                    return Popen([argv[0], "-c", script, method, json.dumps(plan), root], **kwargs)
+
+                with patch.object(exhaustive.subprocess, "Popen", side_effect=spawn), \
+                     patch.object(exhaustive.fork_server, "available", return_value=True), \
+                     patch.object(exhaustive, "NEWTON_GRACE_SECONDS", 3), \
+                     patch.object(exhaustive, "_canonical_head_start", return_value=False), \
+                     patch.object(exhaustive, "current_replay_scope", return_value=None):
+                    begin = time.monotonic()
+                    result = exhaustive.search({(2, 0, 0): 1}, list("xyz"), "embedded", compute="cpu")
+                    elapsed = time.monotonic() - begin
+                self.assertEqual(result, {"engine": expected})
+                self.assertEqual(set(started), {"newton", "origin", "certificates"})
+                self.assertLess(max(started.values()) - min(started.values()), .5)
+                # No answer is taken before the first lane's own answer.
+                self.assertGreaterEqual(elapsed, .6)
+                self.assertLess(elapsed, 3)

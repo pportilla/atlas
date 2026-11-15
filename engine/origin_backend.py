@@ -40,7 +40,8 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
                           "variables": list(variables), "mode": mode, "seconds": seconds,
                           "defer_outputs": defer_outputs, "tangent_only": tangent_only})
     try:
-        done = subprocess.run([sys.executable, "-m", "engine.origin_backend"], input=request, text=True,
+        from . import fork_server
+        done = fork_server.run([sys.executable, "-m", "engine.origin_backend"], input=request, text=True,
                               capture_output=True, cwd=Path(__file__).resolve().parents[1],
                               timeout=None if seconds is None else seconds + 2)
     except subprocess.TimeoutExpired:

@@ -444,6 +444,17 @@ def _session_loop(parser, panel, session, shell_names):
 def main(*, unlimited_decimals=False):
     parser = make_parser()
     argv = sys.argv[1:]
+    if not argv or argv[0] in ("run", "serve"):
+        # Sessions, scripts and the server start their resolution workers
+        # from one preloaded engine, warmed while the first input arrives.
+        # A one-shot resolve finishes before such a server could be ready.
+        from . import fork_server
+        with fork_server.serving(prepare_now=True):
+            return _main(parser, argv, unlimited_decimals)
+    return _main(parser, argv, unlimited_decimals)
+
+
+def _main(parser, argv, unlimited_decimals):
     if argv:
         # The standalone parent also decodes and prints exact integer fields
         # returned by the worker, including resolution multiplicities.

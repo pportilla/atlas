@@ -1,5 +1,4 @@
 """Transport the bounded reduced-singular-locus proof before loading graph assembly."""
-from pathlib import Path
 import subprocess
 from time import monotonic
 
@@ -20,10 +19,10 @@ def smooth_reduced_graph(poly, names, mode, *, seconds=0.25):
     if any(len(e) != len(names) for e, c in poly.items() if c):
         raise ValueError("Invalid polynomial exponent vector.")
     equation = encode_sparse_row(poly)
-    helper = Path(__file__).resolve().parents[1] / "native" / "build" / "graph_verify"
+    from . import native_process
     try:
-        done = subprocess.run([str(helper)], input=f"smooth_reduced_graph {len(names)} {int(mode == 'embedded')}\n{equation}\n",
-                              text=True, capture_output=True, timeout=min(seconds, 0.1))
+        done = native_process.run("graph_verify", input=f"smooth_reduced_graph {len(names)} {int(mode == 'embedded')}\n{equation}\n",
+                                  timeout=min(seconds, 0.1))
         if done.returncode or not done.stdout:
             return None
         header, *rows = done.stdout.splitlines()

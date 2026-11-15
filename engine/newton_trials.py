@@ -15,16 +15,16 @@ def _record(names, support, fan, centres, charts):
                   summary=f"Certified toric modification with {len(charts)} charts.", fan=fan, certificate=proof)
 
 
-def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integrals=False):
+def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integrals=False, construct=True):
     from .newton_backend import _boundary_centres, monomial
     from .newton_faces import exhaustive_faces
     if fan is None:
         fan = build_fan(support, exhaustive=exhaustive_faces())
     if len(fan["cones"]) > 32768:
         return None
-    if verified is not None:
-        from .monomial_construction import construct
-        value = construct(poly, names, fan, integrals)
+    if verified is not None and construct:
+        from .monomial_construction import construct as native_construct
+        value = native_construct(poly, names, fan, integrals)
         if value is not None:
             centres, charts, atlas, output = value
             result = _record(names, support, fan, centres, charts)
@@ -58,13 +58,17 @@ def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integr
         chart["exceptional"] = [{"id":c["id"], "equation":c["ideal"][0], "total_multiplicity":c["multiplicity"]}
                                 for c in owned["components"] if c["id"] != "strict"]
     result["dual_complex"] = outputs["dual_complex"]
+    if verified is not None and not bounded and not integrals:
+        # The caller attaches this certified atlas instead of verifying the
+        # same fan charts again. Zeta requests still verify with integrals.
+        verified.append((result, (atlas, outputs)))
     return result
 
 
-def resolve_trials(poly, names, *, verified=None, integrals=False):
+def resolve_trials(poly, names, *, verified=None, integrals=False, construct=True):
     for support in trial_supports(poly):
         try:
-            result = _try(poly, names, support, verified=verified, integrals=integrals)
+            result = _try(poly, names, support, verified=verified, integrals=integrals, construct=construct)
         except LimitError:
             continue
         if result is not None:

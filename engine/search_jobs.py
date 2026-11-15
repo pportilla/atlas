@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 
+from . import fork_server
 from .polynomial import integer_from_decimal
 from .resolution_zetas import selected_zetas
 
@@ -113,7 +114,7 @@ class SearchJobs:
         path = Path(self.progress_dir.name) / job.id
         path.unlink(missing_ok=True)
         job.progress = None
-        return subprocess.Popen(self.command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        return fork_server.popen(self.command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 env={**os.environ, "ATLAS_PROGRESS_FILE": str(path)},
                                 text=True, start_new_session=True)
 

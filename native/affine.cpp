@@ -1649,6 +1649,20 @@ std::string affine(std::istream& in) {
         emit(result, RecordParser(line(in), chart).run());
         return result;
     }
+    if (operation == "decode_lines") {
+        // The record expressions of one chart, one per line. A line that
+        // "decode" rejects is answered with "!": the caller decodes it alone
+        // and reports that error where it reads the expression.
+        std::string result;
+        for (std::string text; std::getline(in, text);) {
+            try {
+                emit(result, RecordParser(text, chart).run());
+            } catch (const std::exception&) {
+                result += "!\n";
+            }
+        }
+        return result;
+    }
     if (operation == "parse_field_input") {
         auto modulus = RecordParser(line(in), chart).run();
         ParserField field(modulus);

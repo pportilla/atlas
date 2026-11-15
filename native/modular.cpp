@@ -735,6 +735,21 @@ void atlas_groebner_swap_cpu_scope(ReplayBatch* batch, int* active, TraceScreen*
     atlas_groebner_activity_counts(counts);
 }
 
+// A forked copy of a solver runs a helper program's entry in place of that
+// program. Give its only thread the state of a fresh process: no replay
+// hooks and no recorded activity.
+void atlas_groebner_reset_fork_child() noexcept {
+    default_batch.store(nullptr);
+    scoped_batch = nullptr;
+    has_scoped_batch = 0;
+    trace_screen = nullptr;
+    trace_profile = nullptr;
+    cpu_batches = cpu_primes = 0;
+    cpu_trace_batches = cpu_trace_pairs = 0;
+    certified_bases = certification_attempts = 0;
+    lift_ns = verification_ns = 0;
+}
+
 // For benchmarks and tests of a batch backend: trace the problem, then replay
 // it for `count` primes on the host's threads and through the hook. seconds
 // receives the trace, the host replay and the hook replay. Returns the number

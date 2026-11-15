@@ -424,7 +424,8 @@ class _Worker:
     """
     def __init__(self):
         self.answered = 0
-        self.process = subprocess.Popen([sys.executable,"-m","engine.general_resolution"],
+        from . import fork_server
+        self.process = fork_server.popen([sys.executable,"-m","engine.general_resolution"],
             cwd=Path(__file__).resolve().parents[1], stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
@@ -593,8 +594,8 @@ def _isolated_graph_prefix(variables, active, candidates, seconds):
                                     len(candidate.boundary),*(len(ideal) for ideal in candidate.boundary))))
         frames.append("\n".join([header,*rows])+"\n")
     try:
-        answer = subprocess.run([str(worker)], input="\f".join(frames), text=True,
-                                capture_output=True, timeout=seconds)
+        from . import native_process
+        answer = native_process.run("graph_verify", input="\f".join(frames), timeout=seconds)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if answer.returncode or not answer.stdout:

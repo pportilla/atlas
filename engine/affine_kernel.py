@@ -181,6 +181,36 @@ def sparse_terms(variables, value):
     return _checked(native, lambda: _oracle("sparse_terms", variables, value), variables)
 
 
+# Rows of record expressions decoded ahead of reading, by (names, text).
+_prefetched = {}
+
+
+def prefetch(variables, texts):
+    """Decode a chart's record expressions with one native call.
+
+    decode() then reads each prefetched row instead of calling the kernel for
+    that expression. Expressions the single decode would reject are left to
+    it, so its error is raised where the expression is read.
+    """
+    names = tuple(v.name for v in variables)
+    if (not np.native_ring(variables) or any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name) for name in names)
+            or len(set(names)) != len(names)):
+        return
+    pending = [text for text in dict.fromkeys(texts) if (names, text) not in _prefetched
+               and text.isascii() and not any(c in text for c in "\n\r\0")]
+    if len(pending) < 2:
+        return
+    try:
+        rows = _request(["decode_lines", " ".join(names), *pending])
+    except ArithmeticError:
+        return
+    if len(rows) != len(pending):
+        return
+    if len(_prefetched) > 65536:
+        _prefetched.clear()
+    _prefetched.update(((names, text), row) for text, row in zip(pending, rows) if row != "!")
+
+
 def decode(variables, text):
     """Read one record expression with the polynomial grammar over Q."""
     from .polynomial import InputError
@@ -191,6 +221,9 @@ def decode(variables, text):
         raise InputError("Invalid chart expression or coordinate names.")
 
     def native():
+        row = _prefetched.pop((names, text), None)
+        if row is not None:
+            return _sparse_expression(variables, row)
         try:
             row, = _request(["decode", " ".join(names), text])
         except _AffineUnavailable:

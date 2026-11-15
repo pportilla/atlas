@@ -9,6 +9,7 @@ import threading
 import time
 
 from .exact_json import result_json
+from . import fork_server
 from .polynomial import integer_from_decimal
 
 
@@ -30,7 +31,7 @@ class WorkerGroup:
         with self._lock:
             if self._closed:
                 raise RuntimeError("The computation server is shutting down.")
-            child = subprocess.Popen(*args, **options)
+            child = fork_server.popen(*args, **options)
             self._children.add(child)
             return child
 
@@ -52,7 +53,7 @@ class WorkerGroup:
 def _exchange(command, payload, root, deadline, owner):
     if deadline is not None and time.monotonic() >= deadline:
         raise subprocess.TimeoutExpired(command, 0)
-    start = owner.start if owner is not None else subprocess.Popen
+    start = owner.start if owner is not None else fork_server.popen
     child = start(command, cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                   text=True, start_new_session=True)
     try:

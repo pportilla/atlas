@@ -274,7 +274,8 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
         report("Searching for a verified resolution with independent methods")
-        r = exhaustive_search(p, variables, mode, compute=compute)
+        r = exhaustive_search(p, variables, mode, compute=compute, integrals=bool(selected_zetas(request)),
+                              verified=verified)
     elif r is None and native_range and singular and len(variables) == 3:
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True)

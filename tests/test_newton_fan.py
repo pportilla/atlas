@@ -72,14 +72,15 @@ class NewtonFan(unittest.TestCase):
                 with patch.object(newton_fan, "_small_fan", return_value=None):
                     expected = build_fan(support)
                     proposals = trial_supports(support)
-                with patch.object(newton_fan.subprocess, "run", side_effect=AssertionError):
+                with patch("engine.native_process.run", side_effect=AssertionError):
                     fan = build_fan(support)
                     self.assertEqual(trial_supports(support), proposals)
                 self.assertEqual(fan, expected)
                 check_fan(self, fan, support)
 
         support = [(2, 3, 0), (1, 1, 3)]
-        with patch.object(newton_fan.subprocess, "run", wraps=newton_fan.subprocess.run) as run:
+        from engine import native_process
+        with patch.object(native_process, "run", wraps=native_process.run) as run:
             fan = build_fan(support)
         run.assert_called_once()
         check_fan(self, fan, support)

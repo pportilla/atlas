@@ -9,6 +9,7 @@ lattice has finite index. Multiplication by a Laurent monomial is a unit.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
+import os
 from fractions import Fraction
 from pathlib import Path
 import subprocess
@@ -45,8 +46,13 @@ class _FaceWorker:
             sock, child = socket.socketpair()
             try:
                 with child:
-                    self.proc = subprocess.Popen([str(_KERNEL), "--serve"], stdin=child,
-                                                 stdout=child, stderr=subprocess.DEVNULL)
+                    from . import native_process
+                    with open(os.devnull, "wb") as devnull:
+                        self.proc = native_process.start("face_gb", ["--serve"], stdin=child.fileno(),
+                                                         stdout=child.fileno(), stderr=devnull.fileno())
+                    if self.proc is None:
+                        self.proc = subprocess.Popen([str(_KERNEL), "--serve"], stdin=child,
+                                                     stdout=child, stderr=subprocess.DEVNULL)
             except BaseException:
                 sock.close()
                 raise
@@ -133,8 +139,8 @@ def _kernel(terms, dimension, timeout):
     worker = _WORKER.get()
     try:
         if worker is None:
-            proc = subprocess.run([str(_KERNEL)], input="\n".join(rows)+"\n", capture_output=True,
-                                  text=True, timeout=timeout)
+            from . import native_process
+            proc = native_process.run("face_gb", input="\n".join(rows)+"\n", timeout=timeout)
             reply = proc.stdout if proc.returncode == 0 else ""
         else:
             reply = worker.query(" ".join(rows), timeout)

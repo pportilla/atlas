@@ -487,15 +487,30 @@ struct Resolver {
         return r;
     }
 };
-int main(){
+// Address space already mapped by this process, in bytes. Library start-up
+// reservations (for example BLAS thread buffers) and, in a forked solver, the
+// parent's mappings count here but not against the calculation's budget.
+static rlim_t mapped_bytes(){
+    FILE* statm=fopen("/proc/self/statm","r");
+    unsigned long pages=0;
+    if(statm){
+        if(fscanf(statm,"%lu",&pages)!=1) pages=0;
+        fclose(statm);
+    }
+    return rlim_t(pages)*rlim_t(sysconf(_SC_PAGESIZE));
+}
+
+static int program(){
     J req,out;
     try{
         cin>>req;
         quick=!req.get("exhaustive",false).asBool();
-        // Apply the optional quick-mode memory budget only to this helper.
+        // Apply the optional quick-mode memory budget only to this helper:
+        // at most 1 GiB beyond the address space mapped at its start.
         struct rlimit limit;
         if (quick && getrlimit(RLIMIT_AS,&limit)==0) {
-            limit.rlim_cur=min<rlim_t>(limit.rlim_cur,rlim_t(1)<<30);
+            const rlim_t budget=mapped_bytes()+(rlim_t(1)<<30);
+            if (limit.rlim_cur==RLIM_INFINITY || limit.rlim_cur>budget) limit.rlim_cur=budget;
             if(setrlimit(RLIMIT_AS,&limit)!=0) throw Fail("Could not bound the exact-arithmetic worker.");
         }
         if (req.isMember("ordered_roots")) {
@@ -524,3 +539,16 @@ int main(){
     Json::StreamWriterBuilder w;w["indentation"]="";
     cout<<Json::writeString(w,out)<<"\n";return 0;
 }
+
+// The plane program's entry, also run in a forked copy of a solver that
+// already loaded this library.
+extern "C" __attribute__((visibility("default"))) int atlas_plane_main(int, char**) noexcept {
+    const int status=program();
+    cout.flush();
+    fflush(nullptr);
+    return status;
+}
+
+#ifndef ATLAS_HELPER_LIBRARY
+int main(int argc, char** argv){ return atlas_plane_main(argc, argv); }
+#endif

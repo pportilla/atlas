@@ -7,13 +7,19 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
+from . import fork_server
 from .native_library import current_replay_scope
 from .polynomial import LimitError, NonReducedError, integer_from_decimal, rational_text
 from .resolution_progress import report
 
 
 NEWTON_GRACE_SECONDS = 2
+# With lanes forked from a preloaded engine, the later lanes start with the
+# first one. Their answers wait until the first lane answers or its grace
+# ends, so the first lane keeps its priority.
+SPECULATIVE_LANES = True
 # A short wall-clock prefix for the canonical rule only when the native
 # proof excludes Newton and the early identity/origin/coordinate graphs.
 ORIGIN_GRACE_SECONDS = 0.25
@@ -37,7 +43,25 @@ def _canonical_head_start(poly, variables, mode):
         return False
 
 
-def search(poly, variables, mode, *, compute=None):
+def _restored(certified):
+    """A Newton lane's (atlas, outputs) as the solver builds them in place.
+
+    JSON transport turns each chart's torus rays and linear map into lists.
+    """
+    atlas, outputs = certified
+    for chart in atlas:
+        torus = chart.get("torus")
+        if isinstance(torus, dict):
+            chart["torus"] = {**torus, "rays": tuple(map(tuple, torus["rays"])),
+                              "linear_map": tuple(map(tuple, torus["linear_map"]))}
+    return atlas, outputs
+
+
+def _processors():
+    return os.sched_getaffinity(0) if hasattr(os, "sched_getaffinity") else range(os.cpu_count() or 1)
+
+
+def search(poly, variables, mode, *, compute=None, integrals=False, verified=None):
     """Give the first eligible method a short head start, then race the remaining workers.
 
     Each method has its own process group. Its inherited pipe closes if
@@ -48,6 +72,7 @@ def search(poly, variables, mode, *, compute=None):
         "terms": [[list(e), rational_text(c)] for e, c in poly.items()],
         "variables": variables, "mode": mode, "compute": compute,
         "replay": scope.settings() if scope else {"compute": compute},
+        "integrals": integrals,
     }
     payload = json.dumps(request)
     replies = queue.SimpleQueue()
@@ -74,7 +99,7 @@ def search(poly, variables, mode, *, compute=None):
         read_fd, write_fd = os.pipe()
         try:
             environment = {**os.environ, "ATLAS_PROGRESS_METHOD": method} if os.getenv("ATLAS_PROGRESS_FILE") else None
-            child = subprocess.Popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
+            child = fork_server.popen([sys.executable, "-m", "engine.exhaustive_resolution", method, str(read_fd)],
                                      cwd=Path(__file__).resolve().parents[1],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=environment,
                                      start_new_session=True, pass_fds=(read_fd,))
@@ -94,31 +119,54 @@ def search(poly, variables, mode, *, compute=None):
             first, others, grace = "origin", ("certificates",), ORIGIN_GRACE_SECONDS
         else:
             first, others, grace = "newton", ("origin", "certificates"), NEWTON_GRACE_SECONDS
+        def answer(method, reply):
+            """The winning record, or None to keep waiting."""
+            if "nonreduced" in reply:
+                raise NonReducedError(reply["nonreduced"])
+            if reply.get("record") is not None:
+                if scope is not None:
+                    scope.merge(reply.get("replay"))
+                if verified is not None and isinstance(reply.get("certified"), list) and len(reply["certified"]) == 2:
+                    verified.append((reply["record"], _restored(reply["certified"])))
+                return reply["record"]
+            if "error" in reply:
+                errors.append(f"{method}: {reply['error']}")
+            return None
+
         start(first)
         head_start = bool(children)
-        if not head_start:
+        speculative = (head_start and SPECULATIVE_LANES and len(_processors()) > len(others)
+                       and fork_server.available())
+        if not head_start or speculative:
             for method in others:
                 start(method)
+        held = []
         received = 0
+        end = time.monotonic() + grace
         while received < len(children):
             try:
-                method, reply = replies.get(timeout=grace if head_start else None)
+                method, reply = replies.get(timeout=max(0, end - time.monotonic()) if head_start else None)
             except queue.Empty:
                 pass
             else:
                 received += 1
-                if "nonreduced" in reply:
-                    raise NonReducedError(reply["nonreduced"])
-                if reply.get("record") is not None:
-                    if scope is not None:
-                        scope.merge(reply.get("replay"))
-                    return reply["record"]
-                if "error" in reply:
-                    errors.append(f"{method}: {reply['error']}")
+                if head_start and speculative and method != first:
+                    held.append((method, reply))
+                    continue
+                record = answer(method, reply)
+                if record is not None:
+                    return record
             if head_start:
                 head_start = False
-                for method in others:
-                    start(method)
+                if not speculative:
+                    for method in others:
+                        start(method)
+                # The later lanes now race as if they had started here.
+                for method, reply in held:
+                    record = answer(method, reply)
+                    if record is not None:
+                        return record
+                held.clear()
         if errors:
             raise RuntimeError("Exhaustive resolution could not finish. " + " / ".join(errors))
         return None
@@ -146,11 +194,17 @@ def _run(method, payload):
             if method == "newton":
                 from .newton_backend import resolve_newton
                 report("Testing a Newton polyhedron resolution")
+                verified = []
                 try:
                     record = resolve_newton(terms, payload["variables"], payload["mode"],
-                                            compute=payload["compute"], seconds=1200, defer_outputs=True)
+                                            compute=payload["compute"], seconds=1200, defer_outputs=True,
+                                            verified=verified, integrals=payload.get("integrals", False),
+                                            construct=False)
                 except (LimitError, subprocess.TimeoutExpired):
                     record = None
+                certified = next((value for producer, value in verified if producer is record), None)
+                if record is not None and certified is not None:
+                    return {"record": record, "certified": list(certified), "replay": replay.report()}
             elif method == "origin":
                 from .origin_backend import _resolve
                 report("Searching for smooth blow-up centres over the origin")

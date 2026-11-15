@@ -4,6 +4,7 @@
 #include <flint/fmpz_mpoly.h>
 #include <flint/fmpz_poly.h>
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <unordered_map>
@@ -107,8 +108,18 @@ int serve() {
 }
 } // namespace
 
-int main(int argc, char** argv) {
-    if (argc == 2 && std::string(argv[1]) == "--serve") return serve();
-    if (argc != 1) return 2;
-    return check(std::cin, std::cout);
+// The face_gb program's entry, also run in a forked copy of a solver that
+// already loaded this library.
+extern "C" __attribute__((visibility("default"))) int atlas_face_gb_main(int argc, char** argv) noexcept {
+    int status;
+    if (argc == 2 && std::string(argv[1]) == "--serve") status = serve();
+    else if (argc != 1) status = 2;
+    else status = check(std::cin, std::cout);
+    std::cout.flush();
+    std::fflush(nullptr);
+    return status;
 }
+
+#ifndef ATLAS_HELPER_LIBRARY
+int main(int argc, char** argv) { return atlas_face_gb_main(argc, argv); }
+#endif

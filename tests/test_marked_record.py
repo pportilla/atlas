@@ -54,7 +54,7 @@ class MarkedRecordTests(unittest.TestCase):
         roots = (flint_literal((2,-1), 1), flint_literal((1,0,-2), 1),
                  flint_literal((1,0,-2), 2), flint_literal((1,0,-3), 1),
                  flint_literal((1,0,-5), 1))
-        with patch("engine.plane_backend.subprocess.run", side_effect=AssertionError("unexpected worker")):
+        with patch("engine.native_process.run", side_effect=AssertionError("unexpected worker")):
             field = coefficient_field(roots, exhaustive=True, root_images=True)
         self.assertEqual(field["degree"], 8)
         t = sp.Symbol("T")

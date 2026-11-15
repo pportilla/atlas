@@ -36,13 +36,13 @@ class GeneralResolutionTests(unittest.TestCase):
         names = list("xyz")
         poly = parse("(x+y+z)^2-z*(x-y)^2", names)
         for reply in ("", "not a proof", "unknown 2\n", "centre 2\n1 1 0 0\n1 0 1 0\npass 1\n-1 0\n", "centre 2\n1 1 0 0\n1 0 1 0\npass 3\n1 1\n"):
-            with patch.object(general_resolution.subprocess,"run",return_value=CompletedProcess([],0,reply,"")):
+            with patch("engine.native_process.run",return_value=CompletedProcess([],0,reply,"")):
                 self.assertIsNone(general_resolution.smooth_reduced_graph(poly,names,"embedded"))
         for exc in (OSError("native binary unavailable"), TimeoutExpired("graph_verify",.1)):
-            with patch.object(general_resolution.subprocess,"run",side_effect=exc) as native:
+            with patch("engine.native_process.run",side_effect=exc) as native:
                 self.assertIsNone(general_resolution.smooth_reduced_graph(poly,names,"embedded"))
                 self.assertLessEqual(native.call_args.kwargs["timeout"],.1)
-        with patch.object(general_resolution.subprocess,"run",side_effect=AssertionError):
+        with patch("engine.native_process.run",side_effect=AssertionError):
             for exponent,coefficient in [((2**100,0,0),Fraction(1)),((4,0,0),Fraction(1,2**300))]:
                 self.assertIsNone(general_resolution.smooth_reduced_graph(
                     dict(poly)|{exponent:coefficient}, names, "embedded"))
@@ -60,7 +60,7 @@ class GeneralResolutionTests(unittest.TestCase):
         names = ["z", "a", "x"]
         terms = {(1, 0, 2): Fraction(-2, 7), (0, 3, 1): Fraction(5, 9), (1, 2, 0): 0}
         with patch.dict(sys.modules, {"engine.general_resolution": None, "engine.native_polynomial": None}), \
-                patch.object(reduced_centre.subprocess, "run", return_value=CompletedProcess([], 0, "none", "")) as run:
+                patch("engine.native_process.run", return_value=CompletedProcess([], 0, "none", "")) as run:
             self.assertIsNone(reduced_centre.smooth_reduced_graph(terms, names, "intrinsic"))
             header, equation = run.call_args.kwargs["input"].splitlines()
             self.assertEqual(header, "smooth_reduced_graph 3 0")

@@ -338,6 +338,26 @@ def to_json(charts):
                 if c.coefficient_field else {})} for c in charts]
 
 
+def _record_texts(item):
+    """The expressions of a saved chart in its own coordinates, for prefetching.
+
+    Malformed charts give no texts here: from_json reports them as before.
+    """
+    try:
+        texts = [*item.get("ambient_ideal", ()), *item.get("fibre", ()), *item.get("region", ()),
+                 *item.get("map", {}).values()]
+        for component in item.get("components", ()):
+            texts.extend(component.get("ideal", ()))
+        for removed in item.get("removed", ()):
+            texts.extend(removed)
+        link = item.get("repair_projection")
+        if isinstance(link, dict) and isinstance(link.get("map"), list):
+            texts.extend(link["map"])
+    except (AttributeError, TypeError):
+        return []
+    return [text for text in texts if isinstance(text, str)]
+
+
 def from_json(data, *, native=None):
     """Read saved charts in the runtime's representation. Pass native=False for symbolic display."""
     api = np if _use_native(native) else sp
@@ -347,6 +367,9 @@ def from_json(data, *, native=None):
         if not names or len(set(names)) != len(names):
             raise InputError("Each chart needs distinct coordinate names.")
         symbols = {name: api.Symbol(name) for name in names}
+        if api is np:
+            from .affine_kernel import prefetch
+            prefetch(tuple(symbols.values()), _record_texts(item))
 
         def ideal(gens):
             return tuple(_expression(g, symbols) for g in gens)

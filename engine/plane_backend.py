@@ -21,9 +21,9 @@ def resolve_plane(poly, variables, mode, *, exhaustive=False):
         raise LimitError("Plane input degree exceeds a signed native word.")
     payload = {"terms":[[*e,rational_text(c)] for e,c in poly.items()],
                "variables":variables, "mode":mode, "exhaustive":exhaustive}
-    proc = subprocess.run([str(_WORKER)], input=json.dumps(payload), capture_output=True,
-                          text=True, timeout=None if exhaustive else 50,
-                          env={**os.environ,"OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"})
+    from . import native_process
+    proc = native_process.run("plane", input=json.dumps(payload), timeout=None if exhaustive else 50,
+                              env={**os.environ,"OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"})
     if proc.returncode:
         raise LimitError(f"Native plane worker stopped with status {proc.returncode}.")
     try:
@@ -44,8 +44,9 @@ def ordered_roots(polynomial):
     """Distinct exact roots of a record's rational polynomial, in (real, imaginary) order."""
     terms = parse_expression(polynomial, ("T",))
     rows = [[power, str(c)] for (power,), c in terms.items()]
-    done = subprocess.run([str(_WORKER)], input=json.dumps({"ordered_roots": rows, "exhaustive": True}),
-                          capture_output=True, text=True, check=True)
+    from . import native_process
+    done = native_process.run("plane", input=json.dumps({"ordered_roots": rows, "exhaustive": True}))
+    done.check_returncode()
     roots = json.loads(done.stdout)
     if isinstance(roots, dict):
         raise ValueError(roots.get("error", "The plane worker does not support ordered chart roots."))
@@ -74,8 +75,9 @@ def coefficient_field(roots, rectangles=None, *, exhaustive=False, root_images=F
             return kernel_json("atlas_common_field", "common_field", **request)
         except InputError as error:
             raise LimitError(str(error)) from error
-    done = subprocess.run([str(_WORKER)], input=json.dumps(request),
-                          capture_output=True, text=True, check=True)
+    from . import native_process
+    done = native_process.run("plane", input=json.dumps(request))
+    done.check_returncode()
     field = json.loads(done.stdout)
     if "error" in field:
         raise LimitError(field["error"])

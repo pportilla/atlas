@@ -9,6 +9,7 @@
 #include <json/json.h>
 #include <algorithm>
 #include <sstream>
+#include <cstdio>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -454,13 +455,28 @@ JsonValue compute(const JsonValue& obj) {
     Fan fan(n,exhaustive); fan.build(support); return fan.report();
 }
 } // namespace
-int main() {
+namespace {
+int program() {
     JsonValue input,output; int rc=0;
     try {std::cin>>input;output=compute(input);}
     catch(const std::exception& e) {output["error"]=e.what();rc=1;}
     Json::StreamWriterBuilder writer; writer["indentation"]="";
     std::cout<<Json::writeString(writer,output)<<"\n"; return rc;
 }
+} // namespace
+
+// The newton_fan program's entry, also run in a forked copy of a solver that
+// already loaded this library.
+extern "C" __attribute__((visibility("default"))) int atlas_newton_fan_main(int, char**) noexcept {
+    const int status = program();
+    std::cout.flush();
+    std::fflush(nullptr);
+    return status;
+}
+
+#ifndef ATLAS_HELPER_LIBRARY
+int main(int argc, char** argv) { return atlas_newton_fan_main(argc, argv); }
+#endif
 #else
 } // namespace
 

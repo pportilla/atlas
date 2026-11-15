@@ -230,21 +230,113 @@ def _owned_supports(monomials, excluded):
     return masks.strip()
 
 
-def _fan_chart_rows(parts, equation, term_count, base, linear, *, boundary_terms=False):
-    """Pull back the original equation through the common linear map, then through each cone."""
+def _adapted_equation(equation, term_count, base, linear):
+    """The equation in the fan's common linear coordinates, and its number of terms."""
     n = len(base)
-    names = " ".join(base)
     units = tuple(_unit(j, n) for j in range(n))
     adapted = equation
     if linear != units:
+        names = " ".join(base)
         images = [format_poly(dict(zip(units, row)), base) for row in linear]
         row, = native_library.affine_request(["pullbacks", names, names, *images, "0", adapted])
         terms = sparse_row(row)
         term_count = len(terms)
         adapted = format_poly(terms, base)
-        del row, terms  # Only the adapted equation is needed while streaming chart blocks.
     if not term_count:
         raise InvalidChart("Expected a nonzero fan equation.")
+    return adapted, term_count
+
+
+_PER_CHART = object()
+
+
+def _verify_fan_natively(charts, regions, equation, term_count, base, linear, axes, complex, bounded):
+    """Verify a fresh embedded fan atlas in one native call.
+
+    The kernel runs the per-chart steps of _verify_charts for every cone and
+    reports each chart's first failing check. This loop raises the same
+    exceptions in the same chart order. _PER_CHART selects the per-chart
+    verifier, for example when the plan needs orbit proofs.
+    """
+    n = len(base)
+    try:
+        parts = list(_chart_parts(charts, regions, (), n))
+    except InputError:
+        return _PER_CHART  # reported at its chart by the per-chart verifier
+    adapted, term_count = _adapted_equation(equation, term_count, base, linear)
+    ids, rays, requests, exceptional = {}, [], [], []
+    for chart, cone, excluded, coords in parts:
+        cone_ids = []
+        for ray in cone:
+            if ray not in ids:
+                ids[ray] = len(ids)
+                rays.append([integer_text(x) for x in ray])
+            cone_ids.append(ids[ray])
+        positions = [j for j, ray in enumerate(cone) if ray not in axes]
+        exceptional.append(positions)
+        labels = [""] * n
+        for j in positions:
+            labels[j] = f"E{chart['ray_indices'][j]-n+1}"
+        requests.append({"coordinates": list(coords), "cone": cone_ids, "labels": labels,
+                         "excluded": [sorted(face) for face in excluded]})
+    from .kernel_json import kernel_json
+    try:
+        answer = kernel_json("atlas_fan_verification", "verify", names=list(base), equation=adapted,
+                             frame=[[integer_text(c) for c in row] for row in linear], rays=rays, charts=requests,
+                             block=max(1, min(64, 16384 // term_count)), bounded=bounded, complex=complex)
+    except InputError:
+        return _PER_CHART
+    failure, results = answer.get("failure"), answer["charts"]
+    output = []
+    for index, (chart, cone, excluded, coords) in enumerate(parts):
+        if failure is not None and index == failure["chart"]:
+            raise (native_library.Unavailable if failure["kind"] == "unavailable" else ArithmeticError)(
+                failure["message"])
+        if index >= len(results):
+            raise ArithmeticError("The native fan verification returned incomplete chart data.")
+        verified = results[index]
+        if set(chart["map"]) != set(base):
+            raise InvalidChart("The projection map differs from its monomial chart.")
+        projection = tuple(verified["projection"])
+        if any(actual != expected and _row(actual, coords) != _row(expected, coords)
+               for actual, expected in zip((chart["map"][v] for v in base), projection)):
+            raise InvalidChart("The projection map differs from its monomial chart.")
+        status = verified["status"]
+        if status == "label":
+            raise InvalidChart("One exceptional ray must have a single global component label.")
+        if status == "data":
+            raise InvalidChart("The charts disagree about exceptional numerical data.")
+        if status == "unavailable":
+            raise native_library.Unavailable(verified["message"])
+        if status == "unknown":
+            return None
+        if status == "defect":
+            raise InvalidChart("Normal crossings fail on the owned origin fibre.")
+        if status != "ok":
+            raise ArithmeticError("Unknown native fan verification status.")
+        components = [dict(id=f"E{chart['ray_indices'][j]-n+1}", multiplicity=integer_from_decimal(order),
+                           nu=integer_from_decimal(nu), ideal=[coords[j]])
+                      for j, (order, nu) in zip(exceptional[index], verified["orders"], strict=True)]
+        if verified["strict"]:
+            components.append(dict(id="strict", multiplicity=1, nu=1, ideal=[verified["strict_text"]]))
+        output.append({"coordinates": list(coords), "ambient_ideal": [], "components": components,
+                       "fibre": list(projection), "region": verified["region"], "removed": [],
+                       "map": dict(zip(base, projection)), "torus": {"rays": cone, "linear_map": linear}})
+    found = {"reason": None, "cells": None}
+    if complex:
+        plan = answer.get("plan")
+        if plan is None:
+            return None
+        if "complex" not in plan:
+            return _PER_CHART
+        found.update(cells=plan["complex"]["cells"], dual_complex=plan["complex"])
+    return output, found
+
+
+def _fan_chart_rows(parts, equation, term_count, base, linear, *, boundary_terms=False):
+    """Pull back the original equation through the common linear map, then through each cone."""
+    names = " ".join(base)
+    adapted, term_count = _adapted_equation(equation, term_count, base, linear)
     # Keep only a block of chart responses in memory, even for large equations.
     block_size = max(1, min(64, 16384 // term_count))
     with_projection = hasattr(native_library._library(), "atlas_fan_projection_abi")
@@ -343,6 +435,12 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     # The surface fallback can require the full strict equation off its boundary.
     boundary_terms = complex and intrinsic and not internal_surface and hasattr(
         native_library._library(), "atlas_fan_boundary_terms_abi")
+    if (not split and not saved and not intrinsic and not integrals and direct_jet and reduced is None
+            and all(hasattr(native_library._library(), abi) for abi in
+                    ("atlas_fan_charts_abi", "atlas_fan_projection_abi", "atlas_fan_verification_abi"))):
+        native = _verify_fan_natively(charts, regions, f, len(polynomial), base, linear, axes, complex, bounded)
+        if native is not _PER_CHART:
+            return native
     parts = _chart_parts(charts, regions, () if saved else marked, dimension)
     if not split and direct_jet and reduced is None and hasattr(native_library._library(), "atlas_fan_charts_abi"):
         verified = _fan_chart_rows(parts, f, len(polynomial), base, linear, boundary_terms=boundary_terms)

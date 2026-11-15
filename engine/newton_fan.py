@@ -79,8 +79,8 @@ def _request(exponents, exhaustive, *, operation=None):
     if operation:
         request["operation"] = operation
     try:
-        proc = subprocess.run([str(_BINARY)], input=json.dumps(request),
-                              capture_output=True, text=True, timeout=35)
+        from . import native_process
+        proc = native_process.run("newton_fan", input=json.dumps(request), timeout=35)
     except subprocess.TimeoutExpired:
         raise LimitError("Newton fan construction exceeded its time budget.") from None
     try:
