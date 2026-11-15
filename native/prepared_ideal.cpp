@@ -20,9 +20,14 @@ using Power = ideal_powers::PowerResult;
 
 struct Ring {
     size_t width;
-    fmpq_mpoly_ctx_t ctx;
-    explicit Ring(size_t n) : width(n) { fmpq_mpoly_ctx_init(ctx, n, ORD_LEX); }
-    ~Ring() { fmpq_mpoly_ctx_clear(ctx); }
+    bool named_parent;
+    // The converter reuses exponent and coefficient scratch in this context.
+    // FLINT arithmetic itself only reads the context and needs no lock.
+    mutable std::mutex conversion_mutex;
+    mutable std::optional<local::SparseLexRing> converter;
+    const fmpq_mpoly_ctx_struct* ctx;
+    explicit Ring(size_t n, bool named = false) : width(n), named_parent(named),
+        ctx(n <= 32 ? converter.emplace(n).ctx : nullptr) {}
 };
 using RingPtr = std::shared_ptr<const Ring>;
 
@@ -32,6 +37,49 @@ struct Generator {
     explicit Generator(RingPtr parent) : ring(std::move(parent)), value(ring->ctx) {}
 };
 using PolyPtr = std::shared_ptr<const Generator>;
+
+struct PackedGenerator {
+    PolyPtr value;
+    size_t term_bits = 0;
+    bool unit = false;
+};
+
+PackedGenerator pack_generator(const RingPtr& ring, const local::Polynomial& row,
+                               local::SparseLexRing& converter) {
+    if (row.empty()) return {};
+    auto f = std::make_shared<Generator>(ring);
+    if (unit_generator(row)) {
+        fmpq_mpoly_one(f->value.p, ring->ctx);
+        return {std::move(f), 1, true};
+    }
+    converter.write(f->value.p, row);
+    const auto* p = f->value.p;
+    const auto bits = fmpz_bits(fmpq_numref(p->content)) + fmpz_bits(fmpq_denref(p->content)) +
+                      std::abs(fmpz_mpoly_max_bits(p->zpoly)) + p->zpoly->bits;
+    return {std::move(f), static_cast<size_t>(bits), false};
+}
+
+// The sparse polynomial is exact, including zero and the scale of constants.
+// Its packed generator can be shared by every ideal containing this value.
+// Over-budget values retain their sparse transport for the isolated worker.
+struct PreparedPolynomial {
+    RingPtr ring;
+    size_t row_bytes;
+    std::optional<std::string> worker_row;
+    local::Polynomial sparse;
+    PackedGenerator packed;
+
+    PreparedPolynomial(RingPtr parent, std::string_view text) : ring(std::move(parent)), row_bytes(text.size()) {
+        if (ring->width > 32 || row_bytes > 4096 || std::count(text.begin(),text.end(),';') >= 512) {
+            worker_row.emplace(text);
+        } else {
+            sparse = local::decode_row(text,ring->width);
+            std::lock_guard lock(ring->conversion_mutex);
+            packed = pack_generator(ring,sparse,*ring->converter);
+        }
+    }
+};
+using PreparedPtr = std::shared_ptr<const PreparedPolynomial>;
 
 struct Generators {
     std::vector<PolyPtr> polys;
@@ -49,25 +97,26 @@ struct Generators {
         terms += fmpq_mpoly_length(f->value.p, f->ring->ctx);
         polys.push_back(std::move(f));
     }
+
+    void add_generator(const PackedGenerator& f) {
+        if (f.unit) {
+            polys.assign(1,f.value);
+            terms = term_bits = 1;
+            unit = true;
+        } else if (f.value) {
+            term_bits = std::max(term_bits, f.term_bits);
+            append(f.value);
+        }
+    }
 };
 
 Generators pack(const RingPtr& ring, const Basis& rows) {
-    local::SparseLexRing converter(ring->width);
+    std::lock_guard lock(ring->conversion_mutex);
     Generators result;
     result.polys.reserve(rows.size());
     for (const auto& row : rows) {
-        if (row.empty()) continue;
-        auto f = std::make_shared<Generator>(ring);
-        if (unit_generator(row)) {
-            fmpq_mpoly_one(f->value.p, ring->ctx);
-            return {{std::move(f)}, 1, true, 1};
-        }
-        converter.write(f->value.p, row);
-        const auto* p = f->value.p;
-        const auto coeff_bits = fmpz_bits(fmpq_numref(p->content)) + fmpz_bits(fmpq_denref(p->content)) +
-                                std::abs(fmpz_mpoly_max_bits(p->zpoly));
-        result.term_bits = std::max<size_t>(result.term_bits, coeff_bits + p->zpoly->bits);
-        result.append(std::move(f));
+        result.add_generator(pack_generator(ring,row,*ring->converter));
+        if (result.unit) break;
     }
     return result;
 }
@@ -75,10 +124,11 @@ Generators pack(const RingPtr& ring, const Basis& rows) {
 // Input ideals retain their declared rows for powers and replay. Their packed
 // form omits zero generators and represents the unit ideal by (1).
 class Ideal {
-    enum class Source { sparse, packed, power };
+    enum class Source { sparse, declared, packed, power };
     Source source;
     mutable Generators generators;
     mutable Basis rows;
+    std::vector<PreparedPtr> declared;
     const std::optional<Power> power;
     mutable std::once_flag to_packed, to_sparse;
 public:
@@ -87,31 +137,47 @@ public:
     size_t operand_bytes;
     Ideal(RingPtr r, Basis v, size_t bytes) : source(Source::sparse), rows(std::move(v)),
         ring(std::move(r)), operand_bytes(bytes) {}
+    Ideal(RingPtr r, std::vector<PreparedPtr> v, size_t bytes) : source(Source::declared),
+        declared(std::move(v)), ring(std::move(r)), operand_bytes(bytes) {
+        generators.polys.reserve(declared.size());
+        for (const auto& f : declared) {
+            generators.add_generator(f->packed);
+            if (generators.unit) break;
+        }
+    }
     Ideal(RingPtr r, Generators v, size_t bytes) : source(Source::packed), generators(std::move(v)),
         ring(std::move(r)), operand_bytes(bytes) {}
     Ideal(RingPtr r, Power v) : source(Source::power), power(std::move(v)),
         ring(std::move(r)), operand_bytes(0) {}
 
     const Generators& packed() const {
-        if (source != Source::packed)
-            std::call_once(to_packed, [&]{ generators = pack(ring, sparse()); });
+        if (source != Source::packed && source != Source::declared)
+            std::call_once(to_packed, [&]{ generators = pack(ring,sparse()); });
         return generators;
     }
     const Basis& sparse() const {
         if (source != Source::sparse) std::call_once(to_sparse, [&]{
-            if (source == Source::power) {
+            if (source == Source::declared) {
+                Basis decoded;
+                decoded.reserve(declared.size());
+                for (const auto& f : declared) decoded.push_back(f->sparse);
+                rows = std::move(decoded);
+            } else if (source == Source::power) {
                 rows = power->materialize();
             } else {
-                local::SparseLexRing converter(ring->width);
+                std::lock_guard lock(ring->conversion_mutex);
                 Basis decoded;
                 decoded.reserve(generators.polys.size());
-                for (const auto& f : generators.polys) decoded.push_back(converter.read(f->value.p));
+                for (const auto& f : generators.polys) decoded.push_back(ring->converter->read(f->value.p));
                 rows = std::move(decoded);
             }
         });
         return rows;
     }
-    size_t size() const { return source == Source::packed ? generators.polys.size() : sparse().size(); }
+    size_t size() const {
+        if (source == Source::declared) return declared.size();
+        return source == Source::packed ? generators.polys.size() : sparse().size();
+    }
     std::string expressions(const std::vector<std::string>& names) const {
         std::string text;
         if (source == Source::power && power->is_packed()) {
@@ -126,6 +192,8 @@ public:
 };
 
 std::unique_ptr<Ideal> binary(const Ideal& a, const Ideal& b, bool product) {
+    if (a.ring->named_parent && b.ring->named_parent && a.ring != b.ring)
+        throw std::invalid_argument("The ideals belong to different parent rings.");
     if (a.ring->width != b.ring->width) throw std::invalid_argument("Different numbers of ideal coordinates.");
     const size_t bytes = a.operand_bytes + b.operand_bytes;
     if (a.ring->width > 32 || bytes > 32768) return {};
@@ -188,6 +256,47 @@ char* copy_text(const std::string& text) {
 
 using namespace atlas::ideal_arithmetic;
 
+extern "C" void* atlas_ideal_ring(size_t width) noexcept {
+    return guarded([&]{ return new RingPtr(std::make_shared<Ring>(width,true)); });
+}
+extern "C" void atlas_ideal_ring_release(void* p) noexcept { delete static_cast<RingPtr*>(p); }
+extern "C" void* atlas_ideal_polynomial(void* ring, const char* row) noexcept {
+    return guarded([&]{
+        if (!ring || !row) throw std::invalid_argument("Missing polynomial parent or value.");
+        return new PreparedPtr(std::make_shared<PreparedPolynomial>(*static_cast<RingPtr*>(ring),row));
+    });
+}
+extern "C" void atlas_ideal_polynomial_release(void* p) noexcept { delete static_cast<PreparedPtr*>(p); }
+extern "C" char* atlas_ideal_polynomial_row(void* p) noexcept {
+    return guarded([&]{
+        if (!p) throw std::invalid_argument("Missing polynomial.");
+        const auto& f = **static_cast<PreparedPtr*>(p);
+        return f.worker_row ? copy_text(*f.worker_row) : copy_text(atlas::local::encode_row(f.sparse));
+    });
+}
+extern "C" void* atlas_ideal_from_polynomials(void* parent, void* const* polys, size_t count) noexcept {
+    return guarded([&]() -> void* {
+        if (!parent || (count && !polys)) throw std::invalid_argument("Missing ideal parent or generators.");
+        const auto& ring = *static_cast<RingPtr*>(parent);
+        size_t terms = 0, bytes = 0;
+        bool eligible = count <= 128 && ring->width <= 32;
+        for (size_t i = 0; i < count; ++i) {
+            if (!polys[i]) throw std::invalid_argument("Missing polynomial generator.");
+            const auto& f = *static_cast<PreparedPtr*>(polys[i]);
+            if (f->ring != ring) throw std::invalid_argument("The generator belongs to a different parent ring.");
+            if (eligible) {
+                terms += f->sparse.size();
+                bytes += f->row_bytes;
+                eligible = !f->worker_row && terms <= 512 && bytes <= 4096;
+            }
+        }
+        if (!eligible) return nullptr;
+        std::vector<PreparedPtr> declared;
+        declared.reserve(count);
+        for (size_t i = 0; i < count; ++i) declared.push_back(*static_cast<PreparedPtr*>(polys[i]));
+        return new Ideal(ring,std::move(declared),bytes+count);
+    });
+}
 extern "C" void* atlas_ideal_prepare(size_t width, const char* rows, size_t count) noexcept {
     return guarded([&]() -> void* {
         if (!rows) throw std::invalid_argument("Missing ideal input.");

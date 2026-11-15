@@ -186,6 +186,15 @@ def from_row(variables, line):
     return from_terms(variables, sparse_row(line))
 
 
+def from_kernel_row(variables, line):
+    value = from_row(variables, line)
+    if value._coords and not value.is_Symbol:
+        # A kernel result can supply its original ambient row when it becomes
+        # a session polynomial. Interned scalars and generators span many rings.
+        value.__dict__["_source_row"] = tuple(variables), line
+    return value
+
+
 def terms(variables, value):
     f = coerce(value)
     positions = {v._coords[0]: i for i,v in enumerate(variables)}
@@ -203,8 +212,16 @@ def row(variables, value):
     return _encoded_row(tuple(variables), coerce(value))
 
 
-@lru_cache(maxsize=16384)
-def _encoded_row(variables, value):
+def generator_row(variables, value):
+    """A native generator's exact sparse bytes in this ambient coordinate order."""
+    source = value.__dict__.pop("_source_row", None)
+    # The native polynomial owns the row. Keeping another copy in the global
+    # transport cache for every short-lived session value can retain large inputs.
+    line = source[1] if source is not None and source[0] == variables else _encode_row(variables, value)
+    return line.encode("ascii")
+
+
+def _encode_row(variables, value):
     columns = _chart_positions(variables)
     indices = tuple(columns[key] for key in value._coords)
     lines = []
@@ -214,6 +231,9 @@ def _encoded_row(variables, value):
             exponents[index] = integer_text(power)
         lines.append(rational_text(coefficient) + ' ' + ' '.join(exponents))
     return ';'.join(lines)
+
+
+_encoded_row = lru_cache(maxsize=16384)(_encode_row)
 
 
 @lru_cache(maxsize=1024)
@@ -239,7 +259,7 @@ def _substitution_request(source_keys, images):
 
 def _decode(keys, line):
     if keys:
-        return from_row(tuple(map(_symbol,keys)),line)
+        return from_kernel_row(tuple(map(_symbol,keys)),line)
     return coerce(next(iter(sparse_row(line).values()),0))
 
 

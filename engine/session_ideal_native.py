@@ -1,6 +1,6 @@
 """Owned, immutable native ideals for arithmetic on live session values."""
 import ctypes
-from functools import cache
+from functools import cache, partial
 from importlib.machinery import EXTENSION_SUFFIXES, ExtensionFileLoader, FileFinder
 from importlib.util import module_from_spec
 from threading import Lock
@@ -54,10 +54,88 @@ def _api():
         ("atlas_ideal_error", ctypes.c_char_p, ()),
         ("atlas_ideal_release", None, (ptr,)),
     )
+    if hasattr(library, "atlas_ideal_from_polynomials"):
+        signatures += (
+            ("atlas_ideal_ring", ptr, (size,)),
+            ("atlas_ideal_ring_release", None, (ptr,)),
+            ("atlas_ideal_polynomial", ptr, (ptr, ctypes.c_char_p)),
+            ("atlas_ideal_polynomial_release", None, (ptr,)),
+            ("atlas_ideal_from_polynomials", ptr, (ptr, ctypes.POINTER(ptr), size)),
+        )
     for name, result, args in signatures:
         function = getattr(library, name)
         function.restype, function.argtypes = result, args
     return library
+
+
+class _CtypesOwner:
+    __slots__ = ("ptr", "_release")
+
+    def __init__(self, ptr, release):
+        self.ptr = ptr
+        self._release = release
+
+    def __del__(self):
+        self._release(self.ptr)
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+class _CtypesRing(_CtypesOwner):
+    __slots__ = ("library",)
+
+    def __init__(self, library, width):
+        ptr = library.atlas_ideal_ring(width)
+        if not ptr:
+            raise ArithmeticError(library.atlas_ideal_error().decode())
+        super().__init__(ptr, library.atlas_ideal_ring_release)
+        self.library = library
+
+    def polynomial(self, row):
+        ptr = self.library.atlas_ideal_polynomial(self.ptr, row)
+        if not ptr:
+            raise ArithmeticError(self.library.atlas_ideal_error().decode())
+        return _CtypesOwner(ptr, self.library.atlas_ideal_polynomial_release)
+
+    def declare(self, parent, polynomial_type, generators):
+        handles = []
+        for f in generators:
+            if type(f) is not polynomial_type or f._space is not parent:
+                return NotImplemented
+            handles.append(f._native_polynomial)
+        return self.ideal(handles)
+
+    def ideal(self, generators):
+        count = len(generators)
+        if count > 128:
+            return None
+        pointers = (ctypes.c_void_p * count)(*(g.ptr for g in generators))
+        ptr = self.library.atlas_ideal_from_polynomials(self.ptr, pointers, count)
+        return NativeIdeal(self.library, ptr) if ptr else NativeIdeal._declined(self.library)
+
+
+class _CompiledRing:
+    __slots__ = ("polynomial", "ideal", "declare")
+
+    def __init__(self, binding, width):
+        ring = binding.ring(width)
+        self.polynomial = partial(binding.polynomial, ring)
+        self.ideal = partial(binding.from_polynomials, ring)
+        self.declare = partial(binding.declare, ring)
+
+
+def native_ring(width):
+    binding = _compiled()
+    if binding is not None and hasattr(binding, "declare"):
+        return _CompiledRing(binding, width)
+    library = _api()
+    if library is not None and hasattr(library, "atlas_ideal_from_polynomials"):
+        return _CtypesRing(library, width)
+    return None
 
 
 class NativeIdeal:
@@ -75,41 +153,6 @@ class NativeIdeal:
 
     def __deepcopy__(self, memo):
         return self
-
-    @classmethod
-    def prepare(cls, variables, generators):
-        # Larger input is parsed and computed in the cancellable worker.
-        if len(variables) > 32 or len(generators) > 128:
-            return None
-        compiled = _compiled()
-        library = None if compiled is not None else _api()
-        if compiled is None and library is None:
-            return None
-        values = tuple(f._value for f in generators)
-        if sum(len(value._terms) for value in values) > 512:
-            return None
-        # Before formatting an integer with thousands of decimal digits,
-        # use its stored bit length to tell whether the transport fits.
-        for value in values:
-            for powers, coefficient in value._terms:
-                if (coefficient.numerator.bit_length() > 16384 or coefficient.denominator.bit_length() > 16384
-                        or any(power.bit_length() > 16384 for power in powers)):
-                    return None
-        rows = [polynomial.row(variables, value) for value in values]
-        if sum(map(len, rows)) > 4096:
-            return None
-        payload = "".join(row + "\n" for row in rows).encode("ascii")
-        if compiled is not None:
-            handle = compiled.prepare(len(variables), payload, len(rows))
-            if handle is None:
-                return None
-        else:
-            ptr = library.atlas_ideal_prepare(len(variables), payload, len(rows))
-            if not ptr:
-                return cls._declined(library)
-            handle = cls(library, ptr)
-        handle._values = values
-        return handle
 
     @staticmethod
     def _declined(library):

@@ -74,7 +74,7 @@ def native_expression_source(source, variables):
     return " ".join(tokens)
 
 
-def parse_expression(source, variables, *, bounded=False, coefficient_modulus=None, _reference=False):
+def parse_expression(source, variables, *, bounded=False, coefficient_modulus=None, as_row=False, _reference=False):
     """Read a chart polynomial. An optional modulus defines its last generator as a field coefficient."""
     tokens = _expression_tokens(source, variables, bounded)
     from . import native_library
@@ -83,7 +83,8 @@ def parse_expression(source, variables, *, bounded=False, coefficient_modulus=No
         return _parse_tokens([*tokens, None], variables, bounded)
 
     if _reference:
-        return reference()
+        terms = reference()
+        return encode_sparse_row(terms) if as_row else terms
 
     # Standalone callers can declare unusual names or the same name twice.
     # Retain their coordinate columns by translating the token for a generator
@@ -101,7 +102,7 @@ def parse_expression(source, variables, *, bounded=False, coefficient_modulus=No
     if not bounded:
         _check_literal_digits(tokens)
 
-    def native():
+    def native_row():
         # Preserve Unicode whitespace and separate tokens such as '* *'.
         # The input grammar and source/token budgets above see the original text.
         if coefficient_modulus is not None:
@@ -125,10 +126,17 @@ def parse_expression(source, variables, *, bounded=False, coefficient_modulus=No
                 raise LimitError(message) from error
             raise InputError(message) from error
 
-        parsed = sparse_row(row)
+        return row
+
+    if as_row and variables and native_library._MODE == "native" and not native_library.CHECK:
+        return native_row()
+
+    def native():
+        parsed = sparse_row(native_row())
         return parsed if variables else {(): value for value in parsed.values()}
 
-    return native() if coefficient_modulus is not None else checked_native(native, reference)
+    terms = native() if coefficient_modulus is not None else checked_native(native, reference)
+    return encode_sparse_row(terms) if as_row else terms
 
 
 def checked_native(native, reference):

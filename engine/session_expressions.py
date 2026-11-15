@@ -251,32 +251,35 @@ class Evaluator:
             statements = _short_statements(source)
         else:
             statements = _parse(source)
-        if transcript is not None:
-            entries = transcript.entries(source, len(statements))
+        if transcript is None:
+            for value in map(self._statement, statements):
+                if value is not None:
+                    yield True, value
+            return
+        entries = transcript.entries(source, len(statements))
         for index, statement in enumerate(statements):
             # A failed block can assign bindings before the line that fails.
             # Restore them so later saved statements replay in the same state.
             compound = isinstance(statement, (ast.For, ast.If))
-            before = self.variables.copy() if transcript is not None and compound else None
+            before = self.variables.copy() if compound else None
             try:
                 value = self._statement(statement)
             except (SessionError, KeyboardInterrupt):
                 if before is not None:
                     self.variables = before
                 raise
-            if transcript is not None:
-                transcript.statements.append(entries[index])
+            transcript.statements.append(entries[index])
             if value is not None:
                 yield True, value
 
     def _statement(self, statement):
         try:
+            pair = getattr(statement, "_atlas_pair", None)
+            if pair is not None and _assign_pair(self, pair, statement.lineno):
+                return
             if isinstance(statement, ast.Expr):
                 return self._value(statement.value)
             if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-                pair = getattr(statement, "_atlas_pair", None)
-                if pair is not None and _assign_pair(self, pair, statement.lineno):
-                    return
                 value, declared = self._assignment_value(statement.value)
                 self._bind(statement.targets[0], value, declaration=statement.value if declared else None)
             elif isinstance(statement, ast.For) and not statement.orelse:

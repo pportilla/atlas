@@ -4,6 +4,12 @@
 extern "C" {
 // Handles own their ring and generators. Each successful operation returns a new
 // independently owned handle. A null result with an empty error requests a worker.
+void* atlas_ideal_ring(size_t width) noexcept;
+void atlas_ideal_ring_release(void* ring) noexcept;
+void* atlas_ideal_polynomial(void* ring, const char* row) noexcept;
+char* atlas_ideal_polynomial_row(void* polynomial) noexcept; // free with atlas_groebner_release
+void atlas_ideal_polynomial_release(void* polynomial) noexcept;
+void* atlas_ideal_from_polynomials(void* ring, void* const* polynomials, size_t count) noexcept;
 void* atlas_ideal_prepare(size_t width, const char* rows, size_t count) noexcept;
 void* atlas_ideal_binary(void* left, void* right, int product) noexcept;
 void* atlas_ideal_power_small(void* ideal, unsigned long exponent, int lex) noexcept;

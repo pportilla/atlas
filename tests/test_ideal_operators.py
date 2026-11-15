@@ -1,25 +1,110 @@
 """Ideal arithmetic at the Atlas prompt and in scripts."""
 import json
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from textwrap import dedent
+from threading import Barrier
 from unittest.mock import patch
 
 from tests.cli_support import run_prompt, run_script
 
 
 class IdealOperatorTests(unittest.TestCase):
+    def test_declarations_reuse_native_polynomials_and_preserve_the_written_generators(self):
+        from engine import native_polynomial, session_ideal_native
+        from engine.session_algebra import ideal, polynomial
+        from engine.session_polynomial import coordinates
+
+        for binding in ("installed", "ctypes"):
+            backend = patch.object(session_ideal_native, "_compiled", return_value=None) if binding == "ctypes" else nullcontext()
+            with self.subTest(binding=binding), backend:
+                z, a = coordinates("z", "a")
+                exponent = 2**70 + 1
+                coefficient = 2**150 + 3
+                f = polynomial(f"{coefficient}/7*z^{exponent}+a", ring=z.parent)
+                g = z**2 + a
+                zero, unit = z - z, polynomial("-3/7", ring=z.parent)
+                originals = (zero, f, unit, g, f)
+                rows = [native_polynomial.row(z.parent.generators, p._value) for p in originals]
+                with patch.object(native_polynomial, "row", side_effect=AssertionError("encoded again at declaration")):
+                    domain = ideal(originals, ring=z.parent, order="lex")
+                    self.assertIs(domain.parent, z.parent)
+                    self.assertEqual(domain._native_ideal.rows(), rows)
+                    # A unit changes the arithmetic result. Replay still needs
+                    # the exact zeros, repeated entries and nonmonic generators.
+                    total = domain + ideal(f, g)
+                    self.assertEqual(total._native_ideal.rows(), ["1 0 0"])
+                replay = total.record["replay"]["script"]
+                self.assertIn(f"I = ideal({', '.join(map(str, originals))}, order='lex')", replay)
+                foreign_z, _ = coordinates("z", "a")
+                with self.assertRaisesRegex(ArithmeticError, "different parent"):
+                    z.parent._native_ring.ideal((f._native_polynomial, foreign_z._native_polynomial))
+
+    def test_same_spelled_constant_in_a_different_ring_cannot_replace_a_saved_ideal(self):
+        source = dedent("""
+            x, y = coordinates("x", "y")
+            f = x^2 + y
+            g = polynomial("2", ring=x.parent)
+            I = ideal(f, g)
+            x, y = coordinates("x", "y", fresh=True)
+            h = polynomial("2", ring=x.parent)
+            I = ideal(f, h)
+        """).lstrip()
+        script = run_script(source)
+        self.assertEqual(script.returncode, 2)
+        self.assertIn("different coordinate spaces", script.stderr)
+        status, out, err = run_prompt(source + "print(I.parent == f.parent, I.generators == (f,g), h.parent == x.parent)\nquit\n")
+        self.assertEqual(status, 0)
+        self.assertIn("different coordinate spaces", err)
+        self.assertIn("True True True", out)
+
+    def test_large_polynomials_retain_their_values_across_worker_fallback(self):
+        from engine import session_algebra
+        from engine.session_algebra import ideal, ideal_sum
+        from engine.session_polynomial import coordinates
+
+        x = coordinates("x")
+        first_of_many = coordinates(*(f"u{i}" for i in range(33)))[0]
+        for f in ((10**4500 + 7) * x**(2**80 + 3), first_of_many):
+            with self.subTest(variables=f.variables):
+                self.assertIsNotNone(f._native_polynomial)
+                left, zero = ideal(f), ideal(ring=f.parent)
+                with patch.object(session_algebra, "_evaluate", wraps=session_algebra._evaluate) as worker:
+                    result = ideal_sum(left, zero)
+                    worker.assert_called_once()
+                self.assertEqual(result.generators, (f,))
+                self.assertIs(result.parent, f.parent)
+
+    def test_concurrent_polynomials_in_the_same_new_parent_form_one_ideal(self):
+        from engine.session_algebra import ideal
+        from engine.session_polynomial import Polynomial, _CoordinateSpace
+
+        parent = _CoordinateSpace.named(("x", "y", "z", "w"))
+        ready = Barrier(len(parent.generators))
+
+        def create(generator):
+            ready.wait(timeout=10)
+            return Polynomial(parent, generator)
+
+        with ThreadPoolExecutor(max_workers=len(parent.generators)) as pool:
+            generators = tuple(pool.map(create, parent.generators))
+        declared = ideal(*generators)
+        self.assertIs(declared.parent, parent)
+        self.assertEqual(declared._native_ideal.expressions(parent.names), list(parent.names))
+
     def test_session_arithmetic_with_and_without_python_extension(self):
         from engine import session_ideal_native
         from engine.session_algebra import ideal
         from engine.session_polynomial import coordinates
 
-        x, y = coordinates("x", "y")
-
         def calculate():
+            x, y = coordinates("x", "y")
             left, right = ideal(x, y**2), ideal(x**2 + y, ring=x.parent)
             value = ((left * right) + left) ** 2
             self.assertIs(value.parent, x.parent)
-            return value.result, value.record["replay"], value.generators
+            self.assertTrue(all(p.parent is x.parent for p in value.generators))
+            return value.result, value.record["replay"], tuple(map(str, value.generators))
 
         expected = calculate()
         with patch.object(session_ideal_native, "_compiled", return_value=None):

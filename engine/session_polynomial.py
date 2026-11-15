@@ -9,6 +9,7 @@ import re
 
 from . import native_polynomial as native
 from .point_geometry import support_profile
+from .session_ideal_native import native_ring
 
 
 @dataclass(frozen=True, eq=False)
@@ -63,6 +64,22 @@ class _CoordinateSpace:
             return QQ
         return cls(tuple(native.Dummy(name) for name in names), has_relations=has_relations, coeffs=coeffs)
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        # Ring identity survives copies of surrounding session objects.
+        return self
+
+    @cached_property
+    def _native_ring(self):
+        # Native construction can release the GIL; concurrent first users must
+        # all retain the same context for this particular live parent.
+        if self.has_relations or self.coeffs is not QQ:
+            return None
+        ring = native_ring(len(self.generators))
+        return self.__dict__.setdefault("_native_ring", ring)
+
     @property
     def polynomial_generators(self):
         if self.coeffs is QQ:
@@ -110,12 +127,24 @@ class Polynomial:
     _value: native.Expr
     _fields = {"variables", "coeffs", "multiplicity", "parent"}
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        # The value and its native polynomial are immutable in this parent.
+        return self
+
     def __post_init__(self):
         if self._space.has_relations:
             object.__setattr__(self, "_value", self._space.relation_basis.remainder(self._value))
         elif self._space.coeffs is not QQ:
             reduced = self._space.coeffs.reduce(self._value, self._space.polynomial_generators)
             object.__setattr__(self, "_value", reduced)
+        else:
+            parent = self._space
+            ring = parent._native_ring
+            handle = None if ring is None else ring.polynomial(native.generator_row(parent.generators, self._value))
+            object.__setattr__(self, "_native_polynomial", handle)
 
     @property
     def variables(self):

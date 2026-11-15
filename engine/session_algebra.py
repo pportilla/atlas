@@ -16,7 +16,7 @@ from .polynomial import LimitError, integer_text, parse_expression, rational_tex
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace
-from .session_ideal_native import NativeIdeal, values as ideal_values
+from .session_ideal_native import values as ideal_values
 
 if TYPE_CHECKING:
     from .session_maps import RingHomomorphism
@@ -51,6 +51,9 @@ class _RingValue:
         raise AttributeError(f"This algebra value has no Atlas field {name!r}.")
 
 
+_unprepared = object()
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class Ideal(_RingValue):
     _space: _CoordinateSpace
@@ -59,13 +62,21 @@ class Ideal(_RingValue):
     _fields = _RingValue._fields | {"generators", "parent"}
     _label = "ideal"
 
+    def __init__(self, _space, generators, order, prepared=_unprepared):
+        state = self.__dict__
+        state["_space"] = _space
+        state["generators"] = generators
+        state["order"] = order
+        if prepared is not _unprepared:
+            state["_native_ideal"] = prepared
+
     @property
     def parent(self):
         return self._space
 
     @cached_property
     def _native_ideal(self):
-        return NativeIdeal.prepare(self._space.generators, self.generators)
+        return _assemble_ideal(self._space, self.generators)
 
     def __add__(self, other):
         return _binary_ideals("ideal-sum", self, other, "auto", infix=True)
@@ -712,11 +723,11 @@ def polynomial(source, *, ring=None, variables=None):
     # bounded parser also caps powers and intermediate coefficient sizes.
     if modulus is None and len(source) <= 128 and "(" not in source and ")" not in source:
         try:
-            terms = parse_expression(source, names, bounded=True)
+            row = parse_expression(source, names, bounded=True, as_row=True)
         except LimitError:
             pass  # A quick-parser limit selects the unrestricted worker.
         else:
-            return Polynomial(space, native.from_terms(generators, terms))
+            return Polynomial(space, native.from_kernel_row(generators, row))
 
     request = {"source": source, "variables": names}
     if modulus is not None:
@@ -724,15 +735,19 @@ def polynomial(source, *, ring=None, variables=None):
     status, record = run_worker(["engine.algebra_worker", "--polynomial"], request, None)
     if status != 200:
         raise ValueError(record["error"]["message"])
-    return Polynomial(space, native.from_row(generators, record["terms"]))
+    return Polynomial(space, native.from_kernel_row(generators, record["terms"]))
 
 
 def _polynomial_inputs(values, order, variables, default_space=None, *, ring=None):
     if variables is None and ring is None:
-        spaces = [f._space for f in values if isinstance(f, Polynomial)]
-        space = next((parent for parent in spaces if parent is not QQ), default_space)
-        if space is None and spaces:
-            space = QQ
+        space = default_space
+        for f in values:
+            if isinstance(f, Polynomial):
+                if f._space is not QQ:
+                    space = f._space
+                    break
+                if space is None:
+                    space = QQ
         if space is None:
             raise ValueError("For a constant or empty ideal, supply ring=QQ, ring=f.parent, or variables=(x, y).")
     else:
@@ -741,26 +756,46 @@ def _polynomial_inputs(values, order, variables, default_space=None, *, ring=Non
         raise ValueError("Algebra operations require polynomial coordinates over QQ.")
     if space.has_relations:
         raise ValueError("Algebra operations require polynomial coordinates with no quotient-ring relations.")
-    polynomials = tuple(_polynomial(f, space) for f in values)
-    # Only computations in this parent contribute a stored monomial order.
-    if order is None:
-        orders = {f.order for f in polynomials if isinstance(f, _OrderedPolynomial)}
-        if len(orders) > 1:
-            raise ValueError("Choose an explicit monomial order for these polynomials.")
-        order = next(iter(orders), "grevlex")
+    # The common declaration already holds immutable polynomials in their exact
+    # live parent. The general path also handles scalar embeddings and order-bearing results.
+    if isinstance(values, tuple) and all(type(f) is Polynomial and f._space is space for f in values):
+        polynomials = values
+        if order is None:
+            order = "grevlex"
+    else:
+        polynomials = tuple(_polynomial(f, space) for f in values)
+        if order is None:
+            orders = {f.order for f in polynomials if isinstance(f, _OrderedPolynomial)}
+            if len(orders) > 1:
+                raise ValueError("Choose an explicit monomial order for these polynomials.")
+            order = next(iter(orders), "grevlex")
     if order not in ("lex", "grevlex"):
         raise ValueError("Unsupported monomial order. Choose lex or grevlex.")
     return space, polynomials, order
 
 
+def _assemble_ideal(space, generators):
+    ring = space._native_ring
+    if ring is None:
+        return None
+    return ring.ideal(tuple(f._native_polynomial for f in generators))
+
+
 def ideal(*generators, order=None, variables=None, ring=None):
     """Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."""
-    space, generators, order = _polynomial_inputs(_unpack(generators), order, variables, ring=ring)
-    declared = Ideal(space, generators, order)
-    # Retain the exact native generators while the new ideal is bound in the
-    # session. Large declarations still use the worker when a computation needs them.
-    declared.__dict__["_native_ideal"] = NativeIdeal.prepare(space.generators, generators)
-    return declared
+    generators = _unpack(generators)
+    if generators and variables is None and order in (None, "lex", "grevlex"):
+        first = generators[0]
+        if type(first) is Polynomial and (ring is None or first._space is ring):
+            parent = first._space
+            native_ring = parent._native_ring
+            if native_ring is not None:
+                # Check all live parents and gather their native generators in one pass.
+                handle = native_ring.declare(parent, Polynomial, generators)
+                if handle is not NotImplemented:
+                    return Ideal(parent, generators, order or "grevlex", handle)
+    space, generators, order = _polynomial_inputs(generators, order, variables, ring=ring)
+    return Ideal(space, generators, order, _assemble_ideal(space, generators))
 
 
 def _typed(record, space, *, quotient_parent=None):
@@ -779,7 +814,7 @@ def _typed(record, space, *, quotient_parent=None):
         if not coordinate_space.generators:
             return native.coerce(sparse_row(text).get((), 0))
         row, = affine_request(["decode", " ".join(coordinate_space.names), text])
-        return native.from_row(coordinate_space.generators, row)
+        return native.from_kernel_row(coordinate_space.generators, row)
 
     def polynomials(expressions, coordinate_space=space):
         return tuple(Polynomial(coordinate_space, decode(text, coordinate_space)) for text in expressions)
