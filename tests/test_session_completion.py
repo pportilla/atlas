@@ -47,6 +47,10 @@ class SessionCompletionTests(unittest.TestCase):
     def test_structured_algebra_results_share_their_declared_fields(self):
         list(self.session.run('x = coordinates("x")\nI = ideal(x)\ng = gcd(x, x)'))
         self.assertEqual(candidates("I.g", self.session), ["I.generators"])
+        with patch("engine.session_quotient.quotient_ring", side_effect=AssertionError("Help declared a quotient")):
+            from engine.session_help import algebra_help_values
+            self.assertEqual(candidates("I.q", self.session), ["I.quotient_ring"])
+            self.assertIn("I.quotient_ring", algebra_help_values(self.session))
         self.assertEqual(candidates("g.m", self.session), ["g.multiplicity("])
         self.assertEqual(candidates("g.ord", self.session), ["g.order"])
         self.assertEqual(candidates("g.pol", self.session), ["g.polynomial"])

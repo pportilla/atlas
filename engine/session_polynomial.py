@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from fractions import Fraction
-from functools import cache, cached_property, lru_cache
+from functools import cached_property, lru_cache
 import re
 
 from . import native_polynomial as native
@@ -47,6 +47,32 @@ class _NumberField:
         ring = _ring(variables)
         _, row = _request(["wide_division", ring.header, "lex", ring.text(value), ring.text(self.minimal_polynomial)])
         return _sparse_expression(variables, row)
+
+
+class _Coordinates(tuple):
+    """The ordered coordinate objects of a live parent, including an empty tuple."""
+
+    _fields = {"parent"}
+
+    def __new__(cls, parent, coordinates):
+        value = super().__new__(cls, coordinates)
+        value._parent = parent
+        return value
+
+    @property
+    def parent(self):
+        return self._parent
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def session_attribute(self, name):
+        if name == "parent":
+            return self.parent
+        raise AttributeError(f"A coordinate tuple has no Atlas field {name!r}.")
 
 
 @dataclass(frozen=True, eq=False)
@@ -94,9 +120,12 @@ class _CoordinateSpace:
     def variables(self):
         return self.names
 
-    @property
+    @cached_property
     def coordinates(self):
-        return tuple(Polynomial(self, generator) for generator in self.generators)
+        # Share one coordinate object per generator, including concurrent first
+        # access. A computed polynomial equal to a coordinate is a separate value.
+        coordinates = _Coordinates(self, (Polynomial(self, generator) for generator in self.generators))
+        return self.__dict__.setdefault("coordinates", coordinates)
 
     def session_attribute(self, name):
         if name in self._fields:
@@ -294,7 +323,16 @@ def coordinates(*names, coeffs=QQ):
 
 def session_coordinates():
     """Create the coordinates function for one prompt or script."""
-    declared_parent = cache(_CoordinateSpace.named)
+    parents = {}
+
+    def declared_parent(names, *, coeffs):
+        key = (coeffs, names)
+        parent = parents.get(key)
+        if parent is None:
+            # Publish the first completed construction. All callers of this
+            # session must receive that same live ring for the same declaration.
+            parent = parents.setdefault(key, _CoordinateSpace.named(names, coeffs=coeffs))
+        return parent
 
     def coordinates(*names, coeffs=QQ, fresh=False):
         """Reuse the ring with these ordered coordinate names. Pass fresh=True for a separate ring."""

@@ -57,7 +57,7 @@ HELP = """Define coordinates and keep the results of calculations:
   I = ideal(x^2*(x-1), y)
   J = radical(I)                         # the ideal of the two reduced points
   A = quotient_ring(ideal(x*y - 1))
-  u, v = A.gens                         # residue classes of x and y
+  u, v = A.coordinates                  # residue classes of x and y
   u.inverse() == v                      # True in A
   (u^3 / u).representative              # x^2 in the ambient coordinates
   S = ideal_sum(I, J)                   # I + J at the prompt

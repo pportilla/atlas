@@ -126,7 +126,10 @@ class PromptHelpTests(unittest.TestCase):
                  'a = A(x)\nphi = A.projection\nalias = factor\nd = dimension(I)\nring = x.parent\n')
         for topic, example_part in (("ring", "ring.coordinates"), ("f", "ring=f.parent"),
                                     ("f.parent", "f.parent.coordinates"), ("I", "I.generators"),
-                                    ("I.parent", "ring=I.parent"), ("A", "A.ambient.coordinates"),
+                                    ("I.parent", "ring=I.parent"), ("I.quotient_ring", "K = I.quotient_ring"),
+                                    ("A", "A.ambient.coordinates"), ("A.coordinates", "residue classes"),
+                                    ("A.ambient.coordinates", "polynomial generators"),
+                                    ("A.declaration_executions", "A.execution"),
                                     ("a", "a.representative"), ("phi", "phi.images"), ("d", "d.value"),
                                     ("phi.codomain", "phi.codomain.gens"), ("alias", "alias(")):
             with self.subTest(topic=topic):

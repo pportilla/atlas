@@ -63,13 +63,15 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.assertIn(b"x2, z = coordinates('x', 'z')", rejected)
         self.assertNotIn(SAVE + b"\x1b[1;1H\x1b[2K", rejected)
         workspace = self.command(":workspace").decode()
-        self.assertIn("QQ[x, y] → x, y, f", workspace)
+        self.assertIn("Coordinates     x, y", workspace)
+        self.assertIn("Polynomials     f =", workspace)
         self.assertNotIn("QQ[x, z]", workspace)
 
         self.command('x, y = coordinates("x", "y")')
         workspace = self.command(":workspace").decode()
         self.assertEqual(workspace.count("QQ[x, y]"), 1)
-        self.assertIn("QQ[x, y] → x, y, f", workspace)
+        self.assertIn("Coordinates     x, y", workspace)
+        self.assertIn("Polynomials     f =", workspace)
         update = self.panel_update(self.command('g = polynomial("x^2+y", ring=f.parent)'))
         rings = update.split("Variables", 1)[0]
         self.assertEqual(rings.count("QQ[x, y]"), 1)
@@ -79,8 +81,8 @@ class SessionPanelTerminalTests(CliTerminalCase):
         for group in ("QQ[x, y] → x, y", "QQ[x, y] → f, g"):
             self.assertIn(group, update.split("Variables", 1)[0])
         workspace = self.command(":workspace").decode()
-        self.assertIn("QQ[x, y] → f, g", workspace)
-        self.assertIn("QQ[x, y] → x, y", workspace)
+        self.assertRegex(workspace, r"f\.parent = QQ\[x, y\]\r?\n  Polynomials\s+f = [^\n]+, g = ")
+        self.assertRegex(workspace, r"x\.parent = QQ\[x, y\]\r?\n  Coordinates\s+x, y")
 
         self.command("f = 7")
         expression = self.command("f + 1")
@@ -98,6 +100,24 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.startup = self.read_until(PROMPT)
         self.assertRegex(self.startup, rb"\x1b\[5;(?:32)?r")
         self.check_exit(b"\x04")
+
+    def test_quotient_ring_and_residue_classes_in_header_and_workspace(self):
+        self.startup = self.read_until(PROMPT)
+        self.command("x,y = coordinates('x','y')")
+        self.command("I = ideal(y^2+x^5)")
+        before = self.panel_update(self.command("K = I.quotient_ring"))
+        self.assertIn("K = QQ[x, y]/(x^5+y^2)", before)
+        self.assertNotIn("→ K", before)
+        header = self.panel_update(self.command("u,v = K.coordinates"))
+        full = self.command(":workspace").decode()
+        for line in ("QQ[x, y] → x, y, I", "K = QQ[x, y]/(x^5+y^2) → u, v",
+                     "u = [x] in K", "v = [y] in K"):
+            self.assertIn(line, header)
+        expanded = full.replace("\r\n", "\n")
+        self.assertIn("QQ[x, y]\n  Coordinates     x, y\n  Ideals          I\n\n"
+                      "K = QQ[x, y]/(x^5+y^2)\n  Coordinates     u = [x], v = [y]", expanded)
+        self.assertNotIn("Variables", expanded)
+        self.check_exit(b"quit\n")
 
     def resize(self, rows, columns):
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))

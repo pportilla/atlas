@@ -34,6 +34,14 @@ maps with a domain, codomain and ordered generator images for transport.
 Test changes to these rules with independent same-named
 rings at the prompt and in scripts, including what survives a failed command.
 
+A ring owns its ordered coordinates, including an empty coordinate tuple.
+For a quotient `K`, `K.coordinates` belongs to `K` and
+`K.ambient.coordinates` belongs to its polynomial ring. A saved name is
+an alias for its value. Renaming a value or selecting a compute backend must
+preserve its live parent. Group workspace bindings by that parent and show
+maps with both endpoints. Help, completion and workspace display must be
+able to describe these relationships without running a computation.
+
 For each new mathematical operation that Singular supports, add repeatable
 timing tests on the same inputs in both systems. Check mathematical agreement,
 run multiple trials, and record both timings and the comparison conditions.

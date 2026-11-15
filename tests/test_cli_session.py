@@ -98,7 +98,9 @@ class CliSessionTests(unittest.TestCase):
                                       "print(f.parent == x.parent, f-x^3 == y^2)\nquit\n")
         self.assertEqual(status, 0)
         self.assertIn(hint, err)
-        self.assertIn("QQ[x, y] → x, y, f", out)
+        self.assertIn("QQ[x, y]", out)
+        self.assertRegex(out, r"Coordinates\s+x, y")
+        self.assertRegex(out, r"Polynomials\s+f = ")
         self.assertNotIn("QQ[x, z]", out)
         self.assertIn("True True", out)
 
@@ -140,6 +142,91 @@ class CliSessionTests(unittest.TestCase):
         list(session.run('G = coordinates("x","y",fresh=True)'))
         with self.assertRaisesRegex(ValueError, r"G2 = coordinates\('x', 'y'\)"):
             list(session.run('G = coordinates("x","y")'))
+
+    def test_coordinate_declaration_protects_computed_values_equal_to_generators(self):
+        setup = 'x,y = coordinates("x","y")\nP = x.parent\noriginal = x\nx = x+0\n'
+        conflict = 'x, other = coordinates("x","y")\n'
+        script = run_script(setup + conflict)
+        self.assertEqual(script.returncode, 2)
+        self.assertIn("x2, other = coordinates('x', 'y')", script.stderr)
+        status, out, err = run_prompt(setup + conflict + 'print(x == original, x.parent == P)\nquit\n')
+        self.assertEqual(status, 0)
+        self.assertIn("True True", out)
+        self.assertIn("x2, other = coordinates('x', 'y')", err)
+        session = new_session(None)
+        list(session.run(setup))
+        saved = session.variables["x"]
+        with self.assertRaisesRegex(ValueError, "would replace"):
+            list(session.run(conflict))
+        self.assertIs(session.variables["x"], saved)
+        self.assertNotIn("other", session.variables)
+
+    def test_explicit_assignment_selects_coordinate_objects_from_an_existing_ring(self):
+        source = dedent("""
+            x, y = coordinates("x", "y")
+            P = x.parent
+            I = ideal(x-y)
+            K = I.quotient_ring
+            x, y = K.coordinates
+            print(x.parent == K, x == y)
+            x = P.coordinates[0]
+            print(x.parent == P, y.parent == K)
+            x, y = K.ambient.coordinates
+            pair = (x, y)
+            pair = coordinates("x", "y")
+            print(pair == P.coordinates, y.parent == P)
+        """).lstrip()
+        expected = ["True True", "True True", "True True"]
+        script = run_script(source)
+        self.assertEqual((script.returncode, script.stderr), (0, ""))
+        self.assertEqual(script.stdout.splitlines(), expected)
+        status, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((status, err), (0, ""))
+        self.assertEqual(out.replace("atlas> ", "").strip().splitlines(), expected)
+
+    def test_chart_coordinates_keep_their_positions_even_if_their_values_coincide(self):
+        from engine.session_algebra import polynomial
+        from engine.session_polynomial import QQ
+        from engine.session_values import Resolution
+
+        self.assertEqual(QQ.coordinates, ())
+        self.assertIs(QQ.coordinates.parent, QQ)
+        graph = Resolution({"variables": ["t"], "dual_complex": {"vertices": []}, "charts": [
+            {"id": "G", "coordinates": ["a", "b"], "ambient_ideal": ["a", "b"]}
+        ]}).chart("G")
+        a, b = graph.coordinates
+        self.assertEqual(a, 0)
+        self.assertEqual(a, b)
+        self.assertIsNot(a, b)
+        self.assertIs(graph.parent.coordinates[0], a)
+        self.assertIs(graph.parent.coordinates[1], b)
+        self.assertEqual(polynomial("b", variables=(a, b)), 0)
+        with self.assertRaisesRegex(ValueError, "order"):
+            polynomial("b", variables=(b, a))
+
+    def test_concurrent_first_declarations_return_one_sessions_coordinates(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from engine.session_polynomial import _CoordinateSpace
+
+        first_started, second_started = Event(), Event()
+        make_parent = _CoordinateSpace.named
+
+        def overlap(*args, **kwargs):
+            if first_started.is_set():
+                second_started.set()
+            else:
+                first_started.set()
+                second_started.wait(timeout=1)
+            return make_parent(*args, **kwargs)
+
+        with patch.object(_CoordinateSpace, "named", side_effect=overlap), ThreadPoolExecutor(2) as pool:
+            declare = new_session(None).builtins["coordinates"]
+            a = pool.submit(declare, "x", "y")
+            self.assertTrue(first_started.wait(timeout=2))
+            b = pool.submit(declare, "x", "y")
+            self.assertIs(a.result(), b.result())
+            self.assertIs(a.result().parent, declare("x", "y").parent)
 
     def test_quoted_polynomials_reuse_chart_and_elimination_coordinates_at_both_entry_points(self):
         source = """

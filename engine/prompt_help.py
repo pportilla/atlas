@@ -15,13 +15,18 @@ _TOPICS = {
         "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
         "Repeating the same coordinate names in the same order reuses their ring.\n"
         "A declaration protects saved names. Use aliases on the left, as in x2, z = coordinates('x', 'z').\n"
-        "Use fresh=True for an independent copy. The Rings row groups saved names by ring.\n"
+        "Use fresh=True for an independent copy. Assigning from a saved ring's .coordinates "
+        "explicitly binds its existing generators to the names you choose.\n"
+        "For a quotient ring K, use u, v = K.coordinates to name its residue classes.\n"
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),
     ":workspace": (
-        "Group polynomials by parent, ideals by ambient ring, and resolutions by input ring.\n"
-        "List all saved names.\n\nExample\n  :workspace"
+        "Show each live ring once, with its aliases and its saved coordinates, polynomials and ideals. "
+        "A resolution appears under its input ring. A map shows its domain and codomain. "
+        "Under a quotient ring, [x] means the residue class of x.\n\n"
+        'Example\n  x, y = coordinates("x", "y")\n  I = ideal(y^2+x^5)\n'
+        "  K = I.quotient_ring\n  u, v = K.coordinates\n  :workspace"
     ),
     "ring": (
         "A polynomial keeps its live parent ring. An ideal exposes its ambient ring as I.parent. "

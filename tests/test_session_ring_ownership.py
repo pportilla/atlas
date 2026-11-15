@@ -55,9 +55,10 @@ class RingOwnershipTests(unittest.TestCase):
             phi = C.map
             t, = C.coordinates
             print(phi.domain.ambient == x.parent, phi.codomain.ambient == t.parent)
+            print(quotient_ring(C.prime, compute="cpu") == phi.domain, C.relations.quotient_ring == phi.codomain)
             print(phi(phi.domain(x)) == phi.codomain(t^2), phi(phi.domain(y)) == phi.codomain(t^3))
             print(phi.domain(y^2-x^3) == 0, C.map == phi)
-        """, ["True True", "True True", "True True"])
+        """, ["True True", "True True", "True True", "True True"])
 
     def test_partial_archived_chart_only_transports_recorded_coordinates(self):
         record = {"variables": ["x", "y"], "dual_complex": {"vertices": []},

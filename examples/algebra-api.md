@@ -100,12 +100,13 @@ The ideal operations below take an `ideal`, an array of polynomial strings. Use 
 
 ### Arithmetic in declared quotient rings over QQ
 
-Declare an ideal in the ambient coordinates, then call `quotient_ring(I)` to work in $A=\mathbb Q[x_1,\ldots,x_n]/I$. The ring retains the chosen monomial order. `A.coordinates` holds the original ambient variables, `A.gens` holds their residue classes, and `A(f)` takes the class of an ambient polynomial or rational number. Every quotient element exposes its `.parent` and its canonical ambient `.representative`.
+Declare an ideal in the ambient coordinates, then call `quotient_ring(I)` to work in $A=\mathbb Q[x_1,\ldots,x_n]/I$. The ring retains the chosen monomial order. `A.ambient.coordinates` holds the original ambient variables, `A.coordinates` and `A.gens` hold their residue classes, and `A(f)` takes the class of an ambient polynomial or rational number. Every quotient element exposes its `.parent` and its canonical ambient `.representative`.
 
 ```python
 x, y = coordinates("x", "y", coeffs=QQ)
-A = quotient_ring(ideal(x*y - 1))
-u, v = A.gens
+I = ideal(x*y - 1)
+A = I.quotient_ring
+u, v = A.coordinates
 print(u.inverse() == v)                 # True
 print((u^3 / u).representative == x^2)  # True
 print(A(x^2*y + 1) == u + 1)           # True

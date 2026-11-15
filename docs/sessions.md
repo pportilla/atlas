@@ -29,10 +29,46 @@ True
 The `Rings` row now shows `QQ[x, y] → x, y, f, g`. Here the four names
 are polynomials with that parent. If you save an ideal, Atlas lists it under
 its ambient ring. A resolution appears under the ring of its input equation.
-A map has two endpoints, so it appears in `Variables`. Inspect its `.domain`
-and `.codomain` to see them. Type `:workspace` for the full list.
+Type `:workspace` to see each ring's coordinates, polynomials and ideals together.
+Maps appear separately with their domain and codomain.
 Type `help f` or `help f.parent` to inspect a saved polynomial or its ring.
 The same help command accepts a saved ideal, quotient ring, or ring map.
+
+### Name a quotient and its coordinates
+
+Every ring owns its coordinates. Assigning a name to a ring or to one of its
+coordinates gives you another way to refer to the same object.
+
+```text
+atlas> I = ideal(y^2+x^5)
+atlas> K = I.quotient_ring
+atlas> K.coordinates
+([x], [y])
+atlas> u, v = K.coordinates
+atlas> u.parent == K
+True
+atlas> v^2 + u^5
+0
+```
+
+The workspace groups `x, y` and `I` in the ambient polynomial ring. Under
+`K = QQ[x, y]/(x^5+y^2)`, the coordinate entry `u = [x]` means the class of
+`x` in this quotient. `K.ambient.coordinates` gives the original polynomials.
+If you also write `R = quotient_ring(I)`, the heading shows both names for one
+ring. A different compute backend still yields that same parent.
+Use `quotient_ring(I, fresh=True)` to request an independent copy.
+
+Use `polynomial("x^5+y^2", ring=K)` to read an expression directly in the
+quotient. It gives the zero class. The same source with `ring=K.ambient` gives
+the ambient polynomial. Strings use the ring's declared names, so in this
+example you write `x, y` in a string and can use `u, v` as prompt variables.
+You can also pass `variables=K.coordinates`. A saved coordinate tuple carries
+its own `.parent`, including when the ring has no generators.
+
+`K.defining_ideal` is the ideal you supplied. `K.relations` gives its reduced
+basis. The serializable presentation in `K.ring` includes the relations.
+
+### Reuse and rebind coordinate names
 
 Atlas uses the coefficient field and the generator names in the order you
 give them. Omitting `coeffs=QQ` selects the rationals. If a direct coordinate
@@ -129,7 +165,7 @@ and monomial order. Use `ideal(ring=f.parent)` for the zero ideal and
 `resolve("y^2+x^3", ring=f.parent)` have the same original parent.
 
 For `A = quotient_ring(I)`, `A.ambient` is the original polynomial ring,
-`A.gens` are its residue classes, and `A.projection` sends ambient polynomials
+`A.coordinates` and `A.gens` give its generators' residue classes, and `A.projection` sends ambient polynomials
 to their classes. Compare inside the quotient with `A(f) == A(0)`. For
 `J = eliminate(I, x)`, `J.inclusion` sends a polynomial in the surviving
 coordinates back into the original ring.

@@ -266,13 +266,11 @@ def _field(value, name):
 
 
 def _same_coordinates(previous, value):
-    # A scalar, residue class, or computed result can compare equal to a
-    # generator while carrying a different parent or additional result data.
-    if type(previous) is not type(value):
-        return False
-    if isinstance(value, tuple):
-        return len(previous) == len(value) and all(_same_coordinates(a, b) for a, b in zip(previous, value))
-    return previous.parent is value.parent and previous._value == value._value
+    if previous is value:
+        return True
+    # An explicitly assembled tuple may already hold the same live coordinates.
+    return (isinstance(previous, tuple) and isinstance(value, tuple) and len(previous) == len(value)
+            and all(a is b for a, b in zip(previous, value)))
 
 
 class Evaluator:

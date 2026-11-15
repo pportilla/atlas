@@ -15,7 +15,7 @@ from .native_library import affine_request, current_replay_scope
 from .polynomial import LimitError, integer_text, parse_expression, rational_text, sparse_row
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
-from .session_polynomial import QQ, Polynomial, _CoordinateSpace
+from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
 from .session_ideal_native import ideal_constructor, values as ideal_values
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ class Ideal(_RingValue):
     _space: _CoordinateSpace
     generators: tuple[Polynomial, ...]
     order: str
-    _fields = _RingValue._fields | {"generators", "parent"}
+    _fields = _RingValue._fields | {"generators", "parent", "quotient_ring"}
     _label = "ideal"
 
     def __init__(self, _space, generators, order, prepared=_unprepared):
@@ -73,6 +73,19 @@ class Ideal(_RingValue):
     @property
     def parent(self):
         return self._space
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        # An immutable ideal owns its quotient parent even inside copied records.
+        return self
+
+    @cached_property
+    def quotient_ring(self):
+        """The default quotient parent for this particular ideal."""
+        from .session_quotient import quotient_ring
+        return quotient_ring(self)
 
     @cached_property
     def _native_ideal(self):
@@ -289,9 +302,8 @@ class _NormalizedComponent(_RingValue):
     @cached_property
     def map(self):
         from .session_maps import hom
-        from .session_quotient import quotient_ring
-        domain = quotient_ring(self.prime)
-        codomain = quotient_ring(self.relations)
+        domain = self.prime.quotient_ring
+        codomain = self.relations.quotient_ring
         return hom(domain, codomain, images=tuple(codomain(f) for f in self.images))
 
 
@@ -659,6 +671,10 @@ def _polynomial(value, space):
         return value
     if type(value) is int or isinstance(value, Fraction):
         return Polynomial(space, native.coerce(value))
+    from .session_quotient import QuotientElement
+    if isinstance(value, QuotientElement):
+        raise TypeError("This operation needs an ambient polynomial. Use the class's .representative "
+                        "when you intend to work in its ambient ring.")
     raise TypeError("Expected a polynomial or an exact rational number.")
 
 
@@ -688,33 +704,42 @@ def _result_space(space, names):
 
 
 def _coordinate_space(variables):
+    from .session_quotient import QuotientElement
+    if isinstance(variables, _Coordinates):
+        return variables.parent
     variables = _unpack((variables,))
-    if not all(isinstance(v, Polynomial) for v in variables):
+    if not variables:
+        return QQ
+    if not isinstance(variables[0], (Polynomial, QuotientElement)):
         raise TypeError("Pass coordinate generators, for example variables=C.coordinates.")
-    space = variables[0]._space if variables else QQ
-    generators = tuple(v._value for v in space.coordinates) if space.has_relations else space.generators
-    if (any(v._space is not space for v in variables) or
-            tuple(v._value for v in variables) != generators):
-        raise ValueError("Use all coordinates in their declared order from one coordinate space.")
-    return space
+    parent = variables[0].parent
+    if len(variables) != len(parent.variables) or any(
+        actual is not coordinate for actual, coordinate in zip(variables, parent.coordinates)
+    ):
+        raise ValueError("Use all coordinates in their declared order from one coordinate space, or supply its ring directly.")
+    return parent
 
 
 def _declared_space(ring, variables):
+    from .session_quotient import QuotientRing
     if (ring is None) == (variables is None):
         raise ValueError("Supply exactly one of ring=f.parent or variables=(x, y).")
-    if ring is not None and not isinstance(ring, _CoordinateSpace):
-        raise TypeError("Pass a polynomial parent ring, for example ring=f.parent.")
+    if ring is not None and not isinstance(ring, (_CoordinateSpace, QuotientRing)):
+        raise TypeError("Pass a live parent ring, for example ring=f.parent.")
     return ring if ring is not None else _coordinate_space(variables)
 
 
 def polynomial(source, *, ring=None, variables=None):
-    """Parse a polynomial in an existing parent ring or in the space of its coordinate generators."""
+    """Evaluate a polynomial expression in the specified parent, reducing it in a quotient ring."""
     from .session_pullback import chart_source
+    from .session_quotient import QuotientRing
     from .worker_process import run_worker
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("polynomial expects a nonempty expression string.")
     space = _declared_space(ring, variables)
+    if isinstance(space, QuotientRing):
+        return space(polynomial(source, ring=space.ambient))
     generators = space.polynomial_generators
     source = chart_source(source, space)
     names = [g.name for g in generators]
@@ -739,6 +764,7 @@ def polynomial(source, *, ring=None, variables=None):
 
 
 def _polynomial_inputs(values, order, variables, default_space=None, *, ring=None):
+    from .session_quotient import QuotientElement, QuotientRing
     if variables is None and ring is None:
         space = default_space
         for f in values:
@@ -749,9 +775,14 @@ def _polynomial_inputs(values, order, variables, default_space=None, *, ring=Non
                 if space is None:
                     space = QQ
         if space is None:
+            if any(isinstance(f, QuotientElement) for f in values):
+                raise TypeError("Ideal generators must lie in an ambient polynomial ring. "
+                                "Use .representative to select an ambient polynomial explicitly.")
             raise ValueError("For a constant or empty ideal, supply ring=QQ, ring=f.parent, or variables=(x, y).")
     else:
         space = _declared_space(ring, variables)
+    if isinstance(space, QuotientRing):
+        raise TypeError("This operation requires a polynomial ring. Use K.ambient for the ambient ring of a quotient K.")
     if space.coeffs is not QQ:
         raise ValueError("Algebra operations require polynomial coordinates over QQ.")
     if space.has_relations:
@@ -790,7 +821,7 @@ def ideal(*generators, order=None, variables=None, ring=None):
 ideal = ideal_constructor(ideal, Polynomial, Ideal)
 
 
-def _typed(record, space, *, quotient_parent=None):
+def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_generators=None):
     result = record["result"]
     kind = result["type"]
     names = result["ring"]["variables"]
@@ -817,15 +848,12 @@ def _typed(record, space, *, quotient_parent=None):
         return hom(space, original_space, images=[Polynomial(original_space, g) for g in space.generators])
 
     if kind in ("quotient-ring", "quotient-element"):
-        from .session_quotient import QuotientElement, QuotientRing, quotient_ring
-        if kind == "quotient-ring":
-            relations = Ideal(space, polynomials(result["relations"]), order)
-            return QuotientRing(space, order, record, relations)
+        from .session_quotient import QuotientElement, quotient_parent_from_record
         if quotient_parent is None:
-            # Replayed one-shot operations also provide a usable parent, with
-            # its own declaration record and the replay's fresh coordinates.
-            relations = Ideal(space, polynomials(result["relations"]), order)
-            quotient_parent = quotient_ring(relations, compute=record["execution"]["requested"])
+            quotient_parent = quotient_parent_from_record(
+                record, space, polynomials(result["relations"]), defining_ideal, replay_generators)
+        if kind == "quotient-ring":
+            return quotient_parent
         representative = _OrderedPolynomial(space, decode(result["representative"]), order)
         return QuotientElement(quotient_parent, representative, record)
     if kind == "localization":
@@ -926,7 +954,8 @@ def algebra_request(source):
     record = _evaluate(request)
     names = request["ring"]["variables"]
     space = _CoordinateSpace.named(names)
-    return _typed(record, space)
+    generators = request["operands"]["ideal"] if record["operation"] == "quotient-ring" else None
+    return _typed(record, space, replay_generators=generators)
 
 
 def _require_ideal(value):
