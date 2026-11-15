@@ -5,6 +5,8 @@
 #include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 
+#include <flint/fmpq.h>
+
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -14,8 +16,47 @@ namespace {
 
 // A p-vector of source jets in total-degree order, with position m*p+j.
 using Index = unsigned;
-using Row = std::map<Index, mpq_class>;
 using Exponent = std::vector<unsigned>;
+
+// An exact rational. FLINT keeps a small numerator and denominator inside
+// the words themselves, so the short coefficients of jet rows need neither
+// allocation nor multiprecision gcds.
+struct Rational {
+    fmpq_t v;
+    Rational() noexcept { fmpq_init(v); }
+    explicit Rational(const mpq_class& q) { fmpq_init(v); fmpq_set_mpq(v, q.get_mpq_t()); }
+    Rational(const Rational& other) { fmpq_init(v); fmpq_set(v, other.v); }
+    Rational(Rational&& other) noexcept { *v = *other.v; fmpq_init(other.v); }
+    Rational& operator=(Rational other) noexcept { fmpq_swap(v, other.v); return *this; }
+    ~Rational() { fmpq_clear(v); }
+};
+
+// The nonzero coefficients of a row in increasing column order.
+struct Term {
+    Index col;
+    Rational value;
+};
+using Row = std::vector<Term>;
+
+void sort_columns(Row& row) {
+    std::sort(row.begin(), row.end(), [](const Term& a, const Term& b) { return a.col < b.col; });
+}
+
+// Add the terms of equal columns and drop zero sums.
+Row collect(Row terms) {
+    sort_columns(terms);
+    Row row;
+    row.reserve(terms.size());
+    for (auto& term : terms) {
+        if (!row.empty() && row.back().col == term.col) {
+            fmpq_add(row.back().value.v, row.back().value.v, term.value.v);
+            if (fmpq_is_zero(row.back().value.v)) row.pop_back();
+        } else {
+            row.push_back(std::move(term));
+        }
+    }
+    return row;
+}
 constexpr Index missing = std::numeric_limits<Index>::max();
 
 struct JetLimit {};
@@ -27,14 +68,6 @@ struct Budget {
         steps -= count;
     }
 };
-
-void accumulate(Row& row, Index index, const mpq_class& value) {
-    auto [it, inserted] = row.try_emplace(index, value);
-    if (!inserted) {
-        it->second += value;
-        if (it->second == 0) row.erase(it);
-    }
-}
 
 class Monomials {
     std::map<Exponent, Index> ids_;
@@ -108,6 +141,7 @@ class Echelon {
     std::vector<Row> rows_;
     const Echelon* base_;
     Budget& budget_;
+    Row scratch_;
 public:
     std::vector<Index> pivots;
     Echelon(size_t width, Budget& budget, const Echelon* base = nullptr)
@@ -118,53 +152,74 @@ public:
         return !rows_[i].empty() || (base_ && !base_->rows_[i].empty());
     }
 
-    // Remove a coefficient at a normalized pivot. Coordinate rows need no
-    // rational copy or multiplication.
-    void reduce_pivot(Row& r, Row::iterator pivot, const Row& basis) {
+    // Remove the coefficient of r[at] at a normalized pivot and keep only
+    // the terms after it. Every other basis term follows the pivot column,
+    // so a merge keeps the column order. Coordinate rows need no rational
+    // multiplication.
+    void reduce_pivot(Row& r, size_t at, const Row& basis) {
+        scratch_.clear();
         if (basis.size() == 1) {
-            r.erase(pivot);
+            for (size_t i = at+1; i < r.size(); ++i) scratch_.push_back(std::move(r[i]));
+            r.swap(scratch_);
             return;
         }
-        const auto lc = std::move(pivot->second);
-        r.erase(pivot);
+        const Rational lc = std::move(r[at].value);
         budget_.use(basis.size());
-        for (auto t = std::next(basis.begin()); t != basis.end(); ++t)
-            accumulate(r,t->first,-lc*t->second);
+        scratch_.reserve(r.size()-at-1+basis.size()-1);
+        size_t i = at+1, j = 1;
+        while (i < r.size() || j < basis.size()) {
+            if (j == basis.size() || (i < r.size() && r[i].col < basis[j].col)) {
+                scratch_.push_back(std::move(r[i++]));
+                continue;
+            }
+            if (i < r.size() && r[i].col == basis[j].col) {
+                fmpq_submul(r[i].value.v, lc.v, basis[j].value.v);
+                if (!fmpq_is_zero(r[i].value.v)) scratch_.push_back(std::move(r[i]));
+                ++i;
+            } else {
+                Term term{basis[j].col, Rational()};
+                fmpq_mul(term.value.v, lc.v, basis[j].value.v);
+                fmpq_neg(term.value.v, term.value.v);
+                scratch_.push_back(std::move(term));
+            }
+            ++j;
+        }
+        r.swap(scratch_);
     }
 
     // Canonical representatives use only columns outside the Jacobian pivots.
     // They keep target products sparse on nonlinear coordinate changes.
     Row remainder(Row r) {
-        for (auto it = r.begin(); it != r.end();) {
-            const Index col = it->first;
-            const Row& basis = rows_[col];
+        Row kept;
+        // Terms before i have been kept or dropped. Reduction only adds
+        // terms after the pivot column, which are not yet irreducible.
+        for (size_t i = 0; i < r.size();) {
+            const Row& basis = rows_[r[i].col];
             if (basis.empty()) {
-                ++it;
+                kept.push_back(std::move(r[i++]));
             } else if (basis.size() == 1) {
-                it = r.erase(it);
+                ++i;
             } else {
-                // Reduction may have introduced a term before the former
-                // successor. Terms preceding col are already irreducible.
-                reduce_pivot(r,it,basis);
-                it = r.upper_bound(col);
+                reduce_pivot(r,i,basis);
+                i = 0;
             }
         }
-        return r;
+        return kept;
     }
 
     void insert(Row r) {
         while (!r.empty()) {
-            const Index pivot = r.begin()->first;
+            const Index pivot = r.front().col;
             const Row& basis = rows_[pivot].empty() && base_ ? base_->rows_[pivot] : rows_[pivot];
             if (basis.empty()) {
-                const auto lc = r.begin()->second;
-                if (lc != 1) for (auto& term : r) term.second /= lc;
+                const Rational lc = r.front().value;
+                if (!fmpq_is_one(lc.v)) for (auto& term : r) fmpq_div(term.value.v, term.value.v, lc.v);
                 budget_.use(r.size());
                 rows_[pivot] = std::move(r);
                 pivots.push_back(pivot);
                 return;
             }
-            reduce_pivot(r,r.begin(),basis);
+            reduce_pivot(r,0,basis);
         }
     }
 };
@@ -184,30 +239,37 @@ struct Jet {
             for (const auto& [powers,c] : f[j]) {
                 const auto order = total_degree(powers);
                 if (order > degree + 1) continue;
-                if (order <= degree) images[j].emplace(mons.id(powers),c);
+                if (order <= degree) images[j].push_back({mons.id(powers),Rational(c)});
                 Powers lowered = powers;
                 for (Index i = 0; i < n; ++i) if (powers[i] > 0) {
                     --lowered[i];
-                    derivatives[i].emplace(mons.id(lowered)*p+j,c*powers[i]);
+                    derivatives[i].push_back({mons.id(lowered)*p+j,Rational(c*powers[i])});
                     ++lowered[i];
                 }
             }
         }
-        for (auto& row : derivatives) jacobian.insert(std::move(row));
+        // Distinct exponents give distinct columns in each row.
+        for (auto& row : images) sort_columns(row);
+        for (auto& row : derivatives) {
+            sort_columns(row);
+            jacobian.insert(std::move(row));
+        }
         source_closure(jacobian);
     }
 
     void source_closure(Echelon& space) {
         for (size_t i = 0; i < space.pivots.size(); ++i) {
             const Row& row = space.row(space.pivots[i]);
-            if (mons.degree[row.begin()->first/p] == mons.cutoff) continue;
+            if (mons.degree[row.front().col/p] == mons.cutoff) continue;
             for (Index x = 0; x < mons.width; ++x) {
                 Row shifted;
                 for (const auto& [col,c] : row) {
                     const Index m = col/p;
                     if (mons.degree[m] == mons.cutoff) break;
-                    shifted.emplace(mons.shift(m,x)*p + col%p,c);
+                    shifted.push_back({mons.shift(m,x)*p + col%p,c});
                 }
+                // Multiplication by x is injective on monomials.
+                sort_columns(shifted);
                 space.insert(std::move(shifted));
             }
         }
@@ -226,7 +288,7 @@ struct Jet {
         Echelon contact(p*mons.degree.size(),budget,&jacobian);
         for (const Row& f : images) for (Index j = 0; j < p; ++j) {
             Row row;
-            for (const auto& [m,c] : f) row.emplace(m*p+j,c);
+            for (const auto& [m,c] : f) row.push_back({m*p+j,c});
             contact.insert(std::move(row));
         }
         source_closure(contact);
@@ -235,23 +297,29 @@ struct Jet {
 
     size_t tangent(Index& first_full) {
         Echelon tangent(p*mons.degree.size(),budget,&jacobian);
-        for (Index j = 0; j < p; ++j) tangent.insert(jacobian.remainder({{j,1}}));
+        for (Index j = 0; j < p; ++j) {
+            Row unit;
+            unit.push_back({j,Rational()});
+            fmpq_one(unit.back().value.v);
+            tangent.insert(jacobian.remainder(std::move(unit)));
+        }
         // Rather than enumerate all target monomials, multiply only independent
         // rows by f_1,...,f_p. Any discarded combination has its products in
         // the same closure, and df(R^n) is closed under these multiplications.
         for (size_t i = 0; i < tangent.pivots.size(); ++i) {
             const Row& row = tangent.row(tangent.pivots[i]);
             for (const Row& f : images) {
-                Row product;
+                Row terms;
                 for (const auto& [b,coeff] : f) {
-                    if (mons.degree[b]+mons.degree[row.begin()->first/p] > mons.cutoff) break;
+                    if (mons.degree[b]+mons.degree[row.front().col/p] > mons.cutoff) break;
                     for (const auto& [col,c] : row) {
                         if (mons.degree[b]+mons.degree[col/p] > mons.cutoff) break;
                         budget.use(1);
-                        accumulate(product,mons.product(col/p,b)*p+col%p,c*coeff);
+                        terms.push_back({mons.product(col/p,b)*p+col%p,Rational()});
+                        fmpq_mul(terms.back().value.v,c.v,coeff.v);
                     }
                 }
-                tangent.insert(jacobian.remainder(std::move(product)));
+                tangent.insert(jacobian.remainder(collect(std::move(terms))));
             }
         }
         first_full = first_full_power(tangent);
