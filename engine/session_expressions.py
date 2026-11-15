@@ -206,9 +206,10 @@ def _assign_pair(session, pair, line):
         raise SessionError(f"{target!r} is a reserved Atlas name.", line)
     session.variables[target] = result
     # Arithmetic and ring-preserving calls stay in their operands' named rings.
+    # Any other call, such as ring(a, b), is a direct assignment that may name a ring.
     rings = session.rings
     if (type(operation) is str and operation not in RING_PRESERVING_CALLS) or target in rings.names:
-        rings.note(target, result)
+        rings.note(target, result, naming=True)
     return True
 
 

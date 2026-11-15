@@ -82,6 +82,38 @@ class RingNameTests(unittest.TestCase):
         with self.assertRaisesRegex(SessionError, "would replace"):
             list(session.run('r = coordinates("r")'))
 
+    def test_ring_returns_the_session_parent_of_the_declared_coordinates(self):
+        self.check_at_both_entry_points("""
+            R = ring("x", "y")
+            x, y = R.coordinates
+            X, Y = coordinates("x", "y")
+            print(X == x, x.parent == R, ring("x", "y") == R, ring("y", "x") == R)
+            S = ring("x", "y", fresh=True)
+            u, v = S.coordinates
+            f = polynomial("x^2+y", ring=S)
+            print(S == R, f == u^2 + v, f.parent == S)
+            a = "s"
+            b = "t"
+            T = ring(a, b, coeffs=QQ)
+            print(T.variables, T.coordinates[1].parent == T)
+        """, ["True True True False", "False True True", "('s', 't') True"])
+
+    def test_ring_names_the_ring_it_creates(self):
+        session = session_with('x, y = coordinates("x", "y")\nR = ring("x", "y")\nT = use_ring(ring("s", "t"))')
+        names = session.variables
+        self.assertIs(names["R"], names["x"].parent)
+        self.assertNotIn("R1", names)
+        self.assertIs(session.rings.active, names["T"])
+        self.assertEqual(workspace(names, session.rings.active).header()[0],
+                         ["R = QQ[x, y] → x, y", "T = QQ[s, t] (active)"])
+        # Rebinding R to another ring leaves QQ[x, y] with a free name for its coordinates.
+        list(session.run('R = ring("x", "z")'))
+        self.assertIs(names["R1"], names["x"].parent)
+        for command, message in (("ring()", "coordinate names"), ('ring("x", "x")', "distinct"),
+                                 ('ring("x", fresh=1)', "fresh must be"), ('ring = 1', "reserved")):
+            with self.subTest(command=command), self.assertRaisesRegex(SessionError, message):
+                list(session.run(command))
+
     def test_independent_same_named_rings_keep_their_own_names_in_both_entry_points(self):
         self.check_at_both_entry_points("""
             x, y = coordinates("x", "y")

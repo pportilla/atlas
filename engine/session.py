@@ -10,7 +10,7 @@ from .session_algebra import _coordinate_space, algebra_bindings
 from .session_expressions import Evaluator, SessionError
 from .session_maps import hom
 from .session_monodromy import check_resolution, unavailable_check
-from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_coordinates
+from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_declarations
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing, quotient_ring
 from .session_rings import ring_bindings
 from .session_values import Divisor, DualComplex, Resolution
@@ -65,7 +65,7 @@ def _resolution_input(polynomial, variables, ring, declare, active):
 
 def new_session(calculate):
     """Register session operations here so both entry points return the same values."""
-    declare = session_coordinates()
+    declare, ring = session_declarations()
     session = Evaluator({}, reserved=("help", "quit", "exit"))
     rings = session.rings
 
@@ -111,7 +111,7 @@ def new_session(calculate):
         return DualComplex(resolution, dual_complex(resolution))
 
     # The ring functions replace polynomial and ideal with readers that use the active ring.
-    session.builtins.update({"QQ": QQ, "coordinates": declare, "resolve": resolve,
+    session.builtins.update({"QQ": QQ, "coordinates": declare, "ring": ring, "resolve": resolve,
                              "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                              "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
                              "quotient_ring": quotient_ring, "hom": hom, **algebra_bindings(), **ring_bindings(rings)})

@@ -303,7 +303,7 @@ class Polynomial:
         return Polynomial(self._space, self._value ** exponent)
 
 
-def _declare_coordinates(names, coeffs, make_parent):
+def _declare_ring(names, coeffs, make_parent):
     if coeffs is not QQ:
         raise ValueError("The supported coefficient field is QQ.")
     if not names or any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", n)
@@ -311,8 +311,11 @@ def _declare_coordinates(names, coeffs, make_parent):
         raise ValueError("Use coordinate names of up to 24 letters, digits, or underscores, starting with a letter.")
     if len(names) != len(set(names)):
         raise ValueError("Choose distinct coordinate names.")
+    return make_parent(names, coeffs=coeffs)
 
-    generators = make_parent(names, coeffs=coeffs).coordinates
+
+def _declare_coordinates(names, coeffs, make_parent):
+    generators = _declare_ring(names, coeffs, make_parent).coordinates
     return generators[0] if len(names) == 1 else generators
 
 
@@ -321,8 +324,12 @@ def coordinates(*names, coeffs=QQ):
     return _declare_coordinates(names, coeffs, _CoordinateSpace.named)
 
 
-def session_coordinates():
-    """Create the coordinates function for one prompt or script."""
+def session_declarations():
+    """Create the coordinates and ring functions for one prompt or script.
+
+    Both functions share the session's rings, so ring("x", "y") is the parent
+    of the generators that coordinates("x", "y") returns.
+    """
     parents = {}
 
     def declared_parent(names, *, coeffs):
@@ -334,11 +341,25 @@ def session_coordinates():
             parent = parents.setdefault(key, _CoordinateSpace.named(names, coeffs=coeffs))
         return parent
 
-    def coordinates(*names, coeffs=QQ, fresh=False):
-        """Reuse the ring with these ordered coordinate names. Pass fresh=True for a separate ring."""
+    def parent_maker(fresh):
         if type(fresh) is not bool:
             raise ValueError("fresh must be True or False.")
-        make_parent = _CoordinateSpace.named if fresh else declared_parent
-        return _declare_coordinates(names, coeffs, make_parent)
+        return _CoordinateSpace.named if fresh else declared_parent
 
-    return coordinates
+    def coordinates(*names, coeffs=QQ, fresh=False):
+        """Reuse the ring with these ordered coordinate names. Pass fresh=True for a separate ring."""
+        return _declare_coordinates(names, coeffs, parent_maker(fresh))
+
+    def ring(*names, coeffs=QQ, fresh=False):
+        """Return the polynomial ring over QQ with these ordered coordinate names.
+
+        >>> R = ring("x", "y")
+        >>> x, y = R.coordinates
+        >>> f = polynomial("x^2 + y", ring=R)
+        >>> f.parent == R
+
+        Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
+        """
+        return _declare_ring(names, coeffs, parent_maker(fresh))
+
+    return coordinates, ring

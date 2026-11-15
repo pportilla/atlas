@@ -3,8 +3,8 @@
 Run `./atlas` at a terminal. Assignments bind names quietly. Enter a name or
 expression to inspect it. Tab completes names, fields such as `R.divisors`,
 and methods such as `R.chart(`. Use `:workspace` to inspect the rings and
-variables in use. Every ring has a name, and `use_ring` selects the ring that
-new polynomials use by default. Type `help functions` to list operations or
+variables in use. Create a ring with `R = ring("x", "y")`. Every ring has a
+name, and `use_ring` selects the ring that new polynomials use by default. Type `help functions` to list operations or
 `help resolve` for its arguments and an example.
 
 For a polynomial map germ, type `help ae_codimension`. The returned object's
@@ -19,10 +19,11 @@ you can enter them directly at the prompt. The documentation link opens the
 section for that kind of value.
 
 ```text
-atlas> x, y = coordinates("x", "y")
+atlas> R = ring("x", "y")
+atlas> x, y = R.coordinates
 atlas> f = y^2 - x^3
 atlas> help f
-f is a polynomial in R1 (QQ[x, y]).
+f is a polynomial in R (QQ[x, y]).
 
 Example
   f.parent
@@ -32,28 +33,33 @@ Example
 Docs  https://github.com/pportilla/atlas/blob/main/docs/sessions.md#choose-the-ring-of-a-polynomial
 ```
 
-Atlas named the ring `R1`. `f -h` and `f help` open the same card. Use
-`help R1` or `help f.parent` to inspect the ring, `help polynomial` for the
-constructor, and `:workspace` to see all your saved names.
+`f -h` and `f help` open the same card. Use `help R` or `help f.parent` to
+inspect the ring, `help polynomial` for the constructor, and `:workspace` to
+see all your saved names.
 
 ## Choose the ring of a polynomial
 
-`coordinates("x", "y")` gives you the generators of `QQ[x, y]`. Repeating
-the declaration in the same session gives you those same generators.
+`ring("x", "y")` returns the polynomial ring `QQ[x, y]`, and assigning it to
+`R` names the ring. `R.coordinates` gives its generators in order, and
+`polynomial("x^2", ring=R)` reads a formula in it. `coordinates("x", "y")`
+declares the same ring and returns its generators directly. Repeating either
+declaration in the same session gives you the same ring and generators.
 
 ```text
-atlas> x, y = coordinates("x", "y")
+atlas> R = ring("x", "y")
+atlas> x, y = R.coordinates
 atlas> f = y^2 + x
 atlas> x, y = coordinates("x", "y")
-atlas> x.parent == f.parent
+atlas> x.parent == R
 True
-atlas> g = f + x
+atlas> g = f + polynomial("x^2", ring=R)
 atlas> g.parent == f.parent
 True
 ```
 
-The `Rings` row now shows `R1 = QQ[x, y] → x, y, f, g`. Here the four names
-are polynomials with that parent, and `R1` is the name Atlas gave the ring.
+The `Rings` row now shows `R = QQ[x, y] → x, y, f, g`. Here the four names
+are polynomials with that parent. A ring that you have not named, such as one
+declared only with `coordinates`, appears under a name such as `R1`.
 [Name, select and delete rings](#name-select-and-delete-rings) explains these
 names and the active ring. If you save an ideal, Atlas lists it under
 its ambient ring. A resolution appears under the ring of its input equation.
@@ -79,10 +85,10 @@ atlas> v^2 + u^5
 0
 ```
 
-The workspace groups `x, y` and `I` in the ambient polynomial ring `R1`. Under
-`K = R1/(x^5+y^2)`, the coordinate entry `u = [x]` means the class of
+The workspace groups `x, y` and `I` in the ambient polynomial ring `R`. Under
+`K = R/(x^5+y^2)`, the coordinate entry `u = [x]` means the class of
 `x` in this quotient. `K.ambient.coordinates` gives the original polynomials.
-If you also write `R = quotient_ring(I)`, the heading shows both names for one
+If you also write `A = quotient_ring(I)`, the heading shows both names for one
 ring. A different compute backend still yields that same parent.
 Use `quotient_ring(I, fresh=True)` to request an independent copy.
 
@@ -151,7 +157,8 @@ True
 ```
 
 Here `x2` and `z2` name the generators spelled `x` and `z` in the second ring.
-The workspace lists that ring under the next free name, such as `R2`. Similarly,
+The workspace lists that ring under the next free name, such as `R1`, and
+`S = ring("x", "z")` names it `S`. Similarly,
 `x3, y3, z3 = coordinates("x", "y", "z")` selects `QQ[x, y, z]` while `x`,
 `y`, and `f` still belong to `QQ[x, y]`. Asking for
 `coordinates("y", "x")` also selects a different parent because the order changed.
@@ -180,10 +187,11 @@ assign `x, y = f.parent.coordinates`.
 
 ### Name, select and delete rings
 
-Every ring that holds a saved value has a name. When a declaration or a
-calculation introduces a ring that you have not named, Atlas binds the first
-free name among `R1`, `R2`, and so on. Assigning that ring to a name of your
-own renames it.
+Every ring that holds a saved value has a name. `R = ring("x", "y")` names a
+ring as you create it. When a declaration or a calculation introduces a ring
+that you have not named, Atlas binds the first free name among `R1`, `R2`,
+and so on. Assigning that ring to a name of your own renames it. In a new
+session:
 
 ```text
 atlas> x, y = coordinates("x", "y")
@@ -218,6 +226,8 @@ True
 ```
 
 Polynomials and coordinates keep their own parent, so `ideal(u)` lies in `P`.
+`use_ring` returns its ring, so `S = use_ring(ring("s", "t"))` creates, names
+and selects a ring in one line.
 `resolve("y^2-x^3")` and `monodromy_check` also read a string in the active
 ring when it is a polynomial ring over QQ. The workspace marks the active ring
 with `(active)`. `active_ring()` returns it, and `use_ring(None)` clears the

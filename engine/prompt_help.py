@@ -24,14 +24,9 @@ _TOPICS = {
         'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
         _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
     ),
-    "ring": (
-        "A polynomial’s parent is the ring in which its coordinates and arithmetic are defined.",
-        'x, y = coordinates("x", "y")\nf = x^2 + y\nf.parent\ng = polynomial("x+y", ring=f.parent)',
-        _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
-    ),
     "rings": (
-        "Atlas names each ring R1, R2, … until you name it, and use_ring selects the default ring.",
-        'x, y = coordinates("x", "y")\nuse_ring(R1)\nf = polynomial("x^2 + y")\nS = R1\ndelete_ring(S)',
+        "Name a ring when you create it with ring(), or Atlas names it R1, R2, … until you name it.",
+        'R = ring("x", "y")\nuse_ring(R)\nf = polynomial("x^2 + y")\nx, z = coordinates("x", "z")\nR1\ndelete_ring(R1)',
         _SESSION_GUIDE + "name-select-and-delete-rings",
     ),
     "QQ": (

@@ -128,8 +128,8 @@ class PromptHelpTests(unittest.TestCase):
 
     def test_help_follows_live_algebra_values_and_function_aliases(self):
         setup = ('x, y = coordinates("x", "y")\nf = x^2+y\nI = ideal(f)\nA = quotient_ring(I)\n'
-                 'a = A(x)\nphi = A.projection\nalias = factor\nd = dimension(I)\nring = x.parent\n')
-        for topic, example_part in (("ring", "ring.coordinates"), ("f", "ring=f.parent"),
+                 'a = A(x)\nphi = A.projection\nalias = factor\nd = dimension(I)\nP = x.parent\n')
+        for topic, example_part in (("P", "P.coordinates"), ("f", "ring=f.parent"),
                                     ("f.parent", "f.parent.coordinates"), ("I", "I.generators"),
                                     ("I.parent", "ring=I.parent"), ("I.quotient_ring", "I.quotient_ring.coordinates"),
                                     ("A", "A.ambient.coordinates"), ("A.coordinates", "residue classes"),
@@ -217,14 +217,15 @@ class PromptHelpTests(unittest.TestCase):
                                    ("K", "K is the quotient ring R1/(x).", "use_ring(K)"),
                                    ("d", "d records that deleting QQ[t] removed the names t, R3.", "d.names"),
                                    ("d.names", "d.names lists the saved names that d removed", "len(d.names)"),
-                                   ("rings", "until you name it", "delete_ring(S)")):
+                                   ("rings", "until you name it", 'R = ring("x", "y")'),
+                                   ("ring", 'ring(*names, coeffs=QQ, fresh=False)', "R.coordinates")):
             with self.subTest(topic=topic):
                 card, error = self.ask(setup + "help " + topic)
                 self.assertEqual(error, "")
                 card = card.rsplit("atlas> ", 1)[-1]
                 self.assertIn(first, card)
                 self.assertIn(part, card)
-                self.assert_example_runs("" if topic == "rings" else setup, card)
+                self.assert_example_runs("" if topic in ("rings", "ring") else setup, card)
                 path, anchor = card.rsplit("/blob/main/", 1)[1].split("#")
                 headings = re.findall(r"^#{1,6} (.+)$", (root / path).read_text(), re.MULTILINE)
                 self.assertIn(anchor, {re.sub(r"[^\w\- ]", "", h.lower()).replace(" ", "-") for h in headings})
@@ -244,7 +245,7 @@ class PromptHelpTests(unittest.TestCase):
         from engine.session_function_help import function_help
 
         builtins = new_session(None).builtins
-        for name in ("use_ring", "active_ring", "delete_ring", "polynomial", "ideal"):
+        for name in ("ring", "use_ring", "active_ring", "delete_ring", "polynomial", "ideal"):
             with self.subTest(name=name):
                 card = function_help(name, builtins)
                 self.assertIn(f"{name}(", card.split("\n\n", 1)[0])
