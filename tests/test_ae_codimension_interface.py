@@ -71,7 +71,24 @@ class AeCodimensionInterface(unittest.TestCase):
                                            'print(r.finite, r.value, r.scope)\nquit\n')
         self.assertEqual((status, error), (0, ""))
         self.assertIn("ae_codimension(*components", output)
+        self.assertIn("r.lower_bound", output)
         self.assertIn("True 1 origin", output)
+
+    def test_command_help_example_and_weighted_result_field(self):
+        help_text = shell(["./atlas", "algebra", "ae-codimension", "--help"])
+        self.assertEqual(help_text.returncode, 0, help_text.stderr)
+        self.assertIn("result.finite", help_text.stdout)
+        example = shlex.split(help_text.stdout.split("Example\n", 1)[1])
+        command = shell([*example, "--json"])
+        self.assertEqual(command.returncode, 0, command.stderr)
+        self.assertEqual(json.loads(command.stdout)["result"]["value"], 1)
+        script = run_script("""
+            x, y, z = coordinates("x", "y", "z")
+            r = ae_codimension(x, y, z^3+x*z, z^5+y*z)
+            print(r.value, r.last_weight)
+        """)
+        self.assertEqual(script.returncode, 0, script.stderr)
+        self.assertEqual(script.stdout.strip(), "2 6")
 
     def test_inconclusive_record_preserves_last_proved_lower_bound(self):
         names = [f"x{i}" for i in range(20)]

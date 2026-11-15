@@ -317,20 +317,51 @@ A nonzero GCD has leading coefficient one in the recorded order. Thus `gcd(0,f)`
 
 ### Extended right-left codimension of a map germ
 
-Use `ae_codimension(f1, ..., fp)` in the console or a script. Supply the ordered
-coordinates of a polynomial map with rational coefficients from one smooth
-source germ at the origin to one smooth target germ at the origin. Every
-component must vanish there. The components share one declared coordinate space.
-A zero or repeated component still counts toward the target dimension.
+Use `ae_codimension(f1, ..., fp)` or `ae_codimension([f1, ..., fp])` at
+the prompt or in a script. Supply ordered components in one declared source
+coordinate space over `QQ`. Each must vanish at the origin. Zero and repeated
+components count toward the target dimension.
 
-The CLI takes `./atlas algebra ae-codimension --vars t --component 't^2' --component 't^3' --json`.
-The HTTP operation is `ae-codimension` with `operands.components` an ordered
-array of polynomial strings. The cusp above returns `finite: true` and `value: 1`.
-A stable germ returns zero. A proof of infinite dimension returns `finite: false`
-and `value: null`. When the native solver reaches its jet work limit,
-`finite` and `value` are both null and the record gives the last proved
-`lower_bound` and `jet_degree`. Each record identifies the method used.
-[Definition and algorithms](../native/KERNEL.md#extended-right-left-codimension)
+The $\mathcal A_e$-codimension counts independent infinitesimal deformations
+of the map modulo changes of source and target coordinates, including constant
+vector fields. A stable map germ has value zero. In Singular's
+`classifyMapGerms.lib`, the corresponding value is `coDimMap(f)[2]` with
+the default extended convention. [Definition and native algorithms](../native/KERNEL.md#extended-right-left-codimension) · [Singular comparison](../benchmarks/README.md#extended-right-left-codimension-of-map-germs)
+
+For Sharland's $\widehat B_7$ with $\alpha=-1$, inspect the value and the
+weight at which the native solver proved that every higher piece vanishes.
+
+```python
+x, y, z = coordinates("x", "y", "z", coeffs=QQ)
+r = ae_codimension(x, y^2+x*z, z^2-x*y, y^7+y^6*z+y*z^6-z^7)
+print(r.finite, r.value)                     # True 837
+print(r.method, r.contact_order, r.last_weight)  # weighted_tangent_ranks 3 27
+```
+
+| `r.finite` in a session | `r.value` | Interpretation |
+| --- | --- | --- |
+| `True` | Integer | Exact finite codimension |
+| `False` | `None` | Proven infinite codimension |
+| `None` | `None` | Inconclusive. Inspect `r.reason`, the proven `r.lower_bound`, and the last completed `r.jet_degree`. |
+
+Every result gives the computation `method`. The optional fields
+`contact_order`, `last_weight`, and `jet_degree` describe the proof used.
+JSON uses `true`, `false`, and `null` for the three finiteness states.
+[Published examples and kernel timings](../benchmarks/README.md#published-map-germs)
+
+At the shell, repeat `--component` in target order. For the parametrized cusp
+$t\mapsto(t^2,t^3)$, the following command returns `finite: true` and `value: 1`.
+
+```sh
+./atlas algebra ae-codimension --vars t --component 't^2' --component 't^3' --json
+```
+
+Send the same map to `POST /api/algebra` with this JSON body. The response
+stores the number in `result.value`.
+
+```json
+{"operation":"ae-codimension","ring":{"variables":["t"]},"operands":{"components":["t^2","t^3"]}}
+```
 
 ### Quotient bases and local hypersurface invariants
 

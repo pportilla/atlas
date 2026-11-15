@@ -81,6 +81,15 @@ def register_parser(subparsers):
         parser = operations.add_parser(name, aliases=["localize"] if name == "localization" else [],
                                        help=OPERATION_DESCRIPTIONS[name], description=OPERATION_DESCRIPTIONS[name])
         parser.set_defaults(operation=name)
+        if name == "ae-codimension":
+            parser.epilog = (
+                "Each component must vanish at the origin. With --json, result.finite is\n"
+                "true for an exact integer in result.value, false for a proof of infinity,\n"
+                "or null for an inconclusive calculation. In the last case, read\n"
+                "result.lower_bound and result.reason.\n\n"
+                "Example\n  ./atlas algebra ae-codimension --vars t --component 't^2' --component 't^3'"
+            )
+            parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.add_argument("--vars", type=_comma_list, required=True, metavar="x,y",
                             help="ordered variables, highest priority first")
         parser.add_argument("--field", metavar="QQ", help="coefficient field (default: QQ)")

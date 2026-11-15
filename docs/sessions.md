@@ -6,6 +6,10 @@ and methods such as `R.chart(`. Use `:workspace` to inspect the rings and
 variables in use. Type `help functions` to list operations or `help resolve`
 for its arguments and an example.
 
+For a polynomial map germ, type `help ae_codimension`. The returned object's
+`.finite` field tells you how to interpret `.value`.
+[Map-germ inputs, results, and an example](../examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ)
+
 ## Inspect a cusp
 
 ```text

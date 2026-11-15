@@ -372,7 +372,7 @@ class _LocalNumber(_AtPoint, _QuotientNumber):
 
 
 class _AeCodimension(_LocalNumber):
-    _fields = _LocalNumber._fields | {"method", "lower_bound", "jet_degree", "contact_order", "reason"}
+    _fields = _LocalNumber._fields | {"method", "lower_bound", "jet_degree", "contact_order", "last_weight", "reason"}
 
     @property
     def method(self):
@@ -389,6 +389,10 @@ class _AeCodimension(_LocalNumber):
     @property
     def contact_order(self):
         return self._record["result"].get("contact_order")
+
+    @property
+    def last_weight(self):
+        return self._record["result"].get("last_weight")
 
     @property
     def reason(self):
@@ -875,7 +879,22 @@ def milnor_number(polynomial, *, point=None, order=None, variables=None, compute
 
 
 def ae_codimension(*components, order=None, variables=None, compute="auto"):
-    """Extended left-right codimension of a map germ, in target coordinate order."""
+    """Compute the extended left-right codimension of a map germ at the origin.
+
+    Pass the components in target order as separate arguments or as one list.
+    They must belong to the same source coordinate space over QQ and vanish
+    at the origin. The result measures deformations modulo infinitesimal changes
+    of source and target coordinates, including constant vector fields.
+
+    When r.finite is True, r.value is the exact codimension. False certifies
+    infinity. None means the calculation was inconclusive. In that case,
+    r.lower_bound and r.reason give the partial result. For a weighted
+    calculation, r.last_weight gives the last weight checked.
+
+    >>> t = coordinates("t", coeffs=QQ)
+    >>> r = ae_codimension(t^2, t^3)
+    >>> print(r.finite, r.value)  # True 1
+    """
     space, values, order = _polynomial_inputs(_unpack(components), order, variables, _scalar_space)
     request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},
                "operands": {"components": [str(f) for f in values]}, "compute": compute}

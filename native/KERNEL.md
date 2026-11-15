@@ -238,7 +238,11 @@ computes an integral nullspace spanning the rational kernel and carries it
 forward in the original monomial coordinates. A homogeneous component
 $c x_i+H$ with $H$ independent of $x_i$ can supply a monomial after the
 bounded source substitution $x_i\mapsto x_i-H/c$. This automorphism preserves
-the grading and the contact certificate. [Native quotient calculation](ae_weighted_quotient.cpp)
+the grading and the contact certificate. Before exact elimination, the kernel
+uses Hadamard's inequality to bound minor sizes from the heights of individual
+matrix columns. When it carries the nullspace basis into the next weight, it
+charges work only for the nonzero change-of-basis entries it multiplies.
+[Native quotient calculation](ae_weighted_quotient.cpp)
 
 Let $k$ be the contact order proved by the filtered jets. Since
 $\mathfrak m^kM\subset(f)M$, the monomial vectors of ordinary degree less
@@ -246,6 +250,8 @@ than $k$ span $M/(f)M$. Their weights are at most
 $G=(k-1)\max_i w_i-\min_j d_j$. Thus for $q>G$,
 $N_q=\sum_j f_j N_{q-d_j}$. A run of $\max_j d_j$ consecutive zero pieces
 ending at or above $G$ proves by induction that every later piece vanishes.
+For this method, `contact_order` records $k$ and `last_weight` records the
+weight at the end of that run of zeros.
 The sum of the computed coranks is then the dimension of the completed normal
 space, since positive weights give finite pieces and tend to infinity with
 ordinary degree. The kernel caches the Jacobian and the pullbacks across

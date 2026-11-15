@@ -48,7 +48,6 @@ _RING_EXAMPLES = {
     "local_smoothness": "local_smoothness(ideal(y - x^2)).value",
     "local_jacobian_algebra": "local_jacobian_algebra(y^2 - x^3).basis",
     "milnor_number": "milnor_number(y^2 - x^3).value",
-    "ae_codimension": "ae_codimension(x, y^2).value",
     "tjurina_number": "tjurina_number(y^2 - x^3).value",
 }
 
@@ -82,10 +81,14 @@ def function_help(name, builtins):
 
     canonical = getattr(function, "__name__", name)
     doc_lines = (getdoc(function) or "").splitlines()
-    summary = doc_lines[0] if doc_lines else ""
     doc_examples = [line[4:] for line in doc_lines if line.startswith((">>> ", "... "))]
     operation = canonical.replace("_", "-") if canonical != "localize" else "localization"
-    purpose = _PURPOSES.get(canonical) or OPERATION_DESCRIPTIONS.get(operation) or summary
+    if doc_examples:
+        example_start = next(i for i, line in enumerate(doc_lines) if line.startswith((">>> ", "... ")))
+        purpose = "\n".join(doc_lines[:example_start]).strip()
+    else:
+        summary = doc_lines[0] if doc_lines else ""
+        purpose = _PURPOSES.get(canonical) or OPERATION_DESCRIPTIONS.get(operation) or summary
     purpose = (purpose or f"Call the registered Atlas function {name}").rstrip(".") + "."
     purpose = purpose[0].upper() + purpose[1:]
 
