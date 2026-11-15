@@ -2,9 +2,9 @@
 
 import ast
 from fractions import Fraction
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from io import StringIO
-from itertools import count
+from itertools import count, groupby
 from keyword import iskeyword
 import operator
 import re
@@ -42,9 +42,7 @@ def _parse(source):
                 else token for token in tokens
             )
         statements = ast.parse(source).body
-        for statement in statements:
-            _prepare_assignments(statement)
-        return statements
+        return statements, _prepare_suite(statements)
     except tokenize.TokenError as error:
         message, (line, _) = error.args
         raise SessionError(message, line) from None
@@ -101,8 +99,8 @@ def assignment_syntax(source):
 
 def _prepare_assignments(statement):
     if isinstance(statement, (ast.For, ast.If)):
-        for child in (*statement.body, *statement.orelse):
-            _prepare_assignments(child)
+        statement._atlas_body = _prepare_suite(statement.body)
+        statement._atlas_orelse = _prepare_suite(statement.orelse)
         return
     if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
         return
@@ -123,6 +121,55 @@ def _prepare_assignments(statement):
         statement._atlas_pair = target.id, operation, left.id, right.id
     elif isinstance(right, ast.Constant) and type(right.value) is int:
         statement._atlas_pair = target.id, operation, left.id, right.value
+
+
+class _CallGroup:
+    """Consecutive named calls with simple arguments and single-name assignments."""
+    __slots__ = ("statements", "instructions", "execute")
+
+    def __init__(self, statements):
+        self.statements = statements
+        self.instructions = tuple((*s._atlas_pair, s.lineno) for s in statements)
+        from .session_ideal_native import assignment_runner
+        compiler = assignment_runner()
+        self.execute = compiler(self.instructions) if compiler is not None else None
+
+    def run(self, session):
+        completed = 0
+        if self.execute is not None and session._assignment_runner is not None:
+            completed = self.execute(session.__dict__)
+            if completed == len(self.instructions):
+                return
+            if isinstance(completed, tuple):
+                position, error = completed
+                target, name, _, _, line = self.instructions[position]
+                if error is None:
+                    raise SessionError(f"{target!r} is a reserved Atlas name.", line)
+                if isinstance(error, _EVALUATION_ERRORS):
+                    raise _call_error(name, line, error) from None
+                raise error
+        # Special bindings such as coordinates use the full evaluator. Earlier
+        # calls have already updated the workspace and must never be repeated.
+        for statement in self.statements[completed:]:
+            session._statement(statement)
+
+
+def _simple_named_call(statement):
+    pair = getattr(statement, "_atlas_pair", None)
+    return pair is not None and type(pair[1]) is str
+
+
+def _prepare_suite(statements):
+    for statement in statements:
+        _prepare_assignments(statement)
+    steps = []
+    for named, group in groupby(statements, _simple_named_call):
+        consecutive = tuple(group)
+        if named and len(consecutive) >= 2:
+            steps.append(_CallGroup(consecutive))
+        else:
+            steps.extend(consecutive)
+    return steps[0] if len(steps) == 1 and type(steps[0]) is _CallGroup else steps
 
 
 def _assign_pair(session, pair, line):
@@ -234,6 +281,11 @@ class Evaluator:
         self.reserved = frozenset(reserved)
         self.variables = {}
 
+    @cached_property
+    def _assignment_runner(self):
+        from .session_ideal_native import assignment_runner
+        return assignment_runner()
+
     def assign(self, pair, source, transcript):
         """Run a recognized binary assignment and record the original text on success."""
         if not _assign_pair(self, pair, 1):
@@ -245,14 +297,17 @@ class Evaluator:
     def run(self, source, *, transcript=None):
         """Execute in this session; yield (True, value) for top-level expression previews."""
         if len(source) <= 512:
-            pair = _pair_syntax(source)
+            pair = _pair_syntax(source) if "\n" not in source else None
             if pair is not None and self.assign(pair, source, transcript):
                 return
-            statements = _short_statements(source)
+            statements, suite = _short_statements(source)
         else:
-            statements = _parse(source)
+            statements, suite = _parse(source)
         if transcript is None:
-            for value in map(self._statement, statements):
+            if type(suite) is _CallGroup:
+                suite.run(self)
+                return
+            for value in map(self._statement, suite):
                 if value is not None:
                     yield True, value
             return
@@ -273,6 +328,9 @@ class Evaluator:
                 yield True, value
 
     def _statement(self, statement):
+        if type(statement) is _CallGroup:
+            statement.run(self)
+            return
         try:
             pair = getattr(statement, "_atlas_pair", None)
             if pair is not None and _assign_pair(self, pair, statement.lineno):
@@ -288,12 +346,10 @@ class Evaluator:
                     raise ValueError("A for loop requires a list, tuple, or record.")
                 for item in items:
                     self._bind(statement.target, item)
-                    for child in statement.body:
-                        self._statement(child)
+                    self._run_suite(statement._atlas_body)
             elif isinstance(statement, ast.If):
-                suite = statement.body if self._value(statement.test) else statement.orelse
-                for child in suite:
-                    self._statement(child)
+                suite = statement._atlas_body if self._value(statement.test) else statement._atlas_orelse
+                self._run_suite(suite)
             else:
                 raise ValueError("Use an expression, assignment, for loop, or if statement.")
         except SessionError:
@@ -302,6 +358,13 @@ class Evaluator:
             raise SessionError("Division by zero.", statement.lineno) from None
         except _EVALUATION_ERRORS as error:
             raise SessionError(str(error), statement.lineno) from None
+
+    def _run_suite(self, suite):
+        if type(suite) is _CallGroup:
+            suite.run(self)
+        else:
+            for child in suite:
+                self._statement(child)
 
     def _assignment_value(self, node):
         """Track a direct coordinate declaration through indexing, without evaluating twice."""
@@ -314,26 +377,31 @@ class Evaluator:
 
     def _bind(self, target, value, *, declaration=None):
         if isinstance(target, ast.Name):
-            targets, values = [target], [value]
-        elif isinstance(target, (ast.Tuple, ast.List)):
-            if not isinstance(value, (tuple, list)) or len(value) != len(target.elts):
-                raise ValueError(f"Expected {len(target.elts)} values to unpack.")
-            targets, values = target.elts, value
-        else:
+            name = self._target_name(target)
+            if declaration is not None:
+                self._check_coordinate_bindings([name], [value], declaration)
+            self.variables[name] = value
+            return
+        if not isinstance(target, (ast.Tuple, ast.List)):
             raise ValueError("Assign to a name or a list of names.")
-
+        if not isinstance(value, (tuple, list)) or len(value) != len(target.elts):
+            raise ValueError(f"Expected {len(target.elts)} values to unpack.")
         names = []
-        for item in targets:
-            if not isinstance(item, ast.Name) or item.id.startswith("_"):
-                raise ValueError("Assign to public variable names.")
-            if item.id in self.builtins or item.id in self.reserved:
-                raise ValueError(f"{item.id!r} is a reserved Atlas name.")
-            if item.id in names:
-                raise ValueError(f"Repeated assignment target {item.id!r}.")
-            names.append(item.id)
+        for item in target.elts:
+            name = self._target_name(item)
+            if name in names:
+                raise ValueError(f"Repeated assignment target {name!r}.")
+            names.append(name)
         if declaration is not None:
-            self._check_coordinate_bindings(names, values, declaration)
-        self.variables.update(zip(names, values))
+            self._check_coordinate_bindings(names, value, declaration)
+        self.variables.update(zip(names, value))
+
+    def _target_name(self, item):
+        if not isinstance(item, ast.Name) or item.id.startswith("_"):
+            raise ValueError("Assign to public variable names.")
+        if item.id in self.builtins or item.id in self.reserved:
+            raise ValueError(f"{item.id!r} is a reserved Atlas name.")
+        return item.id
 
     def _check_coordinate_bindings(self, names, values, declaration):
         conflicts = {}

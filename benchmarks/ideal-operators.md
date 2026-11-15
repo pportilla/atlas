@@ -1,34 +1,61 @@
 # Ideal arithmetic at the prompt and in resolution charts
 
-## Declaring ideals and computing with them
+## Declaring ideals and computing with them in scripts
 
-Median microseconds on a Ryzen 7 6800H with CPython 3.14.4 and Singular 4.4.1. The four input polynomials already exist in one copy of `QQ[x,y]` with graded reverse lexicographic order. Each iteration constructs the required ideals and immediately computes a sum, product or square. A square needs only the left ideal. The Atlas columns call the public ideal constructor and operator directly. Singular reassigns the ideals and the result in its interpreter. Trials use a single CPU core, and each reported time is the median of five batches.
+Each iteration starts with four existing polynomials in one `QQ[x,y]` ring and reassigns the ideals and result. For a sum or product, Atlas executes these three lines.
 
-| Inputs | Operation | Previous Atlas, 16 calls | Atlas, 16 | Singular, 16 | Atlas, 256 | Singular, 256 |
+```atlas
+I = ideal(a, b)
+J = ideal(c, d)
+answer = ideal_sum(I, J)
+```
+
+For the product the third line calls `ideal_product(I, J)`. The square declares only `I` and calls `ideal_power(I, 2)`. Singular executes equivalent assignments inside its interpreter loop, and uses `std(I^2)` with `option(redSB)` because Atlas returns a reduced Gröbner basis. Both use graded reverse lexicographic order. Each trial checks mutual ideal containment in Singular outside the timer.
+
+Median microseconds per complete iteration, from five trials on a single Ryzen 7 6800H core with CPython 3.14.4 and Singular 4.4.1. The repeated-script columns submit the complete assignment block through the Atlas script evaluator for each iteration. The last column runs the same lines inside a single Atlas `for` loop. An untimed iteration primes the evaluator for each script. Ring and polynomial construction, process launch and result formatting are outside these timers.
+
+| Inputs | Operation | Previous Atlas, 256 | Atlas, 16 | Singular, 16 | Atlas, 256 | Singular, 256 | Atlas `for` loop, 256 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Monomials | Sum | 3.95 | 2.40 | 4.06 | 2.30 | 2.91 | 2.31 |
+| Monomials | Product | 4.20 | 2.60 | 4.06 | 2.43 | 2.89 | 2.50 |
+| Monomials | Square | 5.42 | 4.89 | 8.50 | 4.48 | 7.38 | 4.40 |
+| Rational forms | Sum | 3.96 | 2.34 | 4.00 | 2.18 | 3.17 | 2.18 |
+| Rational forms | Product | 5.26 | 3.79 | 6.00 | 3.43 | 4.89 | 3.43 |
+| Rational forms | Square | 32.90 | 35.71 | 65.69 | 33.06 | 61.25 | 33.31 |
+
+Both Atlas script measurements had a lower median than Singular on all six cases at both batch sizes. [Driver](ideal_operators.py) · [Before the change](ideal-script-before-ryzen-6800h.json) · [All 16-iteration trials](ideal-operators-ryzen-6800h.json) · [All 256-iteration trials](ideal-operators-batch256-ryzen-6800h.json)
+
+The monomial inputs are `I = (x², y)` and `J = (x, y²)`. The rational inputs are `I = ((x+2y)⁸, (18446744073709551629/7)x⁶y)` and `J = ((2x−y)⁷, xy⁵/13)`.
+
+### Time spent evaluating script statements
+
+The direct control calls the same public Atlas functions, reads the same named operands and writes the results into the same workspace dictionary. Subtracting that median from the repeated-script median estimates the cost of dispatching the Atlas statements. Timings are in microseconds at 256 iterations.
+
+| Inputs | Operation | Previous direct | Previous script | Current direct | Current script | Current native arithmetic alone |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Monomials | Sum | 16.42 | 3.12 | 4.00 | 2.71 | 2.88 |
-| Monomials | Product | 17.39 | 3.55 | 4.06 | 2.99 | 2.85 |
-| Monomials | Square | 12.36 | 5.40 | 8.81 | 4.65 | 7.41 |
-| Rational forms | Sum | 27.26 | 3.20 | 4.06 | 2.89 | 3.41 |
-| Rational forms | Product | 29.66 | 4.81 | 5.94 | 3.98 | 5.00 |
-| Rational forms | Square | 49.76 | 37.43 | 66.06 | 35.03 | 65.57 |
+| Monomials | Sum | 2.44 | 3.95 | 1.53 | 2.30 | 0.06 |
+| Monomials | Product | 2.71 | 4.20 | 1.71 | 2.43 | 0.26 |
+| Monomials | Square | 4.00 | 5.42 | 3.65 | 4.48 | 1.16 |
+| Rational forms | Sum | 2.46 | 3.96 | 1.44 | 2.18 | 0.06 |
+| Rational forms | Product | 3.65 | 5.26 | 2.66 | 3.43 | 1.10 |
+| Rational forms | Square | 31.34 | 32.90 | 32.02 | 33.06 | 27.53 |
 
-The monomial inputs are `I = (x², y)` and `J = (x, y²)`. The rational inputs are `I = ((x+2y)⁸, (18446744073709551629/7)x⁶y)` and `J = ((2x−y)⁷, xy⁵/13)`. Atlas returns a reduced Gröbner basis for the square, so Singular runs `std(I^2)` with `option(redSB)`. Outside the timer, each trial verifies mutual ideal containment in Singular. [Driver](ideal_operators.py) · [Previous 16-call measurements](https://github.com/pportilla/atlas/blob/7907dfa/benchmarks/ideal-operators-ryzen-6800h.json) · [All 16-call trials](ideal-operators-ryzen-6800h.json) · [All 256-call trials](ideal-operators-batch256-ryzen-6800h.json)
+Evaluating and binding the statements added 1.49–1.62 µs above the direct calls on the four sum and product examples before this change. Atlas now prepares groups of simple assignments once, then resolves the current names and calls the original functions in order. Newly declared ideals own their native generators directly, removing an intermediate wrapper from each declaration. The remaining dispatch time was 0.72–0.78 µs on the same examples. [Script evaluator](../engine/session_expressions.py) · [Native call dispatch](../native/python_session.cpp) · [Ideal constructor](../native/python_ideal.cpp)
 
-### First declaration and script execution
+### Repeated and fresh input polynomials
 
-The first Atlas column uses polynomials prepared in separate fresh rings before timing. The constructor has never seen the polynomial objects or assembled an ideal in that ring. The script column binds each input ideal with `I = ideal(a, b)` and assigns the result with the named function. The script evaluator handles all the assignments. Both columns include ideal construction and computation. The Singular column runs the same assignment sequence in its interpreter. Each trial contains 256 iterations.
+The original direct-operator benchmark supplies the generators, parent and order to the public ideal constructor on every iteration. The fresh-input control performs the very first ideal declaration from each set of polynomials in its own independent parent. Both exclude creating the polynomials. Singular uses the same polynomials in the same ring across iterations. These medians use 256 iterations.
 
-| Inputs | Operation | Atlas, first declaration | Atlas script | Singular |
+| Inputs | Operation | Atlas direct, repeated inputs | Atlas direct, first declaration | Singular, repeated inputs |
 | --- | --- | ---: | ---: | ---: |
-| Monomials | Sum | 3.41 | 4.19 | 2.88 |
-| Monomials | Product | 3.98 | 4.37 | 2.85 |
-| Monomials | Square | 5.31 | 6.12 | 7.41 |
-| Rational forms | Sum | 4.00 | 4.45 | 3.41 |
-| Rational forms | Product | 5.79 | 5.76 | 5.00 |
-| Rational forms | Square | 36.28 | 37.20 | 65.57 |
+| Monomials | Sum | 1.83 | 2.60 | 2.91 |
+| Monomials | Product | 2.06 | 2.79 | 2.89 |
+| Monomials | Square | 4.04 | 4.81 | 7.38 |
+| Rational forms | Sum | 1.75 | 2.58 | 3.17 |
+| Rational forms | Product | 2.96 | 4.20 | 4.89 |
+| Rational forms | Square | 31.91 | 33.97 | 61.25 |
 
-Atlas had a lower median on all 6 cases at 16 calls and 5 of the 6 cases at 256 calls in the original declaration-inclusive test. The fresh-polynomial condition had a lower median on 2 of the 6 cases, and the script on 2 of the 6 cases.
+For the monomial product, Atlas took 2.79 µs with fresh polynomials and parents, compared with 2.89 µs for Singular with reused inputs.
 
 ## Cost of declaring two ideals
 
@@ -38,8 +65,8 @@ These medians cover the two positional `ideal(f, g)` calls together over seven t
 
 | Inputs | Previous Atlas, first declaration | Atlas, first declaration | Atlas, repeated declaration | Singular |
 | --- | ---: | ---: | ---: | ---: |
-| Monomials | 22.71 | 1.65 | 1.46 | 3.56 |
-| Rational forms | 48.14 | 2.73 | 1.41 | 2.32 |
+| Monomials | 1.65 | 1.04 | 0.40 | 3.62 |
+| Rational forms | 2.73 | 1.69 | 0.68 | 2.33 |
 
 ### Including polynomial creation
 
@@ -47,35 +74,37 @@ A separate script evaluates all four polynomial expressions from `x` and `y` and
 
 | Inputs | Work | Previous Atlas | Atlas | Singular |
 | --- | --- | ---: | ---: | ---: |
-| Monomials | Four polynomials | 65.47 | 80.84 | 5.22 |
-| Monomials | Four polynomials and two ideals | 108.64 | 89.62 | 6.81 |
-| Rational forms | Four polynomials | 511.40 | 604.76 | 7.59 |
-| Rational forms | Four polynomials and two ideals | 584.31 | 617.73 | 8.81 |
+| Monomials | Four polynomials | 80.84 | 80.65 | 5.28 |
+| Monomials | Four polynomials and two ideals | 89.62 | 89.85 | 7.00 |
+| Rational forms | Four polynomials | 604.76 | 620.80 | 7.75 |
+| Rational forms | Four polynomials and two ideals | 617.73 | 647.83 | 8.91 |
 
-The declaration driver verifies the ordered generators against the original expressions in Singular. The public `ideal` calls and the scripts are timed separately from those checks. [Driver](ideal_declarations.py) · [Previous build, all trials](ideal-declarations-before-native-polynomials-ryzen-6800h.json) · [Current build, all trials](ideal-declarations-ryzen-6800h.json)
+The rational expressions produce 12 intermediate polynomial operations. On first evaluation in a fresh ring, Atlas formats operands for each native request and decodes the sparse result back into Python terms. In a separate profile of these four expressions, decoding took about 227 µs and formatting operands took about 89 µs. These costs occur before the first ideal declaration. [Polynomial arithmetic and decoding](../engine/native_polynomial.py)
+
+The declaration benchmark verifies the ordered generators against the original expressions. [Driver](ideal_declarations.py) · [Previous build, all trials](https://github.com/pportilla/atlas/blob/fa9e3d5/benchmarks/ideal-declarations-ryzen-6800h.json) · [Current build, all trials](ideal-declarations-ryzen-6800h.json)
 
 ## Operating on saved ideals at the prompt
 
-The Atlas prompt column includes routing the submitted line, computing and saving the ideal, and recording the command in the transcript. Input comes from memory. Screen painting, terminal I/O and formatting the result for display take place outside the measurement. These medians use five trials of 16 operations on the same saved ideals.
+The prompt benchmark times a named assignment on already declared ideals and saves the command to the transcript. Input comes from memory. Screen painting, terminal I/O and result formatting take place outside the timer. These medians use five trials of 16 operations.
 
-| Inputs | Operation | Original Atlas prompt | Atlas C++ arithmetic | Atlas prompt | Singular assignment |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Monomials | Sum | 512.12 | 0.09 | 1.73 | 2.94 |
-| Monomials | Product | 515.24 | 0.52 | 2.11 | 3.00 |
-| Monomials | Square | 76,134.63 | 1.29 | 3.57 | 8.00 |
-| Rational forms | Sum | 757.67 | 0.10 | 1.74 | 2.94 |
-| Rational forms | Product | 877.69 | 1.59 | 3.21 | 4.94 |
-| Rational forms | Square | 72,558.28 | 28.66 | 31.93 | 64.94 |
+| Inputs | Operation | Atlas C++ arithmetic | Atlas prompt | Singular assignment |
+| --- | --- | ---: | ---: | ---: |
+| Monomials | Sum | 0.09 | 1.84 | 3.00 |
+| Monomials | Product | 0.52 | 1.93 | 3.00 |
+| Monomials | Square | 1.29 | 3.57 | 7.75 |
+| Rational forms | Sum | 0.09 | 1.66 | 2.81 |
+| Rational forms | Product | 1.55 | 3.14 | 4.94 |
+| Rational forms | Square | 29.11 | 32.57 | 66.56 |
 
-At 256 calls per trial, the named prompt assignment had a lower median than Singular on all 6 cases. Small powers compute a complete reduced basis in the session under a work limit. Larger inputs and reductions that reach the limit use the cancellable worker. A saved result can feed another operation immediately. Displaying its generators or exporting the replay record formats the native data on demand. [C++ driver](ideal_operators_kernel.cpp) · [Original build](ideal-operators-before-ryzen-6800h.json) · [256-call results](ideal-operators-batch256-ryzen-6800h.json)
+[C++ driver](ideal_operators_kernel.cpp) · [Original build](ideal-operators-before-ryzen-6800h.json) · [All 16-call trials](ideal-operators-ryzen-6800h.json)
 
 ### Starting a new command
 
-Starting a fresh `./atlas algebra` process, parsing the input, writing the JSON record and exiting took 4.13–4.94 ms across the six cases. Singular took 5.54–6.52 ms to start, compute and print the generators. The comparison uses five launches per case on core 6. [Driver](ideal_operators_process.py) · [All process trials](ideal-operators-process-ryzen-6800h.json)
+Starting a fresh `./atlas algebra` process, parsing the input, writing the JSON record and exiting took 4.70–5.50 ms across the six cases. Singular took 6.20–6.71 ms to start, compute and print the generators. The comparison uses five launches per case on core 6. [Driver](ideal_operators_process.py) · [All process trials](ideal-operators-process-ryzen-6800h.json)
 
 ### Repeating the comparison
 
-Build with the headers for the CPython interpreter that will run Atlas. On Debian or Ubuntu these are usually in `python3-dev`. With headers, the build creates a stable-ABI extension. On a headerless build, Atlas calls the same native functions through ctypes. The measurements above use the extension.
+Build with the headers for the CPython interpreter that will run Atlas. On Debian or Ubuntu these are usually in `python3-dev`. With headers, the build creates a stable-ABI extension. On a headerless build, Atlas calls the same native functions through ctypes. The measurements above use the extension. To reproduce the matched before-control, run the current operator driver in a checkout of the [previous build](https://github.com/pportilla/atlas/tree/fa9e3d54fd17bdce19ffef0b39e1fe836b20f368) with the same compiler and interpreter.
 
 ```sh
 make -j4

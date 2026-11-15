@@ -16,7 +16,7 @@ from .polynomial import LimitError, integer_text, parse_expression, rational_tex
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace
-from .session_ideal_native import values as ideal_values
+from .session_ideal_native import ideal_constructor, values as ideal_values
 
 if TYPE_CHECKING:
     from .session_maps import RingHomomorphism
@@ -783,19 +783,11 @@ def _assemble_ideal(space, generators):
 
 def ideal(*generators, order=None, variables=None, ring=None):
     """Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."""
-    generators = _unpack(generators)
-    if generators and variables is None and order in (None, "lex", "grevlex"):
-        first = generators[0]
-        if type(first) is Polynomial and (ring is None or first._space is ring):
-            parent = first._space
-            native_ring = parent._native_ring
-            if native_ring is not None:
-                # Check all live parents and gather their native generators in one pass.
-                handle = native_ring.declare(parent, Polynomial, generators)
-                if handle is not NotImplemented:
-                    return Ideal(parent, generators, order or "grevlex", handle)
-    space, generators, order = _polynomial_inputs(generators, order, variables, ring=ring)
+    space, generators, order = _polynomial_inputs(_unpack(generators), order, variables, ring=ring)
     return Ideal(space, generators, order, _assemble_ideal(space, generators))
+
+
+ideal = ideal_constructor(ideal, Polynomial, Ideal)
 
 
 def _typed(record, space, *, quotient_parent=None):

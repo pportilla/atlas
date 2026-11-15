@@ -6,13 +6,17 @@
 #include <cstring>
 #include "prepared_ideal.hpp"
 extern "C" void atlas_groebner_release(char*) noexcept;
+int atlas_add_session_runner(PyObject* module);
 
 namespace {
 constexpr char ring_name[] = "atlas.ideal_ring";
 constexpr char polynomial_name[] = "atlas.ideal_polynomial";
 
 void destroy_ring(PyObject* obj) { atlas_ideal_ring_release(PyCapsule_GetPointer(obj,ring_name)); }
-void destroy_polynomial(PyObject* obj) { atlas_ideal_polynomial_release(PyCapsule_GetPointer(obj,polynomial_name)); }
+void destroy_polynomial(PyObject* obj) {
+    atlas_ideal_polynomial_release(PyCapsule_GetPointer(obj,polynomial_name));
+    Py_XDECREF(static_cast<PyObject*>(PyCapsule_GetContext(obj)));
+}
 
 PyObject* make_ring(PyObject*, PyObject* width) {
     const size_t n = PyLong_AsSize_t(width);
@@ -48,7 +52,11 @@ PyObject* make_polynomial(PyObject*, PyObject* args) {
         return nullptr;
     }
     auto* result = PyCapsule_New(polynomial,polynomial_name,destroy_polynomial);
-    if (!result) atlas_ideal_polynomial_release(polynomial);
+    if (result) {
+        // A generator carries its exact ring through the C++ and Python calls.
+        if (PyCapsule_SetContext(result,parent) < 0) { Py_DECREF(result); return nullptr; }
+        Py_INCREF(parent);
+    } else atlas_ideal_polynomial_release(polynomial);
     return result;
 }
 
@@ -69,26 +77,38 @@ struct Handle {
     PyObject_HEAD
     void* ideal;
     PyObject* values;  // Optional tuple of immutable session expressions.
+    PyTypeObject* handle_type; // Held alive by the instance's type or its bases.
+    PyObject *space, *generators, *order; // Present for a public declared ideal.
 };
 
-PyObject* owned(PyTypeObject* type, void* ideal) {
+PyObject* owned(PyTypeObject* type, void* ideal, PyTypeObject* instance_type = nullptr) {
     if (!ideal) {
         const char* error = atlas_ideal_error();
         if (*error) { PyErr_SetString(PyExc_ArithmeticError,error); return nullptr; }
         Py_RETURN_NONE;  // Retry in the cancellable worker.
     }
-    auto* self = reinterpret_cast<Handle*>(PyType_GenericAlloc(type,0));
+    auto* self = reinterpret_cast<Handle*>(PyType_GenericAlloc(instance_type ? instance_type : type,0));
     if (!self) { atlas_ideal_release(ideal); return nullptr; }
     self->ideal = ideal;
+    self->handle_type = type;
     return reinterpret_cast<PyObject*>(self);
 }
 
 int traverse(Handle* self, visitproc visit, void* arg) {
     Py_VISIT(Py_TYPE(self));
     Py_VISIT(self->values);
+    Py_VISIT(self->space);
+    Py_VISIT(self->generators);
+    Py_VISIT(self->order);
     return 0;
 }
-int clear(Handle* self) { Py_CLEAR(self->values); return 0; }
+int clear(Handle* self) {
+    Py_CLEAR(self->values);
+    Py_CLEAR(self->space);
+    Py_CLEAR(self->generators);
+    Py_CLEAR(self->order);
+    return 0;
+}
 void destroy(Handle* self) {
     PyObject_GC_UnTrack(self);
     clear(self);
@@ -104,7 +124,7 @@ PyObject* reject_new(PyTypeObject*, PyObject*, PyObject*) {
 
 template<bool product>
 PyObject* binary(Handle* self, PyObject* right) {
-    if (Py_TYPE(self) != Py_TYPE(right)) {
+    if (!PyObject_TypeCheck(right,self->handle_type)) {
         PyErr_SetString(PyExc_TypeError,"Expected another prepared ideal.");
         return nullptr;
     }
@@ -112,7 +132,7 @@ PyObject* binary(Handle* self, PyObject* right) {
     Py_BEGIN_ALLOW_THREADS
     answer = atlas_ideal_binary(self->ideal,reinterpret_cast<Handle*>(right)->ideal,product);
     Py_END_ALLOW_THREADS
-    return owned(Py_TYPE(self),answer);
+    return owned(self->handle_type,answer);
 }
 PyObject* power(Handle* self, PyObject* args) {
     PyObject* exponent;
@@ -124,7 +144,7 @@ PyObject* power(Handle* self, PyObject* args) {
     Py_BEGIN_ALLOW_THREADS
     answer = atlas_ideal_power_small(self->ideal,degree,lex);
     Py_END_ALLOW_THREADS
-    return owned(Py_TYPE(self),answer);
+    return owned(self->handle_type,answer);
 }
 PyObject* size(Handle* self, PyObject*) {
     size_t count;
@@ -194,48 +214,128 @@ struct PolynomialOwners {
     ~PolynomialOwners() { while (count) Py_DECREF(objects[--count]); }
 };
 
-PyObject* declare(PyObject* type, PyObject* args) {
-    PyObject *parent_token, *parent, *polynomial_type, *items;
-    if (!PyArg_ParseTuple(args,"OOOO!",&parent_token,&parent,&polynomial_type,&PyTuple_Type,&items))
-        return nullptr;
-    auto* ring = PyCapsule_GetPointer(parent_token,ring_name);
-    if (!ring) return nullptr;
+struct OwnedReference {
+    PyObject* value;
+    ~OwnedReference() { Py_XDECREF(value); }
+};
+
+struct ConstructorConfig { PyObject* definition; };
+int traverse_constructor(PyObject* module, visitproc visit, void* arg) {
+    Py_VISIT(static_cast<ConstructorConfig*>(PyModule_GetState(module))->definition);
+    return 0;
+}
+int clear_constructor(PyObject* module) {
+    Py_CLEAR(static_cast<ConstructorConfig*>(PyModule_GetState(module))->definition);
+    return 0;
+}
+PyModuleDef constructor_module = {PyModuleDef_HEAD_INIT,"_atlas_ideal_constructor",nullptr,
+    sizeof(ConstructorConfig),nullptr,nullptr,traverse_constructor,clear_constructor,nullptr};
+
+// Dispatch ordinary declarations directly. Scalar embeddings, ordered results,
+// worker-sized ideals and diagnostics continue through the public validator.
+PyObject* public_ideal(PyObject* module, PyObject* args, PyObject* kwargs) {
+    auto* state = static_cast<ConstructorConfig*>(PyModule_GetState(module))->definition;
+    auto* base = reinterpret_cast<PyTypeObject*>(PyTuple_GetItem(state,0));
+    auto* subclass = reinterpret_cast<PyTypeObject*>(PyTuple_GetItem(state,1));
+    auto* polynomial_type = PyTuple_GetItem(state,2);
+    auto fallback = [&] { return PyObject_Call(PyTuple_GetItem(state,3),args,kwargs); };
+    auto* order = PyTuple_GetItem(state,4);
+    PyObject* requested_ring = nullptr;
+    if (kwargs) {
+        requested_ring = PyDict_GetItemString(kwargs,"ring");
+        auto* chosen = PyDict_GetItemString(kwargs,"order");
+        if (PyDict_Size(kwargs) != (requested_ring != nullptr) + (chosen != nullptr)) return fallback();
+        if (chosen && chosen != Py_None) {
+            if (!PyUnicode_CheckExact(chosen) ||
+                (PyUnicode_CompareWithASCIIString(chosen,"grevlex") && PyUnicode_CompareWithASCIIString(chosen,"lex")))
+                return fallback();
+            order = chosen;
+        }
+    }
+    PyObject* items = args;
+    if (PyTuple_Size(args) == 1 && PyTuple_CheckExact(PyTuple_GetItem(args,0))) items = PyTuple_GetItem(args,0);
     const auto count = PyTuple_Size(items);
-    if (count > 128) Py_RETURN_NOTIMPLEMENTED; // The general path validates every parent.
-    const auto* fields = static_cast<const Fields*>(PyType_GetModuleState(reinterpret_cast<PyTypeObject*>(type)));
+    if (!count || count > 128) return fallback();
+    const auto* fields = static_cast<const Fields*>(PyType_GetModuleState(base));
     if (!fields) return nullptr;
+    OwnedReference parent{nullptr};
+    void* ring = nullptr;
     void* polynomials[128];
     PolynomialOwners owners;
     for (Py_ssize_t i = 0; i < count; ++i) {
         auto* f = PyTuple_GetItem(items,i);
-        if (reinterpret_cast<PyObject*>(Py_TYPE(f)) != polynomial_type) Py_RETURN_NOTIMPLEMENTED;
+        if (reinterpret_cast<PyObject*>(Py_TYPE(f)) != polynomial_type) return fallback();
         auto* space = PyObject_GetAttr(f,fields->parent_name);
         if (!space) return nullptr;
-        bool same = space == parent;
-        Py_DECREF(space);
-        if (!same) Py_RETURN_NOTIMPLEMENTED; // General path can embed a QQ scalar.
+        if (i == 0) {
+            parent.value = space;
+            if (requested_ring && requested_ring != Py_None && parent.value != requested_ring) return fallback();
+        } else {
+            bool same = space == parent.value;
+            Py_DECREF(space);
+            if (!same) return fallback();
+        }
         auto* owner = PyObject_GetAttr(f,fields->polynomial_name);
         if (!owner) {
             if (!PyErr_ExceptionMatches(PyExc_AttributeError)) return nullptr;
             PyErr_Clear();
-            Py_RETURN_NOTIMPLEMENTED;
+            return fallback();
         }
         owners.objects[owners.count++] = owner;
-        if (!PyCapsule_IsValid(owner,polynomial_name)) Py_RETURN_NOTIMPLEMENTED;
+        if (!PyCapsule_IsValid(owner,polynomial_name)) return fallback();
         polynomials[i] = PyCapsule_GetPointer(owner,polynomial_name);
+        if (i == 0) {
+            auto* context = static_cast<PyObject*>(PyCapsule_GetContext(owner));
+            ring = PyCapsule_GetPointer(context,ring_name);
+            if (!ring) return nullptr;
+        }
     }
-    return owned(reinterpret_cast<PyTypeObject*>(type),
-                 atlas_ideal_from_polynomials(ring,polynomials,static_cast<size_t>(count)));
+    void* handle = atlas_ideal_from_polynomials(ring,polynomials,static_cast<size_t>(count));
+    if (!handle && !*atlas_ideal_error()) return fallback();
+    auto* result = owned(base,handle,subclass);
+    if (result) {
+        auto* declared = reinterpret_cast<Handle*>(result);
+        declared->space = Py_NewRef(parent.value);
+        declared->generators = Py_NewRef(items);
+        declared->order = Py_NewRef(order);
+    }
+    return result;
+}
+
+PyMethodDef ideal_function = {"ideal", reinterpret_cast<PyCFunction>(reinterpret_cast<void(*)()>(public_ideal)),
+    METH_VARARGS | METH_KEYWORDS,
+    "ideal($self, /, *generators, order=None, variables=None, ring=None)\n--\n\n"
+    "Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."};
+
+PyObject* make_constructor(PyObject* type, PyObject* args) {
+    PyObject *value_type, *polynomial_type, *fallback;
+    if (!PyArg_ParseTuple(args,"O!O!O",&PyType_Type,&value_type,&PyType_Type,&polynomial_type,&fallback))
+        return nullptr;
+    if (!PyType_IsSubtype(reinterpret_cast<PyTypeObject*>(value_type),reinterpret_cast<PyTypeObject*>(type))) {
+        PyErr_SetString(PyExc_TypeError,"Expected a native ideal value type.");
+        return nullptr;
+    }
+    OwnedReference order{PyUnicode_InternFromString("grevlex")};
+    if (!order.value) return nullptr;
+    // A module-bound builtin retains its qualified name, signature and pickle identity.
+    OwnedReference context{PyModule_Create(&constructor_module)};
+    if (!context.value) return nullptr;
+    auto* config = static_cast<ConstructorConfig*>(PyModule_GetState(context.value));
+    config->definition = PyTuple_Pack(5,type,value_type,polynomial_type,fallback,order.value);
+    OwnedReference module{PyObject_GetAttrString(fallback,"__module__")};
+    if (!config->definition || !module.value) return nullptr;
+    return PyCFunction_NewEx(&ideal_function,context.value,module.value);
 }
 
 PyObject* copy_handle(PyObject* self, PyObject*) { return Py_NewRef(self); }
+PyObject* native_ideal(PyObject* self, void*) { return Py_NewRef(self); }
 PyMethodDef methods[] = {
     {"prepare", prepare, METH_CLASS | METH_VARARGS, nullptr},
     {"ring", make_ring, METH_CLASS | METH_O, nullptr},
     {"polynomial", make_polynomial, METH_CLASS | METH_VARARGS, nullptr},
     {"polynomial_row", polynomial_row, METH_CLASS | METH_O, nullptr},
     {"from_polynomials", from_polynomials, METH_CLASS | METH_VARARGS, nullptr},
-    {"declare", declare, METH_CLASS | METH_VARARGS, nullptr},
+    {"constructor", make_constructor, METH_CLASS | METH_VARARGS, nullptr},
     {"__copy__", copy_handle, METH_NOARGS, nullptr},
     {"__deepcopy__", copy_handle, METH_O, nullptr},
     {"sum", reinterpret_cast<PyCFunction>(binary<false>), METH_O, nullptr},
@@ -248,16 +348,24 @@ PyMethodDef methods[] = {
 };
 PyMemberDef members[] = {
     {"_values", T_OBJECT_EX, offsetof(Handle,values), 0, nullptr},
+    {"_space", T_OBJECT_EX, offsetof(Handle,space), READONLY, nullptr},
+    {"generators", T_OBJECT_EX, offsetof(Handle,generators), READONLY, nullptr},
+    {"order", T_OBJECT_EX, offsetof(Handle,order), READONLY, nullptr},
     {nullptr,0,0,0,nullptr}
+};
+PyGetSetDef getters[] = {
+    {"_native_ideal", native_ideal, nullptr, nullptr, nullptr},
+    {nullptr,nullptr,nullptr,nullptr,nullptr}
 };
 PyType_Slot slots[] = {
     {Py_tp_new, reinterpret_cast<void*>(reject_new)},
     {Py_tp_dealloc, reinterpret_cast<void*>(destroy)},
     {Py_tp_traverse, reinterpret_cast<void*>(traverse)},
     {Py_tp_clear, reinterpret_cast<void*>(clear)},
-    {Py_tp_members, members}, {Py_tp_methods, methods}, {0,nullptr}
+    {Py_tp_members, members}, {Py_tp_methods, methods}, {Py_tp_getset, getters}, {0,nullptr}
 };
-PyType_Spec spec = {"_atlas_ideal.Ideal",sizeof(Handle),0,Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,slots};
+PyType_Spec spec = {"_atlas_ideal.Ideal",sizeof(Handle),0,
+                    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_BASETYPE,slots};
 
 PyObject* prepare(PyObject* type, PyObject* args) {
     Py_ssize_t width, count, bytes;
@@ -293,6 +401,7 @@ PyModuleDef module = {PyModuleDef_HEAD_INIT,"_atlas_ideal",nullptr,sizeof(Fields
 PyMODINIT_FUNC PyInit__atlas_ideal() {
     auto* m = PyModule_Create(&module);
     if (!m) return nullptr;
+    if (atlas_add_session_runner(m) < 0) { Py_DECREF(m); return nullptr; }
     auto* fields = static_cast<Fields*>(PyModule_GetState(m));
     fields->parent_name = PyUnicode_InternFromString("_space");
     fields->polynomial_name = PyUnicode_InternFromString("_native_polynomial");

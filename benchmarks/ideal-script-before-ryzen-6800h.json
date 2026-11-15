@@ -1,0 +1,657 @@
+{
+  "atlas_commit": "fa9e3d54fd17bdce19ffef0b39e1fe836b20f368",
+  "batches": {
+    "16": {
+      "plane_monomials": {
+        "left": [
+          "x^2",
+          "y"
+        ],
+        "right": [
+          "x",
+          "y^2"
+        ],
+        "operations": {
+          "sum": {
+            "atlas_operation": "I + J",
+            "singular_operation": "I+J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 4.348,
+              "atlas_script_loop_declare_and_first_use": 4.737,
+              "atlas_direct_named_assignments": 2.588,
+              "singular_declare_and_first_use": 3.812,
+              "atlas_native": 0.086
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                4.475,
+                4.269,
+                4.453,
+                4.277,
+                4.348
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.737,
+                5.371,
+                5.035,
+                4.532,
+                4.513
+              ],
+              "atlas_direct_named_assignments": [
+                2.626,
+                2.57,
+                2.618,
+                2.556,
+                2.588
+              ],
+              "singular_declare_and_first_use": [
+                3.812,
+                3.812,
+                3.812,
+                4.438,
+                4.125
+              ],
+              "atlas_native": [
+                0.086,
+                0.087,
+                0.086,
+                0.086,
+                0.086
+              ]
+            }
+          },
+          "product": {
+            "atlas_operation": "I * J",
+            "singular_operation": "I*J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 4.63,
+              "atlas_script_loop_declare_and_first_use": 4.781,
+              "atlas_direct_named_assignments": 2.875,
+              "singular_declare_and_first_use": 3.812,
+              "atlas_native": 0.521
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                4.63,
+                4.666,
+                4.555,
+                4.628,
+                4.693
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.902,
+                4.781,
+                4.72,
+                4.778,
+                4.894
+              ],
+              "atlas_direct_named_assignments": [
+                2.875,
+                2.884,
+                2.837,
+                2.874,
+                2.922
+              ],
+              "singular_declare_and_first_use": [
+                3.812,
+                3.812,
+                3.812,
+                3.938,
+                3.875
+              ],
+              "atlas_native": [
+                0.53,
+                0.521,
+                0.519,
+                0.52,
+                0.929
+              ]
+            }
+          },
+          "square": {
+            "atlas_operation": "I^2",
+            "singular_operation": "std(I^2)",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 6.474,
+              "atlas_script_loop_declare_and_first_use": 6.521,
+              "atlas_direct_named_assignments": 4.72,
+              "singular_declare_and_first_use": 8.375,
+              "atlas_native": 1.281
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                6.616,
+                6.442,
+                6.811,
+                6.474,
+                6.301
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                7.065,
+                6.361,
+                6.941,
+                6.521,
+                6.422
+              ],
+              "atlas_direct_named_assignments": [
+                4.808,
+                4.612,
+                4.72,
+                4.929,
+                4.71
+              ],
+              "singular_declare_and_first_use": [
+                8.312,
+                8.375,
+                8.688,
+                8.812,
+                8.188
+              ],
+              "atlas_native": [
+                1.257,
+                1.294,
+                1.304,
+                1.269,
+                1.281
+              ]
+            }
+          }
+        }
+      },
+      "rational_forms": {
+        "left": [
+          "(x+2*y)^8",
+          "(18446744073709551629/7)*x^6*y"
+        ],
+        "right": [
+          "(2*x-y)^7",
+          "(1/13)*x*y^5"
+        ],
+        "operations": {
+          "sum": {
+            "atlas_operation": "I + J",
+            "singular_operation": "I+J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 4.272,
+              "atlas_script_loop_declare_and_first_use": 4.502,
+              "atlas_direct_named_assignments": 2.56,
+              "singular_declare_and_first_use": 3.875,
+              "atlas_native": 0.088
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                4.694,
+                4.272,
+                4.249,
+                4.199,
+                4.375
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.55,
+                4.416,
+                4.502,
+                4.502,
+                4.557
+              ],
+              "atlas_direct_named_assignments": [
+                2.56,
+                2.508,
+                2.51,
+                2.593,
+                2.608
+              ],
+              "singular_declare_and_first_use": [
+                3.875,
+                3.812,
+                3.875,
+                3.938,
+                3.812
+              ],
+              "atlas_native": [
+                0.089,
+                0.091,
+                0.087,
+                0.088,
+                0.087
+              ]
+            }
+          },
+          "product": {
+            "atlas_operation": "I * J",
+            "singular_operation": "I*J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 5.775,
+              "atlas_script_loop_declare_and_first_use": 5.971,
+              "atlas_direct_named_assignments": 3.839,
+              "singular_declare_and_first_use": 5.625,
+              "atlas_native": 1.483
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                5.775,
+                5.659,
+                5.619,
+                5.793,
+                5.779
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                5.973,
+                5.971,
+                5.793,
+                5.959,
+                6.027
+              ],
+              "atlas_direct_named_assignments": [
+                3.877,
+                3.817,
+                3.839,
+                3.812,
+                3.889
+              ],
+              "singular_declare_and_first_use": [
+                5.625,
+                5.625,
+                5.875,
+                5.75,
+                5.562
+              ],
+              "atlas_native": [
+                1.483,
+                1.828,
+                1.554,
+                1.48,
+                1.471
+              ]
+            }
+          },
+          "square": {
+            "atlas_operation": "I^2",
+            "singular_operation": "std(I^2)",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 36.271,
+              "atlas_script_loop_declare_and_first_use": 36.008,
+              "atlas_direct_named_assignments": 33.537,
+              "singular_declare_and_first_use": 63.75,
+              "atlas_native": 27.583
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                66.023,
+                35.532,
+                36.271,
+                36.6,
+                36.176
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                68.691,
+                35.295,
+                36.746,
+                35.611,
+                36.008
+              ],
+              "atlas_direct_named_assignments": [
+                68.982,
+                33.68,
+                33.223,
+                33.22,
+                33.537
+              ],
+              "singular_declare_and_first_use": [
+                67.125,
+                68.25,
+                63.625,
+                63.75,
+                63.438
+              ],
+              "atlas_native": [
+                27.447,
+                27.89,
+                27.852,
+                27.352,
+                27.583
+              ]
+            }
+          }
+        }
+      }
+    },
+    "256": {
+      "plane_monomials": {
+        "left": [
+          "x^2",
+          "y"
+        ],
+        "right": [
+          "x",
+          "y^2"
+        ],
+        "operations": {
+          "sum": {
+            "atlas_operation": "I + J",
+            "singular_operation": "I+J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 3.947,
+              "atlas_script_loop_declare_and_first_use": 4.074,
+              "atlas_direct_named_assignments": 2.438,
+              "singular_declare_and_first_use": 2.77,
+              "atlas_native": 0.061
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                3.999,
+                3.957,
+                3.947,
+                3.874,
+                3.92
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.106,
+                4.209,
+                4.032,
+                4.074,
+                4.042
+              ],
+              "atlas_direct_named_assignments": [
+                2.438,
+                2.468,
+                2.437,
+                2.395,
+                2.461
+              ],
+              "singular_declare_and_first_use": [
+                2.773,
+                2.77,
+                2.77,
+                2.762,
+                2.914
+              ],
+              "atlas_native": [
+                0.06,
+                0.061,
+                0.061,
+                0.061,
+                0.062
+              ]
+            }
+          },
+          "product": {
+            "atlas_operation": "I * J",
+            "singular_operation": "I*J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 4.2,
+              "atlas_script_loop_declare_and_first_use": 4.354,
+              "atlas_direct_named_assignments": 2.706,
+              "singular_declare_and_first_use": 2.836,
+              "atlas_native": 0.249
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                4.234,
+                4.259,
+                4.098,
+                4.2,
+                4.175
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.354,
+                4.418,
+                4.29,
+                4.376,
+                4.346
+              ],
+              "atlas_direct_named_assignments": [
+                2.706,
+                2.721,
+                2.622,
+                2.747,
+                2.689
+              ],
+              "singular_declare_and_first_use": [
+                5.102,
+                2.855,
+                2.836,
+                2.797,
+                2.75
+              ],
+              "atlas_native": [
+                0.253,
+                0.248,
+                0.277,
+                0.245,
+                0.249
+              ]
+            }
+          },
+          "square": {
+            "atlas_operation": "I^2",
+            "singular_operation": "std(I^2)",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 5.419,
+              "atlas_script_loop_declare_and_first_use": 5.556,
+              "atlas_direct_named_assignments": 3.997,
+              "singular_declare_and_first_use": 7.211,
+              "atlas_native": 1.11
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                5.492,
+                5.488,
+                5.379,
+                5.419,
+                5.396
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                5.577,
+                5.556,
+                5.645,
+                5.552,
+                5.542
+              ],
+              "atlas_direct_named_assignments": [
+                4.008,
+                3.983,
+                3.924,
+                3.997,
+                4.015
+              ],
+              "singular_declare_and_first_use": [
+                7.277,
+                7.18,
+                7.211,
+                7.176,
+                7.297
+              ],
+              "atlas_native": [
+                1.11,
+                1.118,
+                1.098,
+                1.101,
+                1.117
+              ]
+            }
+          }
+        }
+      },
+      "rational_forms": {
+        "left": [
+          "(x+2*y)^8",
+          "(18446744073709551629/7)*x^6*y"
+        ],
+        "right": [
+          "(2*x-y)^7",
+          "(1/13)*x*y^5"
+        ],
+        "operations": {
+          "sum": {
+            "atlas_operation": "I + J",
+            "singular_operation": "I+J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 3.964,
+              "atlas_script_loop_declare_and_first_use": 4.088,
+              "atlas_direct_named_assignments": 2.459,
+              "singular_declare_and_first_use": 3.074,
+              "atlas_native": 0.061
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                3.887,
+                3.939,
+                3.997,
+                3.964,
+                4.055
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                4.07,
+                4.051,
+                4.106,
+                4.089,
+                4.088
+              ],
+              "atlas_direct_named_assignments": [
+                2.459,
+                2.447,
+                2.511,
+                2.514,
+                2.451
+              ],
+              "singular_declare_and_first_use": [
+                3.062,
+                3.082,
+                3.047,
+                3.074,
+                3.082
+              ],
+              "atlas_native": [
+                0.06,
+                0.061,
+                0.061,
+                0.061,
+                0.06
+              ]
+            }
+          },
+          "product": {
+            "atlas_operation": "I * J",
+            "singular_operation": "I*J",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 5.265,
+              "atlas_script_loop_declare_and_first_use": 5.411,
+              "atlas_direct_named_assignments": 3.645,
+              "singular_declare_and_first_use": 4.805,
+              "atlas_native": 1.058
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                5.304,
+                5.157,
+                5.265,
+                5.142,
+                5.287
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                5.442,
+                5.378,
+                5.444,
+                5.315,
+                5.411
+              ],
+              "atlas_direct_named_assignments": [
+                3.647,
+                3.558,
+                3.645,
+                3.538,
+                3.65
+              ],
+              "singular_declare_and_first_use": [
+                4.805,
+                4.746,
+                4.98,
+                4.676,
+                9.328
+              ],
+              "atlas_native": [
+                1.058,
+                1.057,
+                1.053,
+                1.065,
+                1.076
+              ]
+            }
+          },
+          "square": {
+            "atlas_operation": "I^2",
+            "singular_operation": "std(I^2)",
+            "mutual_containment_verified": true,
+            "median_us": {
+              "atlas_script_declare_and_first_use": 32.895,
+              "atlas_script_loop_declare_and_first_use": 33.775,
+              "atlas_direct_named_assignments": 31.345,
+              "singular_declare_and_first_use": 60.297,
+              "atlas_native": 26.383
+            },
+            "samples_us": {
+              "atlas_script_declare_and_first_use": [
+                32.264,
+                32.724,
+                32.895,
+                33.76,
+                34.642
+              ],
+              "atlas_script_loop_declare_and_first_use": [
+                32.861,
+                33.298,
+                33.775,
+                34.171,
+                34.868
+              ],
+              "atlas_direct_named_assignments": [
+                30.69,
+                31.345,
+                30.842,
+                31.757,
+                32.839
+              ],
+              "singular_declare_and_first_use": [
+                58.898,
+                60.297,
+                59.203,
+                61.77,
+                62.605
+              ],
+              "atlas_native": [
+                26.023,
+                26.297,
+                26.383,
+                40.322,
+                27.19
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    5
+  ],
+  "atlas_native_sha256": "ea0b7022c26965f9bfbb2277cec546b7e55356602f2148bdeb0e93436b7d14f4",
+  "python": "3.14.4",
+  "atlas_binding": "CPython stable ABI",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "ring": "QQ[x,y], grevlex",
+  "trials": 5,
+  "conditions": "Each trial repeats an operation on the same prepared pair. One preceding invocation per method is discarded for warm operations. Trial order rotates. Session measures one operator on typed ideals. Prompt measures a named assignment using the prompt evaluator and transcript, excluding terminal I/O. CLI and CLI infix time named and operator assignments through the interactive command loop with input in memory and the terminal panel disabled. It includes routing, multiline detection, evaluation, and transcript updates. First use takes newly declared ideals of the same initialized polynomials without a warm-up per ideal. Declare and first use includes construction of the input ideals from those polynomials. First declaration on fresh polynomials excludes creation of the separate rings and polynomial values, and includes their very first ideal construction. Script with declarations evaluates named functions and binds I, J as needed and answer through the shared script evaluator, submitted once per iteration. Direct named assignments use the same public functions and workspace dictionary in Python. The Atlas loop runs the same statements inside a single script for-loop over a prepared tuple, after one untimed iteration. Record measures first export of a complete record from an already computed result. Native wire includes sparse input decoding and JSON output. Prepared native measures C++ arithmetic on parsed inputs and the completed result stays in memory. Singular measures an assignment on initialized ideals in its interpreter, with one thread. Timings exclude top-level program startup, input declarations, and agreement checks. Each trial checks mutual containment in Singular. Ordinary power returns a reduced basis in Atlas, so Singular uses std(I^2) with option(redSB).",
+  "atlas_binding_sha256": "7b482826cc7b99015b7c49498d985faa0f8df4fb69e7e8ed7c7e56f5c3a5d23e"
+}

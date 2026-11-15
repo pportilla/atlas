@@ -25,9 +25,9 @@ PYTHON_MODULE_LINK := -bundle -undefined dynamic_lookup
 else
 PYTHON_MODULE_LINK := -shared
 endif
-build/_atlas_ideal.abi3.so: python_ideal.cpp prepared_ideal.hpp $(GROEBNER_LIB)
+build/_atlas_ideal.abi3.so: python_ideal.cpp python_session.cpp prepared_ideal.hpp $(GROEBNER_LIB)
 	@set -e; output=$$(mktemp "$@.XXXXXX"); trap 'rm -f "$$output"' EXIT; \
-	  $(CXX) $(CPPFLAGS) $(CXXFLAGS) -I"$(PYTHON_INCLUDE)" -fPIC $(PYTHON_MODULE_LINK) $< -o "$$output" $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner; \
+	  $(CXX) $(CPPFLAGS) $(CXXFLAGS) -I"$(PYTHON_INCLUDE)" -fPIC $(PYTHON_MODULE_LINK) $(filter %.cpp,$^) -o "$$output" $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner; \
 	  chmod 755 "$$output"; mv -f "$$output" "$@"
 endif
 

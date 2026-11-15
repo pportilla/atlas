@@ -11,6 +11,40 @@ from tests.cli_support import run_prompt, run_script
 
 
 class IdealOperatorTests(unittest.TestCase):
+    def test_public_constructor_and_native_ideal_preserve_session_semantics(self):
+        from copy import copy, deepcopy
+        from dataclasses import FrozenInstanceError
+        from inspect import signature
+        import pickle
+        import weakref
+        import gc
+
+        from engine.session_algebra import Ideal, ideal
+        from engine.session_polynomial import coordinates
+
+        self.assertEqual(ideal.__qualname__, "ideal")
+        self.assertEqual(str(signature(ideal)), "(*generators, order=None, variables=None, ring=None)")
+        self.assertIs(pickle.loads(pickle.dumps(ideal)), ideal)
+        x, y = coordinates("x", "y")
+        declared = ideal(x, y, ring=x.parent, order="lex")
+        self.assertIsInstance(declared, Ideal)
+        self.assertIs(declared.parent, x.parent)
+        self.assertEqual(repr(declared), "ideal(x, y) over QQ[x, y] (lex)")
+        for attr in ("extra", "order", "generators"):
+            with self.subTest(attr=attr), self.assertRaises(FrozenInstanceError):
+                setattr(declared, attr, None)
+        with self.assertRaises(AttributeError):
+            declared.session_attribute("rows")
+        for clone in (copy(declared), deepcopy(declared)):
+            self.assertIs(clone.parent, x.parent)
+            self.assertEqual(clone.generators, (x, y))
+        del clone
+        ref = weakref.ref(declared)
+        declared.__dict__["cycle"] = declared
+        del declared
+        gc.collect()
+        self.assertIsNone(ref())
+
     def test_declarations_reuse_native_polynomials_and_preserve_the_written_generators(self):
         from engine import native_polynomial, session_ideal_native
         from engine.session_algebra import ideal, polynomial

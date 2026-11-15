@@ -1,6 +1,7 @@
 """Owned, immutable native ideals for arithmetic on live session values."""
 import ctypes
-from functools import cache, partial
+from dataclasses import dataclass
+from functools import cache, cached_property, partial
 from importlib.machinery import EXTENSION_SUFFIXES, ExtensionFileLoader, FileFinder
 from importlib.util import module_from_spec
 from threading import Lock
@@ -9,13 +10,18 @@ from . import native_polynomial as polynomial
 from .native_library import _LIBRARY, _kernel
 
 
+_compile_assignments = None
+
+
 def _load_binding():
+    global _compile_assignments
     finder = FileFinder(str(_LIBRARY.parent), (ExtensionFileLoader, EXTENSION_SUFFIXES))
     spec = finder.find_spec("_atlas_ideal")
     if spec is not None:
         try:
             module = module_from_spec(spec)
             spec.loader.exec_module(module)
+            _compile_assignments = getattr(module, "compile_assignments", None)
             return module.Ideal
         except (ImportError, OSError):
             pass
@@ -35,6 +41,10 @@ def _compiled():
             if _binding is _unloaded:
                 _binding = _load_binding()
     return _binding
+
+
+def assignment_runner():
+    return _compile_assignments if _compiled() is not None else None
 
 
 @cache
@@ -101,14 +111,6 @@ class _CtypesRing(_CtypesOwner):
             raise ArithmeticError(self.library.atlas_ideal_error().decode())
         return _CtypesOwner(ptr, self.library.atlas_ideal_polynomial_release)
 
-    def declare(self, parent, polynomial_type, generators):
-        handles = []
-        for f in generators:
-            if type(f) is not polynomial_type or f._space is not parent:
-                return NotImplemented
-            handles.append(f._native_polynomial)
-        return self.ideal(handles)
-
     def ideal(self, generators):
         count = len(generators)
         if count > 128:
@@ -118,19 +120,36 @@ class _CtypesRing(_CtypesOwner):
         return NativeIdeal(self.library, ptr) if ptr else NativeIdeal._declined(self.library)
 
 
+def ideal_constructor(fallback, polynomial_type, ideal_type):
+    binding = _compiled()
+    if binding is None or not hasattr(binding, "constructor"):
+        return fallback
+
+    @dataclass(frozen=True, eq=False, repr=False, init=False)
+    class DeclaredIdeal(ideal_type, binding):
+        """A declared session ideal owns its immutable native generators directly."""
+        __slots__ = ()
+        _native_ideal = binding._native_ideal
+
+        @cached_property
+        def _values(self):
+            return tuple(f._value for f in self.generators)
+
+    return binding.constructor(DeclaredIdeal, polynomial_type, fallback)
+
+
 class _CompiledRing:
-    __slots__ = ("polynomial", "ideal", "declare")
+    __slots__ = ("polynomial", "ideal")
 
     def __init__(self, binding, width):
         ring = binding.ring(width)
         self.polynomial = partial(binding.polynomial, ring)
         self.ideal = partial(binding.from_polynomials, ring)
-        self.declare = partial(binding.declare, ring)
 
 
 def native_ring(width):
     binding = _compiled()
-    if binding is not None and hasattr(binding, "declare"):
+    if binding is not None and hasattr(binding, "constructor"):
         return _CompiledRing(binding, width)
     library = _api()
     if library is not None and hasattr(library, "atlas_ideal_from_polynomials"):

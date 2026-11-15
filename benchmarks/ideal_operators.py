@@ -67,6 +67,19 @@ def atlas_sample(calculate, batch):
     return (perf_counter_ns() - start) / (1000 * batch), result
 
 
+def script_loop_sample(session, body, batch):
+    """Time the declaration and computation lines inside one Atlas script loop."""
+    source = "for i in iterations:\n" + "\n".join("    " + line for line in body.splitlines())
+    session.variables["iterations"] = (0,)
+    for _ in session.run(source):
+        pass
+    session.variables["iterations"] = tuple(range(batch))
+    start = perf_counter_ns()
+    for _ in session.run(source):
+        pass
+    return (perf_counter_ns() - start) / (1000 * batch), session.variables["answer"]
+
+
 def run_singular(source):
     run = subprocess.run(["Singular", "-q", "--no-rc", "--threads=1", "--ticks-per-sec=1000000"],
                          input=source + "\nquit;\n", text=True, capture_output=True, check=True, timeout=60)
@@ -205,10 +218,27 @@ def measure(left_source, right_source, operation, batch, trials, kernel):
             pass
         return session.variables["answer"]
 
+    # Same public named calls, parent checks and workspace writes as the script.
+    # This control isolates the expense of evaluating three Atlas statements.
+    workspace = session.variables
+    named_operation = session.builtins[name.partition("(")[0]]
+    if operation == "square":
+        def declare_directly():
+            workspace["I"] = ideal(workspace["a"], workspace["b"])
+            workspace["answer"] = named_operation(workspace["I"], 2)
+            return workspace["answer"]
+    else:
+        def declare_directly():
+            workspace["I"] = ideal(workspace["a"], workspace["b"])
+            workspace["J"] = ideal(workspace["c"], workspace["d"])
+            workspace["answer"] = named_operation(workspace["I"], workspace["J"])
+            return workspace["answer"]
+
     methods = ("atlas_session", "atlas_prompt", "atlas_cli", "atlas_cli_infix", "atlas_first_use", "atlas_declare_and_first_use",
                "atlas_export_record", "atlas_native_wire",
                *(("atlas_native",) if kernel else ()), "singular", "singular_declare_and_first_use",
-               "atlas_first_declare_fresh_polynomials", "atlas_script_declare_and_first_use")
+               "atlas_first_declare_fresh_polynomials", "atlas_script_declare_and_first_use",
+               "atlas_direct_named_assignments", "atlas_script_loop_declare_and_first_use")
     samples = {name: [] for name in methods}
     for trial in range(trials):
         generators = []
@@ -232,6 +262,12 @@ def measure(left_source, right_source, operation, batch, trials, kernel):
                 generators.append([str(f) for f in result.generators])
             elif method == "atlas_script_declare_and_first_use":
                 elapsed, result = atlas_sample(declare_in_script, batch)
+                generators.append([str(f) for f in result.generators])
+            elif method == "atlas_direct_named_assignments":
+                elapsed, result = atlas_sample(declare_directly, batch)
+                generators.append([str(f) for f in result.generators])
+            elif method == "atlas_script_loop_declare_and_first_use":
+                elapsed, result = script_loop_sample(session, script, batch)
                 generators.append([str(f) for f in result.generators])
             elif method == "atlas_export_record":
                 pending = [apply(left, operand) for _ in range(batch)]
@@ -293,7 +329,10 @@ def main():
             "Declare and first use includes construction of the input ideals from those polynomials. "
             "First declaration on fresh polynomials excludes creation of the separate rings and polynomial values, "
             "and includes their very first ideal construction. Script with declarations evaluates named functions "
-            "and binds I, J as needed and answer through the shared script evaluator. "
+            "and binds I, J as needed and answer through the shared script evaluator, submitted once per iteration. "
+            "Direct named assignments use the same public functions and workspace dictionary in Python. "
+            "The Atlas loop runs the same statements inside a single script for-loop over a prepared tuple, "
+            "after one untimed iteration. "
             "Record measures first export of a complete record from an already computed result. Native wire includes "
             "sparse input decoding and JSON output. Prepared native measures C++ arithmetic on parsed inputs and "
             "the completed result stays in memory. Singular measures an assignment on initialized ideals in its "

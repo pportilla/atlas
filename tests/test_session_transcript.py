@@ -9,6 +9,74 @@ from tests.cli_support import ROOT, run_prompt
 
 
 class SessionTranscriptTests(unittest.TestCase):
+    def test_script_calls_observe_rebindings_and_keep_prior_assignments_on_error(self):
+        from engine.session_expressions import Evaluator, SessionError
+
+        for fallback in (False, True):
+            with self.subTest(fallback=fallback):
+                session = Evaluator({})
+                if fallback:
+                    session._assignment_runner = None
+                calls = []
+
+                def first(a, b):
+                    calls.append((a, b))
+                    session.variables = dict(session.variables, op=lambda a, b: a - b)
+                    return a + b
+
+                session.variables.update(op=first, a=3, b=2)
+                with self.assertRaises(SessionError) as context:
+                    list(session.run("x = op(a, b)\ny = op(x, b)\nz = op(y, missing)"))
+                self.assertEqual((context.exception.line, context.exception.function,
+                                  context.exception.unknown_name), (3, "op", "missing"))
+                self.assertEqual((session.variables["x"], session.variables["y"], calls), (5, 3, [(3, 2)]))
+                self.assertNotIn("z", session.variables)
+
+                def reserve(a, b):
+                    session.reserved = frozenset({"locked"})
+                    calls.append((a, b))
+
+                session.variables["reserve"] = reserve
+                with self.assertRaisesRegex(SessionError, "reserved") as context:
+                    list(session.run("x = op(a, b)\nlocked = reserve(x, b)"))
+                self.assertEqual((context.exception.line, calls[-1]), (2, (1, 2)))
+                self.assertNotIn("locked", session.variables)
+
+    def test_grouped_loop_error_runs_each_call_once_and_restores_transcript(self):
+        from engine.session_expressions import Evaluator, SessionError
+        from engine.session_transcript import SessionTranscript
+
+        visited = []
+
+        def check(a, b):
+            visited.append(a)
+            if a == 2:
+                raise ValueError("second iteration")
+            return a
+
+        session, log = Evaluator({"check": check}), SessionTranscript()
+        session.variables.update(a=0, b=1, previous=7)
+        source = "for a in (1, 2):\n    if b:\n        previous = check(a, b)\n        answer = check(previous, b)"
+        with self.assertRaisesRegex(SessionError, "second iteration") as context:
+            list(session.run(source, transcript=log))
+        self.assertEqual((context.exception.line, context.exception.function, visited), (3, "check", [1, 1, 2]))
+        self.assertEqual(session.variables, {"a": 0, "b": 1, "previous": 7})
+        self.assertEqual(log.statements, [])
+
+    def test_coordinate_alias_in_script_group_preserves_live_parent_bindings(self):
+        from engine.session import new_session
+        from engine.session_expressions import SessionError
+
+        session = new_session(None)
+        list(session.run('x, y = coordinates("x", "y")\nI = ideal(x,y)\ncoords = coordinates\na = "x"\nb = "y"'))
+        original = session.variables["I"]
+        with self.assertRaisesRegex(SessionError, "would replace") as context:
+            list(session.run("J = ideal(x, y)\nI = coords(a, b)\nK = ideal(x, y)"))
+        self.assertEqual(context.exception.line, 2)
+        self.assertIs(session.variables["I"], original)
+        self.assertIs(session.variables["J"].parent, original.parent)
+        self.assertNotIn("K", session.variables)
+
     def test_repeated_assignment_resolves_live_names_and_keeps_only_successes(self):
         from engine.session import new_session
         from engine.session_expressions import SessionError, assignment_syntax
