@@ -16,18 +16,13 @@ from .reference import sp
 from .reference import QQ
 from .algebra_execution import current_execution, packed_basis, record_fallback, record_stage
 
-from .native_library import CHECK, Unavailable, _LIBRARY, _MODE, _kernel, _use_gpu
+from .native_library import Unavailable, _kernel
 
 # "first": the exponent of the first variable is compared before the grevlex
 # order of the others, so the first variable is eliminated.
 _ORDERS = {"grevlex": 0, "lex": 1, "first": 2, "grlex": 3}
 _MAX_VARIABLES = 32
 _MAX_DEGREE = 32767  # Native packed exponent/total-degree limit.
-
-
-def _reference_order(order):
-    from tests.groebner_oracle import reference_order
-    return reference_order(order)
 
 
 # Generators recur from one basis to the next, and converting a SymPy
@@ -72,7 +67,7 @@ def _monomial_row(gens, expr):
 
 def _expanded_qq_line(gens, expr):
     """Encode parsed rational expressions as sparse FLINT terms."""
-    if _MODE == "sympy" or not isinstance(expr, sp.Expr) or not gens:
+    if not isinstance(expr, sp.Expr) or not gens:
         return None
     # The FLINT expression reader also accepts exact polynomial division.
     # Restrict it to the QQ expression tree so symbols named I, pi and
@@ -86,16 +81,9 @@ def _expanded_qq_line(gens, expr):
     try:
         row, = _request(["function", ring.header, ring.text(expr)])
     except Unavailable:
-        if _MODE == "native":
-            raise
-        return None
+        raise
     except ArithmeticError as exc:
-        if _MODE == "native":
-            raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.") from exc
-        return None
-    if CHECK:
-        from tests.groebner_oracle import check_expanded
-        check_expanded(gens, expr, row)
+        raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.") from exc
     return row
 
 
@@ -114,17 +102,13 @@ def _line(gens, expr):
     line = _lines.get(key)
     if line is not None:
         return line
-    if _MODE == "native":
-        line = _monomial_row(gens, expr)
+    line = _monomial_row(gens, expr)
     if line is None:
         if expr.is_Mul and any(factor.is_Add for factor in expr.args):
             # The kernel multiplies; expanding a product here is the slow part.
             line = "*".join(_line(gens, factor) for factor in expr.args)
         elif (line := _expanded_qq_line(gens, expr)) is None:
-            if _MODE == "native":
-                raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.")
-            terms = sp.Poly(expr, *gens, domain=QQ).as_dict(native=True)
-            line = ";".join(f"{c} {' '.join(map(str, m))}" for m, c in terms.items())
+            raise sp.PolynomialError("Expected a polynomial in the specified rational coordinates.")
     if len(_lines) >= _CACHE_LIMIT:
         _lines.clear()
     _lines[key] = line
@@ -138,8 +122,6 @@ def _canonical_qq(gens, expr):
         if not value.free_symbols.issubset(gens):
             raise ValueError("The polynomial uses an undeclared coordinate.")
         return value
-    if _MODE == "sympy":
-        return None
     row = _lines.get((gens, expr))
     decoded = _polys.get((gens, row)) if row is not None else None
     if decoded is not None:
@@ -255,32 +237,6 @@ class NativeBasis:
         return None, self.remainder(expr)
 
 
-class _Checked:
-    """Both engines side by side; any disagreement is an error."""
-    def __init__(self, native, reference):
-        self._native, self._reference = native, reference
-        if native.exprs != reference.exprs:
-            raise AssertionError("The native Groebner basis differs from SymPy's.")
-        self.exprs = native.exprs
-
-    @property
-    def polys(self):
-        return self._native.polys
-
-    def contains(self, expr):
-        answer = self._native.contains(expr)
-        if answer != self._reference.contains(expr):
-            raise AssertionError("The native ideal membership differs from SymPy's.")
-        return answer
-
-    def reduce(self, expr):
-        answer = self._native.reduce(expr)
-        expected = self._reference.reduce(expr)
-        if answer[1] != expected[1] or (answer[0] is not None and answer[0] != expected[0]):
-            raise AssertionError("The native normal form differs from SymPy's.")
-        return answer
-
-
 def _wide_qq_basis(ideal, gens, order, reason):
     from .wide_basis import wide_basis
     basis = wide_basis(ideal, gens, order)
@@ -303,12 +259,7 @@ def _native(ideal, gens, order, known):
     if np.native_ring(gens):
         lines = [np.row(gens, f) for f in ideal]
     else:
-        try:
-            lines = [_line(gens, f) for f in ideal]
-        except sp.polys.polyerrors.BasePolynomialError:
-            if _MODE == "native":
-                raise
-            return None
+        lines = [_line(gens, f) for f in ideal]
     payload = (f"{len(gens)} {_ORDERS[order]} {known}\n" + "".join(line + "\n" for line in lines)).encode("ascii")
     handle = packed_basis(library, payload, lines, can_homogenize=len(gens) < _MAX_VARIABLES,
                           known=known, order=order)
@@ -328,35 +279,26 @@ def groebner(ideal, gens, *, order="grevlex", domain=QQ, known=0):
     if not 0 <= known <= len(ideal):
         raise ValueError("known must count leading generators of the ideal.")
     native = None
-    if _MODE != "sympy":
-        if domain == QQ:
-            native = _native(ideal, gens, order, known)
-        elif getattr(domain, "is_AlgebraicField", False):
-            from .field_polynomial import native_basis
-            native = native_basis(ideal, gens, order, domain)
-    if native is not None and CHECK and domain == QQ:
-        from .field_wide import WideBlockBasis
-        if np.native_ring(gens) or isinstance(native, WideBlockBasis):
-            from tests.groebner_oracle import _SymbolicBasis
-            return _Checked(native, _SymbolicBasis(ideal, gens, order, trusted=False))
-    if native is not None and (_MODE != "check" or np.native_ring(gens)):
+    if domain == QQ:
+        native = _native(ideal, gens, order, known)
+    elif getattr(domain, "is_AlgebraicField", False):
+        from .field_polynomial import native_basis
+        native = native_basis(ideal, gens, order, domain)
+    if native is not None:
         return native
-    if _MODE == "native" or np.native_ring(gens):
-        raise Unavailable("Native Groebner computation unavailable for the specified ring or order. "
-                          "Build the current kernel with make groebner.")
-    reference = sp.groebner(ideal, *gens, order=_reference_order(order), domain=domain)
-    return reference if native is None else _Checked(native, reference)
+    raise Unavailable("Native Groebner computation unavailable for the specified ring or order. "
+                      "Build the current kernel with make groebner.")
 
 
 def colon(ideal, by, gens, *, domain=QQ):
     """Generators of the ideal quotient (ideal) : (by), or None when only SymPy can do it."""
     gens = tuple(gens)
     library = _kernel()
-    if (getattr(domain, "is_AlgebraicField", False) and _MODE != "sympy" and library is not None
+    if (getattr(domain, "is_AlgebraicField", False) and library is not None
             and hasattr(library, "atlas_coefficient_block_abi")):
         from .field_polynomial import native_colon
         return native_colon(ideal, by, gens, domain)
-    if domain != QQ or _MODE == "sympy" or library is None or not gens:
+    if domain != QQ or library is None or not gens:
         return None
     if len(gens) >= _MAX_VARIABLES:
         from .wide_basis import wide_colon

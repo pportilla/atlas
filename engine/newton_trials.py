@@ -79,7 +79,7 @@ def resolve_trials(poly, names, *, verified=None, integrals=False, construct=Tru
 def bounded_first_trial(poly, names, *, verified=None, integrals=False):
     """Try only the first Newton monomial candidate with fixed native work."""
     from . import native_library
-    if (native_library._MODE != "native" or not 3 <= len(names) <= 4 or len(poly) > 3
+    if (not 3 <= len(names) <= 4 or len(poly) > 3
             or any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64 for c in poly.values())
             or not all(hasattr(native_library._library(), name) for name in
                        ("atlas_bounded_crossings_abi", "atlas_fan_charts_abi"))):
@@ -106,9 +106,8 @@ def bounded_first_trial(poly, names, *, verified=None, integrals=False):
 def bounded_coordinate_graph(poly, names):
     """Test the exhaustive solver’s ordered graph prefix after a certified Newton obstruction."""
     from . import native_library
-    if (native_library._MODE != "native"
-            or not all(hasattr(native_library._library(), marker) for marker in
-                       ("atlas_transverse_pencil_abi", "atlas_coordinate_exceptional_abi"))
+    if (not all(hasattr(native_library._library(), marker) for marker in
+                    ("atlas_transverse_pencil_abi", "atlas_coordinate_exceptional_abi"))
             or any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64 for c in poly.values())):
         return None
     from .point_geometry import encode_terms

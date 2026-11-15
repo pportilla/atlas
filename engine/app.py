@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from .resolve_cli import (MAX_SECONDS, add_resolution_options, calculate_resolution as _calculate_resolution,
                           needs_exhaustive_search, resolution_arguments, run_job, run_resolution,
-                          session_decimals, show, show_zeta)
+                          session_decimals, show_zeta)
 
 ROOT=Path(__file__).resolve().parents[1]
 WEB=ROOT/'web'

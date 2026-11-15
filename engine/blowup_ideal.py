@@ -22,7 +22,7 @@ from .reference import sp
 from .reference import QQ
 
 from . import kernel
-from .groebner import _MODE, _canonical_qq, groebner
+from .groebner import _canonical_qq, groebner
 from .polynomial import integer_text, integer_from_decimal
 
 
@@ -49,7 +49,7 @@ def _canonical(variables, expr, domain):
         value = _canonical_qq(variables, expr)
         if value is not None:
             return value
-    elif _MODE != "sympy":
+    else:
         from .field_factors import compose
         value, = compose(variables, variables, variables, (expr,), domain)
         return value
@@ -132,7 +132,7 @@ def empty_locus(variables, ideal, *, domain=QQ):
     """Decide geometric emptiness by the unit ideal test."""
     variables = _ring(variables, domain)
     equations = _expressions(variables, ideal, domain)
-    if _MODE == "native" and domain == QQ and np.native_ring(variables):
+    if domain == QQ and np.native_ring(variables):
         from .algebra_execution import current_execution
         from .native_library import current_replay_scope
         scope = current_replay_scope()

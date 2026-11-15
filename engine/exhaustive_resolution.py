@@ -26,8 +26,8 @@ ORIGIN_GRACE_SECONDS = 0.25
 
 
 def _canonical_head_start(poly, variables, mode):
-    from .native_library import Unavailable, _MODE, _kernel
-    if (mode != "embedded" or _MODE != "native" or len(variables) != 3 or not 6 <= len(poly) <= 128
+    from .native_library import Unavailable, _kernel
+    if (mode != "embedded" or len(variables) != 3 or not 6 <= len(poly) <= 128
             or not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi")):
         return False
     # Bound decimal transport even for unbounded exhaustive caller inputs.

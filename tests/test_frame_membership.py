@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from engine import centres, native_polynomial as np
 from engine.centre_frame import Frame
-from engine.native_library import _MODE, ideal_request
+from engine.native_library import ideal_request
 
 
 def b9_restricted_frame():
@@ -24,7 +24,6 @@ def native_check(width, equations, query, nonempty=False):
                          [*equations, query])
 
 
-@unittest.skipUnless(_MODE == "native", "Exercises native membership on rational frames.")
 class FrameMembership(unittest.TestCase):
     def test_b9_defining_equation_without_basis(self):
         packet = b9_restricted_frame()

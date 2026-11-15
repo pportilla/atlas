@@ -26,7 +26,6 @@ class ComponentTests(unittest.TestCase):
         pieces = geometric_components(self.v,[x*y-1,z**2+1],1,domain=field)
         self.assertEqual(set(pieces),{(x*y-1,z-sp.I),(x*y-1,z+sp.I)})
 
-    @unittest.skipUnless(gb._MODE == "native", "Tests the native worker's marked polynomial representation.")
     def test_projected_shapes_and_graph_units_over_the_marked_field(self):
         from engine import native_polynomial as np
         from engine.candidate_field import indexed_field
@@ -138,7 +137,7 @@ class ComponentTests(unittest.TestCase):
         cusp = (x-y**2)**5 + y**7
         self.assertFalse(_absolute_factor(sp.Poly(split, x, y, domain=sp.QQ), 1))
         result = _absolute_factor(sp.Poly(cusp, x, y, domain=sp.QQ), 1)
-        if gb._MODE == "sympy" or gb._kernel() is None:
+        if gb._kernel() is None:
             # The bounded coefficient-equation reference may exhaust its effort.
             self.assertIsNot(result, False)
         else:

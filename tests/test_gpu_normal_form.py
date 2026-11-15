@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from engine.gpu_devices import available_devices
 from engine.gpu_normal_form import _certify, _opencl_witnesses, normal_form
-from engine.native_library import _MODE, _kernel, replay_scope
+from engine.native_library import _kernel, replay_scope
 
 
 class MonomialNormalFormTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class MonomialNormalFormTests(unittest.TestCase):
                 self.assertIsNone(monomial_witnesses(2, [powers] * 64, [(1, 0)]))
             launch.assert_not_called()
 
-    @unittest.skipIf(_MODE == "sympy" or _kernel() is None, "Requires the compiled Atlas reducer")
+    @unittest.skipIf(_kernel() is None, "Requires the compiled Atlas reducer")
     def test_rejected_result_retries_exact_cpu(self):
         from engine.algebra import dispatch
         request = {"operation": "normal-form", "compute": "gpu",

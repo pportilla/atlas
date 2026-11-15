@@ -45,7 +45,7 @@ from .kernel_json import kernel_json
 
 from . import kernel
 from .affine_kernel import _polynomial
-from .groebner import CHECK, groebner
+from .groebner import groebner
 from .local_blowups import GiveUp, _point_components, _radical_points, acampo_over
 from .monodromy_toric import _volume
 from .newton_backend import _valuations
@@ -282,8 +282,6 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
                 count = _point_count(free, points)
                 space, relation = _rational(coords, free, points, count)
                 fibre = (*orbit_ideal, *relation[1:]) if relation else parent_ideal
-                if CHECK and count != _euler(space, (*relation[:1], *fibre)):
-                    raise AssertionError("The finite cover must lift each Newton centre point exactly once.")
                 local_data, local_strata, charts, centres = acampo_over(
                     space, components, fibre, ambient=relation[:1], dimension=n, deadline=deadline,
                     count_strata=count_strata)

@@ -18,14 +18,9 @@ from .reference import QQ
 from .kernel_json import kernel_json
 from .polynomial import integer_from_decimal, sparse_row
 
-from .affine_kernel import (_checked, _polynomial, _request, _ring, _sparse_expression,
+from .affine_kernel import (_polynomial, _request, _ring, _sparse_expression,
                             rational_factor_rows)
 from .blowup_ideal import ideal_basis
-
-
-def _oracle(name, *args):
-    from tests import resolution_search_oracle
-    return getattr(resolution_search_oracle,name)(*args)
 
 
 @dataclass(frozen=True)
@@ -68,7 +63,7 @@ def _support_profile(variables, f):
         return integer_from_decimal(degree), int(count), tuple(map(int, active))
 
 
-    return _checked(native, lambda: _oracle("support_profile", variables, f), variables)
+    return native()
 
 
 def _singular_coordinate_subspaces(variables, f):
@@ -83,7 +78,7 @@ def _singular_coordinate_subspaces(variables, f):
             return tuple(map(int, rows))
 
 
-        for j in _checked(native, lambda: _oracle("singular_subspaces", variables, f, subset_batch), variables):
+        for j in native():
             yield tuple(variables[i] for i in subset_batch[j])
 
 
@@ -103,7 +98,7 @@ def _jacobian_support(variables, f):
         values = [_sparse_expression(variables, row) for row in rows]
         return tuple(sorted(values, key=chart_expressions(variables).default_sort_key))
 
-    return _checked(native, lambda: _oracle("jacobian_support", variables, f), variables)
+    return native()
 
 
 def _two_blowup_candidates(variables, f):
@@ -132,7 +127,7 @@ def _two_blowup_candidates(variables, f):
                                                    "two blowups along a repeated rational tangent"))
             return tuple(results)
 
-        yield from _checked(native, lambda: _oracle("two_blowups", variables, expr, i, j), variables)
+        yield from native()
 
 
 def priority_candidates(variables, polynomial):
@@ -221,12 +216,11 @@ def _decode_range(variables, code):
         axes = (*variables,*projective) if primitive is None else (*variables,*projective,primitive)
         boundary = tuple(tuple(_polynomial(sparse_row(row), axes) for row in ideal) for ideal in data["boundary"])
         return ResolutionCandidate(center,projective,boundary,domain,primitive,f"integer code {code:#x}"), next_code
-    return _checked(native, lambda: _oracle("decode_range",variables,code), variables)
+    return native()
 
 
 def _first_code(variables):
-    return _checked(lambda: int(kernel_json("atlas_resolution_candidate", "first", width=len(variables)),16),
-                    lambda: _oracle("first_code",variables), variables)
+    return int(kernel_json("atlas_resolution_candidate", "first", width=len(variables)),16)
 
 
 def _code_trials(variables, first, stop=None):

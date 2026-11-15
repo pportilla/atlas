@@ -8,13 +8,11 @@ from engine import kernel, native_polynomial as np
 from engine.blowup_ideal import blowup_charts, ideal_subset
 from engine.groebner import groebner
 from engine.local_blowups import Chart, _blow_up, _generators, _graph_divisor_present, _strict_ideal
-from engine.native_library import _MODE
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT/"tests/fixtures/b8-centre-and-incidence.json.gz"
 
 
-@unittest.skipUnless(_MODE == "native", "Exercises the production native computation.")
 class CentreDivisionIncidence(unittest.TestCase):
     def test_same_division_over_all_graph_charts(self):
         x, y, z = variables = np.symbols("x y z")

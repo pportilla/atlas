@@ -82,8 +82,6 @@ class MonodromyTests(unittest.TestCase):
         from engine.incidence import incidence
         from engine.polynomial import parse
         from engine.strata import InvalidChart
-        if native_library._MODE != "native":
-            self.skipTest("Sparse graph replay runs in native mode.")
         x, y, z = sp.symbols("x y z")
         u, v = sp.symbols("U V")
         centre = (x, y)

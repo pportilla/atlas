@@ -30,12 +30,3 @@ def reduce(numbers, strata):
             str(sp.factor(denominator)).replace("**", "^"), poles)
 
 
-def check_reduction(result, reference):
-    if result != reference:
-        # Factored polynomials have several unambiguous displays. Verify
-        # each rendered rational expression exactly as well as pole data.
-        import sympy as sp
-        if (result is None or reference is None or result[3] != reference[3]
-                or any(sp.cancel(sp.sympify(a.replace("^", "**")) - sp.sympify(b.replace("^", "**"))) != 0
-                       for a, b in zip(result[:3], reference[:3]))):
-            raise AssertionError("The native topological zeta reduction differs from SymPy's.")

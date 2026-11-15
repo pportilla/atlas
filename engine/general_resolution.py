@@ -22,7 +22,7 @@ from .reference import sp
 from .reference import QQ
 
 from . import kernel
-from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_basis, ideal_subset,
+from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_subset,
                            radical_subset, resolution_charts, verify_snc)
 from .native_library import current_replay_scope, replay_scope
 from .rational_point import coordinate_fraction

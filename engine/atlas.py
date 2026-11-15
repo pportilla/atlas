@@ -198,10 +198,7 @@ def _plane_region(item, variables):
 
 
 def _use_native(native):
-    if native is not None:
-        return native
-    from .native_library import _MODE
-    return _MODE == "native"
+    return True if native is None else native
 
 
 def from_record(record, polynomial, *, native=None):

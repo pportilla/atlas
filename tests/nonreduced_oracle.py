@@ -5,7 +5,6 @@ On a graph chart the strict ideal is saturated inside its ambient equations.
 Every ambient exceptional prime is locally Cartier on the smooth chart, so
 membership in its ordinary powers computes its generic order of vanishing.
 """
-from fractions import Fraction
 from functools import cmp_to_key, lru_cache
 from math import prod
 import re
@@ -79,37 +78,6 @@ def _algebraics(records, used):
         coefficients=tuple(int(i) for i in match[1].split(","))
         values[name]=_flint_roots(coefficients)[int(match[2])-1]
     return values
-
-
-def _chart_field(atlas, chart):
-    field=atlas.get("coefficient_field",{})
-    used = set(re.findall(r"[A-Za-z][A-Za-z0-9_]*"," ".join(chart["map"].values())))
-    values=_algebraics(atlas.get("algebraic_numbers",{}),used)
-    name=field.get("generator")
-    if name and field.get("exact_root"):
-        from tests.graph_monodromy_oracle import _algebraic_literal
-        values[name]=_algebraic_literal(field["exact_root"])
-    elif name=="theta" and "theta" in used:
-        # The native A-series chart specifies either square root; choosing
-        # one embedding of the displayed common field fixes the atlas.
-        source=field["minimal_polynomial"]
-        match=re.fullmatch(r"theta\^2-\(([-\d/]+)\)",source)
-        if not match: raise ArithmeticError("Unrecognized quadratic chart field.")
-        values[name]=sp.sqrt(sp.Rational(match[1]))
-    return QQ.algebraic_field(*dict.fromkeys(values.values())) if values else QQ,values
-
-
-def _display_poly(poly, domain, field_name):
-    if domain==QQ:
-        return _text(poly.as_expr())
-    # Exact rational-polynomial representation of each coefficient in the
-    # primitive element. A chart-local field definition accompanies this text.
-    t=sp.Symbol(field_name)
-    result=0
-    for powers,c in poly.rep.to_dict().items():
-        scalar=sp.Poly.from_list([sp.Rational(v.numerator,v.denominator) for v in c.to_list()],t).as_expr()
-        result+=scalar*prod(a**k for a,k in zip(poly.gens,powers))
-    return _text(result)
 
 
 def _power_product(factors):
@@ -198,9 +166,8 @@ def _strict_parts(variables, ambient, divisors, pulled):
     gives both the orders and the ideal of the residual strict transform.
     """
     from engine import kernel
-    from engine.groebner import CHECK, _MODE
     native = kernel.strict_parts(variables, ambient, divisors, pulled)
-    if native is None and _MODE != "sympy":
+    if native is None:
         # Work in the preimage of the Cartier ideals in the ambient ring.
         # (J:P) mod A agrees with (J/A):(P/A) whenever A is in J,P.
         # The wide native block order handles large rings and exponents.
@@ -224,7 +191,7 @@ def _strict_parts(variables, ambient, divisors, pulled):
                     order += 1
                 orders.append(order)
             native.append((tuple(orders), residual))
-    if native is not None and not CHECK:
+    if native is not None:
         return native
     ring = QQ.old_poly_ring(*variables, order="grevlex")
     reference = []
@@ -313,9 +280,6 @@ def _weight_embedding(indexed):
         return str(rational_sqrt(b*b - 4*a*c, sp.Rational(1 if index == 0 else -1, 2*a),
                                  sp.Rational(-b, 2*a)))
     from engine.field_coefficient import marked_root_display
-    from engine.groebner import CHECK, _MODE
-    if _MODE == "sympy":
-        return str(_flint_roots(coeffs)[index])
     description = marked_root_display(coeffs)
     if description is None:
         return str(_flint_roots(coeffs)[index])
@@ -323,8 +287,6 @@ def _weight_embedding(indexed):
     x = sp.Symbol("x")
     poly = sp.PurePoly.from_list(normalized, x, domain=sp.ZZ)
     root = scale * sp.CRootOf._new(poly, positions[index])
-    if CHECK and root.equals(_flint_roots(coeffs)[index]) is not True:
-        raise AssertionError("The exact number field embedding differs from the reference root.")
     return str(root)
 
 
@@ -389,39 +351,6 @@ def _lift_free(atlas, chart, factors, unit, symbols):
     return local
 
 
-def _lift_graph_reference(atlas, chart, factors, unit, symbols, weights):
-    coordinates = tuple(map(sp.Symbol, chart["coordinates"]))
-    domain, algebraics = _chart_field(atlas, chart)
-    names = {v.name: v for v in coordinates} | algebraics
-    field_name = "weight_generator"
-    while field_name in names:
-        field_name += "_"
-    if algebraics:
-        chart["weight_field"] = {"generator": field_name, "exact": str(domain.ext.as_expr())}
-
-    def display(f):
-        return _display_poly(sp.Poly(f, *coordinates, domain=domain), domain, field_name)
-
-    mapping = {v: _read(chart["map"][v.name], names) for v in symbols}
-    scalar = sp.Poly(unit.xreplace(mapping), *coordinates, domain=domain)
-    polys = [(sp.Poly(f.xreplace(mapping), *coordinates, domain=domain), m) for f, m in factors]
-    original = [(display(p.as_expr()), m) for p, m in polys]
-    if not scalar.is_one:
-        original.insert(0, (display(scalar.as_expr()), 1))
-    chart["ambient_total_transform"] = _power_product(original)
-    ambient = tuple(_read(f, names) for f in chart["ambient_ideal"])
-    total = scalar.as_expr()*prod(p.as_expr()**m for p, m in polys)
-    pivot = _read(chart["pivot_generator"], names)
-    strict = saturate(coordinates, (*ambient, total), pivot, domain=domain)
-    chart["strict_transform"] = [display(f) for f in strict if not ideal_subset(coordinates, (f,), ambient, domain=domain)]
-    local = {}
-    for comp in chart["exceptional"]:
-        prime = tuple(_read(f, names) for f in comp.get("ideal", [comp["equation"]]))
-        label = comp["id"]
-        local[label] = weights[label] if label in weights else _valuation(coordinates, ambient, prime, total, domain)
-    return local
-
-
 def _lift_graph(atlas, chart, factors, unit, symbols, weights):
     """Compute over Q[theta]/(m), with graph ideals lifted to Q[axes,theta].
 
@@ -432,10 +361,7 @@ def _lift_graph(atlas, chart, factors, unit, symbols, weights):
     """
     from engine.affine_kernel import pullbacks
     from engine.atlas import _record_text
-    from engine.groebner import CHECK, _MODE
     field = atlas.get("coefficient_field", {})
-    if _MODE == "sympy":
-        return _lift_graph_reference(atlas, chart, factors, unit, symbols, weights)
     if atlas.get("algebraic_numbers"):
         from engine.graph_record import lift_graph
         base = tuple(v.name for v in symbols)
@@ -479,14 +405,6 @@ def _lift_graph(atlas, chart, factors, unit, symbols, weights):
         prime = tuple(_read(f, names) for f in comp.get("ideal", [comp["equation"]]))
         data = _strict_parts(coordinates, ambient, (prime,), (total,))
         local[label] = data[0][0][0]
-    if CHECK:
-        other = chart.copy()
-        expected = _lift_graph_reference(atlas, other, factors, unit, symbols, weights)
-        codec = {v.name: v for v in coordinates}
-        other_ideal = tuple(_read(g, codec) for g in other["strict_transform"])
-        if (expected != local or not ideal_subset(coordinates, proper, (*ambient, *other_ideal)) or
-                not ideal_subset(coordinates, other_ideal, (*ambient, *proper))):
-            raise AssertionError("The weighted graph orders or strict ideal differ from the reference.")
     chart["ambient_total_transform"] = _power_product(original)
     chart["strict_transform"] = [_record_text(g, coordinates) for g in proper]
     return local

@@ -22,7 +22,7 @@ class GroebnerKernelTests(unittest.TestCase):
         from engine import groebner as gb
         a, b = sp.Dummy("row"), sp.Dummy("row")
         expr = -sp.Rational(3, 5) * a**2 * b
-        with patch.object(gb, "_MODE", "native"), patch.object(gb, "_expanded_qq_line", side_effect=AssertionError):
+        with patch.object(gb, "_expanded_qq_line", side_effect=AssertionError):
             self.assertEqual(_line((b, a), expr), "-3/5 1 2")
             self.assertEqual(_line((a, b), expr), "-3/5 2 1")
             self.assertEqual(_line((a, b), sp.Mul(0, a, evaluate=False)), "")
@@ -38,24 +38,21 @@ class GroebnerKernelTests(unittest.TestCase):
             ref = sp.groebner(rows, x,y,z, order="grlex", domain=field)
             f = x**2*z + y*z**3 + x*y
             expected = ref.reduce(f)
-            with patch.object(gb, "_MODE", "native"), patch.object(sp, "groebner", side_effect=AssertionError):
+            with patch.object(sp, "groebner", side_effect=AssertionError):
                 actual = gb.groebner(rows, (x,y,z), order="grlex", domain=field)
                 self.assertEqual(actual.exprs, ref.exprs)
                 self.assertEqual(actual.reduce(f), expected)
 
     def test_packed_basis_with_unpacked_remainder(self):
-        from unittest.mock import patch
-        from engine import groebner as gb
         if not hasattr(_kernel(), "atlas_wide_abi"):
             self.skipTest("the sparse QQ arithmetic ABI is unavailable")
         x,t = sp.symbols("x t")
         # A pre-existing small parameter relation receives a sparse
         # polynomial of high degree after a chart pulls it back.
-        with patch.object(gb, "_MODE", "native"), patch.object(gb, "CHECK", False):
-            basis = groebner((t**2-2,), (x,t))
-            large = x**(10**10)
-            self.assertEqual(basis.reduce((t**2+t)*large)[1], t*large+2*large)
-            self.assertTrue(basis.contains(large*(t**2-2)))
+        basis = groebner((t**2-2,), (x,t))
+        large = x**(10**10)
+        self.assertEqual(basis.reduce((t**2+t)*large)[1], t*large+2*large)
+        self.assertTrue(basis.contains(large*(t**2-2)))
 
     def test_compound_qq_codec_with_colliding_names_and_invalid_input(self):
         from engine.blowup_ideal import _expressions
@@ -174,11 +171,11 @@ class GroebnerKernelTests(unittest.TestCase):
                 self.assertEqual(list(colon(ideal, by, gens)),
                                  list(sp.groebner(reference, *gens, order="grevlex", domain=QQ).exprs))
 
-    def test_native_limits_and_explicit_symbolic_fallback(self):
+    def test_native_limits(self):
         from unittest.mock import patch
         from engine import groebner as gb
         x, y = sp.symbols("x y")
-        with patch.object(gb,"_MODE","native"), patch.object(sp,"groebner",side_effect=AssertionError):
+        with patch.object(sp,"groebner",side_effect=AssertionError):
             # The unpacked FLINT ring accepts exponents above the packed limit.
             self.assertNotIsInstance(groebner((x**40000-y,), (x,y)), GroebnerBasis)
             with self.assertRaisesRegex(ArithmeticError,"specified ring or order"):
@@ -188,9 +185,6 @@ class GroebnerKernelTests(unittest.TestCase):
             with patch.object(gb,"_kernel",return_value=None):
                 with self.assertRaisesRegex(ArithmeticError,"make groebner"):
                     groebner((x+y,), (x,y))
-        for mode in ("sympy","check"):
-            with patch.object(gb,"_MODE",mode), patch.object(gb,"_kernel",return_value=None):
-                self.assertEqual(groebner((x+y,), (x,y), domain=sp.GF(3)).exprs,[x+y])
 
     def test_recorded_verifier_bases(self):
         # Every basis the ideal-blowup verifier asked for on the benchmark germs.

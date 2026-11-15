@@ -11,19 +11,12 @@ import re
 from . import native_library
 from .kernel_json import kernel_json
 from .point_geometry import encode_terms, request as point_request
-from .polynomial import InputError, checked_native, format_poly, integer_from_decimal, integer_text, parse_expression, sparse_row
+from .polynomial import InputError, format_poly, integer_from_decimal, integer_text, parse_expression, sparse_row
 from .strata import InvalidChart
 
 
 def independent(parts, dimension):
-    def native():
-        return point_request("independent", point=["0"] * dimension, ideal=list(map(encode_terms, parts)))
-
-    def reference():
-        from tests.identity_oracle import independent as rank
-        return rank(parts, dimension)
-
-    return checked_native(native, reference)
+    return point_request("independent", point=["0"] * dimension, ideal=list(map(encode_terms, parts)))
 
 
 def rational_factors(poly, names):
@@ -31,15 +24,8 @@ def rational_factors(poly, names):
     def ordered(pairs):
         return sorted(pairs, key=lambda pair: tuple(sorted(pair[0].items())))
 
-    def native():
-        rows = native_library.affine_request(["factor", " ".join(names), format_poly(poly, names)])
-        return ordered((sparse_row(row), integer_from_decimal(m)) for m, row in zip(rows[1::2], rows[2::2]))
-
-    def reference():
-        from tests.identity_oracle import rational_factors as factor
-        return ordered(factor(poly, names))
-
-    return checked_native(native, reference)
+    rows = native_library.affine_request(["factor", " ".join(names), format_poly(poly, names)])
+    return ordered((sparse_row(row), integer_from_decimal(m)) for m, row in zip(rows[1::2], rows[2::2]))
 
 
 def _certify_divisor(f, parts, names):
@@ -106,15 +92,8 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
         fibre = [parse_expression(g, coords) for g in chart["fibre"]]
         if len(origin_indices(fibre, len(coords))) != len(fibre):
             raise InvalidChart("The projection fibre misses the origin.")
-        def native():
-            rows = ["frame_empty", " ".join(coords), str(len(fibre)), *(format_poly(f, coords) for f in fibre)]
-            return all(native_library.affine_request([*rows, v]) == ["1"] for v in coords)
-
-        def reference():
-            from tests.identity_oracle import fibre_is_origin
-            return fibre_is_origin(fibre, coords)
-
-        if not checked_native(native, reference):
+        rows = ["frame_empty", " ".join(coords), str(len(fibre)), *(format_poly(f, coords) for f in fibre)]
+        if not all(native_library.affine_request([*rows, v]) == ["1"] for v in coords):
             raise InvalidChart("The claimed identity fibre contains points outside the origin.")
     data, equations = {}, []
     for row in chart["components"]:
@@ -148,10 +127,4 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
         convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else
                       "Ambient exceptional divisor") + " in the germ over the origin over Qbar."
         output["dual_complex"] = {"status": "complete", "convention": convention, "vertices": [], "cells": []}
-    if native_library.CHECK:
-        from . import atlas
-        expected = atlas.outputs(atlas.from_json(charts), len(coords), complex=complex,
-                                 intrinsic=intrinsic, integrals=integrals)
-        if expected != output:
-            raise AssertionError("The point-fibre strata differ from the general atlas computation.")
     return charts, output

@@ -141,9 +141,6 @@ def _write_local(saved, chart, factors, unit, base):
 
 
 def nonreduced_resolution(poly, names, mode, resolve_support):
-    if native_library._MODE == "sympy":
-        from tests.nonreduced_oracle import nonreduced_resolution as reference
-        return reference(poly,names,mode,resolve_support)
     names = tuple(names)
     factors,unit = _factor(format_poly(poly,names),names)
     weights = kernel_json("atlas_identity_divisor", "weight_profile", weights=[integer_text(m) for _, m in factors])

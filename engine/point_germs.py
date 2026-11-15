@@ -23,15 +23,6 @@ def nonzero_terms_at_point(shifts, terms):
     return point_operation("nonzero", shifts, terms)
 
 
-def is_smooth_at_point(shifts, terms):
-    """Check incidence and decide if a first derivative is nonzero."""
-    return point_operation("smooth", shifts, terms)
-
-
-def _nonzero_at_point(variables, point, f):
-    return nonzero_terms_at_point(point, np.terms(variables, f))
-
-
 def _large_translation(variables, shifts, f, *, min_terms=65537):
     return point_operation("large", shifts, np.terms(variables, f), limit=min_terms)
 

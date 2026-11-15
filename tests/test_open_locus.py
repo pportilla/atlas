@@ -9,10 +9,8 @@ from unittest.mock import patch
 from engine import kernel
 from engine.chart_expressions import runtime_expressions
 from engine.local_blowups import _present
-from engine.native_library import _MODE
 
 
-@unittest.skipUnless(_MODE == "native", "These checks exercise the native open-locus calculation.")
 class OpenLocus(unittest.TestCase):
     def test_reducible_nonreduced_and_deleted_charts(self):
         x, y = runtime_expressions().symbols("x y")

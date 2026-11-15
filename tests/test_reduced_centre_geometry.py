@@ -5,13 +5,11 @@ from engine import native_polynomial as np
 from engine.blowup_ideal import ideal_basis
 from engine.monodromy import monodromy_zeta
 from engine.general_resolution import smooth_reduced_graph
-from engine.native_library import _MODE
 from engine.polynomial import parse
 from engine.resolve import resolve
 from engine.resolution_complex import dual_complex
 
 
-@unittest.skipUnless(_MODE == "native", "Reduced singular centre discovery uses the native solver.")
 class ReducedCentreGeometry(unittest.TestCase):
     names = ["x", "y", "z"]
     parabola = "(y-x^2)^2-x*z^2"

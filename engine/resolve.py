@@ -127,8 +127,7 @@ def _resolve(request, proofs):
         else:
             from . import atlas
             from .local_blowups import GiveUp
-            from .native_library import _MODE
-            charts = atlas.from_record(record, p, native=_MODE not in ("check", "sympy"))
+            charts = atlas.from_record(record, p, native=True)
             if charts is None:
                 raise RuntimeError("The resolution engine did not supply its chart ownership data.")
             factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))

@@ -14,11 +14,6 @@ from .reference import sp
 from .reference import QQ
 
 
-def _reference(variables, equations, excluded, domain):
-    from tests.constructible_euler_oracle import _reference as comparison
-    return comparison(variables, equations, excluded, domain)
-
-
 def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
     """Compute χ_c(V(equations) minus the union of V(I) for I in excluded).
 
@@ -27,14 +22,8 @@ def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
     geometric points and ignores nilpotents.
     """
     from . import kernel
-    from .groebner import CHECK, _MODE
     variables, equations = tuple(variables), tuple(equations)
     excluded = tuple(tuple(ideal) for ideal in excluded)
-    def reference():
-        return _reference(variables, equations, excluded, domain)
-
-    if _MODE == "sympy":
-        return reference()
     coords, closed, removed, degree = variables, equations, excluded, 1
     algebraic = getattr(domain, "is_AlgebraicField", False)
     if algebraic:
@@ -49,9 +38,7 @@ def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
         removed = tuple(lifted(z) for z in excluded)
         degree = domain.degree if native_field else domain.mod.degree()
     if domain != QQ and not algebraic:
-        if _MODE == "native" or np.native_ring(variables):
-            raise ValueError("Expected rational or marked number-field coefficients.")
-        return reference()
+        raise ValueError("Expected rational or marked number-field coefficients.")
     # Free complex coordinates have Euler characteristic one. Keep a free
     # coordinate for constant problems because the native ring has arity >= 1.
     support = set().union(*(getattr(f, "free_symbols", ()) for ideal in (closed, *removed) for f in ideal))
@@ -77,9 +64,7 @@ def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
     else:
         found = kernel.strata(coords, closed, ((),), removed)
         if found is None:
-            if _MODE == "native" or np.native_ring(coords):
-                raise ArithmeticError("Build the native Euler characteristic kernel.")
-            return reference()
+            raise ArithmeticError("Build the native Euler characteristic kernel.")
         total = found.get((0,), 0)
     # The finite etale coefficient scheme splits into deg(m) conjugate
     # fibres. Each fibre projection has the same degree/gcd stratification
@@ -89,6 +74,4 @@ def euler_characteristic(variables, equations, excluded=(), *, domain=QQ):
         count = total if degree == 1 else strata_totals([(None, degree, total)]).get(None, 0)
     except InconsistentSheets as exc:
         raise ArithmeticError("Inconsistent Euler characteristic on conjugate sheets.") from exc
-    if CHECK and count != reference():
-        raise AssertionError("The native Euler characteristic differs from the fibre integral.")
     return count

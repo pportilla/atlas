@@ -53,9 +53,9 @@ class OneMachineForEveryEngine(unittest.TestCase):
                 "region": [], "ambient_ideal": [], "components": [], "removed": [], "fibre": []}
         chart, = atlas.from_json([item], native=False)
         self.assertEqual(dict(chart.coordinates)["x"], sp.expand((f-u10)**2*sp.Rational(3, 4)-f**2+u))
-        from engine import native_library, native_polynomial
+        from engine import native_polynomial
         default_chart, = atlas.from_json([item])
-        self.assertEqual(native_polynomial.native_ring(default_chart.variables), native_library._MODE == "native")
+        self.assertTrue(native_polynomial.native_ring(default_chart.variables))
         self.assertEqual(atlas.to_json([default_chart]), atlas.to_json([chart]))
         for value in ("u/u", "u(2)", "u10junk", "for.__class__", "u^2^2", "u^-1", "1/0", "u\n1"):
             with self.subTest(value=value), self.assertRaises(InputError):

@@ -68,7 +68,6 @@ class IdealPowerInterfaceTests(unittest.TestCase):
         self.assertEqual((code, errors), (0, ""))
         self.assertEqual(output.replace("atlas> ", "").strip().splitlines(), expected)
 
-    @unittest.skipUnless(native_library._MODE == "native", "requires the prepared native operation")
     def test_small_squares_and_worker_retry_on_swell(self):
         x, y = coordinates("x", "y")
         easy = ideal((x + 2*y)**8, x**6*y)

@@ -143,7 +143,7 @@ def _graph_bundle_outputs(record, charts, *, complex, intrinsic, integrals):
     from .chart_kernel import crossings_rows, strata_rows, strata_totals
     from .incidence import incidence, stratum_dimension
     from .strata import records
-    if (intrinsic or native_library._MODE != "native" or record.get("coefficient_field")
+    if (intrinsic or record.get("coefficient_field")
             or record.get("input_divisor")
             or not hasattr(native_library._library(), "atlas_coordinate_exceptional_abi")):
         return None

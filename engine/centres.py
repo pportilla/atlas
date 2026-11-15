@@ -141,11 +141,7 @@ def _settle(element, frame, variables, through, new):
 def _remove_coordinate_powers(frame, poly, divisors):
     """Return all orders on free coordinate hyperplanes and their joint residual."""
     from .affine_kernel import _request, _ring, _sparse_expression
-    from .native_library import CHECK, _MODE
     divisors = tuple(divisors)
-    if _MODE == "sympy":
-        from tests.centre_weight_oracle import remove_coordinate_powers
-        return remove_coordinate_powers(frame, poly, divisors)
     if frame.rows and not frame.known_scalar_unit(poly):
         from .field_wide import _expanded_row
         lines = frame._implicit_input(poly)
@@ -167,10 +163,6 @@ def _remove_coordinate_powers(frame, poly, divisors):
         rows = _request(["coordinate_residual", ring.header,
                          " ".join(str(frame.variables.index(v)) for v in divisors), ring.text(poly)])
     answer = list(map(integer_from_decimal, rows[:-1])), _sparse_expression(frame.variables, rows[-1])
-    if CHECK:
-        from tests.centre_weight_oracle import remove_coordinate_powers
-        if answer != remove_coordinate_powers(frame, poly, divisors):
-            raise AssertionError("Coordinate orders differ from repeated exact division.")
     return answer
 
 

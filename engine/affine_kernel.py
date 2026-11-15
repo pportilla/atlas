@@ -3,7 +3,6 @@
 FLINT receives the polynomial expressions, including products and powers. The
 unpacked native kernel handles rings or monomials outside the packed ABI.
 """
-import ctypes
 import re
 from fractions import Fraction
 from functools import lru_cache
@@ -14,7 +13,7 @@ from .polynomial import integer_from_decimal, integer_text, rational_text
 from .reference import sp
 
 from . import groebner as gb
-from .fan_geometry import canonical_laurent_terms, lattice_characters, lattice_pivots
+from .fan_geometry import canonical_laurent_terms, lattice_characters
 
 
 from .native_library import Unavailable as _AffineUnavailable, affine_request as _request, _library
@@ -77,27 +76,6 @@ def _ask(op, variables, mapping, base, functions=(), *, modulus=None, indices=No
     return _request(lines)
 
 
-def _oracle(name, *args):
-    from tests import affine_oracle
-    return getattr(affine_oracle, name)(*args)
-
-
-def _checked(native, reference, variables=()):
-    if np.native_ring(variables):
-        return native()
-    if gb._MODE == "sympy":
-        return reference()
-    try:
-        answer = native()
-    except _AffineUnavailable:
-        if gb._MODE != "check" or np.native_ring(variables) or not variables:
-            raise
-        return reference()
-    if gb.CHECK and answer != reference():
-        raise AssertionError("The native affine-map operation differs from its SymPy reference.")
-    return answer
-
-
 def _integer_rows(vectors):
     return tuple(tuple(map(index, v)) for v in vectors)
 
@@ -118,7 +96,7 @@ def lattice_dimension(exponents):
         rank, = _request(["lattice_dimension", str(len(rows[0])), *(" ".join(map(str,r)) for r in rows)])
         return int(rank)
 
-    return _checked(native, lambda: _oracle("lattice_dimension", rows))
+    return native()
 
 
 @lru_cache(maxsize=16384)
@@ -178,7 +156,7 @@ def sparse_terms(variables, value):
             row, = _request(["decode", ring.header, ring.text(value)])
         return tuple(sorted(_sparse_terms(row), reverse=True))
 
-    return _checked(native, lambda: _oracle("sparse_terms", variables, value), variables)
+    return native()
 
 
 # Rows of record expressions decoded ahead of reading, by (names, text).
@@ -232,7 +210,7 @@ def decode(variables, text):
             raise InputError(str(error)) from error
         return _sparse_expression(variables, row)
 
-    return _checked(native, lambda: _oracle("decode", variables, names, text), variables)
+    return native()
 
 
 def pullbacks(variables, mapping, base, functions, modulus=None):
@@ -243,7 +221,7 @@ def pullbacks(variables, mapping, base, functions, modulus=None):
         rows = _ask("pullbacks", variables, mapping, base, functions, modulus=modulus or 0)
         return tuple(_sparse_expression(variables, row) for row in rows)
 
-    return _checked(native, lambda: _oracle("pullbacks", functions, variables, mapping, base, modulus), variables)
+    return native()
 
 
 def chart_data(variables, mapping, divisors, equation, base, modulus=None):
@@ -261,7 +239,7 @@ def chart_data(variables, mapping, divisors, equation, base, modulus=None):
         rows = _ask("chart", variables, mapping, base, (equation,), modulus=modulus or 0, indices=indices)
         return tuple(tuple(map(integer_from_decimal, r.split())) for r in rows[:-1]), _sparse_expression(variables, rows[-1])
 
-    return _checked(native, lambda: _oracle("chart_data", variables, mapping, divisors, equation, base, modulus, indices), variables)
+    return native()
 
 
 def inverse_map(variables, mapping, base):
@@ -273,7 +251,7 @@ def inverse_map(variables, mapping, base):
         parts = [_sparse_expression(base, row) for row in rows]
         return tuple(zip(parts[::2], parts[1::2]))
 
-    return _checked(native, lambda: _oracle("inverse_map", variables, mapping, base), variables)
+    return native()
 
 
 def transition_pole(variables, mapping, base, inverse):
@@ -284,7 +262,7 @@ def transition_pole(variables, mapping, base, inverse):
         rows = _ask("pole", variables, mapping, base, (f for pair in inverse for f in pair))
         return _sparse_expression(variables, rows[0])
 
-    return _checked(native, lambda: _oracle("transition_pole", variables, mapping, base, inverse), variables)
+    return native()
 
 
 @lru_cache(maxsize=128)
@@ -298,7 +276,7 @@ def frame_locus(variables, equations, units, *, closure=False):
     def native():
         op = "frame_basis" if closure else "frame_empty"
         ring = _ring(variables)
-        if (gb._MODE == "native" and np.native_ring(variables) and len(variables) <= gb._MAX_VARIABLES
+        if (np.native_ring(variables) and len(variables) <= gb._MAX_VARIABLES
                 and all(isinstance(f, (np.Expr, int, Fraction)) for f in (*equations, *units))):
             from .native_library import _kernel, ideal_request
             if hasattr(_kernel(), "atlas_frame_locus_abi"):
@@ -316,7 +294,7 @@ def frame_locus(variables, equations, units, *, closure=False):
         result = _request(lines)
         return tuple(_sparse_expression(variables, row) for row in result) if closure else result == ["1"]
 
-    return _checked(native, lambda: _oracle("frame_locus", variables, equations, units, closure), variables)
+    return native()
 
 
 def _frame_polys(op, variables, columns, functions):
@@ -333,34 +311,31 @@ def frame_function(variables, value):
     variables = tuple(variables)
     if not variables:
         return value if isinstance(value, (np.Expr, int, Fraction)) else sp.sympify(value)
-    if gb._MODE == "native" and np.native_ring(variables) and isinstance(value, (np.Expr, int, Fraction)):
+    if np.native_ring(variables) and isinstance(value, (np.Expr, int, Fraction)):
         value = np.coerce(value)
         if value.free_symbols.issubset(_ring(variables).names):
             return value  # Native chart polynomials already carry their expanded coefficients.
-    return _checked(lambda: _frame_polys("function", variables, None, (value,))[0],
-                    lambda: _oracle("frame_function", value), variables)
+    return _frame_polys("function", variables, None, (value,))[0]
 
 
 def frame_minor(variables, rows, columns):
     """A Jacobian minor, with its sign and rational scale."""
     variables = tuple(variables)
-    return _checked(lambda: _frame_polys("minor", variables, columns, rows)[0],
-                    lambda: _oracle("frame_minor", rows, columns), variables)
+    return _frame_polys("minor", variables, columns, rows)[0]
 
 
 def frame_field(variables, rows, columns):
     """Signed complementary minors for the implicit derivatives in these columns."""
     variables = tuple(variables)
 
-    values = _checked(lambda: _frame_polys("field", variables, columns, rows), lambda: _oracle("frame_field", rows, columns), variables)
+    values = _frame_polys("field", variables, columns, rows)
     return {v: c for v, c in zip(columns, values) if c != 0}
 
 
 def frame_derivative(variables, f, field):
     """Apply a polynomial vector field before reducing by the frame's rows."""
     variables = tuple(variables)
-    return _checked(lambda: _frame_polys("derive", variables, field, (f, *field.values()))[0],
-                    lambda: _oracle("frame_derivative", f, field), variables)
+    return _frame_polys("derive", variables, field, (f, *field.values()))[0]
 
 
 def archived_factor_order(parts, dimension):
@@ -394,7 +369,7 @@ def rational_factor_rows(variables, expression):
             order = archived_factor_order(((dict(_sparse_terms(row)), m) for row, m, _ in parts), len(variables))
             parts = [parts[i] for i in order]
         return scalar, tuple(parts)
-    return _checked(native, lambda: _oracle("rational_factor_rows", variables, expression), variables)
+    return native()
 
 
 def rational_factors(poly):
@@ -403,9 +378,6 @@ def rational_factors(poly):
         from .field_factors import factors
         return poly.LC(), factors(poly)
     if poly.domain not in (sp.QQ, sp.ZZ):
-        if gb._MODE in ("sympy", "check"):
-            from tests.field_polynomial_oracle import factors
-            return factors(poly)
         raise ValueError("Native factorization accepts QQ, ZZ, or a marked number field.")
 
     scalar, rows = rational_factor_rows(poly.gens, poly.as_expr())
@@ -422,7 +394,7 @@ def frame_linear(variables, f, k):
         rows = _request(["linear", ring.header, str(variables.index(k)), ring.text(f)])
         return None if rows == ["none"] else tuple(_sparse_expression(variables, r) for r in rows)
 
-    return _checked(native, lambda: _oracle("frame_linear", f, k), variables)
+    return native()
 
 
 @lru_cache(maxsize=512)
@@ -434,10 +406,10 @@ def frame_restrict(variables, f, k, a, b):
     """Restrict f to k=-b/a, clearing its denominator up to an invertible power of a."""
     variables = tuple(variables)
 
-    if (gb._MODE == "native" and np.native_ring(variables)
+    if (np.native_ring(variables)
             and all(isinstance(value, (np.Expr, int, Fraction)) for value in (f, k, a, b))):
         return _native_restriction(variables, f, k, a, b)
-    return _checked(lambda: _frame_polys("restrict", variables, (k,), (f, a, b))[0], lambda: _oracle("frame_restrict", variables, f, k, a, b), variables)
+    return _frame_polys("restrict", variables, (k,), (f, a, b))[0]
 
 
 def frame_quotient(variables, f, k):
@@ -449,4 +421,4 @@ def frame_quotient(variables, f, k):
         rows = _request(["divide_coordinate", ring.header, str(variables.index(k)), ring.text(f)])
         return None if rows == ["none"] else _sparse_expression(variables, rows[0])
 
-    return _checked(native, lambda: _oracle("frame_quotient", variables, f, k), variables)
+    return native()

@@ -45,14 +45,6 @@ class ReducedBasis:
         return self._basis.contains(polynomial)
 
 
-class _CheckedRationalBasis(gb._Checked):
-    def remainder(self, polynomial):
-        answer = self._native.remainder(polynomial)
-        if answer != self._reference.remainder(polynomial):
-            raise AssertionError("The native normal form differs from SymPy's.")
-        return answer
-
-
 def _restore_native(generators, variables, order):
     """Load verified rows without forming new critical pairs in either representation."""
     support = (m for f in generators for m in np.terms(variables, f))
@@ -79,17 +71,7 @@ def _make_basis(generators, variables, order, *, trusted):
     if not variables:
         rows = scalar_ideal("basis", generators)
         return ReducedBasis((), order, tuple(np.from_row((), row) for row in rows), None)
-    if gb._MODE in ("sympy", "check"):
-        from tests.groebner_oracle import _SymbolicBasis
-    if gb._MODE == "sympy":
-        basis = _SymbolicBasis(generators, variables, order, trusted)
-    elif gb._MODE == "check":
-        basis = (_restore_native(generators, variables, order) if trusted
-                 else gb._native(generators, variables, order, known=0))
-        if basis is None:
-            raise gb.Unavailable("Rebuild the native kernel to check this rational basis.")
-        basis = _CheckedRationalBasis(basis, _SymbolicBasis(generators, variables, order, trusted))
-    elif trusted:
+    if trusted:
         basis = _restore_native(generators, variables, order)
     else:
         basis = gb.groebner(generators, variables, order=order)

@@ -41,7 +41,6 @@ from .resolution_progress import report
 
 from .chart_expressions import chart_expressions
 from .binomial_kernel import exceptional_data, separating_forms
-from .native_polynomial import native_ring
 
 from .blowup_ideal import (blowup_charts, empty_locus, ideal_basis, ideal_subset, radical_subset, saturate,
                            smooth_locus)
@@ -49,7 +48,7 @@ from .affine_kernel import frame_function, frame_linear, pullbacks
 from .centre_weights import (centre_rows, centre_search, component_ideal_product, cover_products, level_weights,
                              maximum_indices, order_fields, ordered_parts, surface_maxima)
 from .centres import GiveUp, maximum
-from .groebner import _MODE, colon, groebner
+from .groebner import colon, groebner
 from .incidence import dual_cells, stratum_dimension
 
 
@@ -84,11 +83,6 @@ class Chart:
             raise GiveUp(str(exc)) from exc
 
 
-def _oracle(name, *args):
-    from tests import local_blowups_oracle
-    return getattr(local_blowups_oracle, name)(*args)
-
-
 def _covers(variables, removed):
     """Functions whose nonvanishing sets cover the complement of the removed
     centres: the products of one generator of each ideal."""
@@ -99,29 +93,20 @@ def _present(variables, ideal, removed=()):
     """Whether V(ideal) has a point outside the removed centres."""
     if not removed:
         return not empty_locus(variables, ideal)
-    if _MODE == "sympy":
-        return _oracle("present_outside", variables, ideal, removed)
     from .kernel import present_outside
     result = present_outside(variables, ideal, removed)
     if result is None:
         result = level_weights("present_outside", (), width=len(variables), ideal=centre_rows(variables, ideal),
                                holes=[centre_rows(variables, z) for z in removed])
-    if _MODE == "check" and result != _oracle("present_outside", variables, ideal, removed):
-        raise AssertionError("The native open-locus test differs from the reference.")
     return result
 
 
 def _dimension(variables, ideal):
     """The dimension of V(ideal), from the leading monomials of a Groebner basis."""
     from . import kernel
-    from .groebner import CHECK
     value = kernel.dimension(variables, ideal)
     if value is None:
-        if _MODE == "native" or native_ring(variables):
-            raise GiveUp("No native dimension certificate is available for this chart.")
-        return _oracle("_dimension_reference", variables, ideal)
-    if CHECK and value != _oracle("_dimension_reference", variables, ideal):
-        raise AssertionError("The dimension differs from the leading-monomial reference.")
+        raise GiveUp("No native dimension certificate is available for this chart.")
     return value
 
 
@@ -207,24 +192,15 @@ def _failures(chart, dimension):
     entries are reduced modulo their ideal.
 
     The packed and arbitrary-width kernels both compute the rank-defect loci.
-    ATLAS_GROEBNER=check also compares the independent symbolic calculation.
     """
     from . import kernel
-    from .groebner import CHECK, _MODE
     labels = [component[0] for component in chart.components]
     divisors = [component[3] for component in chart.components]
     found = kernel.crossings(chart.variables, dimension, chart.ambient, divisors, chart.fibre, chart.region)
     if found is None:
-        if _MODE == "sympy":
-            return _oracle("_failures_here", chart, dimension)
         found = kernel.wide_crossings(chart.variables, dimension, chart.ambient, divisors, chart.fibre, chart.region)
     over = {tuple(labels[i] for i in positions): gens for positions, _, gens in found}
     inside = {tuple(labels[i] for i in positions) for positions, flag, _ in found if flag}
-    if CHECK:
-        other, within = _oracle("_failures_here", chart, dimension)
-        if inside != within or {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in over.items()} != \
-                {key: tuple(ideal_basis(chart.variables, bad)) for key, bad in other.items()}:
-            raise AssertionError("The native check of normal crossings differs from this file's.")
     return over, inside
 
 
@@ -265,7 +241,6 @@ def _point_components(variables, ideal):
     """Orbits of a reduced finite centre over Q, via a separating linear form."""
     from . import kernel
     from .affine_kernel import pullbacks
-    from .groebner import CHECK
     # V(0) as the only stratum returns chi of the whole closed fibre. For
     # a finite complex variety this counts geometric points with no weights.
     native = kernel.strata(variables, ideal, ((),))
@@ -285,14 +260,10 @@ def _point_components(variables, ideal):
                 continue
             equations = pullbacks(variables, (form,), (t,), [f for f, _ in factors])
         except ArithmeticError as exc:
-            if _MODE == "native" or native_ring(variables):
-                raise GiveUp("The native kernel could not separate this finite centre.") from exc
-            return _oracle("_point_components_reference", variables, ideal)
+            raise GiveUp("The native kernel could not separate this finite centre.") from exc
         parts = [(degree, ideal_basis(variables, (*ideal, eq))) for (_, degree), eq in zip(factors, equations)]
         indices = ordered_parts(variables, [p for _, p in parts], [d for d, _ in parts])
         answer = [parts[i][1] for i in indices]
-        if CHECK and answer != _oracle("_point_components_reference", variables, ideal, form):
-            raise AssertionError("The finite point components differ from the reference decomposition.")
         return answer
     raise GiveUp("The points of a centre were not separated.")
 
@@ -341,18 +312,14 @@ def _blow_up_linear(chart, linear, label, stage, codimension):
     order along the new divisor w = 0 is then the least exponent of w.
 
     The kernel computes this (native/ideal.cpp, op_blowup); the arbitrary-width chart kernel
-    answers when it cannot, and with ATLAS_GROEBNER=check both must agree."""
+    answers when it cannot."""
     from . import kernel
-    from .groebner import CHECK, _MODE
     names = _child_variables(chart, linear, stage)
     native = kernel.blowup_linear(
         chart.variables, chart.ambient, [chart.variables.index(v) for v, _ in linear], [shift for _, shift in linear],
         [component[3] for component in chart.components], chart.fibre, chart.region,
         [*(expr for _, expr in chart.coordinates), *(g for z in chart.removed for g in z)])
     if native is None:
-        args = chart, linear, label, stage, codimension, names
-        if _MODE == "sympy":
-            return _oracle("_blow_up_linear_here", *args)
         native = _wide_linear_charts(chart, linear, names)
     children = []
     for j, ((variables, w, ratios), raw) in enumerate(zip(names, native)):
@@ -371,16 +338,6 @@ def _blow_up_linear(chart, linear, label, stage, codimension):
         children.append(Chart(variables, chart.ambient, tuple(components), kernel.exprs(variables, raw["fibre"]), region,
                               tuple((name, expr) for (name, _), expr in zip(chart.coordinates, moved)),
                               (*chart.history, (stage, j)), tuple(removed), chart.coefficient_field))
-    if CHECK:
-        for mine, other in zip(children, _oracle("_blow_up_linear_here", chart, linear, label, stage, codimension, names)):
-            def same(a, b):
-                return ideal_basis(mine.variables, (*mine.ambient, *a)) == ideal_basis(mine.variables, (*mine.ambient, *b))
-            if mine.variables != other.variables or [c[:3] for c in mine.components] != [c[:3] for c in other.components] \
-                    or not all(same(a[3], b[3]) for a, b in zip(mine.components, other.components)) \
-                    or not same(mine.fibre, other.fibre) or not same(mine.region, other.region) \
-                    or not all(ideal_subset(mine.variables, (a[1] - b[1],), mine.ambient)
-                               for a, b in zip(mine.coordinates, other.coordinates)):
-                raise AssertionError("The native blowup of a linear centre differs from this file's.")
     return children
 
 
@@ -419,7 +376,6 @@ def _strict_ideal(variables, ambient, pivot, generators):
     nonuniform order; the caller checks that before accepting the centre.
     """
     from . import kernel
-    from .groebner import CHECK
     nonzero = tuple(g for g in generators if not ideal_subset(variables, (g,), ambient))
     if ambient and len(nonzero) == 1:
         principal = kernel.graph_strict_part(variables, ambient, pivot, nonzero[0])
@@ -436,20 +392,13 @@ def _strict_ideal(variables, ambient, pivot, generators):
             residual = [_expanded(variables, g*pivot**power) for power, (_, ideal) in zip(exponents, native)
                         for g in ideal]
             after = ideal_basis(variables, (*ambient, *residual))
-        if not CHECK:
-            return order, after
-    # Independent comparison and fallback for rings outside the kernel.
-    expected_order = _order(variables, ambient, pivot, generators, limit=max(64, order) if native else 64)
-    expected = colon((*ambient, *generators), (pivot**expected_order,), variables)
-    if expected is None:
-        if _MODE == "native" or native_ring(variables):
-            raise GiveUp("The native kernel could not compute the residual divisor ideal.")
-        expected = _oracle("residual_quotient", variables, ambient, generators, pivot, expected_order)
-    if native:
-        if order != expected_order or after != expected:
-            raise AssertionError("The graph blowup divisor order or residual ideal differs from its reference.")
         return order, after
-    return expected_order, expected
+    # Fallback for rings outside the kernel.
+    order = _order(variables, ambient, pivot, generators, limit=64)
+    after = colon((*ambient, *generators), (pivot**order,), variables)
+    if after is None:
+        raise GiveUp("The native kernel could not compute the residual divisor ideal.")
+    return order, after
 
 
 def _graph_divisor_present(child, after, parent, before, parent_points):
@@ -536,14 +485,9 @@ def _hypersurface(chart):
 def _radical_points(variables, ideal):
     """Seidenberg's radical of a finite ideal, using the squarefree coordinate eliminants."""
     from .affine_kernel import _sparse_expression
-    from .groebner import CHECK, _MODE
     from .kernel import finite_radical
-    if _MODE == "sympy":
-        return _oracle("_radical_points_reference", variables, ideal)
     answer = finite_radical(variables, ideal)
     if answer is not None:
-        if CHECK and answer != _oracle("_radical_points_reference", variables, ideal):
-            raise AssertionError("The native finite radical differs from its reference.")
         return answer
     try:
         extra = []
@@ -557,11 +501,7 @@ def _radical_points(variables, ideal):
             extra.append(frame_function((v,), chart_expressions((v,)).prod(distinct)))
         answer = ideal_basis(variables, (*ideal, *extra))
     except ArithmeticError as exc:
-        if _MODE == "native" or native_ring(variables):
-            raise GiveUp("The native kernel could not reduce this finite centre.") from exc
-        return _oracle("_radical_points_reference", variables, ideal)
-    if CHECK and answer != _oracle("_radical_points_reference", variables, ideal):
-        raise AssertionError("The radical of a finite locus differs from its reference.")
+        raise GiveUp("The native kernel could not reduce this finite centre.") from exc
     return answer
 
 
@@ -994,7 +934,6 @@ def _strata(charts, domain=None):
     hold. Those among them that are coordinates are set to zero beforehand.
     """
     from .chart_kernel import InconsistentSheets, owned_strata, strata_totals
-    from .groebner import CHECK
     data, contributions = {}, []
     for chart in charts:
         for label, n, nu, _ in chart.components:
@@ -1002,12 +941,10 @@ def _strata(charts, domain=None):
                 raise GiveUp("A component has two sets of numerical data.")
         # The kernel computes the strata of a chart (native/ideal.cpp,
         # op_strata, and native/euler.cpp); the code below answers when it
-        # cannot, and with ATLAS_GROEBNER=check both must agree.
-        native = owned_strata(chart) if _MODE != "sympy" and (domain is None or getattr(domain, "is_QQ", False)) else None
+        # cannot.
+        native = owned_strata(chart) if domain is None or getattr(domain, "is_QQ", False) else None
         if native is not None:
             here = {frozenset(chart.components[j][0] for j in subset): chi for subset, chi in native.items()}
-            if CHECK and here != _strata_here(chart, domain):
-                raise AssertionError("The native Euler characteristics differ from this file's.")
         else:
             here = _strata_here(chart, domain)
         degree = chart.coefficient_field[2] if chart.coefficient_field else 1
@@ -1071,8 +1008,7 @@ def _chart_cell_counts(chart, dimension, labels):
 
     from .native_library import _kernel, current_replay_scope
     replay = current_replay_scope()
-    if (_MODE == "native" and (replay is None or replay.compute in (None, "cpu"))
-            and hasattr(_kernel(), "atlas_owned_chart_incidence")):
+    if (replay is None or replay.compute in (None, "cpu")) and hasattr(_kernel(), "atlas_owned_chart_incidence"):
         from .chart_gluing_kernel import rows
         from .kernel_json import kernel_json
         axes = chart.variables

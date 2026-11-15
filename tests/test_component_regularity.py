@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 from engine import centres, native_polynomial as np
 from engine.centre_frame import Frame
-from engine.native_library import _MODE
 from tests.test_graph_regular import certificate
 
 
@@ -20,7 +19,6 @@ def b9_component_requests():
         return json.load(source)
 
 
-@unittest.skipUnless(_MODE == "native", "Exercises native component certificates.")
 class ComponentRegularity(unittest.TestCase):
     def test_embedded_associated_prime(self):
         x, y, z = variables = np.symbols("x y z")

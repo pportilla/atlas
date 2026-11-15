@@ -59,10 +59,7 @@ class RepairedNewtonAtlas(unittest.TestCase):
 
     def test_repaired_cycle_over_conjugate_centres_in_a_product(self):
         from collections import Counter
-        from engine.native_library import _MODE
         from engine.repair_gluing import repair_charts
-        if _MODE in ("sympy", "check"):
-            self.skipTest("The full 26-sheet replay exercises the production kernel.")
         names = list("xyz")
         text = "x^3+y^3+z^3-3*x*y*z+x^4+y^4+z^4"
         result = resolve(dict(polynomial=text, variables=names, mode="intrinsic", search="quick"))

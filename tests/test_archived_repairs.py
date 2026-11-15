@@ -6,7 +6,6 @@ from collections import defaultdict
 from pathlib import Path
 
 from engine import atlas
-from engine.native_library import _MODE
 from engine.polynomial import parse
 
 
@@ -27,7 +26,6 @@ def renamed_patch(row, prefix):
         divisor["equation"] = ", ".join(divisor["ideal"])
 
 
-@unittest.skipUnless(_MODE == "native", "The archived conjugate repair runs in the production kernel.")
 class ArchivedNewtonRepair(unittest.TestCase):
     def assert_triangle_with_subdivided_edges(self, boundary, dimension):
         # The tangent cubic has a rational line and two conjugate lines.

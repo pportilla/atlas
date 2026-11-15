@@ -16,8 +16,6 @@ _LIBRARY = Path(__file__).resolve().parents[1] / "native" / "build" / (
 # exact native kernels. The independent oracles are called by the test suite.
 if os.getenv("ATLAS_GROEBNER", "native") not in ("native", "sympy", "check"):
     raise ValueError("Unknown ATLAS_GROEBNER configuration.")
-_MODE = "native"
-CHECK = False
 
 
 @lru_cache(maxsize=1)

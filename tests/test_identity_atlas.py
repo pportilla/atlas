@@ -133,9 +133,6 @@ class RationalCharts(unittest.TestCase):
 
 
     def test_serialized_monomial_charts_verify_geometry_independently(self):
-        from engine.native_library import _MODE
-        if _MODE == "sympy":
-            self.skipTest("The sparse native monomial verifier is disabled in pure reference mode.")
         record = resolve(dict(polynomial="x^2*y-z^3", variables=list("xyz"), monodromy=True))
         for kind in ("cone", "projection", "fibre", "region", "strict", "order", "boundary"):
             with self.subTest(kind=kind):
@@ -165,9 +162,6 @@ class RationalCharts(unittest.TestCase):
         self.assertEqual(topological_zeta(record)["expression"], "(2*s + 5)/((s + 1)*(6*s + 5))")
 
     def test_redundant_generators_and_missing_fan_annotations_preserve_order_checks(self):
-        from engine.native_library import _MODE
-        if _MODE == "sympy":
-            self.skipTest("Tests the native stored-chart verifier.")
         record = resolve(dict(polynomial="x^2*y-z^3", variables=list("xyz"), monodromy=True))
         for annotations in ("all", "some", "none"):
             r = copy.deepcopy(record)

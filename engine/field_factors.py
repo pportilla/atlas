@@ -4,7 +4,6 @@ from functools import lru_cache
 from .reference import QQ
 from .chart_expressions import chart_expressions
 from .affine_kernel import pullbacks, rational_factors
-from .groebner import CHECK, _MODE
 from .native_library import affine_request
 from .polynomial import integer_from_decimal
 
@@ -13,15 +12,9 @@ from .polynomial import integer_from_decimal
 def factors(poly):
     if poly.domain == QQ:
         return rational_factors(poly)[1]
-    if _MODE in ("sympy", "check"):
-        from tests.field_polynomial_oracle import factors as reference
-    if _MODE == "sympy":
-        return reference(poly)[1]
 
     from .groebner import _kernel
     if not hasattr(_kernel(), "atlas_field_factorization_abi"):
-        if _MODE == "check":
-            return reference(poly)[1]
         raise ArithmeticError("Rebuild the native number-field kernel with make groebner.")
     from .candidate_field import NativeField
     from .field_polynomial import _line_polynomial, _parameter, lift, modulus
@@ -36,8 +29,6 @@ def factors(poly):
                            _expanded_row(extended, lift(value, variables, field, theta))])
     result = [(_line_polynomial(row, variables, field), integer_from_decimal(power))
               for power, row in zip(rows[::2], rows[1::2])]
-    if CHECK and result != reference(poly)[1]:
-        raise AssertionError("The number-field factors differ from the reference.")
     return result
 
 

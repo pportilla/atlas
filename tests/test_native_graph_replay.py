@@ -2,13 +2,11 @@ from copy import deepcopy
 import unittest
 
 from engine.graph_record import _graph_request, graph_record_charts
-from engine.native_library import _MODE
 from engine.polynomial import parse
 from engine.resolve import resolve
 from engine.strata import InvalidChart
 
 
-@unittest.skipUnless(_MODE == "native", "Requires the native graph verifier.")
 class NativeGraphReplayTests(unittest.TestCase):
     def test_displayed_strict_is_checked_in_its_chart_ring(self):
         names = list("xyz")

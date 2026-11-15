@@ -34,7 +34,7 @@ class WeightedEmbedded(unittest.TestCase):
     def test_quadratic_display_extracts_square_beyond_legacy_factoring_limit(self):
         from engine import groebner as gb
         from engine.field_coefficient import rational_sqrt
-        if gb._MODE == "sympy" or not hasattr(gb._kernel(), "atlas_field_radical"):
+        if not hasattr(gb._kernel(), "atlas_field_radical"):
             self.skipTest("requires the native radical display")
         p,q = 1000000007, 1000000009
         self.assertEqual(str(rational_sqrt(p*p*q)), f"{p}*sqrt({q})")
@@ -169,7 +169,7 @@ class WeightedEmbedded(unittest.TestCase):
         from engine.field_coefficient import marked_root_display
         from tests.nonreduced_oracle import _weight_embedding
 
-        if groebner._MODE == "sympy" or not hasattr(groebner._kernel(), "atlas_field_display_order"):
+        if not hasattr(groebner._kernel(), "atlas_field_display_order"):
             self.skipTest("Requires the native marked-root ordering kernel.")
         # Two coincident roots cannot be separated by any rational rectangle.
         with self.assertRaisesRegex(ArithmeticError, "squarefree"):
@@ -183,11 +183,10 @@ class WeightedEmbedded(unittest.TestCase):
         # polynomial. Multiplying all roots by two changes its root bound.
         scaled = (16, 0, 12, 0, 1)
         self.assertEqual(marked_root_display(scaled), (2, (1, 0, 3, 0, 1), (1, 0, 3, 2)))
-        if not groebner.CHECK:
-            with patch.object(sp.CRootOf, "_get_interval", side_effect=AssertionError("Unexpected root isolation")):
-                for i, position in enumerate(expected, 1):
-                    label = f"PolynomialRootIndexed(List({', '.join(map(str, coeffs))}), {i})"
-                    self.assertTrue(_weight_embedding(label).endswith(f", {position})"))
+        with patch.object(sp.CRootOf, "_get_interval", side_effect=AssertionError("Unexpected root isolation")):
+            for i, position in enumerate(expected, 1):
+                label = f"PolynomialRootIndexed(List({', '.join(map(str, coeffs))}), {i})"
+                self.assertTrue(_weight_embedding(label).endswith(f", {position})"))
 
     def test_intrinsic_rejects_repetition_and_units_are_local(self):
         with self.assertRaises(InputError):

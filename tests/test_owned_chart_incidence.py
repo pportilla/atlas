@@ -7,8 +7,7 @@ from engine import native_polynomial as np
 from engine.local_blowups import Chart, GiveUp, cells
 
 
-@unittest.skipUnless(native_library._MODE == "native" and
-                     hasattr(native_library._kernel(), "atlas_owned_chart_incidence"),
+@unittest.skipUnless(hasattr(native_library._kernel(), "atlas_owned_chart_incidence"),
                      "Requires native owned chart incidence.")
 class OwnedChartIncidenceTests(unittest.TestCase):
     def compare(self, chart, dimension):

@@ -235,9 +235,7 @@ def main():
         parser.error("positive batch and repeats, nonnegative cold repeats required")
     if args.cpu is not None:
         os.sched_setaffinity(0, {args.cpu})
-    from engine.native_library import _LIBRARY, _MODE
-    if _MODE != "native":
-        parser.error("unset ATLAS_GROEBNER or select native before launching")
+    from engine.native_library import _LIBRARY
     if not (ROOT / "native/build/bench_local_dimension").is_file():
         parser.error("build the benchmark runner with make -C native -f groebner.mk build/bench_local_dimension")
     cpu_file = Path("/proc/cpuinfo")

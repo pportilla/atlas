@@ -160,12 +160,11 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     if degenerate:
         if not fan['isomorphism_off_origin']:
             return None  # The point-repair chart producer uses exceptional rays over the origin.
-        from .groebner import CHECK
         from .newton_repair import strata as repair_strata
 
         # Repair uses the fan and adapted equation. A failed trial has no
         # atlas to return, so test its singular orbits before expanding charts.
-        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=CHECK)
+        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False)
         if repair is None or not repair['repairs']:
             return None
     coords=[f'u{i+1}' for i in range(n)]
@@ -236,8 +235,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
 
 def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     """Attach the verified local blowups to their parent Newton charts."""
-    from .newton_repair import patch_record, records
-    from .groebner import CHECK
+    from .newton_repair import patch_record
     repairs = repair['repairs']
     parents = {chart['id']:(i,chart) for i,chart in enumerate(result['charts'])}
     blowups = sum(len(r['blowups']) for r in repairs)
@@ -256,8 +254,7 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     result.update(variables=list(variables), mode=mode)
     if not defer_outputs:
         from .atlas import boundary_complex, from_record, to_json
-        from .native_library import _MODE
-        charts = from_record(result, original, native=_MODE == "native")
+        charts = from_record(result, original, native=True)
         result['atlas'] = to_json(charts)
         result['dual_complex'] = boundary_complex(charts, len(variables), mode == 'intrinsic')
     result['summary'] = (f"Regular Newton modification with {len(parents)} charts, then {blowups} blowups over "
@@ -267,8 +264,6 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     proof['description'] = ('The initial Newton modification is an isomorphism off the origin and every maximal cone '
         'has lattice determinant one. The repair steps list the centres blown up over the degenerate faces. '
         'The final charts verify normal crossings on the owned fibre over the origin.')
-    if CHECK:
-        proof['numerical_data'], proof['strata'] = records(repair)
     return result
 
 

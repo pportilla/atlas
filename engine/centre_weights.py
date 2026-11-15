@@ -11,7 +11,7 @@ from .kernel_json import kernel_json
 from .rational_point import coordinate_fraction
 
 from . import native_library
-from .polynomial import checked_native, integer_from_decimal, integer_text, rational_text
+from .polynomial import integer_from_decimal, integer_text, rational_text
 
 
 def level_weights(operation, weights, **fields):
@@ -108,21 +108,11 @@ class Presentation:
         return native_library.affine_request([operation, *self.rows, *extra])
 
     def residual(self):
-        def reference():
-            from tests.centre_weight_oracle import residual
-            return residual(self)
-        def native():
-            return tuple(tuple(map(coordinate_fraction, s.split())) for s in self.request("bm_residual"))
-        return tuple(dict(zip(self.labels, row)) for row in checked_native(native, reference))
+        return tuple(dict(zip(self.labels, map(coordinate_fraction, s.split()))) for s in self.request("bm_residual"))
 
     def candidate_values(self, strata, bounds):
-        def reference():
-            from tests.centre_weight_oracle import values
-            return values(self, strata, bounds)
-        def native():
-            extra = [" ".join(map(integer_text, (len(ids), *ids, *orders))) for ids, orders in zip(strata, bounds)]
-            return list(map(coordinate_fraction, self.request("bm_values", extra)))
-        return checked_native(native, reference)
+        extra = [" ".join(map(integer_text, (len(ids), *ids, *orders))) for ids, orders in zip(strata, bounds)]
+        return list(map(coordinate_fraction, self.request("bm_values", extra)))
 
     def point_maximum(self, point_orders):
         rows = [" ".join(map(integer_text, (len(ids), *ids, *orders))) for ids, orders in point_orders]
@@ -130,10 +120,5 @@ class Presentation:
         return coordinate_fraction(value)
 
     def requirements(self, strata, value):
-        def reference():
-            from tests.centre_weight_oracle import requirements
-            return requirements(self, strata, value)
-        def native():
-            extra = [rational_text(value), *(" ".join(map(str, (len(ids), *ids))) for ids in strata)]
-            return [tuple(map(integer_from_decimal, row.split())) for row in self.request("bm_requirements", extra)]
-        return checked_native(native, reference)
+        extra = [rational_text(value), *(" ".join(map(str, (len(ids), *ids))) for ids in strata)]
+        return [tuple(map(integer_from_decimal, row.split())) for row in self.request("bm_requirements", extra)]

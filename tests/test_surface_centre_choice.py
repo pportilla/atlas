@@ -3,10 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from engine import native_polynomial as np, surface
-from engine.groebner import _MODE
 
 
-@unittest.skipUnless(_MODE == "native", "structural certificate for native QQ chart values")
 class SurfaceCentreChoice(unittest.TestCase):
     def setUp(self):
         self.ring = tuple(map(np.Symbol, "uxy"))

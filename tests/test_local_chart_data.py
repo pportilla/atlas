@@ -31,9 +31,6 @@ class LocalGraphChart(unittest.TestCase):
 
     def test_unavailable_native_operations_on_external_symbols(self):
         from engine import kernel, local_blowups as local
-        from engine.native_library import _MODE
-        if _MODE != "native":
-            self.skipTest("Checks the default native dispatch.")
         x, = sp.symbols("x", seq=True)
         with patch.object(kernel, "dimension", return_value=None):
             with self.assertRaisesRegex(local.GiveUp, "native dimension"):
@@ -103,17 +100,14 @@ class LocalGraphChart(unittest.TestCase):
         expected = (y**3+pivot,)
         self.assertTrue(ideal_subset(variables, after, (*ambient, *expected)))
         self.assertTrue(ideal_subset(variables, expected, (*ambient, *after)))
-        if kernel._MODE != "sympy":
-            order, (q,) = kernel.graph_strict_part(variables, ambient, -3*pivot, 21*z**3)
-            self.assertEqual(order, 3)
-            self.assertEqual(q, -sp.Rational(7,9)*y**3)
+        order, (q,) = kernel.graph_strict_part(variables, ambient, -3*pivot, 21*z**3)
+        self.assertEqual(order, 3)
+        self.assertEqual(q, -sp.Rational(7,9)*y**3)
         self.assertEqual(len(_generators(variables, ambient, expected)), 1)
         self.assertEqual(_generators(variables, ambient, ambient), ())
 
     def test_residual_dimension_on_components_of_an_exceptional_cylinder(self):
         from engine import kernel
-        if kernel._MODE == "sympy":
-            self.skipTest("Exercises the native exceptional-stratum test.")
         x, y, z = sp.symbols("x y z")
         variables = (x, y, z)
         # The base has two irreducible planes. A residual with a constant
@@ -156,8 +150,7 @@ class WideNativeChart(unittest.TestCase):
     def test_large_degree_graph_transform_uses_wide_quotients(self):
         from engine import native_polynomial as np
         from engine.local_blowups import _dimension
-        from engine.native_library import _MODE
-        x, y, z = variables = sp.symbols("x y z") if _MODE == "sympy" else tuple(map(np.Symbol, "xyz"))
+        x, y, z = variables = tuple(map(np.Symbol, "xyz"))
         ambient = (z-y,)
         residual = (2**180+1)*z**40000+1
         order, ideal = _strict_ideal(variables, ambient, x, (x*residual,))

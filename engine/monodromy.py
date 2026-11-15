@@ -26,19 +26,6 @@ def acampo_strata(data, strata):
     return contributions, factors, integer_from_decimal(result["chi"])
 
 
-def acampo_factors(rows):
-    inputs = []
-    for row in rows:
-        n, chi = row["multiplicity"], row["euler_characteristic"]
-        if type(n) is not int or n <= 0 or type(chi) is not int:
-            raise InputError("Expected a positive divisor multiplicity and an integral Euler characteristic.")
-        inputs.append([integer_text(n), integer_text(chi)])
-    result = _request("acampo", rows=inputs)
-    factors = [{"multiplicity": integer_from_decimal(n), "exponent": integer_from_decimal(e)}
-               for n, e in result["factors"]]
-    return factors, integer_from_decimal(result["chi"])
-
-
 def cyclotomic_exponent(factors, order):
     """Valuation at a primitive root of this order of the product of (1 - T^N)^e."""
     return integer_from_decimal(_request("cyclotomic", factors=factor_rows(factors), order=integer_text(order)))

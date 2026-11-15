@@ -5,14 +5,13 @@ from unittest.mock import patch
 import sympy as sp
 
 from engine import groebner as gb
+from tests.groebner_oracle import reference_order
 from engine.field_polynomial import lift, lower, modulus
 
 
 class NumberFieldPolynomials(unittest.TestCase):
     def test_missing_native_field_factorization_on_a_symbolic_input(self):
         from engine import field_factors
-        if gb._MODE != "native":
-            self.skipTest("Checks the default native dispatch.")
         x = sp.Symbol("external")
         p = sp.Poly(x**2-7, x, domain=sp.QQ.algebraic_field(sp.sqrt(7)))
         with patch.object(gb, "_kernel", return_value=None):
@@ -49,10 +48,6 @@ class NumberFieldPolynomials(unittest.TestCase):
         # An algebraic NumberSymbol which the external algebra package
         # understands, but whose private spelling is outside the QQbar reader.
         value = sp.GoldenRatio
-        if gb._MODE != "native":
-            self.assertEqual(lift(value,(),field,theta),(theta+1)/2)
-            self.assertEqual(root_position(poly,value),1)
-            return
         root = sp.CRootOf(poly.as_expr(),1)
         over_field = sp.Poly(t+(1+sp.sqrt(5))/2,t,domain=field)
         with patch.object(field,"convert",side_effect=AssertionError("symbolic coercion")), \
@@ -68,7 +63,7 @@ class NumberFieldPolynomials(unittest.TestCase):
                 with self.assertRaisesRegex(Unavailable,"make groebner"):
                     root_position(sp.PurePoly(t**2-19,t),sp.sqrt(19))
 
-    @unittest.skipUnless(gb._MODE == "native" and hasattr(gb._kernel(),"atlas_field_integer_factors"),
+    @unittest.skipUnless(hasattr(gb._kernel(),"atlas_field_integer_factors"),
                          "the native radical display is not in use")
     def test_additive_generator_display_without_symbolic_expansion(self):
         from engine.field_polynomial import _scalar_expression
@@ -108,7 +103,7 @@ class NumberFieldPolynomials(unittest.TestCase):
                 self.assertEqual(_line_expression("1 8 0;2 0 0", (x,), field), x**8+2)
                 self.assertEqual(_line_expression("1 1 2;2 1 0", (x,), field), (root**2+2)*x)
 
-    @unittest.skipUnless(gb._MODE == "native" and hasattr(gb._kernel(), "atlas_field_flint_index"),
+    @unittest.skipUnless(hasattr(gb._kernel(), "atlas_field_flint_index"),
                          "the native root display permutation is not in use")
     def test_marked_field_root_indices_without_external_isolation(self):
         from engine.field_coefficient import _call, program, root_position
@@ -132,7 +127,7 @@ class NumberFieldPolynomials(unittest.TestCase):
                 self.assertEqual(coords, "0 1")
             self.assertEqual(root_position(poly, primitive), 3)
 
-    @unittest.skipUnless(gb._MODE == "native" and hasattr(gb._kernel(), "atlas_field_coefficient"),
+    @unittest.skipUnless(hasattr(gb._kernel(), "atlas_field_coefficient"),
                          "the native field factor representation is not in use")
     def test_factor_rows_preserve_field_order_without_symbolic_coercion(self):
         from engine.field_factors import factors
@@ -144,7 +139,7 @@ class NumberFieldPolynomials(unittest.TestCase):
         with patch.object(field, "from_sympy", side_effect=AssertionError("unexpected field coercion")):
             self.assertEqual(factors(poly), expected)
 
-    @unittest.skipUnless(gb._MODE != "sympy" and hasattr(gb._kernel(), "atlas_field_coefficient"),
+    @unittest.skipUnless(hasattr(gb._kernel(), "atlas_field_coefficient"),
                          "the native qqbar coefficient bridge is not in use")
     def test_native_power_basis_recognition_and_nonmembership(self):
         from engine.field_coefficient import coefficients
@@ -166,14 +161,13 @@ class NumberFieldPolynomials(unittest.TestCase):
                 expected = tuple(reversed(converted.to_list()))
                 with patch.object(field, "convert", side_effect=AssertionError("unexpected field coercion")):
                     self.assertEqual(coefficients(value,field), expected)
-                    with patch.object(gb,"CHECK",False):
-                        lifted = lift(value, (), field, theta)
+                    lifted = lift(value, (), field, theta)
                     self.assertEqual(lifted, sum(sp.Rational(c)*theta**i for i,c in enumerate(expected)))
         field = sp.QQ.algebraic_field(sp.sqrt(2))
         with self.assertRaises(CoercionFailed):
             coefficients(sp.sqrt(3), field)
 
-    @unittest.skipUnless(gb._MODE != "sympy" and hasattr(gb._kernel(), "atlas_wide_block"),
+    @unittest.skipUnless(hasattr(gb._kernel(), "atlas_wide_block"),
                          "the native sparse block-order kernel is not in use")
     def test_sparse_block_orders_and_queries_beyond_packed_range(self):
         from engine.field_wide import wide_block_basis
@@ -184,25 +178,22 @@ class NumberFieldPolynomials(unittest.TestCase):
             for order in ("lex","grevlex","first"):
                 ideal = (x**2+c*x*y-3, c*y**2+x-1)
                 native = wide_block_basis(ideal, (x,y), order, domain, t)
-                reference = sp.groebner(ideal,x,y,domain=domain,order=gb._reference_order(order))
+                reference = sp.groebner(ideal,x,y,domain=domain,order=reference_order(order))
                 self.assertEqual(native.exprs, reference.exprs)
                 self.assertEqual(native.reduce((x+c*y)**6), reference.reduce((x+c*y)**6))
         # Avoid constructing the dense portable counterpart of this sparse
         # monomial. The exact expected answer takes a single term.
-        with patch.object(gb, "_MODE", "native"):
-            v = sp.symbols("v:32")
-            f = v[0]**(10**12)-a*v[-1]
-            large = gb.groebner((f,), v, domain=field)
-            self.assertEqual(large.exprs, [f])
-            self.assertEqual(large.reduce(3*f), ([3],0))
-            # A colon passes through one additional coefficient variable and
-            # an elimination variable. Both dimensions exceed the packed ABI.
-            with patch.object(gb, "CHECK", False):
-                quotient = gb.colon(((v[0]-a*v[1])*v[2],), (v[0]-a*v[1],), v, domain=field)
-            self.assertEqual(quotient, (v[2],))
-            small = gb.groebner((x-a*y,), (x,y), domain=field)
-            with patch.object(gb, "CHECK", False):
-                self.assertEqual(small.reduce((x-a*y)*y**(10**12)), ([y**(10**12)],0))
+        v = sp.symbols("v:32")
+        f = v[0]**(10**12)-a*v[-1]
+        large = gb.groebner((f,), v, domain=field)
+        self.assertEqual(large.exprs, [f])
+        self.assertEqual(large.reduce(3*f), ([3],0))
+        # A colon passes through one additional coefficient variable and
+        # an elimination variable. Both dimensions exceed the packed ABI.
+        quotient = gb.colon(((v[0]-a*v[1])*v[2],), (v[0]-a*v[1],), v, domain=field)
+        self.assertEqual(quotient, (v[2],))
+        small = gb.groebner((x-a*y,), (x,y), domain=field)
+        self.assertEqual(small.reduce((x-a*y)*y**(10**12)), ([y**(10**12)],0))
 
     def test_lift_lower_preserves_marked_embedding(self):
         x,t = sp.symbols("x t")
@@ -223,7 +214,7 @@ class NumberFieldPolynomials(unittest.TestCase):
         for order in ("grevlex", "lex", "first"):
             ideal = (a*x**2+x*y-1, (a+1)*y**2-1, (x+a)*z)
             basis = gb.groebner(ideal, variables, order=order, domain=field)
-            reference = sp.groebner(ideal, *variables, order=gb._reference_order(order), domain=field)
+            reference = sp.groebner(ideal, *variables, order=reference_order(order), domain=field)
             self.assertEqual(basis.polys, reference.polys)
             for f in (sp.S.Zero, (x+a*y)**4+z**3/5, x**3*z*y+(a-1)*y):
                 self.assertEqual(basis.reduce(f), reference.reduce(f))
@@ -243,13 +234,12 @@ class NumberFieldPolynomials(unittest.TestCase):
         self.assertEqual(basis.polys, sp.groebner((*known,y*y-a), *v, domain=field, order="grevlex").polys)
         empty = gb.groebner((), v, domain=field)
         self.assertEqual(empty.reduce(x+a*y), ([], x+a*y))
-        if gb._MODE != "sympy" and hasattr(gb._kernel(), "atlas_field_division"):
+        if hasattr(gb._kernel(), "atlas_field_division"):
             self.assertEqual(set(gb.colon(((x-a*y)*x, (x-a*y)*y), (x-a*y,), v, domain=field)), {x,y})
             with patch("sympy.groebner", side_effect=AssertionError("unexpected portable basis")):
-                with patch.object(gb, "_MODE", "native"):
-                    exact = gb.groebner((a*x-y,), v, domain=field)
-                    self.assertTrue(exact.contains(a*x-y))
-                    self.assertEqual(exact.reduce(a*x), ([a],y))
+                exact = gb.groebner((a*x-y,), v, domain=field)
+                self.assertTrue(exact.contains(a*x-y))
+                self.assertEqual(exact.reduce(a*x), ([a],y))
 
     def test_reduction_beyond_packed_degree_and_unavailable_binary(self):
         x = sp.Symbol("x")
@@ -258,8 +248,5 @@ class NumberFieldPolynomials(unittest.TestCase):
         # A remainder query may exceed the packing of an already held basis.
         self.assertTrue(basis.contains(x**32768))
         with patch.object(gb, "_kernel", return_value=None):
-            if gb._MODE == "native":
-                with self.assertRaisesRegex(ArithmeticError,"make groebner"):
-                    gb.groebner((x-1,), (x,), domain=field)
-            else:
-                self.assertEqual(gb.groebner((x-1,), (x,), domain=field).exprs,[x-1])
+            with self.assertRaisesRegex(ArithmeticError,"make groebner"):
+                gb.groebner((x-1,), (x,), domain=field)

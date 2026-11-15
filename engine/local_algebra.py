@@ -15,7 +15,7 @@ from .algebra_execution import cpu_stage, current_execution, stage_label
 from .algebra_groebner import reduced_basis
 from .local_kernel import local_request
 from .polynomial import (InputError, LimitError, format_poly, integer_from_decimal, integer_text,
-                         native_expression_source, parse_expression, rational_text)
+                         native_expression_source, rational_text)
 from .quotient_monomials import decode_row, quotient_monomials
 from .rational_point import coordinate_fraction, normalize_point
 
@@ -111,18 +111,12 @@ def handle(operation, ring, operands, *, known_basis=False):
         components = operands["components"]
         try:
             with cpu_stage("ae_codimension", variables=len(names), components=len(components)):
-                if native_library._MODE == "native":
-                    # Submit the original expressions together. Expanding and decoding
-                    # them in the host would only re-encode them for the native solver.
-                    reply, = native_library.affine_request([
-                        "local_ae_expressions", " ".join(names), ring["order"],
-                        *(native_expression_source(source, names) for source in components),
-                    ])
-                else:
-                    # Retain the independent parser in the project's reference/check modes.
-                    variables = tuple(map(np.Symbol, names))
-                    rows = [np.from_terms(variables, parse_expression(f, names)) for f in components]
-                    reply, = local_request("local_ae_codimension", variables, ring["order"], rows)
+                # Submit the original expressions together. Expanding and decoding
+                # them in the host would only re-encode them for the native solver.
+                reply, = native_library.affine_request([
+                    "local_ae_expressions", " ".join(names), ring["order"],
+                    *(native_expression_source(source, names) for source in components),
+                ])
         except UnicodeEncodeError as error:
             raise InputError("A polynomial string must contain valid Unicode.") from error
         except ArithmeticError as error:

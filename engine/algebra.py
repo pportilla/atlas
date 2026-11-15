@@ -311,7 +311,7 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None, _
                     check_expression_digits(request["operands"]["components"], request["ring"]["variables"])
             except InputError as error:
                 return 400, error_record("invalid_request", str(error))
-            if (native_library._MODE == "native" and request["compute"] in ("auto", "cpu")
+            if (request["compute"] in ("auto", "cpu")
                     and all(s.isascii() for s in request["operands"]["components"])):
                 return run_worker(args, request, timeout, owner=owner,
                                   native_command=["native/build/local_algebra", "--ae-worker"])

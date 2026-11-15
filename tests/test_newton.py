@@ -77,11 +77,9 @@ def eval_poly(source, symbols, dimension):
 class NewtonCoordinateChoices(unittest.TestCase):
     def test_bounded_first_trial_preserves_earlier_boundary_and_parallel_fallback(self):
         from unittest.mock import patch
-        from engine import native_library, newton_trials
+        from engine import newton_trials
         from engine.resolve import resolve
 
-        if native_library._MODE != "native":
-            self.skipTest("The bounded first trial uses the native production solver.")
         names = list("xyzt")
         source = "x^2-y^2*(z+t)"
         request = dict(polynomial=source, variables=names, mode="embedded", compute="cpu")
@@ -110,7 +108,7 @@ class NewtonCoordinateChoices(unittest.TestCase):
         from engine.resolve import resolve
         from engine.strata import InvalidChart, rational_chart_outputs
 
-        if native_library._MODE != "native" or not hasattr(native_library._library(), "atlas_monomial_resolution"):
+        if not hasattr(native_library._library(), "atlas_monomial_resolution"):
             self.skipTest("The native monomial construction is not available.")
         names = list("xyzt")
         for policy, want in (("quick", False), ("exhaustive", True)):

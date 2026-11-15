@@ -179,7 +179,6 @@ class AeCodimensionInterface(unittest.TestCase):
         self.assertEqual(unlimited.returncode, 0, unlimited.stderr)
         self.assertEqual(json.loads(unlimited.stdout, parse_int=str)["result"]["value"], "9"*4300 + "7")
 
-    @unittest.skipUnless(native_library._MODE == "native", "production native worker")
     def test_worker_routing_and_gpu_policy(self):
         request = {"operation": "ae-codimension", "ring": {"variables": ["t"]},
                    "operands": {"components": ["t^2", "t^3"]}}
@@ -200,7 +199,6 @@ class AeCodimensionInterface(unittest.TestCase):
             self.assertEqual(configured["result"], record["result"])
             self.assertNotEqual(configured["execution"].get("implementation"), "native-cli")
 
-    @unittest.skipUnless(native_library._MODE == "native", "production native worker")
     def test_isolated_worker_deadline_and_server_close(self):
         request = {"operation": "ae-codimension", "ring": {"variables": ["t"]},
                    "operands": {"components": ["t^2"]}, "compute": "cpu"}

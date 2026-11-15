@@ -15,9 +15,7 @@ def candidate(center, coords, boundary):
 class GeneralResolutionTests(unittest.TestCase):
     def test_polynomial_graph_centre_uses_free_coordinates_in_any_order(self):
         from unittest.mock import patch
-        from engine import general_resolution, native_library
-        if native_library._MODE != "native":
-            self.skipTest("The bounded polynomial graph uses the native solver.")
+        from engine import general_resolution
         names = ["x", "y", "z"]
         for source in ("(y-x^2)^2-x*z^2", "(2*x^2-3*y)^2-x*(7*x+5*z)^2"):
             with self.subTest(source=source), patch.object(general_resolution, "_run_attempt", side_effect=AssertionError):
@@ -30,8 +28,8 @@ class GeneralResolutionTests(unittest.TestCase):
         from unittest.mock import patch
         from fractions import Fraction
         from engine import general_resolution
-        from engine.native_library import _MODE, _kernel
-        if _MODE != "native" or not hasattr(_kernel(), "atlas_smooth_reduced_centre_abi"):
+        from engine.native_library import _kernel
+        if not hasattr(_kernel(), "atlas_smooth_reduced_centre_abi"):
             self.skipTest("Native reduced centre unavailable.")
         names = list("xyz")
         poly = parse("(x+y+z)^2-z*(x-y)^2", names)
@@ -55,7 +53,7 @@ class GeneralResolutionTests(unittest.TestCase):
         from engine import native_library, reduced_centre
         from engine.polynomial import sparse_row
 
-        if native_library._MODE != "native" or not hasattr(native_library._kernel(), "atlas_smooth_reduced_centre_abi"):
+        if not hasattr(native_library._kernel(), "atlas_smooth_reduced_centre_abi"):
             self.skipTest("Native reduced centre unavailable.")
         names = ["z", "a", "x"]
         terms = {(1, 0, 2): Fraction(-2, 7), (0, 3, 1): Fraction(5, 9), (1, 2, 0): 0}

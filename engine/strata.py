@@ -1,7 +1,6 @@
 """Numerical data and Euler characteristics on a certified resolution atlas."""
 import re
 
-from .native_library import CHECK, _MODE
 from .polynomial import InputError, parse
 
 
@@ -65,7 +64,7 @@ def resolution_strata(record, polynomial=None, *, computed=None):
                 from . import atlas
                 from .local_blowups import GiveUp
                 try:
-                    if (charts := atlas.from_record(record, polynomial, native=_MODE not in ("check", "sympy"))) is None:
+                    if (charts := atlas.from_record(record, polynomial, native=True)) is None:
                         # Archived resolutions from before chart ownership was serialized.
                         proof = record.get("certificate", {})
                         if proof.get("numerical_data") and proof.get("strata") and not record.get("input_divisor"):
@@ -78,16 +77,6 @@ def resolution_strata(record, polynomial=None, *, computed=None):
     except (IndexError, KeyError, TypeError) as exc:
         raise InputError("Incomplete chart or divisor data in the resolution record.") from exc
     data, strata = found["numerical_data"], found["strata"]
-    if CHECK:
-        from tests.strata_oracle import IDENTITY_METHOD, resolution_strata as reference, _same_integrals, _zeta_integrals
-        old = reference(record, polynomial)
-        if old is not None and not _same_integrals(data, strata, *old[:2]):
-            # Blowing up a crossing changes the strata. If the reference
-            # used the identity, compare the two resolution invariants.
-            if old[2] != IDENTITY_METHOD:
-                raise AssertionError("The atlas and the reference resolution strata give different zeta integrals.")
-            if _zeta_integrals(data, strata) != _zeta_integrals(*old[:2]):
-                raise AssertionError("The atlas and the identity give different zeta functions.")
     return data, strata, "Euler characteristics on the disjoint parts of the resolution atlas"
 
 
@@ -126,9 +115,6 @@ def annotate_complex(old, found):
     """Preserve compatible names and annotations on a computed complex."""
     if old["status"] != "complete" or found["status"] != "complete":
         return found
-    if CHECK:
-        from tests.strata_oracle import check_complex_counts
-        check_complex_counts(old, found)
     old_vertices = {v["id"]: v for v in old["vertices"]}
     aliases = {}
     if set(old_vertices) != {v["id"] for v in found["vertices"]}:
@@ -140,9 +126,6 @@ def annotate_complex(old, found):
     proved = {aliases.get(v["id"], v["id"]): v for v in found["vertices"]}
     found = {**found, "vertices": [{**old_vertex, **proved[name], "id": name}
                                     for name, old_vertex in old_vertices.items()]}
-    if CHECK:
-        from tests.strata_oracle import check_cell_incidences
-        check_cell_incidences(old, found)
     old_cells = {}
     for cell in old["cells"]:
         old_cells.setdefault(frozenset(cell["vertices"]), []).append(cell)

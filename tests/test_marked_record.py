@@ -119,7 +119,7 @@ class MarkedRecordTests(unittest.TestCase):
 
     def test_native_weighted_local_charts_can_be_read_without_sympy(self):
         from engine import native_library
-        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_field_description"):
+        if not hasattr(native_library._kernel(), "atlas_field_description"):
             self.skipTest("Requires the native chart arithmetic")
         self.guard("""
 from engine.origin_backend import _resolve
@@ -145,7 +145,7 @@ for f,op in (('(x+y)^2+z^3+x^3', lambda p:_resolve(p,names,'embedded',60)),
 
     def test_guarded_marked_literals_and_composita(self):
         from engine import native_library
-        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_field_description"):
+        if not hasattr(native_library._kernel(), "atlas_field_description"):
             self.skipTest("Requires native marked scalar descriptors")
         source = """
 from engine.marked_field import description, common_fields
@@ -160,7 +160,7 @@ assert degree == 4 and len(images) == 2
 
     def test_weighted_graph_with_several_named_roots(self):
         from engine import native_library
-        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_field_description"):
+        if not hasattr(native_library._kernel(), "atlas_field_description"):
             self.skipTest("Requires native marked scalar descriptors")
         self.guard("""
 from engine.graph_record import lift_graph
@@ -174,9 +174,6 @@ assert description(c["weight_field"]["exact"])==description("sqrt(2)+sqrt(3)")
 """)
 
     def test_wide_graph_worker_and_archive_use_the_same_divisor_orders(self):
-        from engine import native_library
-        if native_library._MODE != "native":
-            self.skipTest("Tests the native worker and unpacked chart representation.")
         self.guard("""
 import json
 from engine import native_polynomial as np
@@ -213,9 +210,6 @@ for mode,dimension in [('embedded',34),('intrinsic',33)]:
 """)
 
     def test_intrinsic_components_of_a_marked_tacnode_product(self):
-        from engine import native_library
-        if native_library._MODE != "native":
-            self.skipTest("Tests the native worker and chart-only replay.")
         self.guard("""
 from engine import atlas, native_polynomial as np
 from engine.candidate_field import indexed_field
@@ -240,7 +234,7 @@ assert replay['cells'] == [] and [v['dimension'] for v in replay['vertices']] ==
     def test_archived_graph_computes_both_integrals_without_symbolic_import(self):
         import sympy as sp
         from engine import native_library
-        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_field_description"):
+        if not hasattr(native_library._kernel(), "atlas_field_description"):
             self.skipTest("Requires native marked scalar descriptors")
         from engine.general_resolution import verify_candidate
         from engine.resolution_search import ResolutionCandidate
@@ -285,7 +279,7 @@ sys.meta_path.insert(0,Guard())
 
     def test_saved_and_fresh_weighted_planes(self):
         from engine import native_library
-        if native_library._MODE == "sympy" or not hasattr(native_library._kernel(), "atlas_field_description"):
+        if not hasattr(native_library._kernel(), "atlas_field_description"):
             self.skipTest("Requires native marked scalar descriptors")
         self.guard("""
 from engine.resolve import resolve

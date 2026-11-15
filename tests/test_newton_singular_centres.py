@@ -19,7 +19,7 @@ class NewtonSingularCentres(unittest.TestCase):
         from engine.resolve import resolve
         from engine.general_resolution import search
 
-        if native_library._MODE != "native" or not hasattr(native_library._library(), "atlas_transverse_pencil_abi"):
+        if not hasattr(native_library._library(), "atlas_transverse_pencil_abi"):
             self.skipTest("Native transverse pencil operation unavailable.")
         def recognise(p):
             return kernel_json("atlas_resolution_candidate", "transverse_pencil", width=3, terms=encode_terms(p))
@@ -52,7 +52,7 @@ class NewtonSingularCentres(unittest.TestCase):
     def test_pencil_decline_preserves_search_and_quick_route(self):
         from engine import general_resolution, reduced_centre
         from engine.resolve import resolve
-        if native_library._MODE != "native" or not hasattr(native_library._library(), "atlas_transverse_pencil_abi"):
+        if not hasattr(native_library._library(), "atlas_transverse_pencil_abi"):
             self.skipTest("Native transverse pencil operation unavailable.")
         request = dict(polynomial="(x+y)^2-(x-y)^2*z",variables=list("xyz"),compute="cpu")
         stop = RuntimeError("exhaustive worker started")
@@ -94,7 +94,6 @@ class NewtonSingularCentres(unittest.TestCase):
         self.assertEqual(solved["monodromy_zeta"]["expression"], "1")
         self.assertEqual(len(solved["atlas"]), 3)
 
-    @unittest.skipUnless(native_library._MODE != "sympy", "the native fan verifier is not in use")
     def test_auxiliary_fan_euler_on_chart_orbits_and_fallback(self):
         from engine import monomial_atlas
         from engine.newton_trials import _try

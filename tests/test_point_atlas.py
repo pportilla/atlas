@@ -15,7 +15,6 @@ from engine.resolve import resolve
 from engine.strata import InvalidChart
 
 
-@unittest.skipIf(native_library._MODE == "sympy", "The sparse chart verifier is disabled in pure reference mode.")
 class PointAtlas(unittest.TestCase):
     def test_owned_crossing_keeps_the_linear_normal_term(self):
         from engine.monomial_atlas import fan_outputs

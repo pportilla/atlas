@@ -1,6 +1,5 @@
 """Strata of a certified embedded projective ideal blowup, for A'Campo's
 formula and for the topological zeta function."""
-import ast
 from functools import lru_cache
 from itertools import combinations
 import re
@@ -13,60 +12,14 @@ from tests.nonreduced_oracle import _valuation
 from engine.polynomial import InputError, parse_expression
 
 
-def _algebraic_literal(source):
-    """Read an exact scalar expression printed in a historical weighted chart."""
-    functions = {"sqrt": sp.sqrt, "CRootOf": sp.CRootOf, "cos": sp.cos, "sin": sp.sin,
-                 "tan": sp.tan, "cot": sp.cot, "sec": sp.sec, "csc": sp.csc, "exp": sp.exp, "Rational": sp.Rational}
-    constants = {"I": sp.I, "pi": sp.pi}
-    def read(node, polynomial=False):
-        if isinstance(node, ast.Constant) and type(node.value) is int:
-            return sp.Integer(node.value)
-        if isinstance(node, ast.Name):
-            if node.id in constants:
-                return constants[node.id]
-            if polynomial and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", node.id):
-                return sp.Symbol(node.id)
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-            value = read(node.operand, polynomial)
-            return value if isinstance(node.op, ast.UAdd) else -value
-        if isinstance(node, ast.BinOp):
-            from operator import add, mul, pow, sub, truediv
-            operation = {ast.Add: add, ast.Sub: sub, ast.Mult: mul, ast.Div: truediv, ast.Pow: pow}.get(type(node.op))
-            if operation:
-                return operation(read(node.left, polynomial), read(node.right, polynomial))
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
-            name = node.func.id
-            if name in functions:
-                return functions[name](*(read(child, name == "CRootOf" and i == 0)
-                                         for i, child in enumerate(node.args)))
-        raise InputError("Unrecognized algebraic number in the archived graph.")
-    try:
-        return read(ast.parse(source.replace("^", "**"), mode="eval").body)
-    except (SyntaxError, TypeError, IndexError) as error:
-        raise InputError("Invalid algebraic number in the archived graph.") from error
-
-
 @lru_cache(maxsize=128)
 def _archived_field(exact):
     """Recover the defining polynomial and marked root from a historical graph literal."""
     from engine.field_coefficient import indexed_field, marked_root_display
     from engine.marked_field import description
-    from engine.native_library import CHECK, _MODE
-
-    def reference():
-        root = _algebraic_literal(exact)
-        return sp.QQ.algebraic_field(root), root
-    if _MODE == "sympy":
-        return reference()
     coefficients, flint_index = description(exact)
     order = marked_root_display(tuple(reversed(coefficients)))[2]
     result = indexed_field(coefficients, sp.Symbol("x"), order[flint_index-1])
-    if CHECK:
-        field, original = reference()
-        comparison = field.ext.minpoly
-        if (tuple(comparison.all_coeffs()) != coefficients or
-                (original != result[1] if len(coefficients) == 2 else not comparison.same_root(original, result[1]))):
-            raise AssertionError("The native marked field differs from its historical expression.")
     return result
 
 
@@ -115,13 +68,9 @@ def _jacobian_order(coords, base, ambient, prime, domain):
     if not extra:
         return 0
     from engine.affine_kernel import frame_minor
-    from engine.groebner import _MODE
-    rows = [[sp.diff(h, t) for t in extra] for h in ambient] if _MODE != "native" else None
     best = None
     for chosen in combinations(range(len(ambient)), len(extra)):
-        if rows is not None:
-            minor = sp.expand(sp.Matrix([rows[i] for i in chosen]).det())
-        elif domain.is_AlgebraicField:
+        if domain.is_AlgebraicField:
             from engine.chart_expressions import chart_expressions
             from engine.field_polynomial import lift, lower
             theta = chart_expressions(coords).Dummy("relative_jacobian")

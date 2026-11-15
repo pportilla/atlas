@@ -54,17 +54,10 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False):
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
-    from . import native_library
     from .local_blowups import GiveUp, acampo_over
-    if native_library._MODE == "native":
-        from . import native_polynomial
-        symbols = tuple(map(native_polynomial.Symbol, names))
-        polynomial = native_polynomial.from_terms
-    else:
-        from .reference import sp
-        from .atlas import _polynomial
-        symbols = tuple(map(sp.Symbol, names))
-        polynomial = lambda ring, terms: _polynomial(terms, ring)
+    from . import native_polynomial
+    symbols = tuple(map(native_polynomial.Symbol, names))
+    polynomial = native_polynomial.from_terms
     equation = polynomial(symbols, poly)
     if tangent_only:
         from .repeated_tangent import tangent_power_support

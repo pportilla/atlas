@@ -100,10 +100,7 @@ class TorusChartCertification(unittest.TestCase):
 
     def test_fan_uses_original_equation_across_differently_named_charts(self):
         from engine.monomial_atlas import fan_outputs
-        from engine.native_library import _MODE
         from engine.strata import InvalidChart
-        if _MODE == "sympy":
-            self.skipTest("This test exercises the native fan verifier.")
         variables = ["x", "y"]
         record = {
             "variables": variables, "fan": {"rays": [[1, 0], [0, 1], [1, 1]]},
@@ -125,7 +122,6 @@ class TorusChartCertification(unittest.TestCase):
 
     def test_same_orbit_sections_do_not_certify_a_changed_strict_equation(self):
         from engine.monomial_atlas import fan_outputs
-        from engine.native_library import _MODE
         from engine.strata import InvalidChart
         original = atlas.to_json(self.charts)
         self.assertIsNotNone(torus_complex(self.charts, 3, True))
@@ -135,17 +131,13 @@ class TorusChartCertification(unittest.TestCase):
         # hyperplane. All orbit restrictions agree with the original chart.
         strict["ideal"][0] += "+(" + "*".join(chart["coordinates"]) + ")^2"
         self.assertIsNone(torus_complex(atlas.from_json(original), 3, True))
-        if _MODE != "sympy":
-            with self.assertRaises(InvalidChart):
-                fan_outputs(dict(variables=self.names, atlas=original),
-                            parse("x^2+y^3+z^5", self.names), intrinsic=True)
+        with self.assertRaises(InvalidChart):
+            fan_outputs(dict(variables=self.names, atlas=original),
+                        parse("x^2+y^3+z^5", self.names), intrinsic=True)
 
     def test_projection_terms_follow_chart_order_and_certify_the_whole_map(self):
         from engine.monomial_atlas import fan_outputs
-        from engine.native_library import _MODE
         from engine.strata import InvalidChart
-        if _MODE == "sympy":
-            self.skipTest("This test exercises the native fan verifier.")
 
         # The three charts of the blowup of the origin. The two degree-two
         # terms tie on total degree in every chart. Coordinate order differs
@@ -290,7 +282,7 @@ class FourVariableTorus(unittest.TestCase):
 
 class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
     def test_higher_rank_relative_fan_from_saved_equations(self):
-        from engine.native_library import affine_request, _MODE
+        from engine.native_library import affine_request
         from engine.polynomial import format_poly, sparse_row
         from engine.strata import rational_chart_outputs
         names = list("xyzt")
@@ -324,12 +316,10 @@ class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
         def adjacencies(complex):
             return Counter(frozenset(c["vertices"]) for c in complex["cells"])
         self.assertEqual(adjacencies(dual), adjacencies(record["dual_complex"]))
-        if _MODE != "sympy":
-            _, found = rational_chart_outputs(dict(variables=full, atlas=charts), parse(family, full), intrinsic=True)
-            self.assertEqual(found["dual_complex"], dual)
+        _, found = rational_chart_outputs(dict(variables=full, atlas=charts), parse(family, full), intrinsic=True)
+        self.assertEqual(found["dual_complex"], dual)
 
     def test_two_sheets_and_every_face_from_the_saved_fan(self):
-        from engine.native_library import _MODE
         from engine.strata import InvalidChart, rational_chart_outputs
         names = list("xyztu")
         source = "(x*y)^2-2*(z*t*u)^2"
@@ -354,19 +344,16 @@ class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
         saved = json.loads(json.dumps(dict(variables=names, atlas=record["atlas"])))
         charts = atlas.from_json(saved["atlas"])
         check(torus_complex(charts, len(names), True))
-        if _MODE != "sympy":
-            check(rational_chart_outputs(saved, polynomial, intrinsic=True)[1]["dual_complex"])
+        check(rational_chart_outputs(saved, polynomial, intrinsic=True)[1]["dual_complex"])
         strict, = (c for c in saved["atlas"][0]["components"] if c["id"] == "strict")
         strict["ideal"][0] += "+1"
         self.assertIsNone(torus_complex(atlas.from_json(saved["atlas"]), len(names), True))
-        if _MODE != "sympy":
-            with self.assertRaises(InvalidChart):
-                rational_chart_outputs(saved, polynomial, intrinsic=True)
+        with self.assertRaises(InvalidChart):
+            rational_chart_outputs(saved, polynomial, intrinsic=True)
 
     def test_three_term_section_on_the_same_toric_modification(self):
         from engine.affine_kernel import chart_data
         from engine.chart_expressions import runtime_expressions
-        from engine.native_library import _MODE
         from engine.strata import rational_chart_outputs
         names = list("xyzt")
         source = "(x*y)^2+3*x*y*z*t+(z*t)^2"
@@ -384,11 +371,8 @@ class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
             equation = atlas._record_text(strict, chart.variables)
             next(c for c in item["components"] if c["id"] == "strict")["ideal"] = [equation]
         saved = dict(variables=names, atlas=support["atlas"])
-        if _MODE == "sympy":
-            dual = torus_complex(atlas.from_json(saved["atlas"]), len(names), True)
-        else:
-            _, found = rational_chart_outputs(saved, parse(source, names), intrinsic=True)
-            dual = found["dual_complex"]
+        _, found = rational_chart_outputs(saved, parse(source, names), intrinsic=True)
+        dual = found["dual_complex"]
         self.assertEqual(dual["status"], "complete")
         self.assertEqual(len(dual["vertices"]), 8)
         self.assertEqual(Counter(c["dimension"] for c in dual["cells"]), {1:10, 2:4})

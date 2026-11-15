@@ -8,7 +8,7 @@ from .strata import records
 
 def construct(polynomial, names, fan, integrals):
     n = len(names)
-    if (native_library._MODE != "native" or not 3 <= n <= 4 or len(polynomial) > 3
+    if (not 3 <= n <= 4 or len(polynomial) > 3
             or len(fan["cones"]) > 4 or len(fan["rays"]) > 4*n
             or any(max(e) > 3 for e in polynomial)
             or any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64 for c in polynomial.values())

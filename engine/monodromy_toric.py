@@ -7,14 +7,10 @@ from .polynomial import integer_from_decimal, integer_text
 
 def _volume(points, dimension):
     """Normalized Newton polytope volume in the full orbit lattice."""
-    from .groebner import CHECK, _MODE, _kernel
+    from .groebner import _kernel
     points = tuple(dict.fromkeys(tuple(map(index, p)) for p in points))
     if any(len(p) != dimension for p in points):
         raise ValueError("Each lattice point must have the stated dimension.")
-    if _MODE == "sympy" or CHECK:
-        from tests.toric_monodromy_oracle import _volume_reference
-    if _MODE == "sympy":
-        return _volume_reference(points, dimension)
     library = _kernel()
     if library is None or not hasattr(library, "atlas_lattice_volume"):
         raise RuntimeError("Build the Atlas lattice-volume kernel with make.")
@@ -30,6 +26,4 @@ def _volume(points, dimension):
         value = integer_from_decimal(ctypes.string_at(result).decode("ascii"))
     finally:
         library.atlas_groebner_release(result)
-    if CHECK and value != _volume_reference(points, dimension):
-        raise AssertionError("The normalized lattice volumes differ.")
     return value

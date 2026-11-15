@@ -16,7 +16,6 @@ from engine.strata import InvalidChart, rational_chart_outputs
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipIf(native_library._MODE == "sympy", "The sparse plane chart verifier uses the native kernel.")
 class RationalPlaneAtlas(unittest.TestCase):
     def test_removed_marked_points_contribute_to_their_own_strata(self):
         # Each of the two sheets t=±sqrt(2) contains a line with marked

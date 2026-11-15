@@ -106,9 +106,8 @@ class KernelIdealTests(unittest.TestCase):
         # (xy, xy^2) is a change of torus coordinates. Taking d-th
         # powers next gives d^2 sheets over a line missing two points.
         d = 10**20
-        with patch("engine.groebner.CHECK", False):
-            f = (x*y)**d + 2**500*(x*y**2)**d - 1
-            self.assertEqual(euler_characteristic((x, y), (f,)), -d**2)
+        f = (x*y)**d + 2**500*(x*y**2)**d - 1
+        self.assertEqual(euler_characteristic((x, y), (f,)), -d**2)
 
     def test_geometric_plane_factors_in_owned_regions(self):
         q = x**2 + y**2

@@ -2,9 +2,9 @@
 
 Each function answers like its namesake in engine/blowup_ideal.py, generator
 for generator (native/ideal.cpp follows that file step by step). It returns
-None when the kernel cannot take the problem: the library is absent or
-switched off with ATLAS_GROEBNER=sympy, the ring has too many variables, an
-exponent exceeds the packed range, or the input is not a polynomial over Q.
+None when the kernel cannot take the problem: the library is absent, the
+ring has too many variables, an exponent exceeds the packed range, or the
+input is not a polynomial over Q.
 Callers can retry in the unpacked native kernel.
 """
 
@@ -13,7 +13,7 @@ from .reference import sp
 
 from .chart_kernel import crossings_rows, strata_rows
 from .native_library import Unavailable
-from .groebner import _MAX_VARIABLES, _MODE, _kernel, _line
+from .groebner import _MAX_VARIABLES, _kernel, _line
 
 
 class _Unsuitable(Exception):
@@ -41,7 +41,7 @@ def _lines(gens, exprs):
 
 def _require(variables):
     """Stop unless the kernel is in use and has room for that many variables."""
-    if _MODE == "sympy" or _kernel() is None or not 1 <= variables <= _MAX_VARIABLES:
+    if _kernel() is None or not 1 <= variables <= _MAX_VARIABLES:
         raise _Unsuitable
 
 
@@ -131,7 +131,7 @@ def dimension(variables, ideal):
         _require(len(variables))
         rows = _ask(f"dimension {len(variables)}", _lines(variables, ideal))
     except _Unsuitable:
-        if _MODE == "sympy" or not variables or not hasattr(_kernel(), "atlas_wide_dimension_abi"):
+        if not variables or not hasattr(_kernel(), "atlas_wide_dimension_abi"):
             raise
         from .affine_kernel import _request, _ring
         ring = _ring(tuple(variables))
@@ -170,7 +170,7 @@ def graph_strict_part(variables, ambient, pivot, function):
 @_optional
 def centre_power_transforms(variables, ambient, centre, function, charts):
     """One parent identity gives a candidate order and quotient on every graph chart."""
-    if _MODE == "sympy" or not hasattr(_kernel(), "atlas_centre_power_transforms_abi"):
+    if not hasattr(_kernel(), "atlas_centre_power_transforms_abi"):
         return None
     from .affine_kernel import _request, _ring, _sparse_expression
     ring = _ring(tuple(variables))
@@ -467,10 +467,6 @@ def strata(variables, base, ideals, removed=()):
 @_optional
 def plane_components(variables, equations, region, removed):
     """Owned geometric and rational component counts of a coordinate plane curve."""
-    if _MODE in ("sympy", "check"):
-        from tests.plane_components_oracle import plane_components as reference
-    if _MODE == "sympy":
-        return reference(variables, equations, region, removed)
     _require(len(variables))
     sizes = [len(equations), len(region), *map(len, removed)]
     rows = _ask("plane_components " + " ".join(map(str, (len(variables), *sizes))),
@@ -478,6 +474,4 @@ def plane_components(variables, equations, region, removed):
     if rows == ["unsupported"]:
         return None
     counts = tuple(map(int, rows[0].split()))
-    if _MODE == "check" and counts != reference(variables, equations, region, removed):
-        raise AssertionError("The plane component counts differ from the reference.")
     return counts

@@ -6,7 +6,6 @@ import sympy as sp
 from engine.general_resolution import verify_candidate
 from engine.monodromy import monodromy_zeta
 from engine.newton_backend import resolve_newton
-from engine.native_library import _MODE
 from engine.polynomial import InputError, format_poly, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
@@ -53,7 +52,6 @@ class TopologicalZeta(unittest.TestCase):
                 rows = [dict(components=[], euler_characteristic=chi) for chi in weights]
                 self.assertEqual(_reduce({}, rows), expected)
 
-    @unittest.skipIf(_MODE == "sympy", "Malformed stratum validation uses the native reader.")
     def test_zero_terms_validate_component_indices(self):
         rows = [dict(components=[], euler_characteristic=1),
                 dict(components=["A", "A"], euler_characteristic=0)]

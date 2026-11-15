@@ -11,7 +11,6 @@ from unittest.mock import patch
 from engine.atlas_gluing import glued_complex
 from engine.chart_expressions import runtime_expressions
 from engine.local_blowups import Chart
-from engine.native_library import _MODE
 from engine.polynomial import InputError
 from engine.resolution_complex import dual_complex
 from engine.resolve import resolve
@@ -21,7 +20,6 @@ from tests.cli_support import run_prompt
 
 
 class ResolutionComplexTests(unittest.TestCase):
-    @unittest.skipUnless(_MODE == "native", "Polynomial graph certificates require the native kernel.")
     def test_saved_polynomial_graph_certifies_its_exceptional_bundle(self):
         from engine.graph_record import graph_outputs
         from engine.polynomial import parse
@@ -38,7 +36,6 @@ class ResolutionComplexTests(unittest.TestCase):
                 self.assertEqual({v["component"]: (v["multiplicity"], v["nu"]) for v in result["numerical_data"]},
                                  {"E1": (2, 2), "strict": (1, 1)})
 
-    @unittest.skipUnless(_MODE == "native", "Polynomial graph certificates require the native kernel.")
     def test_bundle_certificate_requires_the_same_exceptional_ideal_on_every_open(self):
         from engine.incidence import incidence
         from engine.monomial_atlas import _row
@@ -59,7 +56,6 @@ class ResolutionComplexTests(unittest.TestCase):
             with self.subTest(centre=centre):
                 self.assertIsNone(verify(centre, [centre, centre]))
 
-    @unittest.skipUnless(_MODE == "native", "Reduced singular centre discovery requires the native kernel.")
     def test_weighted_graph_replays_exceptional_multiplicity_from_the_charts(self):
         equation = "((x+y+z)^2-z*(x-y)^2)^2"
         record = resolve(dict(polynomial=equation, variables=["x", "y", "z"], mode="embedded"))

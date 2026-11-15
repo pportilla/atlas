@@ -231,7 +231,7 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
 
 def point_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
     n = len(record["variables"])
-    if native_library._MODE == "sympy" or n < 3 or n > 8 or record.get("input_divisor"):
+    if n < 3 or n > 8 or record.get("input_divisor"):
         return None
     saved = bool(record.get("atlas"))
     charts = record["atlas"] if saved else record.get("charts")
@@ -267,10 +267,4 @@ def point_outputs(record, polynomial, *, complex=True, intrinsic=False, integral
                             integrals=integrals, complex=complex)
     except native_library.Unavailable:
         return None
-    if result and native_library.CHECK:
-        from . import atlas
-        general = atlas.from_record(record, polynomial)
-        expected = atlas.outputs(general, n, complex=complex, intrinsic=intrinsic, integrals=integrals)
-        if result[1] != expected or (not saved and result[0] != atlas.to_json(general)):
-            raise AssertionError("The point blowup and general chart calculations disagree.")
     return result

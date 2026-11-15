@@ -380,7 +380,7 @@ def _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals):
 
 
 def plane_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
-    if len(record["variables"]) != 2 or native_library._MODE == "sympy":
+    if len(record["variables"]) != 2:
         return None
     if intrinsic and record.get("input_divisor"):
         return None
@@ -392,11 +392,4 @@ def plane_outputs(record, polynomial, *, complex=True, intrinsic=False, integral
         result = _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals)
     except native_library.Unavailable:
         return None
-    if result and native_library.CHECK:
-        from . import atlas
-        charts = atlas.from_record(record, polynomial)
-        reference = atlas.outputs(charts, 2, complex=complex, intrinsic=intrinsic,
-                                  integrals=integrals and "strata" in result[1])
-        if result[1] != reference:
-            raise AssertionError("The sparse plane atlas and reference outputs disagree.")
     return result

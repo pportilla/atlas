@@ -123,8 +123,8 @@ class _NeedsSplittingField(Exception):
 def _ordinary_overlaps(charts, boundaries):
     """Prepare ordinary affine chart maps once and close each requested diagonal."""
     from .kernel import exprs
-    from .native_library import Unavailable, _MODE, _kernel, ideal_request
-    if _MODE != "native" or not hasattr(_kernel(), "atlas_affine_overlap_abi"):
+    from .native_library import Unavailable, _kernel, ideal_request
+    if not hasattr(_kernel(), "atlas_affine_overlap_abi"):
         return None
 
     @cache

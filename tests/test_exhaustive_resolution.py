@@ -63,8 +63,8 @@ class ExhaustiveFallback(unittest.TestCase):
         from engine.newton_backend import coordinate_choices, resolve_newton
         from engine.newton_faces import face_search
         from engine.newton_fan import build_fan
-        from engine.native_library import _MODE, _kernel
-        if _MODE != "native" or not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi"):
+        from engine.native_library import _kernel
+        if not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi"):
             self.skipTest("Packed tangent obstruction unavailable.")
         names = list("xyz")
         for source in ("(x+y+z)^2-z*(x-y)^2", "(x/2+2*y/3-z/5)^2-z*(3*x/4-y/5)^2",

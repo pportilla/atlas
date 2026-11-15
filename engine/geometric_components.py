@@ -19,10 +19,6 @@ def _component_operation(operation, **operands):
     return kernel_json("atlas_component_geometry", operation, **operands)
 
 
-def _encoded_support(powers):
-    return [[integer_text(k) for k in row] for row in powers]
-
-
 def _factor_records(variables, f, domain):
     """Retain the ordered native factors, powers, and rational support certificates."""
     if domain == QQ:

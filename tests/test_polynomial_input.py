@@ -89,16 +89,11 @@ class PublicInputArithmetic(unittest.TestCase):
         with self.assertRaises(InputError):
             parse_expression("(" * depth + "x" + ")" * (depth-1), ["x"])
 
-    def test_stale_binary_and_independent_check(self):
-        if native_library._MODE != "sympy":
-            with patch.object(native_library, "affine_request", side_effect=native_library.Unavailable("build kernel")):
-                with self.assertRaisesRegex(native_library.Unavailable, "build kernel"):
-                    parse_expression("x^5+x^5", ["x"])
-        with patch.object(native_library, "_MODE", "check"), patch.object(native_library, "CHECK", True):
-            with patch.object(native_library, "affine_request", return_value=["2 1"]):
-                with self.assertRaises(AssertionError):
-                    parse_expression("x", ["x"])
-        if native_library._MODE != "sympy" and hasattr(native_library._kernel(), "atlas_input_abi"):
+    def test_stale_binary(self):
+        with patch.object(native_library, "affine_request", side_effect=native_library.Unavailable("build kernel")):
+            with self.assertRaisesRegex(native_library.Unavailable, "build kernel"):
+                parse_expression("x^5+x^5", ["x"])
+        if hasattr(native_library._kernel(), "atlas_input_abi"):
             with patch.object(polynomial, "_parse_tokens", side_effect=AssertionError("unexpected reference")):
                 with self.assertRaises(LimitError):
                     parse_expression("x^129", ["x"], bounded=True)

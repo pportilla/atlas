@@ -7,8 +7,8 @@ from .polynomial import encode_sparse_row
 
 def smooth_reduced_graph(poly, names, mode, *, seconds=0.25):
     """One bounded, replay-aware proof of the graph over the reduced singular locus."""
-    from .native_library import _MODE, _kernel
-    if (_MODE != "native" or not hasattr(_kernel(), "atlas_smooth_reduced_centre_abi")
+    from .native_library import _kernel
+    if (not hasattr(_kernel(), "atlas_smooth_reduced_centre_abi")
             or not 3 <= len(names) <= 8 or len(poly) > 128 or seconds <= 0
             or any(c.numerator.bit_length() > 256 or c.denominator.bit_length() > 256 or
                    any(k > 32 for k in e) for e, c in poly.items())):

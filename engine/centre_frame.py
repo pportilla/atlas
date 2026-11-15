@@ -121,10 +121,9 @@ class Frame:
 
     def derivative_chain(self, f, k, degree):
         """Represent f, D_k f, ..., D_k^degree f on the entire implicit chart."""
-        from . import native_library
         if not degree:
             return (f,)
-        if degree == 1 or not self.rows or native_library._MODE == "sympy":
+        if degree == 1 or not self.rows:
             chain = [f]
             for _ in range(degree):
                 chain.append(self.derivative(chain[-1], k))
@@ -262,9 +261,6 @@ class Frame:
             from . import native_library
             if order <= 1 or not self.coords or 0 in self.units:
                 return (f,)
-            if native_library._MODE == "sympy":
-                from tests.centre_weight_oracle import jet
-                return jet(self, f, order)
             from .affine_kernel import _request, _ring, _sparse_expression
             if self.rows:
                 lines = self._implicit_input(f)
@@ -277,10 +273,6 @@ class Frame:
                 rows = _request(["affine_jet", ring.header, str(order),
                                  " ".join(str(self.variables.index(c)) for c in self.coords), ring.text(f)])
             result = (f, *(_sparse_expression(self.variables, row) for row in rows[1:]))
-            if native_library.CHECK:
-                from tests.centre_weight_oracle import jet
-                if result != jet(self, f, order):
-                    raise AssertionError("The native frame jet differs from iterated differentiation.")
             self._jets[key] = result
         return self._jets[key]
 

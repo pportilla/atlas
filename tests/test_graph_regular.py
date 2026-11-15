@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from engine import centres, native_polynomial as np
 from engine.centre_frame import Frame
-from engine.native_library import _MODE, ideal_request
+from engine.native_library import ideal_request
 
 FIXTURE = Path(__file__).parent / "fixtures/b8-centre-and-incidence.json.gz"
 
@@ -33,7 +33,6 @@ def certificate(variables, equations, function):
     return ideal_request(f"graph_regular {len(variables)} {len(equations)}", rows)
 
 
-@unittest.skipUnless(_MODE == "native", "Exercises the native centre selector.")
 class GraphRegular(unittest.TestCase):
     def test_triangular_substitution_preserves_thickness(self):
         x, y, u, v = variables = np.symbols("x y u v")

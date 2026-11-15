@@ -108,9 +108,6 @@ def _reduce(numbers, strata):
             root, order, *indices = line.split()
             poles.append({"value": root, "order": int(order), "components": [names[int(i)] for i in indices]})
         result = (value, expanded, denominator, poles)
-    if gb.CHECK:
-        from tests.topological_oracle import check_reduction, reduce
-        check_reduction(result, reduce(numbers, strata))
     return result
 
 

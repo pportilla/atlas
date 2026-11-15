@@ -79,7 +79,7 @@ from .chart_expressions import chart_expressions
 from .centre_weights import centre_search, cover_products, level_weights, ordered_parts, surface_maxima
 
 from .affine_kernel import frame_derivative, frame_function, frame_linear, frame_locus, frame_minor, frame_restrict
-from .blowup_ideal import empty_locus, ideal_basis, radical_subset, saturate
+from .blowup_ideal import empty_locus, ideal_basis, saturate
 from .centres import GiveUp, _intersection, _principal
 from .groebner import groebner
 
@@ -235,10 +235,7 @@ def _plane_step(names, units, functions, working):
 def _implicit_step(frame, functions, working, deadline=None):
     """The same step on a surface given by equations, with two of the variables
     as coordinates: (key, kind, generators in the ring of the frame), or None."""
-    from .groebner import _MODE, colon
-    if _MODE == "sympy":
-        from tests.surface_oracle import _implicit_step as reference
-        return reference(frame, functions, working, deadline)
+    from .groebner import colon
     # Ideals are taken in the variables of the chart, over the equations of the
     # surface; the open set of the frame only enters the tests for emptiness.
     ring, base = frame.variables, frame.rows
@@ -347,12 +344,11 @@ def _implicit_step(frame, functions, working, deadline=None):
 
 def _line_centre(variables, ambient, strict, divisors, working, away):
     """Try the native rational-graph certificate in an affine threefold."""
-    from .groebner import _MODE
     from .native_polynomial import native_ring, row
     from .kernel import exprs
     from .kernel_json import kernel_json
     from .polynomial import integer_from_decimal
-    if (_MODE != "native" or len(variables) != 3 or ambient or len(strict) != 1
+    if (len(variables) != 3 or ambient or len(strict) != 1
             or not native_ring(variables) or any(len(ideal) != 1 for _, ideal in divisors)):
         return None
     def rows(ideal):
@@ -378,9 +374,7 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
 
     Variables that an equation determines are eliminated first (the models
     below); the step on each model is the kernel's (native/ideal.cpp,
-    op_surface). This file's own two forms answer when the kernel cannot
-    (ATLAS_GROEBNER=sympy), and with ATLAS_GROEBNER=check both are computed
-    and must agree.
+    op_surface). This file's own two forms answer when the kernel cannot.
     """
     variables, ambient = tuple(variables), tuple(ambient)
     working = [tuple(w) for w in working]
@@ -435,7 +429,6 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
     """The steps found on one model, as (key, kind, generators in its variables)."""
     from . import kernel
     from .centres import _frames
-    from .groebner import CHECK, _MODE
     labels = level_weights("label_order", (), labels=list(fns))
     native = kernel.surface_step(names, left, [fns[label] for label in labels], work, units, threefold)
     if native == "nomodel":
@@ -444,14 +437,9 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
         native = [((kind, top, flag, tuple(labels[i] for i in positions)),
                    "curve" if kind == 2 and not flag else "points", tuple(gens))
                   for kind, top, flag, positions, gens in native]
-        if not CHECK:
-            return native
-    if CHECK or _MODE == "sympy":
-        from tests.surface_oracle import _implicit_step as implicit, _plane_step as plane
-    else:
-        implicit, plane = _implicit_step, _plane_step
+        return native
     if not left:
-        mine = [plane(names, units, fns, work)]
+        mine = [_plane_step(names, units, fns, work)]
     else:
         # Two of the remaining variables as coordinates, the others determined by the equations left.
         try:
@@ -460,13 +448,8 @@ def _on_model(names, units, fns, work, left, threefold, deadline):
                                   units=tuple(u for u in units if not getattr(u, "is_number", True))))
         except GiveUp as error:
             raise NoModel(str(error)) from error
-        mine = [implicit(frame, fns, part, deadline) for frame, part in frames]
-    mine = [item for item in mine if item is not None]
-    if native is not None:
-        from tests.surface_oracle import compare_chart_steps
-        compare_chart_steps(names, left, work, native, mine)
-        return native
-    return mine
+        mine = [_implicit_step(frame, fns, part, deadline) for frame, part in frames]
+    return [item for item in mine if item is not None]
 
 
 def _step(variables, ambient, strict, functions, working, deadline=None):

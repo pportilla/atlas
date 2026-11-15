@@ -9,10 +9,10 @@ from unittest.mock import patch
 from engine import algebra_groebner
 from engine.algebra import dispatch
 from engine.gpu_devices import available_devices
-from engine.native_library import _MODE, _kernel
+from engine.native_library import _kernel
 
 
-@unittest.skipUnless(_MODE == "native" and _kernel() is not None, "requires the native rational kernel")
+@unittest.skipUnless(_kernel() is not None, "requires the native rational kernel")
 class AlgebraExecutionTests(unittest.TestCase):
     request = {"operation": "groebner", "ring": {"variables": ["x", "y"], "order": "lex"},
                "operands": {"ideal": ["x^2+2147483629*y-1", "x*y-2"]}}

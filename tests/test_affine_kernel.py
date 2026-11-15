@@ -132,21 +132,19 @@ class AffineMaps(unittest.TestCase):
 
         # Direct Python callers keep their interpreter's input digit policy.
         # These integers came from the verified native result.
-        from engine import identity_atlas, native_library, weighted_record
+        from engine import identity_atlas, weighted_record
         from engine import native_polynomial as np
         from engine.polynomial import format_poly
         n, m = 10**4500, 2**63+17
         names = ("x", "y")
         variables = np.symbols("x y")
         terms = {(n, m): 1}
-        with patch.object(affine_kernel.gb, "_MODE", "native"), patch.object(affine_kernel.gb, "CHECK", False), \
-                patch.object(native_library, "_MODE", "native"), patch.object(native_library, "CHECK", False):
-            _, rows = affine_kernel.rational_factor_rows(variables, np.from_terms(variables, terms))
-            self.assertEqual({row: k for row, k, _ in rows}, {"1 1 0": n, "1 0 1": m})
-            factors = identity_atlas.rational_factors(terms, names)
-            self.assertEqual({format_poly(f, names): k for f, k in factors}, {"x": n, "y": m})
-            factors, unit = weighted_record._factor(format_poly(terms, names), names)
-            self.assertEqual((dict(factors), unit), ({"x": n, "y": m}, "1"))
+        _, rows = affine_kernel.rational_factor_rows(variables, np.from_terms(variables, terms))
+        self.assertEqual({row: k for row, k, _ in rows}, {"1 1 0": n, "1 0 1": m})
+        factors = identity_atlas.rational_factors(terms, names)
+        self.assertEqual({format_poly(f, names): k for f, k in factors}, {"x": n, "y": m})
+        factors, unit = weighted_record._factor(format_poly(terms, names), names)
+        self.assertEqual((dict(factors), unit), ({"x": n, "y": m}, "1"))
 
     def test_native_input_rows_reuse_encodings_in_chart_order(self):
         from engine import native_polynomial as np
@@ -306,7 +304,6 @@ class AffineMaps(unittest.TestCase):
         # One coordinate now covers the bridge and both outer edges.
         self.assertEqual(dimension(variables, (a*b, b*c, b*d, e*f)), 5)
 
-    @unittest.skipUnless(affine_kernel.gb._MODE == "native", "Exercises the unbounded native coefficient reader.")
     def test_sparse_wide_symbolic_poly_and_integral_factor_domain(self):
         from engine.field_wide import wide_block_basis
         variables = sp.symbols("w:40")
@@ -332,36 +329,21 @@ class AffineMaps(unittest.TestCase):
         self.assertEqual(result["status"], "resolved")
         self.assertEqual(to_json(from_json(result["atlas"])), result["atlas"])
 
-    def test_unavailable_binary_and_explicit_reference(self):
-        x, u = sp.symbols("x u")
-        from engine.polynomial import InputError
+    def test_unavailable_binary(self):
+        x = sp.Symbol("x")
         with patch("engine.native_library._kernel", return_value=None):
             affine_kernel._library.cache_clear()
             try:
-                with patch.object(affine_kernel.gb, "_MODE", "native"):
-                    with self.assertRaises(affine_kernel._AffineUnavailable):
-                        decode((x,), "1/3+x")
-                with patch.object(affine_kernel.gb, "_MODE", "sympy"):
-                    self.assertEqual(decode((x,), "1/3+x"), x+sp.Rational(1, 3))
-                    self.assertEqual(frame_linear((x,), x+4, x), (1, 4))
-                    p = sp.Poly((x+1)**2, x, domain=sp.QQ)
-                    self.assertEqual(rational_factors(p), p.factor_list())
-                    with self.assertRaises(InputError):
-                        decode((x,), "1/x")
-                    with self.assertRaisesRegex(ArithmeticError, "rational inverse"):
-                        inverse_map((u,), (u**2,), (x,))
+                with self.assertRaises(affine_kernel._AffineUnavailable):
+                    decode((x,), "1/3+x")
             finally:
                 affine_kernel._library.cache_clear()
 
-    def test_native_errors_and_comparison_failures_propagate(self):
+    def test_native_errors_propagate(self):
         x = sp.Symbol("x")
-        with patch.object(affine_kernel.gb, "_MODE", "native"):
-            with patch.object(affine_kernel, "_request", side_effect=ArithmeticError("invalid operation")):
-                with self.assertRaisesRegex(ArithmeticError, "invalid operation"):
-                    frame_linear((x,), x+1, x)
-            with patch.object(affine_kernel, "_request", return_value=["none"]), patch.object(affine_kernel.gb, "CHECK", True):
-                with self.assertRaises(AssertionError):
-                    frame_linear((x,), x+1, x)
+        with patch.object(affine_kernel, "_request", side_effect=ArithmeticError("invalid operation")):
+            with self.assertRaisesRegex(ArithmeticError, "invalid operation"):
+                frame_linear((x,), x+1, x)
 
 
 if __name__ == "__main__":

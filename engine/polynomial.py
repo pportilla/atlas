@@ -128,25 +128,15 @@ def parse_expression(source, variables, *, bounded=False, coefficient_modulus=No
 
         return row
 
-    if as_row and variables and native_library._MODE == "native" and not native_library.CHECK:
+    if as_row and variables:
         return native_row()
 
     def native():
         parsed = sparse_row(native_row())
         return parsed if variables else {(): value for value in parsed.values()}
 
-    terms = native() if coefficient_modulus is not None else checked_native(native, reference)
+    terms = native()
     return encode_sparse_row(terms) if as_row else terms
-
-
-def checked_native(native, reference):
-    from . import native_library
-    if native_library._MODE == "sympy":
-        return reference()
-    value = native()
-    if native_library.CHECK and value != reference():
-        raise AssertionError("The native polynomial operation differs from its independent calculation.")
-    return value
 
 
 def integer_from_decimal(text):

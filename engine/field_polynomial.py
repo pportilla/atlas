@@ -19,11 +19,6 @@ from .polynomial import sparse_row
 from . import groebner as gb
 
 
-def _oracle(name, *args):
-    from tests import field_polynomial_oracle
-    return getattr(field_polynomial_oracle, name)(*args)
-
-
 def _display_sum(terms):
     """Reconstruct an already computed symbolic sum without symbolic arithmetic."""
     from .field_display import _held
@@ -61,8 +56,6 @@ def _coefficient(value, domain, theta):
     from .field_coefficient import coefficients
     result = coefficients(value, domain)
     converted = _in_theta(tuple(reversed(result)), theta)
-    if gb.CHECK and converted != _in_theta(_oracle("coefficient", value, domain), theta):
-        raise AssertionError("The marked algebraic coefficient differs from its reference.")
     return converted
 
 
@@ -152,12 +145,6 @@ def _scalar_expression(value, domain):
     from .field_coefficient import generator_expression
     from .field_display import scalar
     result = scalar(tuple(coefficients), generator_expression(domain.ext))
-    if gb.CHECK and result != _oracle("scalar", value, domain):
-        from .field_coefficient import coefficients as coordinates
-        # A complete integer factorization may shorten a historical
-        # bounded-search radical. Verify its marked power-basis value.
-        if coordinates(result,domain) != tuple(reversed(coefficients)):
-            raise AssertionError("The displayed scalar differs from its marked power-basis coordinates.")
     return result
 
 

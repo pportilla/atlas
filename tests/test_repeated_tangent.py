@@ -3,16 +3,12 @@ from dataclasses import replace
 
 from engine import native_polynomial as polynomial
 from engine.centres import GiveUp
-from engine.groebner import _MODE
 from engine.local_blowups import Chart, _run, acampo_over
 from engine.repeated_tangent import RepeatedTangent, certify_fibre
 
 
 def coordinates(names):
-    if _MODE in ("check", "sympy"):
-        from sympy import Symbol
-    else:
-        Symbol = polynomial.Symbol
+    Symbol = polynomial.Symbol
     return tuple(map(Symbol, names))
 
 

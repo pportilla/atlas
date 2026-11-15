@@ -694,8 +694,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
 
 def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True, bounded=False):
     n = len(record["variables"])
-    if not 2 <= n <= 8 or native_library._MODE == "sympy" or (
-            record.get("input_divisor") and not record.get("atlas")):
+    if not 2 <= n <= 8 or (record.get("input_divisor") and not record.get("atlas")):
         return None
     charts = _charts(record, n)
     if charts is None:
@@ -704,27 +703,4 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
         result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded)
     except native_library.Unavailable:
         return None
-    if result is not None and native_library.CHECK:
-        from . import atlas
-        all_charts = atlas.from_record(record, polynomial)
-        actual = result[1]
-        if integrals and "strata" not in actual:
-            from .local_blowups import GiveUp
-            try:
-                atlas.outputs(all_charts, n, complex=False, intrinsic=intrinsic, integrals=True)
-            except GiveUp:
-                pass
-            else:
-                raise AssertionError("The general verifier accepted the embedded normal crossings.")
-        expected = atlas.outputs(all_charts, n, complex=complex, intrinsic=intrinsic, integrals="strata" in actual)
-        if "strata" in actual and (expected["numerical_data"] != actual["numerical_data"] or expected["strata"] != actual["strata"]):
-            raise AssertionError("The monomial and general chart verifiers disagree about the strata.")
-        if complex:
-            def faces(g):
-                return ({v["id"] for v in g["vertices"]},
-                        {frozenset(c["vertices"]) for c in g["cells"]})
-            if ((intrinsic and expected["dual_complex"] != actual["dual_complex"]) or
-                    expected["dual_complex"]["status"] != "complete" or
-                    faces(expected["dual_complex"]) != faces(actual["dual_complex"])):
-                raise AssertionError("The fan incidence differs from the general chart computation.")
     return result
