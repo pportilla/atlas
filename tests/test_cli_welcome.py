@@ -94,7 +94,7 @@ class CliWelcomeTests(unittest.TestCase):
         for interrupt in (False, True):
             with self.subTest(interrupt=interrupt):
                 stream = Terminal()
-                panel = SimpleNamespace(size=size, stream=stream, color=False)
+                panel = SimpleNamespace(size=size, stream=stream, color=False, top=5)
                 with patch.object(stream, 'fileno', return_value=1), patch('os.get_terminal_size', return_value=size):
                     if interrupt:
                         with self.assertRaises(KeyboardInterrupt), interactive_welcome(panel):
@@ -110,9 +110,37 @@ class CliWelcomeTests(unittest.TestCase):
                 self.assertLess(output.index('Welcome to Atlas'), output.index('atlas> '))
                 for row in WORDMARK:
                     self.assertIn(row, output[output.index('atlas> '):])
-                self.assertTrue(output.endswith('\x1b7\x1b[3;r\x1b8'))
+                self.assertTrue(output.endswith('\x1b7\x1b[5;r\x1b8'))
                 self.assertNotIn('\x1b[J', output)
                 self.assertNotIn('\x1b[?25l', output)
+
+    def test_settled_wordmark_closes_the_rows_the_map_needed(self):
+        # The map is six rows taller than the wordmark. A short terminal
+        # plays it without the blank row above and below.
+        for lines, spare in ((30, 6), (25, 4), (24, 4)):
+            size = os.terminal_size((80, lines))
+            stream = Terminal()
+            panel = SimpleNamespace(size=size, stream=stream, color=False, top=5)
+            with (self.subTest(lines=lines), patch.object(stream, 'fileno', return_value=1),
+                  patch('os.get_terminal_size', return_value=size)):
+                with interactive_welcome(panel) as finish:
+                    finish()
+                output = stream.getvalue()
+                # Rows are deleted directly below the wordmark, and the
+                # editing cursor follows its line up.
+                closing = r'\x1b\[5;r\x1b\[11;1H\x1b\[(\d+)M\x1b\[(\d+);r\x1b8\x1b\[(\d+)A'
+                closed = re.findall(closing, output)
+                self.assertEqual(sum(int(rows) for rows, _, _ in closed), spare)
+                self.assertEqual([rows for rows, _, _ in closed], [up for _, _, up in closed])
+                prompt_row = int(re.search(r'\x1b\[(\d+);r', output)[1])
+                self.assertLessEqual(prompt_row + 2, lines)
+                self.assertEqual(int(closed[-1][1]), prompt_row - spare)
+                # One blank row remains on each side of the settled wordmark.
+                settled = output[:re.search(closing, output).start()].rsplit('\x1b7', 2)[1]
+                self.assertEqual(re.findall(r'\x1b\[(\d+);1H\x1b\[2K([^\x1b]+)', settled),
+                                 [(str(6 + i), '  ' + row) for i, row in enumerate(WORDMARK)])
+                version = output.index('version')
+                self.assertEqual(output[:version].count('\n'), 1 + len(WORDMARK) + spare + 1)
 
     def assert_unfolding_sequence(self, frames):
         reveals = []
@@ -158,7 +186,7 @@ class CliWelcomeTests(unittest.TestCase):
     def test_small_or_unavailable_terminal_uses_static_welcome(self):
         for size in (None, os.terminal_size((80, 10)), os.terminal_size((45, 24))):
             stream = Terminal()
-            panel = SimpleNamespace(size=size, stream=stream, color=False)
+            panel = SimpleNamespace(size=size, stream=stream, color=False, top=5)
             with (self.subTest(size=size), patch.object(sys, 'stdout', stream),
                   patch.dict(os.environ, {'COLUMNS': '80', 'NO_COLOR': '1'}),
                   patch('engine.welcome.Thread') as worker):

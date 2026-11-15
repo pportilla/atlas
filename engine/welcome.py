@@ -2,11 +2,14 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import textwrap
 from threading import Event, Thread
+
+from .cli_style import paint, use_color
 
 WORDMARK = (
     "     ___   ______  __      ___    _____",
@@ -23,6 +26,7 @@ SMALL_WORDMARK = (
 )
 
 GREETING = "Welcome to Atlas."
+_COMMANDS = re.compile(r"\bTab\b|\bhelp( NAME)?\b|\bquit\b|\./atlas --help")
 
 FOLDS = (
     (
@@ -93,18 +97,14 @@ def atlas_version():
     return "development"
 
 
-def _ink(text, style, color):
-    return f"\033[{style}m{text}\033[0m" if color and style and text else text
-
-
 def render_welcome(columns, *, color, interactive, art_rows=None):
     margin = "  " if columns >= 24 else ""
     width = max(1, columns - len(margin))
     lines = []
 
-    def paragraph(text, code=None):
+    def paragraph(text, role=None):
         for row in textwrap.wrap(text, width, break_on_hyphens=False):
-            lines.append(_ink(row, code, color))
+            lines.append(paint(row, role, color))
 
     version = f"version {atlas_version()}"
     contact = "pportilla <p.portilla@upm.es>"
@@ -112,23 +112,26 @@ def render_welcome(columns, *, color, interactive, art_rows=None):
     wordmark = next((art for art in (WORDMARK, SMALL_WORDMARK) if max(map(len, art)) <= width), None)
     if wordmark:
         if art_rows is None:
-            lines.extend(_ink(row, "1", color) for row in wordmark)
+            lines.extend(paint(row, "brand", color) for row in wordmark)
         else:
             lines.extend([""] * art_rows)
     else:
-        paragraph("ATLAS", "1")
+        paragraph("ATLAS", "brand")
 
     lines.append("")
-    paragraph(version, "2")
-    paragraph(contact)
+    paragraph(version, "muted")
+    paragraph(contact, "muted")
     lines.append("")
-    paragraph(GREETING, "1")
+    paragraph(GREETING, "strong")
+    hint = len(lines)
     paragraph("Tab completes names. Type help for topics, help NAME for an example, or quit." if interactive
               else "Run ./atlas --help for all commands.")
+    lines[hint:] = [_COMMANDS.sub(lambda word: paint(word[0], "name", color), row) for row in lines[hint:]]
     return "\n" + "\n".join(margin + line if line else "" for line in lines) + "\n"
 
 
-def _animation_frames(color):
+def _animation_frames(color, rest=0):
+    """Yield the rows of each frame and its delay. The wordmark settles rest rows down."""
     # The slanted T and L share columns on different rows. Two blank
     # cells before the L's top keep its strokes on their original diagonal.
     starts = (1, 9, 15, 23, 31)
@@ -142,52 +145,60 @@ def _animation_frames(color):
     pitch = (width - 1) // len(glyphs)
     for frame in FOLDS:
         indent = " " * (2 + (width - max(map(len, frame))) // 2)
-        yield [_ink(indent + row, "32", color) for row in frame], 0.4 if frame is sheet else 0.25
+        yield [paint(indent + row, "paper", color) for row in frame], 0.4 if frame is sheet else 0.25
 
     positions = [i * pitch + (pitch + 1 - max(len(row.rstrip()) for row in glyph)) // 2
                  for i, glyph in enumerate(glyphs)]
     body = next(i for i, row in enumerate(sheet) if row.count(":") == 4)
-    seam = _ink(":", "32", color)
-    side = _ink("|", "32", color)
+    seam = paint(":", "paper", color)
+    side = paint("|", "paper", color)
     # Start the next letter as the preceding one receives its last stroke.
     stagger = len(WORDMARK) - 1
     last_stroke = (len(glyphs) - 1) * stagger + len(WORDMARK) - 1
     for stroke in range(last_stroke + 1):
-        rows = ["  " + _ink(row, "32", color) for row in sheet]
+        rows = ["  " + paint(row, "paper", color) for row in sheet]
         for y in range(len(WORDMARK)):
             cells = []
             for i, glyph in enumerate(glyphs):
                 left = positions[i] - i * pitch - 1
                 ink = glyph[y] if stroke >= i * stagger + y else ""
                 cells.append((" " * left + ink).ljust(pitch - 1))
-            rows[body + y] = "  " + side + seam.join(_ink(cell, "1", color) for cell in cells) + side
+            rows[body + y] = "  " + side + seam.join(paint(cell, "brand", color) for cell in cells) + side
         yield rows, 0.4 if stroke == last_stroke else 0.085
 
     for remaining in (1, 0.78, 0.54, 0.32, 0.15, 0):
         offsets = [end + round((start - end) * remaining) for start, end in zip(positions, starts)]
-        rows = [""] * round(body * remaining)
+        rows = [""] * (rest + round((body - rest) * remaining))
         for y in range(len(WORDMARK)):
             line = [" "] * width
             for x, glyph in zip(offsets, glyphs):
                 for dx, stroke in enumerate(glyph[y]):
                     if stroke != " ":
                         line[x + dx] = stroke
-            rows.append("  " + _ink("".join(line).rstrip(), "1", color))
+            rows.append("  " + paint("".join(line).rstrip(), "brand", color))
         yield rows, 0.20 if remaining == 1 else 0.095
 
 
 @contextmanager
 def interactive_welcome(panel):
     """Play above the editable prompt. Finish early to give completion the full workspace."""
-    size = panel.size
+    size, top = panel.size, panel.top
     height = max(map(len, FOLDS))
     banner = ""
     if size and size.columns >= max(map(len, FOLDS[-1])) + 3:
-        banner = render_welcome(size.columns, color=panel.color, interactive=True, art_rows=height)
-    # The session panel starts the welcome at row 3. Leave room for a
-    # wrapped input line and completion choices below the welcome.
-    prompt_row = 3 + len(banner.splitlines()) + 1
-    if not banner or prompt_row + 2 > size.lines:
+        # A blank row above and below sets the map apart. A short terminal
+        # gives both up, and the wordmark settles one row down instead.
+        for margin in (1, 0):
+            spare = height - len(WORDMARK) - 2 * (1 - margin)
+            banner = render_welcome(size.columns, color=panel.color, interactive=True,
+                                    art_rows=len(WORDMARK) + spare)
+            # Leave room for a wrapped input line and completion choices below the welcome.
+            prompt_row = top + len(banner.splitlines()) + 1
+            if prompt_row + 2 <= size.lines:
+                break
+        else:
+            banner = ""
+    if not banner:
         print_welcome(interactive=True)
         yield lambda: None
         return
@@ -198,32 +209,49 @@ def interactive_welcome(panel):
     stream.flush()
     stop = Event()
 
-    def paint(rows):
+    def paint_map(rows):
         # One write saves the live editing cursor, updates just the
         # map's rows, and restores the cursor (including its column).
         commands = ["\0337"]
         for i in range(height):
-            commands.append(f"\033[{4 + i};1H\033[2K")
+            commands.append(f"\033[{top + margin + i};1H\033[2K")
             if i < len(rows):
                 commands.append(rows[i])
         commands.append("\0338")
         stream.write("".join(commands))
         stream.flush()
 
+    def close_gap():
+        # The wordmark needs fewer rows than the map did. Delete the spare
+        # ones, one at a time unless the prompt is waiting, to draw the text
+        # and the prompt up to the wordmark.
+        closed = 0
+        while closed < spare:
+            step = spare - closed if stop.is_set() else 1
+            closed += step
+            # Deleting rows needs them inside the scrolling region. Return to
+            # the prompt's own region so its output cannot move the banner,
+            # and move the editing cursor up with its line.
+            stream.write(f"\0337\033[{top};r\033[{top + 1 + len(WORDMARK)};1H\033[{step}M"
+                         f"\033[{prompt_row - closed};r\0338\033[{step}A")
+            stream.flush()
+            stop.wait(0.03)
+
     def play():
         try:
-            for rows, delay in _animation_frames(panel.color):
+            for rows, delay in _animation_frames(panel.color, 1 - margin):
                 if os.get_terminal_size(stream.fileno()) != size:
                     return
-                paint(rows)
+                paint_map(rows)
                 if stop.wait(delay):
                     break
             if os.get_terminal_size(stream.fileno()) == size:
-                paint(["  " + _ink(row, "1", panel.color) for row in WORDMARK])
+                paint_map([""] * (1 - margin) + ["  " + paint(row, "brand", panel.color) for row in WORDMARK])
+                close_gap()
         finally:
             # DECSTBM also homes the cursor. Restore readline's
             # position as well as the session panel's scroll region.
-            stream.write("\0337\033[3;r\0338")
+            stream.write(f"\0337\033[{top};r\0338")
             stream.flush()
 
     thread = Thread(target=play, name="atlas-welcome")
@@ -242,6 +270,4 @@ def interactive_welcome(panel):
 
 def print_welcome(*, interactive):
     stream = sys.stdout
-    terminal = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
-    color = terminal and not os.environ.get("NO_COLOR")
-    print(render_welcome(shutil.get_terminal_size().columns, color=color, interactive=interactive))
+    print(render_welcome(shutil.get_terminal_size().columns, color=use_color(stream), interactive=interactive))

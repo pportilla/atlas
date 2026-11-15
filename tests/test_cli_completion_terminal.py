@@ -25,8 +25,8 @@ class CliCompletionTerminalTests(CliTerminalCase):
         self.read_until(b"|::|")
         self.send(b"local_\t")
         choices = self.read_until(b"local_standard_basis", timeout=1.5)
-        # Restore all rows below the two pinned rows before listing choices.
-        self.assertRegex(choices, rb"(?s)\x1b\[3;(?:32)?r.*local_standard_basis")
+        # Restore all rows below the pinned header before listing choices.
+        self.assertRegex(choices, rb"(?s)\x1b\[5;(?:32)?r.*local_standard_basis")
         self.send(b'standard_basis()\n')
         self.read_until(b"help local_standard_basis", timeout=1.5)
         self.send(b"quit\n")

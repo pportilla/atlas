@@ -282,28 +282,30 @@ def run_command(parser, argv):
     return run_resolution(args, calculate_resolution)
 
 
-def read_expression(line):
+def read_expression(line, prompt='... '):
     """Collect continued expressions and indented blocks at the prompt."""
     try:
         while codeop.compile_command(line, symbol="single") is None:
-            line += "\n" + input('... ')
+            line += "\n" + input(prompt)
     except (SyntaxError, ValueError, OverflowError):
         pass  # The evaluator provides the Atlas syntax diagnostic.
     return line
 
 
 def run_session(parser, panel):
+    from .cli_style import tinted_errors
     from .prompt_readline import prompt_completion
     from .session import new_session
     from .welcome import interactive_welcome
     session = new_session(calculate_resolution)
     shell_names = {*parser.command_names, ":save", ":workspace", "quit", "exit"}
-    with interactive_welcome(panel) as finish_welcome:
+    with interactive_welcome(panel) as finish_welcome, tinted_errors(panel.enabled and panel.color):
         with prompt_completion(session, parser, shell_names | {"help"}, on_tab=finish_welcome):
             return _session_loop(parser, panel, session, shell_names, finish_welcome)
 
 
 def _session_loop(parser, panel, session, shell_names, finish_welcome):
+    from .cli_style import readline_prompt
     from .prompt_help import command_hint, help_request, show_help, topic_names
     from .session import SessionError
     from .session_hints import error_hint
@@ -311,11 +313,15 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     from .session_transcript import SessionTranscript
     transcript = SessionTranscript()
     topics = topic_names(session, parser)
+    # Only the line editor understands the markers around a prompt's colours.
+    color = panel.enabled and panel.color and "readline" in sys.modules
+    prompt = readline_prompt(("atlas", "brand"), (">", "muted"), (" ", None), color=color)
+    more = readline_prompt(("...", "muted"), (" ", None), color=color)
     while True:
         try:
             panel.refresh(session.variables)
             try:
-                line = input('atlas> ')
+                line = input(prompt)
             finally:
                 finish_welcome()
             words = line.split(maxsplit=1)
@@ -329,7 +335,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
             is_variable = words[0] in session.variables
             expression_tail = words[0].isidentifier() and tail.startswith(("(", "=", "."))
             if words[0] not in shell_names or is_variable or expression_tail:
-                line = read_expression(line)
+                line = read_expression(line, more)
                 try:
                     for display, value in session.run(line, transcript=transcript):
                         if display:

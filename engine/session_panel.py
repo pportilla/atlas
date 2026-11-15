@@ -3,8 +3,10 @@
 from collections import Counter
 from fractions import Fraction
 import os
+import sys
 from unicodedata import combining, east_asian_width
 
+from .cli_style import paint, use_color
 from .session_algebra import Ideal, _RingValue, _Result
 from .session_polynomial import Polynomial, QQ
 from .session_values import Chart, Resolution
@@ -86,14 +88,30 @@ def workspace(variables):
     return rings, bindings
 
 
+def _binding(entry, role):
+    """Split "name = preview" so that the name can carry its own colour."""
+    name, equals, preview = entry.partition(" = ")
+    return [(name, role), (equals, "muted"), (preview, None)]
+
+
 def print_workspace(variables):
     rings, bindings = workspace(variables)
-    print("Rings     " + ("  ·  ".join(rings) if rings else "—"))
-    print("Variables " + ("\n          ".join(bindings) if bindings else "—"))
+    color = use_color(sys.stdout)
+
+    def ink(text, role):
+        return paint(text, role, color)
+
+    names = ["".join(ink(text, role) for text, role in _binding(entry, "name")) for entry in bindings]
+    print(ink("Rings", "label") + "     " + (ink("  ·  ", "muted").join(rings) if rings else ink("—", "muted")))
+    print(ink("Variables", "label") + " " + ("\n          ".join(names) if names else ink("—", "muted")))
 
 
 def _cells(char):
     return 0 if combining(char) else 2 if east_asian_width(char) in ("F", "W") else 1
+
+
+def _width(text):
+    return sum(map(_cells, text))
 
 
 def _fit(text, width):
@@ -105,36 +123,61 @@ def _fit(text, width):
     return text
 
 
-def _header_row(label, entries, width):
-    prefix = label + " " if width < 26 else f"{label:<10}"
+def _take(pieces, width):
+    """Keep the leading (text, role) pieces that fit in width cells and report any cut."""
+    kept = []
+    for text, role in pieces:
+        part = _fit(text, width)
+        if part:
+            kept.append((part, role))
+        if part != text:
+            return kept, True
+        width -= _width(part)
+    return kept, False
+
+
+def _header_row(label, entries, width, role=None):
+    """Fit a labelled row into width cells as (text, role) pieces."""
+    narrow = width < 26
+    prefix = label + " " if narrow else f"{label:<10}"
     if not entries:
-        return prefix + "—"
-    separator = " " if width < 26 else "  ·  "
+        return [(prefix, "label"), ("—", "muted")]
+    separator = " " if narrow else "  ·  "
     # Fill from the right so the newest bindings survive overflow.
     remaining = width - len(prefix)
     first = len(entries)
     for i in range(first - 1, -1, -1):
-        remaining -= sum(map(_cells, entries[i])) + (len(separator) if first < len(entries) else 0)
+        remaining -= _width(entries[i]) + (len(separator) if first < len(entries) else 0)
         if remaining < (len(str(i)) + 1 + len(separator) if i else 0):
             break
         first = i
     first = min(first, len(entries) - 1)
-    body = (f"+{first}{separator}" if first else "") + separator.join(entries[first:])
-    row = prefix + body
     if first and len(prefix) + len(str(first)) + 1 + len(separator) + 1 >= width:
-        return _fit(prefix + f"+{len(entries)}", width)
-    return row if _fit(row, width) == row else _fit(row, width - 1) + "…"
+        return _take([(prefix, "label"), (f"+{len(entries)}", "muted")], width)[0]
+    pieces = [(prefix, "label")] + ([(f"+{first}", "muted")] if first else [])
+    for entry in entries[first:]:
+        if len(pieces) > 1:
+            pieces.append((separator, "muted"))
+        pieces += _binding(entry, role)
+    kept, cut = _take(pieces, width)
+    return _take(pieces, width - 1)[0] + [("…", "muted")] if cut else kept
+
+
+HEADER_ROWS = 4
+_HINT = "help  ·  :workspace  ·  quit"
 
 
 class SessionPanel:
-    """Reserve two terminal rows while keeping readline and command output below them."""
+    """Pin a framed ring and variable summary above readline and command output."""
+
+    top = HEADER_ROWS + 1  # The first row that scrolls.
 
     def __init__(self, stream):
         self.stream = stream
         self.size = None
         self.rows = None
         self.enabled = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
-        self.color = "NO_COLOR" not in os.environ
+        self.color = not os.environ.get("NO_COLOR")
 
     def __enter__(self):
         self.refresh({})
@@ -148,26 +191,41 @@ class SessionPanel:
         except (OSError, ValueError):
             self.enabled = False
             return
-        if size.columns < 16 or size.lines < 6:
+        if size.columns < 16 or size.lines < HEADER_ROWS + 4:
             self.close()
             return
         resized = size != self.size
         if self.size is None:
-            self.stream.write("\033[?1049h\033[2J\033[3;r\033[3;1H")
+            self.stream.write(f"\033[?1049h\033[2J\033[{self.top};r\033[{self.top};1H")
         elif resized:
-            self.stream.write("\0337\033[3;r\0338")
+            self.stream.write(f"\0337\033[{self.top};r\0338")
         self.size = size
         rings, bindings = workspace(variables)
-        rows = (_header_row("Rings", rings, size.columns - 1),
-                _header_row("Variables", bindings, size.columns - 1))
-        if resized or rows != self.rows:
-            self.rows = rows
-            first, second = rows
-            if self.color:
-                first = first.replace("Rings", "\033[1;36mRings\033[0m", 1)
-                second = second.replace("Variables", "\033[1;36mVariables\033[0m", 1)
-            self.stream.write("\0337\033[1;1H\033[2K" + first + "\033[2;1H\033[2K" + second + "\0338")
+        inner = size.columns - 4
+        rows = (_header_row("Rings", rings, inner), _header_row("Variables", bindings, inner, "name"))
+        plain = tuple("".join(text for text, _ in row) for row in rows)
+        if resized or plain != self.rows:
+            self.rows = plain
+            frame = "".join(f"\033[{y};1H\033[2K{line}" for y, line in enumerate(self._frame(size.columns, rows), 1))
+            self.stream.write("\0337" + frame + "\0338")
             self.stream.flush()
+
+    def _frame(self, columns, rows):
+        def ink(text, role):
+            return paint(text, role, self.color)
+
+        # The standing commands, then the title, give way as the terminal narrows.
+        title = [("─ ", "frame"), ("Atlas", "brand"), (" ", None)] if columns >= 24 else []
+        hint = [(" ", None), (_HINT, "muted"), (" ─", "frame")] if columns >= 60 else []
+        fill = columns - 2 - sum(len(text) for text, _ in title + hint)
+        top = [("╭", "frame"), *title, ("─" * fill, "frame"), *hint, ("╮", "frame")]
+        lines = ["".join(ink(text, role) for text, role in top)]
+        side = ink("│", "frame")
+        for row in rows:
+            text = "".join(ink(text, role) for text, role in row)
+            lines.append(f"{side} {text}{' ' * (columns - 4 - sum(_width(text) for text, _ in row))} {side}")
+        lines.append(ink("╰" + "─" * (columns - 2) + "╯", "frame"))
+        return lines
 
     def close(self):
         if self.size is not None:

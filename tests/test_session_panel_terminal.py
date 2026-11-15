@@ -22,7 +22,11 @@ class SessionPanelTerminalTests(CliTerminalCase):
         end = output.index(RESTORE, start + len(SAVE))
         update = output[start + len(SAVE):end]
         self.assertIn(b"\x1b[2;1H\x1b[2K", update)
-        return ANSI.sub(b" ", update).decode()
+        text = ANSI.sub(b" ", update).decode()
+        # A frame separates the pinned rows from the scrolling ones.
+        self.assertLess(text.index("╭"), text.index("Rings"))
+        self.assertLess(text.index("Variables"), text.index("╰"))
+        return text
 
     def check_exit(self, keys):
         self.send(keys)
@@ -37,7 +41,7 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.startup = startup = self.read_until(PROMPT)
         self.assertIn(b"Welcome to Atlas", startup)
         self.assertGreater(startup.index(b"Welcome to Atlas"), startup.rfind(b"\x1b[2J"))
-        self.assertRegex(startup, rb"\x1b\[3;(?:32)?r")
+        self.assertRegex(startup, rb"\x1b\[5;(?:32)?r")
         self.assertIn("Rings", self.panel_update(startup))
         self.assertIn("Variables", self.panel_update(startup))
 
@@ -63,5 +67,5 @@ class SessionPanelTerminalTests(CliTerminalCase):
 
     def test_eof_restores_normal_scrolling(self):
         self.startup = self.read_until(PROMPT)
-        self.assertRegex(self.startup, rb"\x1b\[3;(?:32)?r")
+        self.assertRegex(self.startup, rb"\x1b\[5;(?:32)?r")
         self.check_exit(b"\x04")
