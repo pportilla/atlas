@@ -12,6 +12,27 @@ namespace {
 using local::Polynomial;
 using local::Powers;
 
+class PowerBasisEngine : public Engine {
+public:
+    // The interactive caller can finish one exact Buchberger pass. Coefficient
+    // swell or excessive reduction work sends the calculation to a worker.
+    bool compute_products(std::vector<Poly>& products, bool bounded) {
+        if (!bounded) {
+            compute(products, 0);
+            return true;
+        }
+        strategy_ = R.lex ? LAZY : EAGER;
+        bit_limit_ = 512;
+        work_limit_ = 10000;
+        try {
+            attempt(products, 0);
+            return true;
+        } catch (const Swell&) {
+            return false;
+        }
+    }
+};
+
 Poly pack(const Polynomial& f, const Ring& ring) {
     const size_t length = f.size();
     std::vector<u64> monomials(ring.stride*length);
@@ -121,8 +142,13 @@ Polynomial unpack(const Poly& p, const Ring& ring) {
 } // namespace
 
 Basis PowerResult::materialize() && {
-    if (auto* principal = std::get_if<PrincipalBasis>(&value_)) return principal->materialize();
     if (auto* rows = std::get_if<Basis>(&value_)) return std::move(*rows);
+    return static_cast<const PowerResult&>(*this).materialize();
+}
+
+Basis PowerResult::materialize() const & {
+    if (auto* principal = std::get_if<PrincipalBasis>(&value_)) return principal->materialize();
+    if (auto* rows = std::get_if<Basis>(&value_)) return *rows;
     const auto& basis = std::get<PackedBasis>(value_);
     Basis rows;
     rows.reserve(basis.rows.size());
@@ -177,10 +203,11 @@ std::vector<std::string> PowerResult::expressions(const std::vector<std::string>
     return result;
 }
 
-std::optional<PackedBasis> packed_power(const Basis& rows, size_t width, bool lex, const mpz_class& exponent) {
+std::optional<PackedBasis> packed_power(const Basis& rows, size_t width, bool lex, const mpz_class& exponent,
+                                        bool bounded) {
     if (width > MAX_VARIABLES || exponent > MAX_DEGREE) return std::nullopt;
     try {
-        Engine engine;
+        PowerBasisEngine engine;
         engine.R.init(static_cast<int>(width),lex ? 1 : 0);
         std::vector<Poly> generators, products;
         for (const auto& f : rows) generators.push_back(pack(f,engine.R));
@@ -204,7 +231,7 @@ std::optional<PackedBasis> packed_power(const Basis& rows, size_t width, bool le
         if (triangular_products(engine.R,generators)) {
             if (auto echelon=echelon_products(engine.R,products,0,0)) return PackedBasis{engine.R,std::move(*echelon)};
         }
-        engine.compute(products,0);
+        if (!engine.compute_products(products,bounded)) return std::nullopt;
         PackedBasis out{engine.R,{}};
         out.rows.reserve(engine.G.size());
         for (auto& g : engine.G) out.rows.push_back(std::move(g.p));

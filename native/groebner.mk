@@ -12,7 +12,24 @@ else
 endif
 
 .PHONY: all
-all: $(GROEBNER_LIB) build/graph_verify build/local_algebra build/primary_decomposition build/normalization build/localization build/ideal_power build/symbolic_power build/quotient_ring
+all: $(GROEBNER_LIB) build/graph_verify build/local_algebra build/primary_decomposition build/normalization build/localization build/ideal_sum build/ideal_product build/ideal_power build/symbolic_power build/quotient_ring
+
+# A headerless installation uses the same kernel through ctypes. When
+# available, build one stable-ABI binding usable by CPython 3.10 and newer.
+PYTHON ?= python3
+PYTHON_INCLUDE := $(shell $(PYTHON) -c 'import os,sys,sysconfig; p=sysconfig.get_path("include"); print(p if sys.implementation.name=="cpython" and sys.version_info>=(3,10) and not sysconfig.get_config_var("Py_GIL_DISABLED") and os.path.isfile(os.path.join(p,"Python.h")) else "")' 2>/dev/null)
+ifneq ($(PYTHON_INCLUDE),)
+all: build/_atlas_ideal.abi3.so
+ifeq ($(shell uname -s),Darwin)
+PYTHON_MODULE_LINK := -bundle -undefined dynamic_lookup
+else
+PYTHON_MODULE_LINK := -shared
+endif
+build/_atlas_ideal.abi3.so: python_ideal.cpp prepared_ideal.hpp $(GROEBNER_LIB)
+	@set -e; output=$$(mktemp "$@.XXXXXX"); trap 'rm -f "$$output"' EXIT; \
+	  $(CXX) $(CPPFLAGS) $(CXXFLAGS) -I"$(PYTHON_INCLUDE)" -fPIC $(PYTHON_MODULE_LINK) $< -o "$$output" $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner; \
+	  chmod 755 "$$output"; mv -f "$$output" "$@"
+endif
 
 build/graph_verify: graph_verify.cpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner
@@ -27,14 +44,17 @@ build/bench_ae_codimension: ../benchmarks/ae_codimension_kernel.cpp ae_codimensi
 build/bench_ideal_powers: ../benchmarks/ideal_powers_kernel.cpp ideal_powers.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
-build/local_algebra: $(LOCAL_SOURCES) ae_codimension.hpp local_io.hpp local_basis.hpp local_division.hpp primary_decomposition.hpp normalization.hpp localization.hpp ideal_powers.hpp quotient_ring.hpp $(GROEBNER_LIB)
+build/bench_ideal_operators: ../benchmarks/ideal_operators_kernel.cpp prepared_ideal.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/local_algebra: $(LOCAL_SOURCES) ae_codimension.hpp local_io.hpp local_basis.hpp local_division.hpp primary_decomposition.hpp normalization.hpp localization.hpp ideal_arithmetic.hpp ideal_powers.hpp quotient_ring.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(LOCAL_SOURCES) -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
 # Install a command marker only once the corresponding native frontend exists.
-build/primary_decomposition build/normalization build/localization build/ideal_power build/symbolic_power build/quotient_ring: build/local_algebra
+build/primary_decomposition build/normalization build/localization build/ideal_sum build/ideal_product build/ideal_power build/symbolic_power build/quotient_ring: build/local_algebra
 	ln -sf local_algebra $@
 
-KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
+KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp prepared_ideal.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
   graph_replay.cpp graph_wide.cpp field_wide.cpp field_coefficient.cpp common_field.cpp field_factorization.cpp marked_scalar.cpp lattice_volume.cpp toric_graph.cpp fan_cover.cpp centre_weights.cpp centre_search.cpp centre_affine_maximum.cpp surface_centre_choice.cpp binomial_fan.cpp newton_repair.cpp repair_geometry.cpp \
   atlas_incidence.cpp graph_centre_incidence.cpp graph_regular.cpp torus_sections.cpp fan_surface.cpp owned_chart_incidence.cpp chart_gluing.cpp marked_chart_geometry.cpp ordered_ideals.cpp monomial_resolution.cpp component_projection.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp monodromy.cpp point_geometry.cpp \

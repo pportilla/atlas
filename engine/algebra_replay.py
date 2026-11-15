@@ -1,6 +1,7 @@
 """Render a validated algebra request as a shell command and an Atlas script."""
 
 import json
+from functools import cache
 from keyword import iskeyword
 import shlex
 
@@ -53,9 +54,15 @@ def _command(request):
     return shlex.join(args)
 
 
-def _script(request, prepared):
+@cache
+def _reserved_names():
     from .session import new_session
 
+    session = new_session(None)
+    return frozenset(("I", "J", "result", "__debug__", *session.builtins, *session.reserved))
+
+
+def _script(request, prepared, generator_text):
     if request["operation"] in ("ideal", "quotient-ring", "ae-codimension"):
         # Preserve the original operands for one-shot declarations, quotient
         # operations and ordered maps without expanding polynomials for presentation.
@@ -68,8 +75,7 @@ def _script(request, prepared):
            (prepared.get("ideal", ()), prepared.get("other_ideal", ()), prepared.get("prime", ()), polynomial_args)):
         return None
     names = request["ring"]["variables"]
-    session = new_session(None)
-    reserved = {"I", "J", "result", "__debug__", *session.builtins, *session.reserved}
+    reserved = _reserved_names()
     if any(not name.isidentifier() or iskeyword(name) or name in reserved for name in names):
         return None
 
@@ -82,7 +88,7 @@ def _script(request, prepared):
         if key not in prepared:
             continue
         generators = prepared[key]
-        args = [str(poly) for poly in generators]
+        args = list(generator_text[key]) if generator_text is not None else [str(poly) for poly in generators]
         if all(poly.is_number for poly in generators):
             args.append(f"variables=[{variables}]")
         args.append(f"order={request['ring']['order']!r}")
@@ -120,9 +126,9 @@ def _script(request, prepared):
     return "\n".join(lines)
 
 
-def make_replay(request, prepared):
+def make_replay(request, prepared, *, generator_text=None):
     """Render original operands at the shell and parsed exact values in a script."""
-    script = _script(request, prepared)
+    script = _script(request, prepared, generator_text)
     if script is None:
         replay_request = request
         if "degrees" in request["operands"]:

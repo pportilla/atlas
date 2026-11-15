@@ -198,6 +198,32 @@ Basis power(const Basis& rows, size_t width, bool lex, const mpz_class& exponent
     return typed_power(rows,width,lex,exponent,symbolic).materialize();
 }
 
+std::optional<PowerResult> bounded_ordinary_power(const Basis& rows, size_t width, bool lex, const mpz_class& exponent) {
+    if (exponent < 0 || exponent > 4 || width > 4 || rows.size() > 4) return std::nullopt;
+    if (exponent == 0) return unit(width);
+    bool monomials = true, has_zero = false;
+    for (const auto& f : rows) {
+        if (f.size() > 16) return std::nullopt;
+        monomials &= f.size() <= 1;
+        has_zero |= f.empty();
+        for (const auto& [e, c] : f) {
+            if (mpz_sizeinbase(mpq_numref(c.get_mpq_t()),2) > 128 ||
+                mpz_sizeinbase(mpq_denref(c.get_mpq_t()),2) > 128 ||
+                std::any_of(e.begin(),e.end(),[](const auto& k) { return k > 16; })) return std::nullopt;
+        }
+    }
+    // At most four monomials to the fourth power have 35 unordered products.
+    // For general polynomials the square bound also caps the term products
+    // before Buchberger's own coefficient and work limits take effect.
+    if (monomials) return typed_power(rows,width,lex,exponent,false);
+    if (exponent > 2) return std::nullopt;
+    if (rows.size() == 1) return typed_power(rows,width,lex,exponent,false);
+    if (has_zero) return std::nullopt;
+    if (auto result = packed_power(rows,width,lex,exponent,true))
+        return PowerResult(std::move(*result));
+    return std::nullopt;
+}
+
 Json::Value compute(const Basis& rows, const std::vector<std::string>& names, bool lex,
                     const mpz_class& exponent, bool symbolic) {
     auto result = typed_power(rows,names.size(),lex,exponent,symbolic);

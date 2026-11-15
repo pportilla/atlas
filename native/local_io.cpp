@@ -208,6 +208,15 @@ std::optional<bool> nonzero_at_point(const Polynomial& f, const std::vector<mpq_
 }
 
 Polynomial parse_expression(const std::vector<std::string>& names, std::string source) {
+    if (names.empty()) {
+        // The FLINT parser requires one variable. Its grammar only recognizes
+        // names starting with a letter, so this coordinate is inaccessible.
+        auto scalar = parse_expression({"_"}, std::move(source));
+        if (scalar.empty()) return {};
+        if (scalar.size() != 1 || scalar.begin()->first[0] != 0)
+            throw std::invalid_argument("Expected a rational scalar.");
+        return {{Powers{}, std::move(scalar.begin()->second)}};
+    }
     // The public grammar treats newlines as whitespace. The kernel protocol is line based.
     for (char& ch : source) if (ch == '\n' || ch == '\r') ch = ' ';
     auto row = affine("parse_input\n" + ring_line(names) + source + "\n");

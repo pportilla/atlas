@@ -2,8 +2,14 @@
 import json
 import shlex
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from textwrap import dedent
+from unittest.mock import patch
 
+from engine import algebra, native_library
+from engine.session_algebra import ideal, ideal_power, polynomial
+from engine.session_polynomial import coordinates
 from tests.cli_support import run_prompt, run_script, shell
 from tests.http_support import endpoint, post
 
@@ -61,6 +67,49 @@ class IdealPowerInterfaceTests(unittest.TestCase):
         code, output, errors = run_prompt(source + "quit\n")
         self.assertEqual((code, errors), (0, ""))
         self.assertEqual(output.replace("atlas> ", "").strip().splitlines(), expected)
+
+    @unittest.skipUnless(native_library._MODE == "native", "requires the prepared native operation")
+    def test_small_squares_and_worker_retry_on_swell(self):
+        x, y = coordinates("x", "y")
+        easy = ideal((x + 2*y)**8, x**6*y)
+        hard = ideal(x**3 + y**2 + 1, x**2*y + y + 1, x*y**3 + x**3 + x**2)
+        with patch.object(algebra, "calculate_algebra", wraps=algebra.calculate_algebra) as worker:
+            small = ideal_power(easy, 2, compute="cpu")
+            worker.assert_not_called()
+            self.assertIs(small.parent, x.parent)
+            # These short generators trigger the exact reduction work limit.
+            # The second attempt in a worker must produce the unit ideal.
+            answer = ideal_power(hard, 2, compute="cpu")
+            worker.assert_called_once()
+            self.assertEqual(answer.generators, (x**0,))
+            self.assertIs(answer.parent, x.parent)
+        status, full = algebra.calculate_algebra(
+            {"operation": "ideal-power", "ring": easy.ring,
+             "operands": {"ideal": list(map(str, easy.generators)), "exponent": 2}, "compute": "cpu"})
+        self.assertEqual(status, 200)
+        self.assertEqual(small.record["result"], full["result"])
+        self.assertEqual(small.record["replay"], full["replay"])
+
+    def test_concurrent_power_polynomials_and_formatted_generators(self):
+        z, a = coordinates("z", "a")
+        for order in ("lex", "grevlex"):
+            with self.subTest(order=order):
+                I = ideal((z + 2*a)**5, z**3*a, order=order)
+                P = ideal_power(I, 2, compute="cpu")
+                status, full = algebra.calculate_algebra(
+                    {"operation": "ideal-power", "ring": I.ring,
+                     "operands": {"ideal": list(map(str, I.generators)), "exponent": 2}, "compute": "cpu"})
+                self.assertEqual(status, 200)
+                expected = full["result"]
+                values = tuple(polynomial(f, ring=z.parent) for f in expected["generators"])
+                start = Barrier(4)
+
+                def inspect(index):
+                    start.wait(timeout=10)
+                    return P.result if index % 2 else P.generators
+
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    self.assertEqual(list(pool.map(inspect, range(4))), [values, expected, values, expected])
 
     def test_invalid_input(self):
         for op in ("ideal-power", "symbolic-power"):

@@ -200,6 +200,8 @@ class SessionPanel:
         self.stream = stream
         self.size = None
         self.rows = None
+        self._display_data = None
+        self._last_assignment = None
         self.variables = {}
         self.enabled = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
         self.color = not os.environ.get("NO_COLOR")
@@ -230,7 +232,7 @@ class SessionPanel:
         except RuntimeError:
             pass  # Output was being written. The next prompt redraws the frame.
 
-    def refresh(self, variables):
+    def refresh(self, variables, assigned=None):
         if not self.enabled:
             return
         self.variables = variables
@@ -248,7 +250,23 @@ class SessionPanel:
         elif resized:
             self.stream.write(f"\0337\033[{self.top};r\0338")
         self.size = size
+        # A simple assignment changes only one binding. An updated value
+        # with the same ring and preview leaves its entry on screen intact.
+        if assigned is None:
+            self._last_assignment = None
+        else:
+            value = variables[assigned]
+            space, preview = _space(value), _preview(value)
+            last = self._last_assignment
+            self._last_assignment = assigned, space, preview
+            if not resized and last and last[0] == assigned and last[1] is space and last[2] == preview:
+                return
         rings, bindings = workspace(variables)
+        # Assigning another ideal in the same ring often leaves both header
+        # rows identical. Avoid laying out and coloring the same text again.
+        if not resized and self._display_data == (rings, bindings):
+            return
+        self._display_data = rings, bindings
         inner = size.columns - 4
         known = _names(variables)
         rows = (_header_row("Rings", rings, inner, names=known),
@@ -280,7 +298,7 @@ class SessionPanel:
         if self.size is not None:
             self.stream.write("\033[r\033[?1049l")
             self.stream.flush()
-            self.size = self.rows = None
+            self.size = self.rows = self._display_data = self._last_assignment = None
 
     def __exit__(self, *exc):
         if self._previous_resize is not None:

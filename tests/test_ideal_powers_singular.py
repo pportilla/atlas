@@ -7,6 +7,15 @@ from benchmarks.ideal_powers import Case, call_wire, corpus, methods, run_singul
 
 
 class IdealPowersTests(unittest.TestCase):
+    def test_disjoint_monomials_of_different_degrees(self):
+        # Removing the repeated generator and the divisible generator exposes
+        # three disjoint supports, one of which spans two coordinates.
+        c = Case("disjoint", ("x", "y", "z", "w"), ("x^2*y", "z^3", "w", "x^2*y*z^3", "w"), 3, False)
+        expected = {"x^6*y^3", "x^4*y^2*z^3", "x^4*y^2*w", "x^2*y*z^6", "x^2*y*z^3*w",
+                    "x^2*y*w^2", "z^9", "z^6*w", "z^3*w^2", "w^3"}
+        for order in ("grevlex", "lex"):
+            self.assertCountEqual(call_wire(replace(c, order=order))["generators"], expected)
+
     @unittest.skipUnless(shutil.which("Singular"), "Singular is required")
     def test_corpus_in_both_orders(self):
         for c in corpus():

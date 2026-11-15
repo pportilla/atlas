@@ -1,9 +1,11 @@
 """Time ideal operators on prepared ideals over QQ and check both containments in Singular."""
 import argparse
 import hashlib
+import io
 import json
 import operator
 import os
+import platform
 import statistics
 import subprocess
 import sys
@@ -16,8 +18,10 @@ from benchmarks.normalization import ideal as singular_ideal
 from benchmarks.primary_decomposition import cpu_name
 from engine import native_polynomial
 from engine.native_library import _LIBRARY, affine_request
+from engine.session import new_session
 from engine.session_algebra import ideal, polynomial
 from engine.session_polynomial import coordinates
+from engine.session_transcript import SessionTranscript
 
 
 # Fixed before timing. The rational case exercises expansion and coefficients beyond 64 bits.
@@ -71,14 +75,63 @@ def run_singular(source):
     return run.stdout.strip()
 
 
-def singular_sample(declarations, calculation, batch):
+def singular_sample(declarations, calculation, batch, setup=""):
     program = declarations + f"""
 ideal answer={calculation};
 int i; int start=rtimer;
-for(i=1;i<={batch};i++) {{ answer={calculation}; }}
+for(i=1;i<={batch};i++) {{ {setup} answer={calculation}; }}
 print(rtimer-start);
 """
     return int(run_singular(program)) / batch
+
+
+def prepared_sample(request, batch):
+    result = subprocess.run([ROOT / "native/build/bench_ideal_operators", str(batch)],
+                            input="\n".join(request) + "\n", text=True, capture_output=True, check=True)
+    ns, *generators = result.stdout.splitlines()
+    return int(ns) / (1000 * batch), generators
+
+
+def cli_sample(session, line, batch):
+    from unittest.mock import patch
+    from engine.app import _session_loop, make_parser, shell_command_names
+    from engine.session_panel import SessionPanel
+
+    parser = make_parser()
+    panel = SessionPanel(io.StringIO())
+    reads = 0
+    started = ended = 0
+
+    def read(_prompt):
+        nonlocal reads, started, ended
+        reads += 1
+        if reads == 2:
+            started = perf_counter_ns()
+        if reads == batch + 2:
+            ended = perf_counter_ns()
+            return "quit"
+        return line
+
+    with patch("builtins.input", read):
+        _session_loop(parser, panel, session, shell_command_names(parser))
+    return (ended - started) / (1000 * batch), session.variables["answer"]
+
+
+def fresh_sample(left, right, apply, square, batch, *, include_declaration=False):
+    def declared(operand):
+        return ideal(operand.generators, ring=operand.parent, order=operand.order)
+
+    if include_declaration:
+        start = perf_counter_ns()
+        for _ in range(batch):
+            result = apply(declared(left), 2 if square else declared(right))
+        return (perf_counter_ns() - start) / (1000 * batch), result
+
+    pairs = [(declared(left), 2 if square else declared(right)) for _ in range(batch)]
+    start = perf_counter_ns()
+    for a, b in pairs:
+        result = apply(a, b)
+    return (perf_counter_ns() - start) / (1000 * batch), result
 
 
 def check(declarations, calculation, results):
@@ -91,25 +144,71 @@ def check(declarations, calculation, results):
         raise AssertionError(f"Singular disagrees with Atlas for {calculation}.")
 
 
-def measure(left_source, right_source, operation, batch, trials):
+def measure(left_source, right_source, operation, batch, trials, kernel):
     left, right = inputs(left_source, right_source)
     apply, singular_expression = OPERATIONS[operation]
     request = wire(operation, left, right)
     declarations = ("ring R=0,(x,y),dp; option(redSB); short=0;\n"
                     f"ideal I={singular_ideal(left_source)}; ideal J={singular_ideal(right_source)};\n")
-    methods = ("atlas_session", "atlas_native_wire", "singular")
+    operand = 2 if operation == "square" else right
+    session = new_session(None)
+    session.variables.update(I=left, J=right)
+    transcript = SessionTranscript()
+    name = {"sum": "ideal_sum(I, J)", "product": "ideal_product(I, J)", "square": "ideal_power(I, 2)"}[operation]
+    line = f"answer = {name}"
+    infix = {"sum": "answer = I + J", "product": "answer = I * J", "square": "answer = I^2"}[operation]
+
+    def prompt():
+        for _ in session.run(line, transcript=transcript):
+            pass
+        return session.variables["answer"]
+
+    # For timings that include declaration, both systems start from the same
+    # already expanded polynomials. Only the input ideals are rebuilt.
+    sources = [("I", left_source)] if operation == "square" else [("I", left_source), ("J", right_source)]
+    poly_declarations = ""
+    assignments = []
+    for label, polys in sources:
+        ids = [f"p{label}{i}" for i in range(len(polys))]
+        poly_declarations += "".join(f"poly {var}={poly};\n" for var, poly in zip(ids, polys))
+        assignments.append(f"{label}={','.join(ids)};")
+    methods = ("atlas_session", "atlas_prompt", "atlas_cli", "atlas_cli_infix", "atlas_first_use", "atlas_declare_and_first_use",
+               "atlas_export_record", "atlas_native_wire",
+               *(("atlas_native",) if kernel else ()), "singular", "singular_declare_and_first_use")
     samples = {name: [] for name in methods}
     for trial in range(trials):
         generators = []
         start = trial % len(methods)
         for method in methods[start:] + methods[:start]:
             if method == "atlas_session":
-                operand = 2 if operation == "square" else right
                 elapsed, result = atlas_sample(lambda: apply(left, operand), batch)
                 generators.append([str(f) for f in result.generators])
+            elif method == "atlas_prompt":
+                elapsed, result = atlas_sample(prompt, batch)
+                generators.append([str(f) for f in result.generators])
+            elif method in ("atlas_cli", "atlas_cli_infix"):
+                elapsed, result = cli_sample(session, line if method == "atlas_cli" else infix, batch)
+                generators.append([str(f) for f in result.generators])
+            elif method in ("atlas_first_use", "atlas_declare_and_first_use"):
+                elapsed, result = fresh_sample(left, right, apply, operation == "square", batch,
+                                               include_declaration=method == "atlas_declare_and_first_use")
+                generators.append([str(f) for f in result.generators])
+            elif method == "atlas_export_record":
+                pending = [apply(left, operand) for _ in range(batch)]
+                started = perf_counter_ns()
+                for value in pending:
+                    record = value.record
+                elapsed = (perf_counter_ns() - started) / (1000 * batch)
+                generators.append(record["result"]["generators"])
             elif method == "atlas_native_wire":
                 elapsed, result = atlas_sample(lambda: affine_request(request), batch)
                 generators.append(json.loads(result[0])["generators"])
+            elif method == "atlas_native":
+                elapsed, rows = prepared_sample(request, batch)
+                generators.append(rows)
+            elif method == "singular_declare_and_first_use":
+                elapsed = singular_sample(declarations + poly_declarations, singular_expression,
+                                          batch, setup=" ".join(assignments))
             else:
                 elapsed = singular_sample(declarations, singular_expression, batch)
             samples[method].append(round(elapsed, 3))
@@ -126,31 +225,46 @@ def main():
     cli.add_argument("--batch", type=int, default=16)
     cli.add_argument("--cpu", type=int)
     cli.add_argument("--output", type=Path)
+    cli.add_argument("--skip-kernel", action="store_true", help="Use for older builds without the prepared C++ driver.")
     args = cli.parse_args()
     if args.trials < 2 or args.batch < 1:
         cli.error("Use at least two trials and one operation per batch.")
     if args.cpu is not None:
         os.sched_setaffinity(0, {args.cpu})
+    try:
+        from engine.session_ideal_native import _compiled
+        binding = "CPython stable ABI" if _compiled() is not None else "ctypes"
+    except ImportError:  # Historical build before prepared handles.
+        binding = "sparse wire"
     report = {
         "cpu": cpu_name(),
         "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
         "atlas_native_sha256": hashlib.sha256(_LIBRARY.read_bytes()).hexdigest(),
+        "python": platform.python_version(), "atlas_binding": binding,
         "singular": subprocess.check_output(["Singular", "--version"], text=True).splitlines()[0],
         "ring": "QQ[x,y], grevlex", "trials": args.trials, "operations_per_trial": args.batch,
         "conditions": (
             "Each trial repeats an operation on the same prepared pair. One preceding invocation per method is "
-            "discarded. Trial order rotates. Warm session timings use the same typed operators as the Atlas prompt, "
-            "including construction of their complete results. Native wire timings include sparse input decoding, "
-            "computation and output serialization; rows are prepared before timing. Singular runs the indicated "
-            "expression on parsed ideals on one thread. Times exclude top-level program startup, ring creation, "
-            "initial input construction and verification. Each trial compares the generated ideals from both Atlas "
-            "paths by mutual reduction in Singular. Ordinary power returns a reduced basis in Atlas, so Singular "
-            "uses std(I^2) with option(redSB)."
+            "discarded for warm operations. Trial order rotates. Session measures one operator on typed ideals. "
+            "Prompt measures a named assignment using the prompt evaluator and transcript, excluding terminal I/O. "
+            "CLI and CLI infix time named and operator assignments through the interactive command loop with input in memory and the terminal "
+            "panel disabled. It includes routing, multiline detection, evaluation, and transcript updates. "
+            "First use takes newly declared ideals of the same initialized polynomials without a warm-up per ideal. "
+            "Declare and first use includes construction of the input ideals from those polynomials. "
+            "Record measures first export of a complete record from an already computed result. Native wire includes "
+            "sparse input decoding and JSON output. Prepared native measures C++ arithmetic on parsed inputs and "
+            "the completed result stays in memory. Singular measures an assignment on initialized ideals in its "
+            "interpreter, with one thread. Timings exclude top-level program startup, input declarations, and "
+            "agreement checks. Each trial checks mutual containment in Singular. Ordinary power returns a reduced "
+            "basis in Atlas, so Singular uses std(I^2) with option(redSB)."
         ), "cases": {},
     }
+    if binding == "CPython stable ABI":
+        module = _LIBRARY.parent / "_atlas_ideal.abi3.so"
+        report["atlas_binding_sha256"] = hashlib.sha256(module.read_bytes()).hexdigest()
     for name, (left, right) in CASES.items():
         report["cases"][name] = {"left": left, "right": right, "operations": {
-            op: measure(left, right, op, args.batch, args.trials) for op in OPERATIONS}}
+            op: measure(left, right, op, args.batch, args.trials, not args.skip_kernel) for op in OPERATIONS}}
     output = json.dumps(report, indent=2) + "\n"
     if args.output:
         args.output.write_text(output)

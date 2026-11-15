@@ -1,5 +1,6 @@
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,72 @@ from tests.cli_support import ROOT, run_prompt
 
 
 class SessionTranscriptTests(unittest.TestCase):
+    def test_repeated_assignment_resolves_live_names_and_keeps_only_successes(self):
+        from engine.session import new_session
+        from engine.session_expressions import SessionError, assignment_syntax
+        from engine.session_transcript import SessionTranscript
+
+        session, log = new_session(None), SessionTranscript()
+        source = "out = op(a, b)"
+        self.assertIsNotNone(assignment_syntax(source))
+        session.variables.update(op=lambda a, b: a, a=1, b=2)
+        list(session.run(source, transcript=log))
+        session.variables.update(op=lambda a, b: b, b=9)
+        list(session.run(source, transcript=log))
+        self.assertEqual(session.variables["out"], 9)
+
+        session.variables.update(op=session.builtins["coordinates"], a="x", b="y")
+        with self.assertRaisesRegex(SessionError, "would replace"):
+            list(session.run(source, transcript=log))
+
+        def fail_on_two(a, b):
+            if a == 2:
+                raise ValueError("second iteration")
+            return a
+
+        session.variables["op"] = fail_on_two
+        with self.assertRaisesRegex(SessionError, "second iteration") as context:
+            list(session.run("for a in (1, 2):\n    out = op(a, b)", transcript=log))
+        self.assertEqual((context.exception.line, context.exception.function), (2, "op"))
+        self.assertEqual((session.variables["a"], session.variables["out"]), ("x", 9))
+        self.assertEqual(log.statements, [source, source])
+
+    def test_only_complete_public_calls_bypass_the_full_parser(self):
+        from engine.session_expressions import Evaluator, SessionError, assignment_syntax
+
+        session = Evaluator({"f": lambda a, b: a + b})
+        session.variables["a"] = 3
+        for text in ("class = f(a, 2)", "ans = f(a, 02)", "ans = f(a, 2", "  ans = f(a, 2)", "ans = a ^ 02"):
+            with self.subTest(text=text):
+                self.assertIsNone(assignment_syntax(text))
+                with self.assertRaises(SessionError):
+                    list(session.run(text))
+        text = "ans = f(a, 2)  # ^ in a comment"
+        self.assertIsNone(assignment_syntax(text))
+        list(session.run(text))
+        self.assertEqual(session.variables["ans"], 5)
+        self.assertIsNotNone(assignment_syntax("ans = a^2"))
+        self.assertIsNone(assignment_syntax("ans = a^2^3"))
+        list(session.run("ans = a^2^3"))
+        self.assertEqual(session.variables["ans"], 3**8)
+
+    @unittest.skipUnless(hasattr(sys, "set_int_max_str_digits"), "Requires a configurable decimal literal limit")
+    def test_repeated_source_obeys_the_current_decimal_limit(self):
+        from engine.session import new_session
+        from engine.session_expressions import SessionError
+
+        session = new_session(None)
+        source = "n = " + "1" * 650
+        previous = sys.get_int_max_str_digits()
+        try:
+            sys.set_int_max_str_digits(0)
+            list(session.run(source))
+            sys.set_int_max_str_digits(640)
+            with self.assertRaisesRegex(SessionError, "640 digits"):
+                list(session.run(source))
+        finally:
+            sys.set_int_max_str_digits(previous)
+
     def replay(self, file):
         result = subprocess.run([str(ROOT / "atlas"), "run", str(file)], capture_output=True,
                                 text=True, timeout=30)

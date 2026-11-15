@@ -1,0 +1,154 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "trials": 5,
+  "cpu_affinity": [
+    6
+  ],
+  "native_cli_sha256": "0b1d4028f99df7797a2a565d5eee9ef37910de81dc2d0ef149f76675dae429de",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "Wall time includes starting each executable, parsing inputs, computing the ideal, writing all results to pipes, and process exit. Atlas emits its full JSON record including replay. Singular prints the ideal in the same ring on one thread. One warm-up per executable is discarded. Process order alternates across trials. Mathematical verification runs outside the timer.",
+  "cases": {
+    "plane_monomials": {
+      "sum": {
+        "samples_ms": {
+          "atlas": [
+            5.808,
+            5.941,
+            5.423,
+            5.623,
+            5.689
+          ],
+          "singular": [
+            7.731,
+            7.799,
+            7.628,
+            7.794,
+            7.797
+          ]
+        },
+        "median_ms": {
+          "atlas": 5.689,
+          "singular": 7.794
+        },
+        "mutual_containment_verified": true
+      },
+      "product": {
+        "samples_ms": {
+          "atlas": [
+            5.799,
+            6.04,
+            5.986,
+            6.038,
+            6.153
+          ],
+          "singular": [
+            7.812,
+            7.586,
+            8.239,
+            8.116,
+            8.218
+          ]
+        },
+        "median_ms": {
+          "atlas": 6.038,
+          "singular": 8.116
+        },
+        "mutual_containment_verified": true
+      },
+      "square": {
+        "samples_ms": {
+          "atlas": [
+            6.158,
+            6.006,
+            5.968,
+            5.646,
+            5.243
+          ],
+          "singular": [
+            8.419,
+            8.014,
+            7.654,
+            7.163,
+            7.347
+          ]
+        },
+        "median_ms": {
+          "atlas": 5.968,
+          "singular": 7.654
+        },
+        "mutual_containment_verified": true
+      }
+    },
+    "rational_forms": {
+      "sum": {
+        "samples_ms": {
+          "atlas": [
+            5.591,
+            5.809,
+            5.741,
+            5.747,
+            6.122
+          ],
+          "singular": [
+            7.186,
+            7.076,
+            7.34,
+            7.273,
+            7.639
+          ]
+        },
+        "median_ms": {
+          "atlas": 5.747,
+          "singular": 7.273
+        },
+        "mutual_containment_verified": true
+      },
+      "product": {
+        "samples_ms": {
+          "atlas": [
+            5.793,
+            5.822,
+            5.856,
+            5.803,
+            5.978
+          ],
+          "singular": [
+            7.231,
+            7.218,
+            7.494,
+            7.246,
+            7.402
+          ]
+        },
+        "median_ms": {
+          "atlas": 5.822,
+          "singular": 7.246
+        },
+        "mutual_containment_verified": true
+      },
+      "square": {
+        "samples_ms": {
+          "atlas": [
+            5.915,
+            5.918,
+            5.928,
+            6.03,
+            5.764
+          ],
+          "singular": [
+            7.572,
+            7.467,
+            7.686,
+            7.519,
+            7.616
+          ]
+        },
+        "median_ms": {
+          "atlas": 5.918,
+          "singular": 7.572
+        },
+        "mutual_containment_verified": true
+      }
+    }
+  }
+}

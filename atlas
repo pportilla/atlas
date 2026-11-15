@@ -16,6 +16,8 @@ case "$1/$2" in
     algebra/localization|algebra/localize) atlas_binary=localization ;;
     algebra/normalization) atlas_binary=normalization ;;
     algebra/quotient-ring) atlas_binary=quotient_ring ;;
+    algebra/ideal-sum) atlas_binary=ideal_sum ;;
+    algebra/ideal-product) atlas_binary=ideal_product ;;
     algebra/ideal-power) atlas_binary=ideal_power ;;
     algebra/symbolic-power) atlas_binary=symbolic_power ;;
     algebra/primary-decomposition) atlas_binary=primary_decomposition ;;

@@ -25,16 +25,27 @@ Basis read_ideal(std::istream& in, size_t count, size_t width) {
     return rows;
 }
 
-bool scalar(const Polynomial& f) {
-    return f.size() == 1 && std::all_of(f.begin()->first.begin(), f.begin()->first.end(),
-                                        [](const auto& k) { return k == 0; });
+ideal_arithmetic::GeneratorsKind kind(const Basis& rows) {
+    bool nonzero = false;
+    for (const auto& f : rows) {
+        if (ideal_arithmetic::unit_generator(f)) return ideal_arithmetic::GeneratorsKind::unit;
+        nonzero |= !f.empty();
+    }
+    return nonzero ? ideal_arithmetic::GeneratorsKind::general : ideal_arithmetic::GeneratorsKind::zero;
 }
 
-Basis normalized(Basis rows) {
-    auto unit = std::find_if(rows.begin(), rows.end(), scalar);
-    if (unit != rows.end()) return {Polynomial{{unit->begin()->first, 1}}};
+Basis without_zeros(Basis rows) {
     rows.erase(std::remove_if(rows.begin(), rows.end(), [](const auto& f) { return f.empty(); }), rows.end());
     return rows;
+}
+
+Basis normalized(Basis rows, ideal_arithmetic::GeneratorsKind how) {
+    if (how == ideal_arithmetic::GeneratorsKind::zero) return {};
+    if (how == ideal_arithmetic::GeneratorsKind::unit) {
+        const auto one = std::find_if(rows.begin(), rows.end(), ideal_arithmetic::unit_generator);
+        return {Polynomial{{one->begin()->first, 1}}};
+    }
+    return without_zeros(std::move(rows));
 }
 
 // Translating all exponents preserves their ordering and creates no collisions.
@@ -51,9 +62,18 @@ Polynomial times_monomial(const Polynomial& f, const Polynomial& monomial) {
 }
 
 namespace ideal_arithmetic {
+bool unit_generator(const Polynomial& f) {
+    return f.size() == 1 && std::all_of(f.begin()->first.begin(), f.begin()->first.end(),
+                                        [](const auto& k) { return k == 0; });
+}
+
 Basis sum(Basis left, Basis right) {
-    left.insert(left.end(), std::make_move_iterator(right.begin()), std::make_move_iterator(right.end()));
-    return normalized(std::move(left));
+    const auto a = kind(left), b = kind(right);
+    const auto action = combine(false,a,b);
+    if (action == Combination::left) return normalized(std::move(left),a);
+    if (action == Combination::right) return normalized(std::move(right),b);
+    return without_zeros(concatenate_generators(std::move(left),std::make_move_iterator(right.begin()),
+                                                 std::make_move_iterator(right.end())));
 }
 
 Basis generator_products(const Basis& left, const Basis& right, size_t width) {
@@ -62,30 +82,37 @@ Basis generator_products(const Basis& left, const Basis& right, size_t width) {
     out.reserve(left.size() * right.size());
     const auto monomial = [](const auto& f) { return f.size() <= 1; };
     if (std::all_of(left.begin(), left.end(), monomial) || std::all_of(right.begin(), right.end(), monomial)) {
-        for (const auto& f : left) for (const auto& g : right) {
+        multiply_generator_pairs(left,right,[&](const auto& f, const auto& g) {
             if (f.empty() || g.empty()) out.emplace_back();
             else out.push_back(f.size() == 1 ? times_monomial(g,f) : times_monomial(f,g));
-        }
+        });
         return out;
     }
     local::SparseLexRing ring(width);
     std::vector<PolyValue> factors;
     for (const auto& f : right) ring.write(factors.emplace_back(ring.ctx).p, f);
     PolyValue factor(ring.ctx), multiple(ring.ctx);
-    for (const auto& f : left) {
-        ring.write(factor.p, f);
-        for (const auto& g : factors) {
-            fmpq_mpoly_mul(multiple.p, factor.p, g.p, ring.ctx);
-            out.push_back(ring.read(multiple.p));
-        }
-    }
+    auto pack_left = [&](const Polynomial& row) -> const PolyValue& {
+        ring.write(factor.p,row);
+        return factor;
+    };
+    multiply_generator_pairs(left,factors,[&](const auto& f, const auto& g) {
+        fmpq_mpoly_mul(multiple.p, f.p, g.p, ring.ctx);
+        out.push_back(ring.read(multiple.p));
+    },pack_left);
     return out;
 }
 
 Basis product(const Basis& left, const Basis& right, size_t width) {
-    if (std::any_of(left.begin(), left.end(), scalar)) return normalized(right);
-    if (std::any_of(right.begin(), right.end(), scalar)) return normalized(left);
-    return normalized(generator_products(left, right, width));
+    const auto a = kind(left), b = kind(right);
+    const auto action = combine(true,a,b);
+    if (action == Combination::left) return normalized(left,a);
+    if (action == Combination::right) return normalized(right,b);
+    return without_zeros(generator_products(left, right, width));
+}
+
+Basis binary(Basis left, Basis right, size_t width, bool multiply) {
+    return multiply ? product(left,right,width) : sum(std::move(left),std::move(right));
 }
 } // namespace ideal_arithmetic
 
@@ -113,8 +140,7 @@ std::string ideal_arithmetic_request(std::istream& in, bool product) {
     ring["order"] = order;
     ring["variables"] = Json::Value(Json::arrayValue);
     for (const auto& name : names) ring["variables"].append(name);
-    const auto generators = product ? ideal_arithmetic::product(left, right, names.size())
-                                    : ideal_arithmetic::sum(std::move(left), std::move(right));
+    const auto generators = ideal_arithmetic::binary(std::move(left),std::move(right),names.size(),product);
     auto& rows = result["generators"];
     rows = Json::Value(Json::arrayValue);
     for (const auto& f : generators) rows.append(local::format_polynomial(f, names));

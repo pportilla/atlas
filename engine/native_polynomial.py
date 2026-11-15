@@ -169,7 +169,7 @@ def coerce(value):
 def from_terms(variables, entries):
     if len(set(variables)) != len(variables) or any(not v.is_Symbol for v in variables):
         raise ValueError('Expected distinct polynomial coordinates.')
-    data = tuple((e, Fraction(c)) for e,c in entries.items() if c)
+    data = tuple((e, c if type(c) is Fraction else Fraction(c)) for e,c in entries.items() if c)
     if any(len(e) != len(variables) for e,c in data):
         raise ValueError('Invalid polynomial exponent vector.')
     active = sorted((v._coords[0], i) for i,v in enumerate(variables) if any(e[i] for e,c in data))

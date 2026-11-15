@@ -1,11 +1,70 @@
 """Ideal arithmetic at the Atlas prompt and in scripts."""
+import json
 import unittest
 from textwrap import dedent
+from unittest.mock import patch
 
 from tests.cli_support import run_prompt, run_script
 
 
 class IdealOperatorTests(unittest.TestCase):
+    def test_session_arithmetic_with_and_without_python_extension(self):
+        from engine import session_ideal_native
+        from engine.session_algebra import ideal
+        from engine.session_polynomial import coordinates
+
+        x, y = coordinates("x", "y")
+
+        def calculate():
+            left, right = ideal(x, y**2), ideal(x**2 + y, ring=x.parent)
+            value = ((left * right) + left) ** 2
+            self.assertIs(value.parent, x.parent)
+            return value.result, value.record["replay"], value.generators
+
+        expected = calculate()
+        with patch.object(session_ideal_native, "_compiled", return_value=None):
+            self.assertEqual(calculate(), expected)
+
+    def test_growing_a_power_result_reaches_the_worker(self):
+        from engine import session_algebra as algebra
+        from engine.session_polynomial import coordinates
+
+        x = coordinates("x")
+        original = algebra.ideal_power(algebra.ideal(x), 2)
+        value = original
+        with patch.object(algebra, "_evaluate", wraps=algebra._evaluate) as worker:
+            for _ in range(8):
+                value = algebra.ideal_sum(value, value)
+            self.assertTrue(worker.called)
+        self.assertEqual(value.generators, (x**2,) * 256)
+        self.assertEqual(original.generators, (x**2,))
+
+    def test_replay_of_derived_ideals_after_rebinding_coordinates(self):
+        # Keep proper order and ownership across an intermediate result when
+        # its old names and source ideals are no longer in the workspace.
+        source = dedent("""
+            z, a = coordinates("z", "a")
+            I = ideal(z^2 + a, 0, order="lex")
+            J = ideal(a, ring=z.parent)
+            P = ideal_product(I, J)
+            S = ideal_sum(P, J)
+            K = ideal_power(S, 2)
+            I, J, P = 0, 0, 0
+            z, a = coordinates("z", "a", fresh=True)
+            print(S.json)
+            print(K.json)
+        """).lstrip()
+        run = run_script(source)
+        self.assertEqual((run.returncode, run.stderr), (0, ""))
+        for line, operation in zip(run.stdout.splitlines(), ("ideal-sum", "ideal-power"), strict=True):
+            record = json.loads(line)
+            self.assertEqual(record["operation"], operation)
+            self.assertEqual(record["result"]["ring"], {"variables": ["z", "a"], "order": "lex", "field": "QQ"})
+            replay = run_script(record["replay"]["script"])
+            self.assertEqual((replay.returncode, replay.stderr), (0, ""))
+            repeated = json.loads(replay.stdout)
+            self.assertEqual((repeated["result"], repeated["replay"]), (record["result"], record["replay"]))
+
     def test_zero_and_unit_ideals_in_scalar_and_polynomial_rings(self):
         source = dedent("""
             x = coordinates("x")

@@ -332,6 +332,7 @@ def _session_loop(parser, panel, session, shell_names):
     from .cli_style import paint, readline_prompt
     from .prompt_help import command_hint, help_request, show_help, topic_names
     from .session import SessionError
+    from .session_expressions import assignment_syntax
     from .session_hints import error_hint
     from .session_panel import print_workspace
     from .session_transcript import SessionTranscript
@@ -350,15 +351,24 @@ def _session_loop(parser, panel, session, shell_names):
         return paint_hint(text, commands=commands, topics=topic_names(session, parser), names=session.variables,
                           functions=functions, color=rich)
 
+    assigned = None
     while True:
         try:
-            panel.refresh(session.variables)
+            if panel.enabled:
+                panel.refresh(session.variables, assigned)
+            assigned = None
             line = input(prompt)
-            words = line.split(maxsplit=1)
-            if not words:
-                continue
-            request = help_request(line)
-            shell = request is not None or _is_shell_command(words, shell_names, session.variables)
+            assignment = assignment_syntax(line)
+            if assignment is not None and assignment[0] == "help":
+                assignment = None  # Preserve the standalone "help TOPIC" command.
+            if assignment is not None:
+                request, shell = None, False
+            else:
+                words = line.split(maxsplit=1)
+                if not words:
+                    continue
+                request = help_request(line)
+                shell = request is not None or _is_shell_command(words, shell_names, session.variables)
             if rich:
                 pieces = (command_pieces(line, commands=commands, topics=topic_names(session, parser)) if shell else
                           expression_pieces(line, names=session.variables, functions=functions))
@@ -367,8 +377,13 @@ def _session_loop(parser, panel, session, shell_names):
                 show_help(request, session, parser, color=rich)
                 continue
             if not shell:
-                line = read_expression(line, more)
                 try:
+                    if assignment is not None:
+                        if session.assign(assignment, line, transcript):
+                            assigned = assignment[0]
+                            continue
+                    else:
+                        line = read_expression(line, more)
                     for display, value in session.run(line, transcript=transcript):
                         if display:
                             print(paint_value(str(value), names=session.variables, functions=functions,

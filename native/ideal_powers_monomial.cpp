@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <functional>
-#include <numeric>
 
 namespace atlas::ideal_powers {
 namespace {
@@ -77,19 +76,27 @@ bool disjoint_supports(const Monomials& rows, size_t width) {
 // When the supports are disjoint, distinct choices of generator
 // multiplicities are incomparable under divisibility. Emit them directly.
 Monomials disjoint_products(const Monomials& base, unsigned long n) {
-    std::vector<unsigned long> counts(base.size());
-    std::vector<size_t> axes(base.size());
-    std::iota(axes.begin(),axes.end(),0);
-    std::vector<std::vector<unsigned long>> compositions;
-    distribute(compositions,counts,axes,0,n);
+    std::vector<std::vector<size_t>> supports(base.size());
+    const auto width = base.front().size();
+    for (size_t i = 0; i < base.size(); ++i)
+        for (size_t k = 0; k < width; ++k)
+            if (base[i][k] != 0) supports[i].push_back(k);
+    Powers exponents(width);
     Monomials result;
-    result.reserve(compositions.size());
-    for (const auto& c : compositions) {
-        Powers e(base.front().size());
-        for (size_t j = 0; j < base.size(); ++j) if (c[j])
-            for (size_t k = 0; k < e.size(); ++k) e[k] += c[j]*base[j][k];
-        result.push_back(std::move(e));
-    }
+    // A generator touches only its own coordinates. Reuse one exponent
+    // vector while distributing the remaining factors among the generators.
+    auto emit = [&](auto&& self, size_t i, unsigned long remaining) -> void {
+        for (auto count = remaining;; --count) {
+            for (auto axis : supports[i]) exponents[axis] = base[i][axis] * count;
+            if (i + 1 == base.size()) {
+                result.push_back(exponents);
+                return;
+            }
+            self(self, i + 1, remaining - count);
+            if (count == 0) break;
+        }
+    };
+    emit(emit, 0, n);
     return result;
 }
 
@@ -112,7 +119,7 @@ Basis as_basis(Monomials rows, bool lex) {
     std::sort(rows.begin(),rows.end(),[&](const auto& a,const auto& b){return local::global_less(b,a,lex);});
     Basis basis;
     basis.reserve(rows.size());
-    for (auto& e : rows) basis.push_back({{std::move(e),1}});
+    for (auto& e : rows) basis.emplace_back().emplace(std::move(e), 1);
     return basis;
 }
 
@@ -194,7 +201,13 @@ std::optional<PackedBasis> packed_homogeneous(const Monomials& base,size_t width
 PowerResult monomial_power(const Basis& basis,size_t width,bool lex,const mpz_class& n,bool symbolic) {
     Monomials rows;
     for (const auto& f : basis) if (!f.empty()) rows.push_back(f.begin()->first);
-    rows = minimal(std::move(rows));
+    // Nonconstant monomials with mutually disjoint supports cannot divide
+    // each other. Reduction can reveal disjointness in other presentations.
+    bool disjoint = disjoint_supports(rows, width);
+    if (!disjoint) {
+        rows = minimal(std::move(rows));
+        disjoint = disjoint_supports(rows, width);
+    }
     if (symbolic) for (const auto& e : rows)
         if (std::any_of(e.begin(),e.end(),[](const auto& a){return a>1;}))
             throw InvalidInput("Symbolic powers require a radical ideal over QQ.");
@@ -202,7 +215,6 @@ PowerResult monomial_power(const Basis& basis,size_t width,bool lex,const mpz_cl
     if (rows.empty() || n == 1) return as_basis(std::move(rows),lex);
     // Disjoint supports give a radical complete intersection. Its powers
     // have only minimal associated primes, hence coincide with symbolic powers.
-    const bool disjoint = disjoint_supports(rows,width);
     if (!symbolic || disjoint) {
         if (auto packed = packed_homogeneous(rows,width,lex,n)) return std::move(*packed);
         return as_basis(ordinary(std::move(rows),n,disjoint),lex);

@@ -10,6 +10,7 @@
 #include "normalization.hpp"
 #include "localization.hpp"
 #include "ideal_powers.hpp"
+#include "ideal_arithmetic.hpp"
 #include "quotient_ring.hpp"
 #include <json/json.h>
 #include <algorithm>
@@ -34,7 +35,7 @@ using Clock = std::chrono::steady_clock;
 
 struct Request {
     std::string operation, order = "grevlex", compute = "auto";
-    Strings names, generators, primes;
+    Strings names, generators, other_generators, primes;
     std::vector<mpq_class> point;
     std::optional<std::string> query, other_query, numerator, denominator, exponent;
     std::string action = "declare";
@@ -46,8 +47,13 @@ bool power_query(const std::string& op) {
     return op == "ideal-power" || op == "symbolic-power";
 }
 
+bool binary_ideal_query(const std::string& op) {
+    return op == "ideal-sum" || op == "ideal-product";
+}
+
 bool global_ideal_query(const std::string& op) {
-    return op == "primary-decomposition" || op == "normalization" || op == "localization" || op == "localize" || power_query(op) || op == "quotient-ring";
+    return op == "primary-decomposition" || op == "normalization" || op == "localization" || op == "localize" ||
+           power_query(op) || binary_ideal_query(op) || op == "quotient-ring";
 }
 
 bool hypersurface_query(const std::string& op) {
@@ -131,7 +137,7 @@ mpq_class coordinate(const std::string& s) {
 
 bool is_option(const std::string& s) {
     static const std::set<std::string> flags = {
-        "--field", "--vars", "--order", "--compute", "--gpu", "--gen", "--poly",
+        "--field", "--vars", "--order", "--compute", "--gpu", "--gen", "--other-gen", "--poly",
         "--component", "--prime", "--numerator", "--denominator", "--exponent", "--action", "--other-poly", "--point", "--json", "--help", "-h", "--"
     };
     return flags.count(s.substr(0, s.find('=')));
@@ -152,6 +158,7 @@ Request arguments(int argc, char** argv) {
         if (flag != "--gen" && flag != "--poly" && flag != "--vars" && flag != "--point" &&
             flag != "--field" && flag != "--order" && flag != "--compute" &&
             !(power_query(r.operation) && flag == "--exponent") &&
+            !(binary_ideal_query(r.operation) && flag == "--other-gen") &&
             !(r.operation == "quotient-ring" && (flag == "--action" || flag == "--other-poly" || flag == "--exponent")) &&
             !(r.operation == "localization" && (flag == "--prime" || flag == "--numerator" || flag == "--denominator")))
             throw std::invalid_argument("Use the general command parser.");
@@ -162,6 +169,7 @@ Request arguments(int argc, char** argv) {
         if (std::any_of(value.begin(), value.end(), [](unsigned char c){ return c >= 128; }))
             throw std::invalid_argument("Use the Unicode command parser.");
         if (flag == "--gen") r.generators.push_back(value);
+        else if (flag == "--other-gen") r.other_generators.push_back(value);
         else if (flag == "--exponent") r.exponent = value;
         else if (flag == "--prime") r.primes.push_back(value);
         else if (flag == "--numerator") r.numerator = value;
@@ -175,7 +183,8 @@ Request arguments(int argc, char** argv) {
         else if (flag == "--compute") r.compute = value;
         else if (value != "QQ") throw std::invalid_argument("Unsupported field.");
     }
-    if (!vars || (r.names.empty() && !power_query(r.operation) && r.operation != "quotient-ring" && r.operation != "local-quotient-basis") ||
+    if (!vars || (r.names.empty() && !power_query(r.operation) && !binary_ideal_query(r.operation)
+                  && r.operation != "quotient-ring" && r.operation != "local-quotient-basis") ||
         (power_query(r.operation) && !r.exponent) || (r.order != "lex" && r.order != "grevlex") ||
         (r.compute != "auto" && r.compute != "cpu") ||
         (r.operation != "quotient-ring" && (r.operation == "local-normal-form" || hypersurface_query(r.operation)) != r.query.has_value()) ||
@@ -226,6 +235,7 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
         else { args.push_back(flag); args.push_back(s); }
     };
     for (const auto& g : r.generators) operand(r.operation == "ae-codimension" ? "--component" : "--gen",g);
+    for (const auto& g : r.other_generators) operand("--other-gen",g);
     for (const auto& g : r.primes) operand("--prime",g);
     if (r.numerator) operand("--numerator",*r.numerator);
     if (r.denominator) operand("--denominator",*r.denominator);
@@ -242,6 +252,7 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
     request["compute"] = r.compute;
     if (r.operation == "ae-codimension") request["operands"]["components"] = array(r.generators);
     else if (!hypersurface_query(r.operation)) request["operands"]["ideal"] = array(r.generators);
+    if (binary_ideal_query(r.operation)) request["operands"]["other_ideal"] = array(r.other_generators);
     if (r.operation == "localization") request["operands"]["prime"] = array(r.primes);
     if (r.numerator) request["operands"]["numerator"] = *r.numerator;
     if (r.denominator) request["operands"]["denominator"] = *r.denominator;
@@ -252,9 +263,30 @@ Json::Value replay(const Request& r, const Json::Value& ring, const Strings& poi
     if (r.operation == "quotient-ring") request["operands"]["action"] = r.action;
     Json::Value out;
     out["command"] = join(args, " ");
-    // algebra_request accepts serialized JSON. Quoting it as a string again
-    // gives an Atlas string literal, even for names reserved by the session.
-    out["script"] = "result = algebra_request("+json_text(json_text(request))+")\nprint(result.json)\n";
+    const std::string source = json_text(request);
+    if (binary_ideal_query(r.operation) && source.size() <= 640) {
+        // Bind the ring under a local name so even a generator named "ideal"
+        // remains a coordinate inside polynomial strings.
+        std::string script = "R = QQ\n";
+        if (!r.names.empty()) {
+            Strings labels;
+            for (const auto& name : r.names) labels.push_back(json_text(name));
+            script = "R = coordinates(" + join(labels, ", ") + ")" + (labels.size() > 1 ? "[0]" : "") + ".parent\n";
+        }
+        auto ideal = [&](const Strings& generators) {
+            Strings values;
+            for (const auto& g : generators) values.push_back("polynomial(" + json_text(g) + ", ring=R)");
+            values.push_back("ring=R");
+            values.push_back("order=" + json_text(r.order));
+            return "ideal(" + join(values, ", ") + ")\n";
+        };
+        const auto name = r.operation == "ideal-sum" ? "ideal_sum" : "ideal_product";
+        out["script"] = script + "I = " + ideal(r.generators) + "J = " + ideal(r.other_generators) +
+                        "result = " + name + "(I, J, compute=" + json_text(r.compute) + ")\nprint(result.json)\n";
+    } else {
+        // Keep large collections of generators in one input record.
+        out["script"] = "result = algebra_request("+json_text(source)+")\nprint(result.json)\n";
+    }
     return out;
 }
 
@@ -460,6 +492,17 @@ Json::Value calculate(const Request& r) {
         stages("parse_input");
         result = atlas::quotient_ring::compute(input, r.names, r.order == "lex", r.action, operands, exponent);
         stages("quotient_ring");
+    } else if (binary_ideal_query(r.operation)) {
+        Basis other;
+        for (const auto& source : r.other_generators) other.push_back(parse_expression(r.names, source));
+        const bool product = r.operation == "ideal-product";
+        stages("parse_input");
+        auto rows = atlas::ideal_arithmetic::binary(std::move(input), std::move(other), r.names.size(), product);
+        stages(product ? "ideal_product" : "ideal_sum");
+        stages.values[stages.values.size()-1]["generators"] = Json::UInt64(r.generators.size());
+        result["type"] = "ideal";
+        result["generators"] = Json::Value(Json::arrayValue);
+        for (const auto& f : rows) result["generators"].append(format_polynomial(f, r.names));
     } else if (power_query(r.operation)) {
         const auto exponent = atlas::ideal_powers::parse_exponent(*r.exponent);
         const bool symbolic = r.operation == "symbolic-power";

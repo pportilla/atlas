@@ -5,16 +5,18 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cached_property
 import json
+from time import perf_counter_ns
 from typing import TYPE_CHECKING, NamedTuple
 from weakref import WeakValueDictionary
 
 from . import native_polynomial as native
 from .exact_json import result_json
-from .native_library import affine_request
+from .native_library import affine_request, current_replay_scope
 from .polynomial import LimitError, integer_text, parse_expression, rational_text, sparse_row
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace
+from .session_ideal_native import NativeIdeal, values as ideal_values
 
 if TYPE_CHECKING:
     from .session_maps import RingHomomorphism
@@ -61,18 +63,26 @@ class Ideal(_RingValue):
     def parent(self):
         return self._space
 
+    @cached_property
+    def _native_ideal(self):
+        return NativeIdeal.prepare(self._space.generators, self.generators)
+
     def __add__(self, other):
-        return ideal_sum(self, other)
+        return _binary_ideals("ideal-sum", self, other, "auto", infix=True)
 
     def __mul__(self, other):
-        return ideal_product(self, other)
+        return _binary_ideals("ideal-product", self, other, "auto", infix=True)
 
     def __pow__(self, exponent):
         return ideal_power(self, exponent)
 
+    def _generator_text(self, names):
+        return map(str, self.generators)
+
     def __repr__(self):
-        ring = f"QQ[{', '.join(self.variables)}]" if self.variables else "QQ"
-        generators = ", ".join(map(str, self.generators)) or "0"
+        names = self.variables
+        ring = f"QQ[{', '.join(names)}]" if names else "QQ"
+        generators = ", ".join(self._generator_text(names)) or "0"
         return f"{self._label}({generators}) over {ring} ({self.order})"
 
 
@@ -112,6 +122,68 @@ class _Result(_RingValue):
 class _IdealResult(_Result, Ideal):
     _record: dict
     _fields = _Result._fields | Ideal._fields
+
+
+class _NativeIdealResult(_IdealResult):
+    """A computed ideal. Convert its native generators to session values only when requested."""
+
+    status = "ok"
+    type = "ideal"
+
+    def __init__(self, parent, order, handle, operation, left, right, compute, elapsed):
+        # Capture independent native operand handles for replay. Keeping the
+        # session results here would retain the entire history of a product.
+        state = self.__dict__
+        state["_space"] = parent
+        state["order"] = order
+        state["_native_ideal"] = handle
+        state["_history"] = operation, left, right, compute, elapsed
+
+    @property
+    def operation(self):
+        return self._history[0]
+
+    @cached_property
+    def generators(self):
+        return tuple(Polynomial(self._space, value) for value in ideal_values(self._native_ideal, self._space.generators))
+
+    def _generator_text(self, names):
+        # Polynomial.__str__ prints factors in name order. Native expressions
+        # already follow this convention when the ring has that order.
+        if tuple(sorted(names)) == names:
+            return self._native_ideal.expressions(names)
+        return super()._generator_text(names)
+
+    @property
+    def result(self):
+        ring = self.ring
+        return {"type": "ideal", "ring": ring, "generators": self._native_ideal.expressions(ring["variables"])}
+
+    @property
+    def execution(self):
+        operation, left, _, compute, elapsed = self._history
+        stage = {"operation": operation.replace("-", "_"), "backend": "cpu",
+                 "generators": left.size(), "elapsed_ns": elapsed}
+        return {"requested": compute, "backend": "cpu", "device": "CPU", "stages": [stage],
+                "fallback_reasons": [], "elapsed_ms": round(elapsed / 1e6, 3)}
+
+    @cached_property
+    def _record(self):
+        from .algebra_replay import make_replay
+
+        operation, left, right, compute, _ = self._history
+        coordinates = self._space.generators
+        prepared = {"ideal": ideal_values(left, coordinates)}
+        operands = {"ideal": list(map(str, prepared["ideal"]))}
+        if operation == "ideal-power":
+            operands["exponent"] = prepared["exponent"] = str(right)
+        else:
+            prepared["other_ideal"] = ideal_values(right, coordinates)
+            operands["other_ideal"] = list(map(str, prepared["other_ideal"]))
+        result = self.result
+        request = {"operation": operation, "ring": result["ring"], "operands": operands, "compute": compute}
+        return {"status": "ok", "operation": operation, "result": result,
+                "execution": self.execution, "replay": make_replay(request, prepared, generator_text=operands)}
 
 
 class _Basis(_IdealResult):
@@ -684,7 +756,11 @@ def _polynomial_inputs(values, order, variables, default_space=None, *, ring=Non
 def ideal(*generators, order=None, variables=None, ring=None):
     """Declare an ideal in its generators' ring or choose one with ring=f.parent or ring=QQ."""
     space, generators, order = _polynomial_inputs(_unpack(generators), order, variables, ring=ring)
-    return Ideal(space, generators, order)
+    declared = Ideal(space, generators, order)
+    # Retain the exact native generators while the new ideal is bound in the
+    # session. Large declarations still use the worker when a computation needs them.
+    declared.__dict__["_native_ideal"] = NativeIdeal.prepare(space.generators, generators)
+    return declared
 
 
 def _typed(record, space, *, quotient_parent=None):
@@ -866,14 +942,6 @@ def _calculate(operation, left, compute, **operands):
             operands[key] = str(_polynomial(operands[key], left._space))
     operands["ideal"] = [str(f) for f in left.generators]
     request = {"operation": operation, "ring": left.ring, "operands": operands, "compute": compute}
-    if operation in ("ideal-sum", "ideal-product"):
-        # Avoid worker startup for small, already-expanded inputs. Even short
-        # monomials can generate a large list of pairwise products.
-        input_size = sum(len(text) + 1 for rows in operands.values() for text in rows)
-        if (input_size <= 512 and len(left.variables) <= 32 and
-                (operation == "ideal-sum" or len(left.generators) * len(right.generators) <= 128)):
-            from .algebra import dispatch
-            return _typed(dispatch(request), left._space)
     known_basis = ((local_basis and operation == "local-normal-form") or
                    (isinstance(left, _Basis) and operation in ("groebner", "normal-form", "membership", "multiplicity")))
     return _typed(_evaluate(request, known_basis=known_basis), left._space)
@@ -999,6 +1067,26 @@ def intersection(ideal, other_ideal, *, compute="auto"):
     return _calculate("intersection", ideal, compute, other_ideal=other_ideal)
 
 
+def _binary_ideals(operation, left, right, compute, *, infix=False):
+    if not (isinstance(left, Ideal) and isinstance(right, Ideal)):
+        if infix:
+            name = "addition" if operation == "ideal-sum" else "multiplication"
+            raise TypeError(f"Ideal {name} requires two ideals in the same parent ring.")
+        raise TypeError("Pass an ideal or a Gröbner basis.")
+    if left._space is not right._space:
+        raise ValueError("These ideals belong to different parent rings (different coordinate spaces). "
+                         "Map their generators into the same ring first.")
+    if compute in ("auto", "cpu") and current_replay_scope() is None:
+        started = perf_counter_ns()
+        a, b = left._native_ideal, right._native_ideal
+        if a is not None and b is not None:
+            result = a.sum(b) if operation == "ideal-sum" else a.product(b)
+            if result is not None:
+                return _NativeIdealResult(left._space, left.order, result, operation, a, b, compute,
+                                         perf_counter_ns() - started)
+    return _calculate(operation, left, compute, other_ideal=right)
+
+
 def ideal_sum(left, right, *, compute="auto"):
     """Return the ideal generated by both sets of generators, using the left ideal's monomial order.
 
@@ -1007,7 +1095,7 @@ def ideal_sum(left, right, *, compute="auto"):
     >>> S = ideal_sum(I, J)
     >>> membership(x, S).value
     """
-    return _calculate("ideal-sum", left, compute, other_ideal=right)
+    return _binary_ideals("ideal-sum", left, right, compute)
 
 
 def ideal_product(left, right, *, compute="auto"):
@@ -1018,7 +1106,7 @@ def ideal_product(left, right, *, compute="auto"):
     >>> P = ideal_product(I, J)
     >>> membership(x*y, P).value
     """
-    return _calculate("ideal-product", left, compute, other_ideal=right)
+    return _binary_ideals("ideal-product", left, right, compute)
 
 
 def quotient(ideal, other_ideal, *, compute="auto"):
@@ -1035,6 +1123,14 @@ def ideal_power(ideal, n, *, compute="auto"):
         n = n.numerator
     if type(n) is not int and not isinstance(n, str):
         raise TypeError("The exponent must be a nonnegative integer or an unsigned decimal string.")
+    if type(n) is int and 0 <= n <= 4 and compute in ("auto", "cpu") and current_replay_scope() is None:
+        started = perf_counter_ns()
+        source = _require_ideal(ideal)._native_ideal
+        if source is not None:
+            result = source.power(n, ideal.order == "lex")
+            if result is not None:
+                return _NativeIdealResult(ideal._space, ideal.order, result, "ideal-power", source, n, compute,
+                                         perf_counter_ns() - started)
     return _calculate("ideal-power", ideal, compute, exponent=n)
 
 

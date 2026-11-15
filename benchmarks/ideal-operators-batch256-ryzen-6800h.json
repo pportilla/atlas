@@ -1,0 +1,623 @@
+{
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "cpu_affinity": [
+    5
+  ],
+  "atlas_native_sha256": "cb20f5b6e85fe09b636e66b5b9e077b835ad0e9f39165a20d096967c1fe7132f",
+  "python": "3.14.4",
+  "atlas_binding": "CPython stable ABI",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "ring": "QQ[x,y], grevlex",
+  "trials": 5,
+  "operations_per_trial": 256,
+  "conditions": "Each trial repeats an operation on the same prepared pair. One preceding invocation per method is discarded for warm operations. Trial order rotates. Session measures one operator on typed ideals. Prompt measures a named assignment using the prompt evaluator and transcript, excluding terminal I/O. CLI and CLI infix time named and operator assignments through the interactive command loop with input in memory and the terminal panel disabled. It includes routing, multiline detection, evaluation, and transcript updates. First use takes newly declared ideals of the same initialized polynomials without a warm-up per ideal. Declare and first use includes construction of the input ideals from those polynomials. Record measures first export of a complete record from an already computed result. Native wire includes sparse input decoding and JSON output. Prepared native measures C++ arithmetic on parsed inputs and the completed result stays in memory. Singular measures an assignment on initialized ideals in its interpreter, with one thread. Timings exclude top-level program startup, input declarations, and agreement checks. Each trial checks mutual containment in Singular. Ordinary power returns a reduced basis in Atlas, so Singular uses std(I^2) with option(redSB).",
+  "cases": {
+    "plane_monomials": {
+      "left": [
+        "x^2",
+        "y"
+      ],
+      "right": [
+        "x",
+        "y^2"
+      ],
+      "operations": {
+        "sum": {
+          "atlas_operation": "I + J",
+          "singular_operation": "I+J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 0.895,
+            "atlas_prompt": 1.438,
+            "atlas_cli": 1.479,
+            "atlas_cli_infix": 1.408,
+            "atlas_first_use": 1.089,
+            "atlas_declare_and_first_use": 14.911,
+            "atlas_export_record": 45.786,
+            "atlas_native_wire": 6.949,
+            "atlas_native": 0.061,
+            "singular": 1.797,
+            "singular_declare_and_first_use": 2.816
+          },
+          "samples_us": {
+            "atlas_session": [
+              0.906,
+              0.868,
+              0.884,
+              0.895,
+              1.04
+            ],
+            "atlas_prompt": [
+              1.472,
+              1.4,
+              1.473,
+              1.438,
+              1.404
+            ],
+            "atlas_cli": [
+              1.583,
+              1.429,
+              1.479,
+              1.607,
+              1.438
+            ],
+            "atlas_cli_infix": [
+              1.408,
+              1.359,
+              1.429,
+              1.38,
+              1.61
+            ],
+            "atlas_first_use": [
+              1.146,
+              1.049,
+              1.098,
+              1.046,
+              1.089
+            ],
+            "atlas_declare_and_first_use": [
+              15.154,
+              15.186,
+              14.911,
+              14.835,
+              14.493
+            ],
+            "atlas_export_record": [
+              47.174,
+              45.989,
+              45.786,
+              44.545,
+              44.854
+            ],
+            "atlas_native_wire": [
+              7.036,
+              6.89,
+              6.949,
+              6.915,
+              7.019
+            ],
+            "atlas_native": [
+              0.06,
+              0.061,
+              0.06,
+              0.061,
+              0.061
+            ],
+            "singular": [
+              1.809,
+              1.785,
+              1.773,
+              1.797,
+              1.938
+            ],
+            "singular_declare_and_first_use": [
+              2.801,
+              2.797,
+              3.105,
+              2.844,
+              2.816
+            ]
+          }
+        },
+        "product": {
+          "atlas_operation": "I * J",
+          "singular_operation": "I*J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 1.122,
+            "atlas_prompt": 1.658,
+            "atlas_cli": 1.683,
+            "atlas_cli_infix": 1.614,
+            "atlas_first_use": 1.429,
+            "atlas_declare_and_first_use": 15.113,
+            "atlas_export_record": 46.183,
+            "atlas_native_wire": 8.132,
+            "atlas_native": 0.252,
+            "singular": 1.789,
+            "singular_declare_and_first_use": 2.797
+          },
+          "samples_us": {
+            "atlas_session": [
+              1.1,
+              1.144,
+              1.129,
+              1.116,
+              1.122
+            ],
+            "atlas_prompt": [
+              1.674,
+              1.644,
+              1.675,
+              1.658,
+              1.62
+            ],
+            "atlas_cli": [
+              1.648,
+              1.689,
+              1.695,
+              1.662,
+              1.683
+            ],
+            "atlas_cli_infix": [
+              1.597,
+              1.685,
+              1.753,
+              1.594,
+              1.614
+            ],
+            "atlas_first_use": [
+              1.628,
+              1.423,
+              1.566,
+              1.429,
+              1.324
+            ],
+            "atlas_declare_and_first_use": [
+              15.113,
+              15.311,
+              15.541,
+              15.019,
+              14.806
+            ],
+            "atlas_export_record": [
+              45.547,
+              46.183,
+              46.297,
+              45.67,
+              47.448
+            ],
+            "atlas_native_wire": [
+              8.133,
+              8.246,
+              8.035,
+              8.132,
+              8.029
+            ],
+            "atlas_native": [
+              0.271,
+              0.27,
+              0.248,
+              0.246,
+              0.252
+            ],
+            "singular": [
+              1.906,
+              1.816,
+              1.789,
+              1.781,
+              1.781
+            ],
+            "singular_declare_and_first_use": [
+              2.797,
+              2.793,
+              2.789,
+              2.797,
+              2.809
+            ]
+          }
+        },
+        "square": {
+          "atlas_operation": "I^2",
+          "singular_operation": "std(I^2)",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 2.363,
+            "atlas_prompt": 2.853,
+            "atlas_cli": 2.942,
+            "atlas_cli_infix": 2.978,
+            "atlas_first_use": 2.511,
+            "atlas_declare_and_first_use": 10.411,
+            "atlas_export_record": 40.691,
+            "atlas_native_wire": 9.726,
+            "atlas_native": 1.104,
+            "singular": 6.621,
+            "singular_declare_and_first_use": 7.395
+          },
+          "samples_us": {
+            "atlas_session": [
+              2.365,
+              2.363,
+              2.334,
+              2.312,
+              2.416
+            ],
+            "atlas_prompt": [
+              2.881,
+              2.919,
+              2.81,
+              2.828,
+              2.853
+            ],
+            "atlas_cli": [
+              3.023,
+              3.054,
+              2.942,
+              2.939,
+              2.898
+            ],
+            "atlas_cli_infix": [
+              2.978,
+              3.037,
+              2.907,
+              3.233,
+              2.935
+            ],
+            "atlas_first_use": [
+              2.376,
+              2.487,
+              2.511,
+              2.558,
+              2.616
+            ],
+            "atlas_declare_and_first_use": [
+              10.411,
+              10.497,
+              10.111,
+              10.316,
+              10.56
+            ],
+            "atlas_export_record": [
+              39.036,
+              40.691,
+              39.419,
+              40.908,
+              41.257
+            ],
+            "atlas_native_wire": [
+              9.798,
+              9.726,
+              9.712,
+              9.692,
+              9.772
+            ],
+            "atlas_native": [
+              1.104,
+              1.136,
+              1.202,
+              1.093,
+              1.082
+            ],
+            "singular": [
+              6.73,
+              6.617,
+              6.621,
+              6.598,
+              6.715
+            ],
+            "singular_declare_and_first_use": [
+              7.395,
+              7.137,
+              7.395,
+              7.254,
+              7.48
+            ]
+          }
+        }
+      }
+    },
+    "rational_forms": {
+      "left": [
+        "(x+2*y)^8",
+        "(18446744073709551629/7)*x^6*y"
+      ],
+      "right": [
+        "(2*x-y)^7",
+        "(1/13)*x*y^5"
+      ],
+      "operations": {
+        "sum": {
+          "atlas_operation": "I + J",
+          "singular_operation": "I+J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 0.898,
+            "atlas_prompt": 1.431,
+            "atlas_cli": 1.442,
+            "atlas_cli_infix": 1.415,
+            "atlas_first_use": 1.125,
+            "atlas_declare_and_first_use": 24.354,
+            "atlas_export_record": 75.523,
+            "atlas_native_wire": 16.39,
+            "atlas_native": 0.061,
+            "singular": 1.938,
+            "singular_declare_and_first_use": 3.07
+          },
+          "samples_us": {
+            "atlas_session": [
+              0.867,
+              0.898,
+              0.888,
+              0.901,
+              0.909
+            ],
+            "atlas_prompt": [
+              1.42,
+              1.412,
+              1.433,
+              1.431,
+              1.445
+            ],
+            "atlas_cli": [
+              1.408,
+              1.437,
+              1.442,
+              1.453,
+              1.464
+            ],
+            "atlas_cli_infix": [
+              1.429,
+              1.478,
+              1.405,
+              1.407,
+              1.415
+            ],
+            "atlas_first_use": [
+              1.254,
+              1.081,
+              1.125,
+              1.058,
+              1.176
+            ],
+            "atlas_declare_and_first_use": [
+              23.95,
+              24.398,
+              24.354,
+              24.104,
+              24.445
+            ],
+            "atlas_export_record": [
+              74.243,
+              75.523,
+              85.182,
+              75.277,
+              75.778
+            ],
+            "atlas_native_wire": [
+              16.521,
+              16.221,
+              16.55,
+              16.39,
+              16.369
+            ],
+            "atlas_native": [
+              0.062,
+              0.061,
+              0.063,
+              0.061,
+              0.06
+            ],
+            "singular": [
+              1.945,
+              1.934,
+              1.938,
+              1.957,
+              1.926
+            ],
+            "singular_declare_and_first_use": [
+              3.047,
+              3.152,
+              3.062,
+              3.07,
+              3.086
+            ]
+          }
+        },
+        "product": {
+          "atlas_operation": "I * J",
+          "singular_operation": "I*J",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 2.062,
+            "atlas_prompt": 2.772,
+            "atlas_cli": 2.629,
+            "atlas_cli_infix": 2.572,
+            "atlas_first_use": 2.607,
+            "atlas_declare_and_first_use": 25.98,
+            "atlas_export_record": 81.502,
+            "atlas_native_wire": 33.695,
+            "atlas_native": 1.093,
+            "singular": 3.621,
+            "singular_declare_and_first_use": 4.711
+          },
+          "samples_us": {
+            "atlas_session": [
+              2.069,
+              2.062,
+              2.065,
+              2.034,
+              2.013
+            ],
+            "atlas_prompt": [
+              2.642,
+              2.816,
+              2.8,
+              2.772,
+              2.573
+            ],
+            "atlas_cli": [
+              2.653,
+              2.617,
+              2.702,
+              2.629,
+              2.625
+            ],
+            "atlas_cli_infix": [
+              2.572,
+              2.586,
+              2.549,
+              2.551,
+              2.582
+            ],
+            "atlas_first_use": [
+              2.715,
+              2.557,
+              2.607,
+              2.529,
+              2.743
+            ],
+            "atlas_declare_and_first_use": [
+              26.523,
+              26.366,
+              25.7,
+              25.98,
+              25.78
+            ],
+            "atlas_export_record": [
+              83.751,
+              81.243,
+              81.502,
+              80.178,
+              81.923
+            ],
+            "atlas_native_wire": [
+              33.276,
+              32.933,
+              33.845,
+              33.851,
+              33.695
+            ],
+            "atlas_native": [
+              1.095,
+              1.099,
+              1.088,
+              1.093,
+              1.086
+            ],
+            "singular": [
+              3.613,
+              3.621,
+              3.688,
+              3.582,
+              3.625
+            ],
+            "singular_declare_and_first_use": [
+              4.727,
+              4.762,
+              4.668,
+              4.707,
+              4.711
+            ]
+          }
+        },
+        "square": {
+          "atlas_operation": "I^2",
+          "singular_operation": "std(I^2)",
+          "mutual_containment_verified": true,
+          "median_us": {
+            "atlas_session": 29.081,
+            "atlas_prompt": 30.587,
+            "atlas_cli": 30.401,
+            "atlas_cli_infix": 29.983,
+            "atlas_first_use": 30.125,
+            "atlas_declare_and_first_use": 47.193,
+            "atlas_export_record": 70.657,
+            "atlas_native_wire": 64.363,
+            "atlas_native": 27.176,
+            "singular": 60.812,
+            "singular_declare_and_first_use": 60.906
+          },
+          "samples_us": {
+            "atlas_session": [
+              28.78,
+              31.223,
+              47.424,
+              29.081,
+              28.978
+            ],
+            "atlas_prompt": [
+              29.541,
+              30.587,
+              31.227,
+              30.466,
+              30.707
+            ],
+            "atlas_cli": [
+              29.715,
+              31.628,
+              38.127,
+              30.401,
+              29.962
+            ],
+            "atlas_cli_infix": [
+              29.318,
+              29.636,
+              29.983,
+              30.345,
+              30.244
+            ],
+            "atlas_first_use": [
+              29.332,
+              57.28,
+              30.125,
+              29.34,
+              30.147
+            ],
+            "atlas_declare_and_first_use": [
+              46.142,
+              59.729,
+              46.708,
+              47.193,
+              49.075
+            ],
+            "atlas_export_record": [
+              69.298,
+              70.657,
+              70.111,
+              72.598,
+              73.086
+            ],
+            "atlas_native_wire": [
+              63.019,
+              64.363,
+              64.975,
+              62.416,
+              65.353
+            ],
+            "atlas_native": [
+              26.955,
+              27.176,
+              27.218,
+              27.74,
+              27.05
+            ],
+            "singular": [
+              60.812,
+              60.375,
+              60.293,
+              62.094,
+              64.078
+            ],
+            "singular_declare_and_first_use": [
+              61.254,
+              60.18,
+              60.906,
+              61.027,
+              59.863
+            ]
+          }
+        }
+      }
+    }
+  },
+  "atlas_binding_sha256": "00d6a9a9b7b9762c3116c20ee2ceb01b77f148f966b9168618ee7b88f80bc5d0"
+}
