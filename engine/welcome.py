@@ -194,7 +194,13 @@ def lettered_map(painter=paint, color=True):
 
 @contextmanager
 def interactive_welcome(panel):
-    """Play above the editable prompt. Finish early to give completion the full workspace."""
+    """Play above the editable prompt while the session runs.
+
+    Typing, commands and short completion lists use the rows below the banner,
+    so the map keeps unfolding until it settles. The yielded function settles
+    it at once, or, given the rows a completion list needs, only when they do
+    not fit below the banner. Leaving the session settles it too.
+    """
     size, top = panel.size, panel.top
     height = max(map(len, FOLDS))
     banner = ""
@@ -213,7 +219,7 @@ def interactive_welcome(panel):
             banner = ""
     if not banner:
         print_welcome(interactive=True)
-        yield lambda: None
+        yield lambda rows=None: None
         return
 
     stream = panel.stream
@@ -221,6 +227,7 @@ def interactive_welcome(panel):
     stream.write(f"\033[{prompt_row};r\033[{prompt_row};1H")
     stream.flush()
     stop = Event()
+    closed = 0  # Rows removed below the settled wordmark.
 
     def paint_map(rows):
         # One write saves the live editing cursor, updates just the
@@ -236,9 +243,9 @@ def interactive_welcome(panel):
 
     def close_gap():
         # The wordmark needs fewer rows than the map did. Delete the spare
-        # ones, one at a time unless the prompt is waiting, to draw the text
+        # ones, one at a time unless the session is ending, to draw the text
         # and the prompt up to the wordmark.
-        closed = 0
+        nonlocal closed
         while closed < spare:
             step = spare - closed if stop.is_set() else 1
             closed += step
@@ -250,17 +257,25 @@ def interactive_welcome(panel):
             stream.flush()
             stop.wait(0.03)
 
+    def settle():
+        # A zoomed or resized window keeps the banner's rows. Draw the
+        # wordmark where it fits instead of leaving a frame half unfolded.
+        now = os.get_terminal_size(stream.fileno())
+        if now.lines < prompt_row:
+            return
+        wide = now.columns > 2 + max(map(len, WORDMARK))
+        paint_map([""] * (1 - margin) + ["  " + paint(row, "brand", panel.color) for row in WORDMARK] if wide else [])
+        close_gap()
+
     def play():
         try:
             for rows, delay in _animation_frames(panel.color, 1 - margin):
                 if os.get_terminal_size(stream.fileno()) != size:
-                    return
+                    break  # A frame drawn for the old width could wrap.
                 paint_map(rows)
                 if stop.wait(delay):
                     break
-            if os.get_terminal_size(stream.fileno()) == size:
-                paint_map([""] * (1 - margin) + ["  " + paint(row, "brand", panel.color) for row in WORDMARK])
-                close_gap()
+            settle()
         finally:
             # DECSTBM also homes the cursor. Restore readline's
             # position as well as the session panel's scroll region.
@@ -269,7 +284,12 @@ def interactive_welcome(panel):
 
     thread = Thread(target=play, name="atlas-welcome")
 
-    def finish():
+    def finish(rows=None):
+        if rows is not None and thread.is_alive():
+            # The prompt scrolls from its row to the bottom while the map plays.
+            room = os.get_terminal_size(stream.fileno()).lines - (prompt_row - closed) + 1
+            if rows < room:
+                return
         stop.set()
         if thread.ident is not None:
             thread.join()

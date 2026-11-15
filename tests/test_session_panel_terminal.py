@@ -114,3 +114,17 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.send(b"1 + 1\n")
         self.read_until(b"\r\n2\r\n")
         self.check_exit(b"quit\n")
+
+    def test_commands_before_the_welcome_settles_leave_it_playing(self):
+        self.startup = self.read_until(PROMPT)
+        # Run a command and complete a name while the map is still unfolding.
+        self.command("f = 1")
+        self.send(b"reso\t")
+        self.read_until(b"resolve(")
+        rest = self.read_until(SAVE + b"\x1b[5;r" + RESTORE)
+        self.assertGreater(rest.count(SAVE + b"\x1b[6;1H"), 3, "the map stopped unfolding")
+        self.assertIn(b"/_/  |_|/_/   /_____/ /_/  |_|/____/", rest)
+        # The gap closes a row at a time, as when nobody types.
+        self.assertEqual(re.findall(rb"\x1b\[11;1H\x1b\[(\d+)M", rest), [b"1"] * 6)
+        self.send(b"\x15")  # Clear the half-typed line.
+        self.check_exit(b"quit\n")

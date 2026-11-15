@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -141,6 +142,33 @@ class CliWelcomeTests(unittest.TestCase):
                                  [(str(6 + i), '  ' + row) for i, row in enumerate(WORDMARK)])
                 version = output.index('version')
                 self.assertEqual(output[:version].count('\n'), 1 + len(WORDMARK) + spare + 1)
+
+    def test_a_resized_window_settles_the_map_instead_of_freezing_it(self):
+        size = os.terminal_size((80, 30))
+        settled = ''.join(r'\x1b\[{};1H\x1b\[2K  {}'.format(6 + i, re.escape(row)) for i, row in enumerate(WORDMARK))
+        for later, wordmark in ((os.terminal_size((60, 30)), True), (os.terminal_size((30, 30)), False),
+                                (os.terminal_size((80, 12)), None)):
+            with self.subTest(later=later):
+                stream = Terminal()
+                panel = SimpleNamespace(size=size, stream=stream, color=False, top=5)
+                sizes = iter([size] * 3)
+                with (patch.object(stream, 'fileno', return_value=1),
+                      patch('os.get_terminal_size', side_effect=lambda fd: next(sizes, later))):
+                    with interactive_welcome(panel) as finish:
+                        deadline = time.monotonic() + 5
+                        while not stream.getvalue().endswith('\x1b7\x1b[5;r\x1b8') and time.monotonic() < deadline:
+                            time.sleep(0.02)
+                        finish()
+                output = stream.getvalue()
+                self.assertTrue(output.endswith('\x1b7\x1b[5;r\x1b8'))
+                # Three frames played before the window changed, and none after.
+                self.assertEqual(output.count('\x1b7\x1b[6;1H\x1b[2K'), 3 + (wordmark is not None))
+                closed = re.findall(r'\x1b\[11;1H\x1b\[(\d+)M', output)
+                if wordmark is None:
+                    self.assertEqual(closed, [])  # The banner's rows left the window.
+                else:
+                    self.assertEqual(bool(re.search(settled, output)), wordmark)
+                    self.assertEqual(closed, ['1'] * 6)
 
     def assert_unfolding_sequence(self, frames):
         reveals = []

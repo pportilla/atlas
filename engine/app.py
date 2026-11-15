@@ -312,9 +312,11 @@ def run_session(parser, panel):
     from .welcome import interactive_welcome
     session = new_session(calculate_resolution)
     shell_names = shell_command_names(parser)
-    with interactive_welcome(panel) as finish_welcome, tinted_errors(panel.enabled and panel.color):
-        with prompt_completion(session, parser, shell_names | {"help"}, on_tab=finish_welcome):
-            return _session_loop(parser, panel, session, shell_names, finish_welcome)
+    # The welcome plays on while the session is in use. A completion list too
+    # long for the rows below it settles the map first, and so does leaving.
+    with interactive_welcome(panel) as settle_welcome, tinted_errors(panel.enabled and panel.color):
+        with prompt_completion(session, parser, shell_names | {"help"}, on_list=settle_welcome):
+            return _session_loop(parser, panel, session, shell_names)
 
 
 def _is_shell_command(words, shell_names, variables):
@@ -324,7 +326,7 @@ def _is_shell_command(words, shell_names, variables):
     return words[0] in shell_names and words[0] not in variables and not expression_tail
 
 
-def _session_loop(parser, panel, session, shell_names, finish_welcome):
+def _session_loop(parser, panel, session, shell_names):
     from .cli_highlight import (command_pieces, expression_pieces, live_terminal, paint_hint,
                                 paint_value, repaint_entry)
     from .cli_style import paint, readline_prompt
@@ -351,10 +353,7 @@ def _session_loop(parser, panel, session, shell_names, finish_welcome):
     while True:
         try:
             panel.refresh(session.variables)
-            try:
-                line = input(prompt)
-            finally:
-                finish_welcome()
+            line = input(prompt)
             words = line.split(maxsplit=1)
             if not words:
                 continue

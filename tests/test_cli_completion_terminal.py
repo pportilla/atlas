@@ -25,10 +25,20 @@ class CliCompletionTerminalTests(CliTerminalCase):
         self.read_until(b"|::|")
         self.send(b"local_\t")
         choices = self.read_until(b"local_standard_basis", timeout=1.5)
-        # Restore all rows below the pinned header before listing choices.
-        self.assertRegex(choices, rb"(?s)\x1b\[5;(?:32)?r.*local_standard_basis")
+        # A short list fits below the banner, so the map keeps unfolding.
+        self.assertNotRegex(choices, rb"\x1b\[5;(?:32)?r")
+        self.read_until(b"\x1b7\x1b[6;1H", timeout=1.5)
         self.send(b'standard_basis()\n')
         self.read_until(b"help local_standard_basis", timeout=1.5)
+        self.send(b"quit\n")
+        self.assertEqual(self.child.wait(timeout=5), 0)
+
+    def test_a_long_completion_list_settles_the_map_first(self):
+        self.read_until(b"|::|")
+        self.send(b"\t")
+        choices = self.read_until(b"zariski_tangent_space", timeout=3)
+        # Restore all rows below the pinned header before listing every name.
+        self.assertRegex(choices, rb"(?s)\x1b\[5;(?:32)?r.*zariski_tangent_space")
         self.send(b"quit\n")
         self.assertEqual(self.child.wait(timeout=5), 0)
 
