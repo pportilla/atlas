@@ -1,7 +1,12 @@
 // Unbounded sparse Buchberger and ordered division for product monomial orders.
 // Each exponent is a FLINT integer; only the number of actual terms costs space.
 #include "flint_polynomial.hpp"
+#include <atomic>
+#include <exception>
 #include <memory>
+#include <mutex>
+#include <system_error>
+#include <thread>
 #include <flint/fmpq.h>
 #include <map>
 #include <set>
@@ -141,6 +146,24 @@ Terms divide(Terms p, const Rows& reducers, Rows* quotients = nullptr) {
         add_shifted(p, reducers[k], shift, factor);
     }
     return remainder;
+}
+
+// Whether divide(p, reducers) is zero. A term set aside for the remainder is
+// never touched again, so the first one already decides.
+bool reduces_to_zero(Terms p, const Rows& reducers) {
+    while (!p.empty()) {
+        auto head = p.begin();
+        size_t k = 0;
+        while (k < reducers.size() && !divides(reducers[k].begin()->first, head->first)) ++k;
+        if (k == reducers.size()) return false;
+        if (reduce_binomial_power(p, reducers[k])) continue;
+        auto shift = difference(head->first, reducers[k].begin()->first);
+        Coefficient factor;
+        fmpq_div(factor.q, head->second.q, reducers[k].begin()->second.q);
+        fmpq_neg(factor.q, factor.q);
+        add_shifted(p, reducers[k], shift, factor);
+    }
+    return true;
 }
 
 Terms s_polynomial(const Terms& a, const Terms& b) {
@@ -326,15 +349,15 @@ struct FrameRing {
     ~FrameRing() { fmpq_mpoly_ctx_clear(ctx); }
 };
 
+// Divisors shared read-only, so that several threads may reduce by them.
 struct PackedDivisors {
     const fmpq_mpoly_ctx_struct* ctx;
-    std::vector<PolyValue> storage, scratch;
-    std::vector<fmpq_mpoly_struct*> rows, quotients;
+    std::vector<PolyValue> storage;
+    std::vector<fmpq_mpoly_struct*> rows;
     std::vector<std::vector<ulong>> heads;
     explicit PackedDivisors(const fmpq_mpoly_ctx_struct* c) : ctx(c) {}
     void add(PolyValue&& polynomial) {
         storage.push_back(std::move(polynomial));
-        scratch.emplace_back(ctx);
     }
     void prepare() {
         for (auto& row : storage) {
@@ -342,7 +365,6 @@ struct PackedDivisors {
             auto& head = heads.emplace_back(fmpq_mpoly_ctx_nvars(ctx));
             fmpq_mpoly_get_term_exp_ui(head.data(), row.p, 0, ctx);
         }
-        for (auto& q : scratch) quotients.push_back(q.p);
     }
     bool irreducible_head(const PolyValue& f) const {
         std::vector<ulong> term(fmpq_mpoly_ctx_nvars(ctx));
@@ -353,8 +375,12 @@ struct PackedDivisors {
             return true;
         });
     }
-    void reduce(PolyValue& f) {
+    void reduce(PolyValue& f) const {
         if (rows.empty() || fmpq_mpoly_is_zero(f.p, ctx)) return;
+        std::vector<PolyValue> scratch;
+        scratch.reserve(rows.size());
+        std::vector<fmpq_mpoly_struct*> quotients;
+        for (size_t i = 0; i < rows.size(); ++i) quotients.push_back(scratch.emplace_back(ctx).p);
         PolyValue remainder(ctx);
         fmpq_mpoly_divrem_ideal(quotients.data(), remainder.p, f.p, rows.data(), rows.size(), ctx);
         fmpq_mpoly_swap(f.p, remainder.p, ctx);
@@ -407,6 +433,33 @@ Terms unpack_frame_row(const PolyValue& p, Order order) {
     return result;
 }
 
+// Remainders modulo a reduced Groebner basis for a graded reverse
+// lexicographic order. The remainder modulo a Groebner basis does not depend
+// on how the division is carried out, so FLINT's packed division returns the
+// remainder of ordered division. Rows past the packing range raise
+// PackingLimit, and the caller divides them in the sparse map instead.
+class PackedRemainders {
+    FrameRing ring;
+    PackedDivisors divisors;
+    Order order;
+public:
+    PackedRemainders(const Rows& basis, Order order_) : ring(order_.n), divisors(ring.ctx), order(order_) {
+        if (order.kind != 0 || order.coefficient) throw PackingLimit{};
+        for (const auto& f : basis) divisors.add(pack_frame_row(f, ring));
+        divisors.prepare();
+    }
+    Terms remainder(const Terms& f) const {
+        auto p = pack_frame_row(f, ring);
+        divisors.reduce(p);
+        return unpack_frame_row(p, order);
+    }
+    bool zero(const Terms& f) const {
+        auto p = pack_frame_row(f, ring);
+        divisors.reduce(p);
+        return fmpq_mpoly_is_zero(p.p, ring.ctx);
+    }
+};
+
 // Keep the derivative representatives identical to ordered chart division.
 // The saturated basis is needed only to discard globally vanishing jets.
 class PackedDerivatives {
@@ -429,7 +482,7 @@ public:
         }
     }
 
-    Terms apply(const Terms& f, size_t k, bool plain, bool jet) {
+    Terms apply(const Terms& f, size_t k, bool plain, bool jet) const {
         auto source = pack_frame_row(f, ring);
         PolyValue sum(ring.ctx), part(ring.ctx), product(ring.ctx);
         for (const auto& [axis, coefficient] : fields[k]) {
@@ -449,6 +502,50 @@ public:
         return unpack_frame_row(sum, f.key_comp());
     }
 };
+
+// Below this many input terms a layer of derivatives is computed in one thread.
+constexpr size_t PARALLEL_TERMS = 2048;
+
+// Calls work(0), ..., work(n-1), on several threads when `parallel`.
+template<class Work>
+void each_index(size_t n, bool parallel, Work&& work) {
+    const size_t lanes = parallel ? std::min<size_t>(n, std::thread::hardware_concurrency()) : 1;
+    if (lanes <= 1) {
+        for (size_t j = 0; j < n; ++j) work(j);
+        return;
+    }
+    std::atomic<size_t> next{0};
+    // The failure of the first index, as the sequential loop would meet it.
+    std::exception_ptr failure;
+    size_t failed = n;
+    std::mutex guard;
+    auto worker = [&] {
+        for (size_t j; (j = next.fetch_add(1, std::memory_order_relaxed)) < n;) {
+            try {
+                work(j);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(guard);
+                if (j < failed) {
+                    failed = j;
+                    failure = std::current_exception();
+                }
+            }
+        }
+    };
+    std::vector<std::thread> crew;
+    crew.reserve(lanes - 1);
+    try {
+        for (size_t k = 1; k < lanes; ++k) crew.emplace_back([&] {
+            worker();
+            flint_cleanup();
+        });
+    } catch (const std::system_error&) {
+        // The started threads and this one take every index.
+    }
+    worker();
+    for (auto& t : crew) t.join();
+    if (failure) std::rethrow_exception(failure);
+}
 
 // Derivatives and coordinate orders on a localized implicit chart. Bind the
 // chart's cached reduced bases once for all layers and repeated divisions.
@@ -502,7 +599,7 @@ std::string implicit_frame(std::istream& input, bool jet, bool chain) {
             }
             auto d = derivative(p,fields[k]);
             if (!plain[k]) d = divide(std::move(d),reducers);
-            if (jet && !d.empty() && divide(d,saturated).empty()) d.clear();
+            if (jet && !d.empty() && reduces_to_zero(d,saturated)) d.clear();
             return d;
         };
         if (chain) {
@@ -515,9 +612,15 @@ std::string implicit_frame(std::istream& input, bool jet, bool chain) {
         std::set<std::string> seen{result};
         Rows layer{std::move(f)};
         for (size_t i = 1; i < order && !layer.empty(); ++i) {
+            // The derivatives of a layer are independent; new ones are kept
+            // in the order of the sequential loop.
+            Rows derived(layer.size() * count, Terms(chart));
+            size_t terms = 0;
+            for (const auto& p : layer) terms += p.size();
+            each_index(derived.size(), terms * count >= PARALLEL_TERMS,
+                       [&](size_t j) { derived[j] = apply(layer[j / count], j % count); });
             Rows next;
-            for (const auto& p : layer) for (size_t k = 0; k < count; ++k) {
-                auto d = apply(p,k);
+            for (auto& d : derived) {
                 if (d.empty()) continue;
                 std::string row;
                 print_row(row,d);
@@ -532,6 +635,32 @@ std::string implicit_frame(std::istream& input, bool jet, bool chain) {
     }
     const auto unit = read_row(line(),chart);
     const size_t axes = integer();
+    // The chart basis and the cuts are reduced Groebner bases for grevlex.
+    auto packed = [](const Rows& basis, Order order) -> std::unique_ptr<PackedRemainders> {
+        try {
+            return std::make_unique<PackedRemainders>(basis, order);
+        } catch (const PackingLimit&) {
+            return nullptr;
+        }
+    };
+    auto remainder = [](const std::unique_ptr<PackedRemainders>& fast, const Terms& f, const Rows& basis) {
+        if (fast) {
+            try {
+                return fast->remainder(f);
+            } catch (const PackingLimit&) {}
+        }
+        return divide(f, basis);
+    };
+    auto zero = [](const std::unique_ptr<PackedRemainders>& fast, const Terms& f, const Rows& basis) {
+        if (fast) {
+            try {
+                return fast->zero(f);
+            } catch (const PackingLimit&) {}
+        }
+        return reduces_to_zero(f, basis);
+    };
+    std::unique_ptr<PackedRemainders> packed_reducers;
+    bool reducers_packed = false;
     for (size_t k = 0; k < axes; ++k) {
         const auto status = line();
         if (status == "absent") { result += "0\n"; continue; }
@@ -539,8 +668,15 @@ std::string implicit_frame(std::istream& input, bool jet, bool chain) {
         const auto cut = rows(chart), open_cut = rows(localized), over = rows(inverse);
         Z order;
         if (f.empty()) throw std::invalid_argument("Zero has no finite coordinate order.");
-        while (divide(f,cut).empty() || (!open_cut.empty() && divide(lift_inverse(f,localized,false),open_cut).empty())) {
-            auto g = divide(f,reducers);
+        if (!reducers_packed) {
+            packed_reducers = packed(reducers, chart);
+            reducers_packed = true;
+        }
+        const auto packed_cut = packed(cut, chart);
+        const auto packed_open_cut = open_cut.empty() ? nullptr : packed(open_cut, localized);
+        while (zero(packed_cut, f, cut) ||
+               (!open_cut.empty() && zero(packed_open_cut, lift_inverse(f,localized,false), open_cut))) {
+            auto g = remainder(packed_reducers, f, reducers);
             bool found = false;
             for (int retry = 0; retry < 12; ++retry) {
                 auto q = divide(lift_inverse(g,inverse,true),over);
@@ -551,7 +687,7 @@ std::string implicit_frame(std::istream& input, bool jet, bool chain) {
                     found = true;
                     break;
                 }
-                g = divide(product(g,unit),reducers);
+                g = remainder(packed_reducers, product(g,unit), reducers);
             }
             if (!found || f.empty()) return "quotient_unavailable\n";
         }
