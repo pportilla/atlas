@@ -1,0 +1,1326 @@
+{
+  "normal_cli": [
+    "./atlas",
+    "resolve",
+    "z^2-(x^2*(x+2*y)^2+4*y^3*(x+y)^2)*(x^2*(x+2*y)^2+4*y*(x+y)^2)",
+    "--vars",
+    "x,y,z",
+    "--mode",
+    "intrinsic",
+    "--json"
+  ],
+  "binary_sha256": "7ade339b14bb13073e35fa559f50b05d1654ff9c1a2d4a06023bdde6862e7957",
+  "snapshot_manifest_sha256": "d0e879cfbfc74db93d90846ff850a03a4b5c2120dbdd8130938dd0e4aeb509dc",
+  "conditions": "Fresh normal Atlas intrinsic CLI on the same host as the published baseline, default exhaustive search. Chart records, progress, native calls and canonical worker memory were observed externally. Other work on this machine varied.",
+  "baseline_source": "component-regularity-surface-ryzen-6800h.json",
+  "completed_observation": true,
+  "wall_s": 5401.183,
+  "limit_s": 5400,
+  "stop_reason": "external comparison time limit",
+  "peak_worker_gib": 3.814,
+  "record": null,
+  "b9_selected": false,
+  "b9_constructed": false,
+  "matched_checkpoints": {
+    "pre-b8.json": {
+      "records": 30,
+      "baseline_equal": true,
+      "sha256": "1b143e4f77b49734b531a3b71f4f10c26dca00e2a2cc4df3c202f11835661f7a"
+    },
+    "post-b8.json": {
+      "records": 36,
+      "baseline_equal": true,
+      "sha256": "2d72402ea9678021c8ad703c68c46f2a030a20c102fd8a0856cb267d5cac66cb"
+    }
+  },
+  "stages": [
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 0,
+      "elapsed_s": 0.203
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 0,
+      "elapsed_s": 0.203
+    },
+    {
+      "stage": "Blowing up centre B1 (complete method)",
+      "blowups": 0,
+      "elapsed_s": 2.809
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 1,
+      "elapsed_s": 2.81
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 1,
+      "elapsed_s": 2.811
+    },
+    {
+      "stage": "Blowing up centre B2 (complete method)",
+      "blowups": 1,
+      "elapsed_s": 2.938
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 2,
+      "elapsed_s": 2.949
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 2,
+      "elapsed_s": 2.952
+    },
+    {
+      "stage": "Blowing up centre B3 (complete method)",
+      "blowups": 2,
+      "elapsed_s": 3.181
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 3,
+      "elapsed_s": 3.182
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 3,
+      "elapsed_s": 3.183
+    },
+    {
+      "stage": "Blowing up centre B4 (complete method)",
+      "blowups": 3,
+      "elapsed_s": 3.207
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 4,
+      "elapsed_s": 3.22
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 4,
+      "elapsed_s": 3.225
+    },
+    {
+      "stage": "Blowing up centre B5 (complete method)",
+      "blowups": 4,
+      "elapsed_s": 3.309
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 5,
+      "elapsed_s": 3.311
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 5,
+      "elapsed_s": 3.312
+    },
+    {
+      "stage": "Blowing up centre B6 (complete method)",
+      "blowups": 5,
+      "elapsed_s": 3.339
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 6,
+      "elapsed_s": 3.596
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 6,
+      "elapsed_s": 5.534
+    },
+    {
+      "stage": "Blowing up centre B7 (complete method)",
+      "blowups": 6,
+      "elapsed_s": 18.379
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 7,
+      "elapsed_s": 18.382
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 7,
+      "elapsed_s": 18.384
+    },
+    {
+      "stage": "Blowing up centre B8 (complete method)",
+      "blowups": 7,
+      "elapsed_s": 18.479
+    },
+    {
+      "stage": "Checking charts for normal crossings (complete method)",
+      "blowups": 8,
+      "elapsed_s": 23.641
+    },
+    {
+      "stage": "Searching for the next centre (complete method)",
+      "blowups": 8,
+      "elapsed_s": 413.544
+    }
+  ],
+  "centre_selection_after_B8": [
+    {
+      "index": 0,
+      "start_s": 413.559,
+      "elapsed_s": 320.731,
+      "invariant": [
+        "2",
+        "0",
+        "1/2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "centre_sha256": "024a0177fe5264e82db15882ca9b63ab097cf0f6f5fdad55f5d3fd8c0eeebf3c",
+      "baseline_elapsed_s": 349.016,
+      "baseline_return_equal": true,
+      "call_counts": {
+        "frame_points": 5,
+        "smooth_point_order": 4,
+        "saturate": 6
+      },
+      "certificate_outcomes": {
+        "frame_points": {
+          "complete_nonempty": 1,
+          "unknown": 4
+        },
+        "smooth_point_order": {
+          "unknown": 2,
+          "0": 2
+        }
+      }
+    },
+    {
+      "index": 1,
+      "start_s": 734.29,
+      "elapsed_s": 899.428,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "centre_sha256": "d2e19757a0c9a8b852e063c6ab2033e674d5d2c370c001dc099772c612de4ad4",
+      "baseline_elapsed_s": 1094.55,
+      "baseline_return_equal": true,
+      "call_counts": {
+        "frame_points": 3,
+        "smooth_point_order": 3,
+        "saturate": 2
+      },
+      "certificate_outcomes": {
+        "frame_points": {
+          "complete_nonempty": 3
+        },
+        "smooth_point_order": {
+          "6": 1,
+          "0": 2
+        }
+      }
+    },
+    {
+      "index": 3,
+      "start_s": 1633.718,
+      "elapsed_s": 4.423,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "e08b018cc710764308ff2d2c497abd7c77543e5ddd1af138300290f615dfe9af",
+      "baseline_elapsed_s": 5.756,
+      "baseline_return_equal": true,
+      "call_counts": {
+        "frame_points": 6,
+        "smooth_point_order": 2,
+        "saturate": 4
+      },
+      "certificate_outcomes": {
+        "frame_points": {
+          "unknown": 3,
+          "complete_nonempty": 3
+        },
+        "smooth_point_order": {
+          "15": 2
+        }
+      }
+    },
+    {
+      "index": 4,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "centre_sha256": "03f75947130f3ec3762827ea09708db81df410f1255d4f3f8f97e2df55901e3c",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 6,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "6db86afc01ed3cb84f8421652064001a93c075fd546f640487f11abce6022850",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 7,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "a16ba4f9e594388bec8f2b96bc7a9c71b08519e57438385cf9d2801c66d99470",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 9,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "533446cdbd76e864f156812c12fdc2a36e01062e17a2e9366d440d3e75bf792a",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 10,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "1"
+      ],
+      "centre_sha256": "be6b3fd6007f55d524c24f719e3e12aefd32977e36db7f86db482f83e480c06c",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 12,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "1/2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "centre_sha256": "3e31bf4a9e27c6a21282d9e2e1d219b5f6ed18fe557516d8c2fdfc99967b81a8",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 13,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 15,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 16,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 18,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 19,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 21,
+      "start_s": 1638.141,
+      "elapsed_s": 0.0,
+      "invariant": [
+        "2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "1",
+        "0",
+        "0"
+      ],
+      "centre_sha256": "9e81b6dffa50c87dd15507961d96e3cd67a08666f53d9a9fffee86a251159dd6",
+      "baseline_elapsed_s": 0.0,
+      "baseline_return_equal": true,
+      "call_counts": {},
+      "certificate_outcomes": {}
+    },
+    {
+      "index": 22,
+      "start_s": 1638.141,
+      "elapsed_s": 33.875,
+      "invariant": [
+        "2",
+        "0",
+        "1/2",
+        "0",
+        "0"
+      ],
+      "key": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "centre_sha256": "d99425e2e10ee3787216990da7fba4fb5bfb6d32cd9cfae25141ba33ac8ce670",
+      "baseline_elapsed_s": 59.876,
+      "baseline_return_equal": true,
+      "call_counts": {
+        "frame_points": 5,
+        "smooth_point_order": 3,
+        "saturate": 6
+      },
+      "certificate_outcomes": {
+        "frame_points": {
+          "complete_nonempty": 1,
+          "unknown": 4
+        },
+        "smooth_point_order": {
+          "unknown": 1,
+          "0": 2
+        }
+      }
+    },
+    {
+      "index": 23,
+      "start_s": 1672.017,
+      "calls": [
+        {
+          "operation": "implicit_jet",
+          "entered_s": 1672.067,
+          "elapsed_ms": 156.295,
+          "result_rows": 4
+        },
+        {
+          "operation": "implicit_jet",
+          "entered_s": 1672.239,
+          "elapsed_ms": 333.935,
+          "result_rows": 11
+        },
+        {
+          "operation": "implicit_derivative_chain",
+          "entered_s": 1675.977,
+          "elapsed_ms": 89.9,
+          "result_rows": 3
+        },
+        {
+          "operation": "implicit_derivative_chain",
+          "entered_s": 1676.079,
+          "elapsed_ms": 1.358,
+          "result_rows": 3
+        },
+        {
+          "operation": "frame_points 6 9 2",
+          "entered_s": 1676.085,
+          "max_terms": 50,
+          "answer": [
+            "points",
+            "0 -1/4 15/26 0 0 0"
+          ],
+          "elapsed_ms": 0.975
+        },
+        {
+          "operation": "smooth_point_order 6 4 64",
+          "entered_s": 1676.086,
+          "max_terms": 435,
+          "answer": [
+            "6"
+          ],
+          "elapsed_ms": 11.221
+        },
+        {
+          "operation": "frame_points 6 13 2",
+          "entered_s": 1676.175,
+          "max_terms": 855,
+          "answer": [
+            "points",
+            "0 -1/4 15/26 0 0 0"
+          ],
+          "elapsed_ms": 6.469
+        },
+        {
+          "operation": "frame_points 6 14 2",
+          "entered_s": 1676.182,
+          "max_terms": 855,
+          "answer": [
+            "points",
+            "0 -1/4 15/26 0 0 0"
+          ],
+          "elapsed_ms": 5.567
+        },
+        {
+          "operation": "implicit_jet",
+          "entered_s": 1677.957,
+          "elapsed_ms": 44953.968,
+          "result_rows": 63
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.741,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 7.875
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.749,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.015
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.749,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 5.357
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.755,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.016
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.755,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 4.384
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.759,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.011
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.76,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.978
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.764,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.011
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.764,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.83
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.768,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.01
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.768,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.746
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.772,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.011
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.773,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.759
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.776,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.011
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.777,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.657
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.78,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.011
+        },
+        {
+          "operation": "smooth_point_direction 6 4 6 3",
+          "entered_s": 1724.781,
+          "max_terms": 435,
+          "answer": [
+            "yes"
+          ],
+          "elapsed_ms": 3.604
+        },
+        {
+          "operation": "contact_open_points 6",
+          "entered_s": 1724.784,
+          "max_terms": 1,
+          "answer": null,
+          "elapsed_ms": 0.01
+        },
+        {
+          "operation": "implicit_derivative_chain",
+          "entered_s": 1724.785,
+          "elapsed_ms": 88.752,
+          "result_rows": 3
+        },
+        {
+          "operation": "implicit_derivative_chain",
+          "entered_s": 1724.874,
+          "elapsed_ms": 139.636,
+          "result_rows": 3
+        },
+        {
+          "operation": "implicit_derivative_chain",
+          "entered_s": 1728.666,
+          "elapsed_ms": 88.281,
+          "result_rows": 3
+        },
+        {
+          "operation": "frame_points 6 9 2",
+          "entered_s": 1728.807,
+          "max_terms": 818,
+          "answer": [
+            "points",
+            "0 -1/4 15/26 0 0 0"
+          ],
+          "elapsed_ms": 8.162
+        },
+        {
+          "operation": "smooth_point_order 6 4 64",
+          "entered_s": 1728.815,
+          "max_terms": 681,
+          "answer": [
+            "6"
+          ],
+          "elapsed_ms": 21.421
+        },
+        {
+          "operation": "groebner_basis",
+          "entered_s": 1728.857,
+          "order": "grevlex",
+          "row_terms": [
+            8,
+            12,
+            4,
+            681
+          ],
+          "request_sha256": "3063dcbfbda980eaeb3f05e95fbd7a149808f6ec47c9a85558a10117d30caa95",
+          "elapsed_ms": 454161.667,
+          "available": true
+        },
+        {
+          "operation": "groebner_basis",
+          "entered_s": 2508.254,
+          "order": "grevlex",
+          "row_terms": [
+            8,
+            12,
+            4,
+            681,
+            1
+          ],
+          "request_sha256": "218ddee0f344572b524e232a3cfba877844fa19f600c6728c926e296dded9a5d",
+          "elapsed_ms": 3.168,
+          "available": true
+        },
+        {
+          "operation": "groebner_basis",
+          "entered_s": 2508.263,
+          "order": "first",
+          "row_terms": [
+            8,
+            12,
+            4,
+            681,
+            2
+          ],
+          "request_sha256": "3a75ea7a360c2a07c66148dd8ca84ec6e087533e6d42157dda08f363b164d06a",
+          "observed_elapsed_at_last_sample_s": 2892.655
+        }
+      ]
+    }
+  ],
+  "independent_cli_regressions": {
+    "cases": 24,
+    "paired_runs": 92,
+    "all_nontiming_fields_equal": true,
+    "two_seven_vertex_chains": [
+      "quartic",
+      "quartic-permuted",
+      "quartic-rescaled"
+    ]
+  },
+  "reference_surface": {
+    "commit": "18e668177ede6e38292c8fa584c92023d89a206a",
+    "native_library_sha256": "6b1a946343e6b3c49db6f8e885b8c3b3aedd71b5b5ce52c3e21130086347286c",
+    "elapsed_s": 5401.074,
+    "peak_worker_gib": 1.306,
+    "b8_constructed_s": 49.624,
+    "b9_search_s": 442.851,
+    "chart23_start_s": 1952.064,
+    "chart23_jet_layer": {
+      "stage": "B9 centre selection, chart 23",
+      "frame_equations": 140,
+      "largest_polynomial_terms": 4034,
+      "seconds_since_previous_native_test_return": 1465.529,
+      "emptiness_check_seconds": 1.307,
+      "timing_scope": "Wall interval between two frame tests. Periodic stacks recorded the native implicit jet during this interval."
+    },
+    "b9_selected": false,
+    "b9_constructed": false
+  },
+  "cpu_affinity": "1,3,5,7,9,11,13,15",
+  "cli_exit_code": 130,
+  "last_sampled_worker_stack": [
+    "exhaustive_resolution.py:_watch_coordinator",
+    "algebra_execution.py:packed_basis",
+    "groebner.py:_native",
+    "groebner.py:groebner",
+    "centre_frame.py:over",
+    "centres.py:_remove_coordinate_powers",
+    "centres.py:_residue",
+    "centres.py:_residual",
+    "centres.py:_level",
+    "centres.py:maximum",
+    "local_blowups.py:_locus",
+    "local_blowups.py:choose",
+    "local_blowups.py:_run",
+    "local_blowups.py:acampo_over",
+    "origin_backend.py:_resolve",
+    "exhaustive_resolution.py:_run"
+  ],
+  "memory_conditions": "Worker limit 10.2 GiB RSS. Memory sampled every second. A second guard applies when the host has less than 1.8 GiB available continuously for 20s while the worker uses more than 1.8 GiB.",
+  "test_suite": {
+    "unittest_cases": 1160,
+    "failures": 0,
+    "skips": 38,
+    "wall_s": 359.755,
+    "standalone_native_boundary_tests": 3,
+    "clean_rebuild_matches_measured_binary": true
+  },
+  "assay_results_file": "resolution-point-order-ryzen-6800h.json",
+  "canonical_certificate_counts": [
+    {
+      "name": "canonical-sheared",
+      "mode": "embedded",
+      "status": "resolved",
+      "steps": 4,
+      "operations": {}
+    },
+    {
+      "name": "canonical-tangent",
+      "mode": "embedded",
+      "status": "resolved",
+      "steps": 4,
+      "operations": {
+        "frame_points": {
+          "unknown": 5
+        }
+      }
+    },
+    {
+      "name": "canonical-double-cone",
+      "mode": "embedded",
+      "status": "resolved",
+      "steps": 6,
+      "operations": {}
+    },
+    {
+      "name": "canonical-intrinsic",
+      "mode": "intrinsic",
+      "status": "resolved",
+      "steps": 4,
+      "operations": {}
+    },
+    {
+      "name": "canonical-double-cone-intrinsic",
+      "mode": "intrinsic",
+      "status": "resolved",
+      "steps": 6,
+      "operations": {}
+    }
+  ],
+  "surface_slice_diagnostic": {
+    "method": "Separate saved-chart replay located the call from _remove_coordinate_powers and the exact smooth frame. Independent Singular checks below apply to that input and represent mathematical checks only.",
+    "coordinate": "divisor_B8",
+    "coordinate_index": 5,
+    "free_parameter_indices": [
+      4,
+      5
+    ],
+    "frame_equation_terms": [
+      8,
+      12,
+      4,
+      681
+    ],
+    "strict_polynomial_terms": 437,
+    "working_point": [
+      "0",
+      "-1/4",
+      "15/26",
+      "0",
+      "0",
+      "0"
+    ],
+    "local_b_eq_0": "After elimination near this point the frame requires (20250/2197)(a-3z)=0, and the strict polynomial restricts to -(a-3z)^2.",
+    "global_b_eq_0": "Restrict to b=0 and eliminate its affine-linear companion x=26u/15-1. Saturation by the two saved open factors gives the same nonzero five-term normal form for the strict transform as the unrestricted slice. An explicit point of the open over QQ[u]/(884u^2+225) kills all four defining equations and has nonzero strict transform.",
+    "singular_open_cut_s": 0.279691,
+    "closed_basis_rows": 7,
+    "open_basis_rows": 7,
+    "open_remainder_terms": 5,
+    "atlas_direct_section": {
+      "method": "Set b=0 by native substitution on the four equations, strict polynomial, and both open factors; native frame_empty checks whether the restricted frame contains a geometric point where the strict polynomial and both factors are nonzero.",
+      "trial_conditions": "Nine fresh Python processes pinned to the same logical CPU, private 700 MiB virtual address-space cap and 12s timeout each. Native library initialization may be part of the after-decoding interval. The chart row decoding is timed separately, and the whole-process interval includes Python process launch and teardown. Other Atlas tasks were running.",
+      "separate_diagnostic": true,
+      "input_sha256": "ced23cb226aa4ea84d0834245fd7a8d81e10625218ed2dc1735dd7526d9f09e5",
+      "native_sha256": "77d34ba54f6083701e5ef92bd91ac24ad25db5add901dd4a34ad8c49b41bbe13",
+      "source_row_terms": [
+        8,
+        12,
+        4,
+        681,
+        437,
+        24,
+        818
+      ],
+      "restricted_row_terms": [
+        8,
+        12,
+        3,
+        69,
+        437,
+        24,
+        57
+      ],
+      "nonempty": true,
+      "divisibility_order": 0,
+      "trials": 9,
+      "medians_ms": {
+        "input_decode_ms": 18.831,
+        "after_decode_section_ms": 21.73,
+        "section_emptiness_ms": 48.179,
+        "after_decode_total_ms": 69.953,
+        "whole_process_ms": 192.804
+      },
+      "internal_archive": "residual-point-order/chart23-coordinate-section.json"
+    }
+  },
+  "isolated_point_change_cli_timings": {
+    "baseline": "2399f81326691abb76656a29afbf9b33c2bf14f6",
+    "candidate": "392decc",
+    "conditions": "Five canonical cases, six alternating fresh CLI pairs per case on logical CPU 2 while other jobs ran. Only the native point-order and derivative changes toggled; full output structure/order compared except elapsed time.",
+    "candidate_native_sha256": "7fc8606b2fb7fba3f27307e52b1bfbef68d8d97bcdff4a3a63ef2440948c4d96",
+    "median_before_over_after": 1.0143608194679266,
+    "after_wins": 17,
+    "pairs": [
+      {
+        "case": "canonical-tangent",
+        "trial": 1,
+        "before_s": 0.9830220869916957,
+        "after_s": 0.7938762950070668,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 1,
+        "before_s": 0.7036524960130919,
+        "after_s": 0.73455850200844,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 1,
+        "before_s": 1.2465015150082763,
+        "after_s": 0.9133342040004209,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 1,
+        "before_s": 0.8954175040125847,
+        "after_s": 0.8636216369923204,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 1,
+        "before_s": 0.7227812540077139,
+        "after_s": 0.634656709007686,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 2,
+        "before_s": 0.7585339630022645,
+        "after_s": 0.7593337830039673,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 2,
+        "before_s": 1.1845183999976143,
+        "after_s": 1.0127018280036282,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 2,
+        "before_s": 0.9018219669815153,
+        "after_s": 0.8977993809967302,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 2,
+        "before_s": 0.7853304390155245,
+        "after_s": 0.7093772960070055,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      },
+      {
+        "case": "canonical-tangent",
+        "trial": 2,
+        "before_s": 0.762910285993712,
+        "after_s": 0.9545324830105528,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 3,
+        "before_s": 0.9273380560043734,
+        "after_s": 0.9411065129970666,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 3,
+        "before_s": 1.0084046950214542,
+        "after_s": 0.9461439250153489,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 3,
+        "before_s": 0.6097414850082714,
+        "after_s": 0.5674814700032584,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      },
+      {
+        "case": "canonical-tangent",
+        "trial": 3,
+        "before_s": 0.7134932469925843,
+        "after_s": 0.7622644060174935,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 3,
+        "before_s": 0.8344338949827943,
+        "after_s": 0.7005070360028185,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 4,
+        "before_s": 1.1050475439988077,
+        "after_s": 1.1498653879971243,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 4,
+        "before_s": 0.82702203001827,
+        "after_s": 0.8288150559819769,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      },
+      {
+        "case": "canonical-tangent",
+        "trial": 4,
+        "before_s": 0.9845699600118678,
+        "after_s": 0.987950392998755,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 4,
+        "before_s": 0.8249169960035942,
+        "after_s": 0.6759256730147172,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 4,
+        "before_s": 0.9434028490213677,
+        "after_s": 0.8163929909933358,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 5,
+        "before_s": 0.7524193660065066,
+        "after_s": 0.5798860420181882,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      },
+      {
+        "case": "canonical-tangent",
+        "trial": 5,
+        "before_s": 0.7192798730102368,
+        "after_s": 0.7184328639996238,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 5,
+        "before_s": 0.6808670830214396,
+        "after_s": 0.664752716984367,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 5,
+        "before_s": 0.822831377008697,
+        "after_s": 0.8842143600049894,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 5,
+        "before_s": 0.8818024159991182,
+        "after_s": 0.9256638549850322,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-tangent",
+        "trial": 6,
+        "before_s": 0.8409714800072834,
+        "after_s": 0.7512181180063635,
+        "geometry_hash": "860774484cea51d5ad1cea7b6ba1bcd2c2be77fe7e33b9436b1db6be1b00ed72"
+      },
+      {
+        "case": "canonical-double-cone",
+        "trial": 6,
+        "before_s": 0.7577948669786565,
+        "after_s": 0.8076433999813162,
+        "geometry_hash": "575f70b7df185f07aef627a4bf35a40fd9ed72b31039670ef8af46e49a6e6c02"
+      },
+      {
+        "case": "canonical-intrinsic",
+        "trial": 6,
+        "before_s": 0.8727050080196932,
+        "after_s": 0.9381906480120961,
+        "geometry_hash": "c57682f00306c7e4478cb601a10b39792d256600ddae6567138125785ab59472"
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "trial": 6,
+        "before_s": 0.9405088239873294,
+        "after_s": 0.9590719549742062,
+        "geometry_hash": "09c677507f74aa2f44697a1850604bdf4bfb4984973cacee235a56f42f2db267"
+      },
+      {
+        "case": "canonical-sheared",
+        "trial": 6,
+        "before_s": 0.7523062539985403,
+        "after_s": 0.6638901970000006,
+        "geometry_hash": "34b56c0ad519b0a01f75b3af34f8455987b24b7d31c2e5f39fc3ccfc4d556ef5"
+      }
+    ],
+    "trial_count": 30
+  },
+  "interleaved_cli_timings": {
+    "trial_conditions": "Six alternating pairs per case on CPU 4. The integrated candidate includes contemporaneous solver and orchestration work.",
+    "cases": [
+      {
+        "case": "canonical-tangent",
+        "engine": "canonical-blowups",
+        "status": "resolved",
+        "trials": 6,
+        "before_s": 1.4663460574956844,
+        "after_s": 0.9733584460045677,
+        "paired_median_ratio": 1.4471544890010546
+      },
+      {
+        "case": "canonical-double-cone",
+        "engine": "canonical-blowups",
+        "status": "resolved",
+        "trials": 6,
+        "before_s": 1.5098125094955321,
+        "after_s": 0.8688321709923912,
+        "paired_median_ratio": 1.556997364293065
+      },
+      {
+        "case": "canonical-intrinsic",
+        "engine": "canonical-blowups",
+        "status": "resolved",
+        "trials": 6,
+        "before_s": 2.8316004014923237,
+        "after_s": 1.8760763614845928,
+        "paired_median_ratio": 1.465009049144327
+      },
+      {
+        "case": "canonical-double-cone-intrinsic",
+        "engine": "canonical-blowups",
+        "status": "resolved",
+        "trials": 6,
+        "before_s": 2.540459841504344,
+        "after_s": 1.8206844350061147,
+        "paired_median_ratio": 1.3253029936302543
+      },
+      {
+        "case": "canonical-sheared",
+        "engine": "canonical-blowups",
+        "status": "resolved",
+        "trials": 6,
+        "before_s": 1.6821758290170692,
+        "after_s": 1.171269858503365,
+        "paired_median_ratio": 1.6578780437179765
+      }
+    ],
+    "by_case_nontiming_fields_equal": true
+  }
+}
