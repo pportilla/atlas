@@ -10,7 +10,8 @@ from .session_hints import closest_name
 _TOPICS = {
     "variables": (
         "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
-        "Each declaration creates a fresh ring. The Rings row groups saved names by ring.\n"
+        "Repeating the same coordinate names in the same order reuses their ring.\n"
+        "Use fresh=True for an independent copy. The Rings row groups saved names by ring.\n"
         "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),

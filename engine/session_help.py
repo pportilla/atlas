@@ -52,7 +52,7 @@ _RING_EXAMPLES = {
 }
 
 _EXAMPLES = {
-    "coordinates": _COORDINATES,
+    "coordinates": _COORDINATES + '\nf = y^2 + x\nx, y = coordinates("x", "y")\nx.parent == f.parent',
     "len": "len([2, 3, 5])",
     "print": 'print("multiplicity", 6)',
     "print_json": 'print_json(divisor="E3", multiplicity=6)',

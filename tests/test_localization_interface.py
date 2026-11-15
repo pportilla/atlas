@@ -92,7 +92,7 @@ class LocalizationInterfaceTests(unittest.TestCase):
 
     def test_coordinates_and_orders_checked_before_localizing(self):
         session = new_session(None)
-        list(session.run('x = coordinates("x")\ny = coordinates("x")\nP = ideal(x)\nL = localize(P)'))
+        list(session.run('x = coordinates("x")\ny = coordinates("x", fresh=True)\nP = ideal(x)\nL = localize(P)'))
         for expression, message in (("localize(P, ideal(y))", "coordinate"), ("L.fraction(y)", "coordinate"),
                                     ("localize(P, ideal(x, order='lex'))", "order")):
             with self.assertRaisesRegex(SessionError, message):

@@ -22,7 +22,7 @@ class Terminal(io.StringIO):
 class SessionWorkspaceTests(unittest.TestCase):
     def test_distinct_rings_follow_live_bindings_after_reassignment(self):
         session = new_session(None)
-        list(session.run('x,y = coordinates("x","y")\na,b = coordinates("x","y")\nf = x+y'))
+        list(session.run('x,y = coordinates("x","y")\na,b = coordinates("x","y", fresh=True)\nf = x+y'))
         self.assertEqual(workspace(session.variables)[0], ["QQ[x, y] → x, y, f", "QQ[x, y] → a, b"])
         list(session.run("x = 17"))
         rings, bindings = workspace(session.variables)

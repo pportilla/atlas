@@ -64,21 +64,25 @@ class CliSessionTests(unittest.TestCase):
             self.assertEqual(limited.returncode, 2)
             self.assertIn("640 digits", limited.stderr)
 
-    def test_polynomial_uses_saved_parent_after_coordinate_redeclaration(self):
+    def test_coordinate_redeclaration_reuses_the_parent_at_prompt_and_in_script(self):
         source = dedent("""
             x, y = coordinates("x", "y")
-            f = y^2 - x^3
-            expected = x^2 + y
+            F = y^2 + x
             x, y = coordinates("x", "y")
-            g = polynomial("x^2+y", ring=f.parent)
-            print(g == expected, g == x^2+y, g.parent == f.parent, g.parent == x.parent)
+            print(F.parent == x.parent, F+x == y^2+2*x)
+            x, y = coordinates("x", "y", fresh=True)
+            g = polynomial("x^2+y", ring=F.parent)
+            print(g.parent == F.parent, g == x^2+y)
+            x, y = coordinates("x", "y", coeffs=QQ)
+            print(g == x^2+y)
         """)
+        expected = ["True True", "True False", "True"]
         script = run_script(source)
         self.assertEqual(script.returncode, 0, script.stderr)
-        self.assertEqual(script.stdout.strip(), "True False True False")
+        self.assertEqual(script.stdout.splitlines(), expected)
         status, out, err = run_prompt(source + "quit\n")
         self.assertEqual((status, err), (0, ""))
-        self.assertIn("atlas> True False True False\n", out)
+        self.assertEqual(out.replace("atlas> ", "").strip().splitlines(), expected)
 
     def test_quoted_polynomials_reuse_chart_and_elimination_coordinates_at_both_entry_points(self):
         source = """
@@ -94,8 +98,11 @@ class CliSessionTests(unittest.TestCase):
             q = polynomial("y^2/2-8", variables=E.coordinates)
             copy = polynomial("y^2/2-8", ring=q.parent)
             print(membership(q, E, compute="cpu").value, q == y^2/2-8, copy == q)
+            u, v = coordinates("u", "v")
+            t = coordinates("y")
+            print(s.parent == u.parent, q.parent == t.parent)
         """
-        expected = ["True True", "False", "True False True"]
+        expected = ["True True", "False", "True False True", "False False"]
         script = run_script(source)
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(script.stdout.splitlines(), expected)
@@ -162,7 +169,7 @@ class CliSessionTests(unittest.TestCase):
             print(x == a)
         """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["QQ -2*x^3+y^2 -x^2", "True True False", "False"])
+        self.assertEqual(result.stdout.splitlines(), ["QQ -2*x^3+y^2 -x^2", "True True False", "True"])
 
     def test_factor_multiplicity_counts_exact_division_and_rejects_undefined_orders(self):
         u, v = coordinates("u", "v")
@@ -179,7 +186,7 @@ class CliSessionTests(unittest.TestCase):
     def test_file_stops_at_coordinate_space_error(self):
         result = run_script("""
             x, y = coordinates("x", "y")
-            a, b = coordinates("x", "y")
+            a, b = coordinates("x", "y", fresh=True)
             print("before")
             f = x + a
             print("after")
@@ -207,7 +214,7 @@ class CliSessionTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 result = run_script(f"""
                     x, y = coordinates("x", "y")
-                    a, b = coordinates("x", "y")
+                    a, b = coordinates("x", "y", fresh=True)
                     R = resolve(y^2-x^3)
                     C = R.chart("B3.u")
                     {invalid}

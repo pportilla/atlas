@@ -12,28 +12,47 @@ For a polynomial map germ, type `help ae_codimension`. The returned object's
 
 ## Choose the ring of a polynomial
 
-Use `ring=f.parent` to write a polynomial in the same ring as `f`. This works
-even after you have reused the names `x` and `y` for another ring.
+`coordinates("x", "y")` gives you the generators of `QQ[x, y]`. Repeating
+the declaration in the same session gives you those same generators.
 
 ```text
 atlas> x, y = coordinates("x", "y")
-atlas> f = y^2 - x^3
+atlas> f = y^2 + x
 atlas> x, y = coordinates("x", "y")
+atlas> x.parent == f.parent
+True
+atlas> g = f + x
+atlas> g.parent == f.parent
+True
+```
+
+The `Rings` row now shows `QQ[x, y] → x, y, f, g`. The names to the right
+of the arrow belong to that ring. Type `:workspace` for the full list.
+
+Atlas uses the coefficient field and the generator names in the order you
+give them. Omitting `coeffs=QQ` selects the rationals. Declaring
+`x, y, z = coordinates("x", "y", "z")` binds those names to generators of
+`QQ[x, y, z]`. The saved polynomial `f` still belongs to `QQ[x, y]`.
+Arithmetic requires both polynomials to have the same parent. Asking for
+`coordinates("y", "x")` also selects a different parent because the order changed.
+
+To work with two independent copies of `QQ[x, y]`, request a fresh one
+explicitly. You can still read a formula in either ring by passing its parent.
+
+```text
+atlas> u, v = coordinates("x", "y", fresh=True)
+atlas> u.parent == f.parent
+False
 atlas> g = polynomial("x^2+y", ring=f.parent)
 atlas> g.parent == f.parent
 True
-atlas> g.parent == x.parent
-False
+atlas> h = u^2 + v
+atlas> h.parent == u.parent
+True
 ```
 
-Each call to `coordinates` creates a fresh ring. The second call binds the
-names `x` and `y` to its generators. In the constructor, Atlas reads the quoted
-expression using the generators of the ring you pass. To build the same
-expression in the second ring, type `h = x^2 + y`.
-
-The `Rings` row groups saved names by ring. In the example above it shows
-`QQ[x, y] → x, y` and `QQ[x, y] → f, g`. Type `:workspace` to see every group
-when the terminal is too narrow for the full list.
+Another ordinary call to `coordinates("x", "y")` returns the generators of
+`f.parent`.
 
 ## Inspect a cusp
 
@@ -62,8 +81,7 @@ atlas> total.multiplicity(u)
 6
 ```
 
-Each call to `coordinates` creates a coordinate space over the rationals by
-default. The same divisor has local equation `v` in chart `B3.v`. Use
+The same divisor has local equation `v` in chart `B3.v`. Use
 `C.coordinates` to construct expressions in a chart and `R.coordinates` for
 the original variables. To read a polynomial from text in the chart, use
 `polynomial("v-1", variables=C.coordinates)`. For a divisor defined by several

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from fractions import Fraction
-from functools import cached_property
+from functools import cache, cached_property
 import re
 
 from . import native_polynomial as native
@@ -215,8 +215,7 @@ class Polynomial:
         return Polynomial(self._space, self._value ** exponent)
 
 
-def coordinates(*names, coeffs=QQ):
-    """Declare generators with rational coefficients in a fresh coordinate space."""
+def _declare_coordinates(names, coeffs, make_parent):
     if coeffs is not QQ:
         raise ValueError("The supported coefficient field is QQ.")
     if not names or any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", n)
@@ -225,5 +224,24 @@ def coordinates(*names, coeffs=QQ):
     if len(names) != len(set(names)):
         raise ValueError("Choose distinct coordinate names.")
 
-    generators = _CoordinateSpace.named(names).coordinates
+    generators = make_parent(names, coeffs=coeffs).coordinates
     return generators[0] if len(names) == 1 else generators
+
+
+def coordinates(*names, coeffs=QQ):
+    """Declare generators in an independent coordinate space outside an Atlas session."""
+    return _declare_coordinates(names, coeffs, _CoordinateSpace.named)
+
+
+def session_coordinates():
+    """Create the coordinates function for one prompt or script."""
+    declared_parent = cache(_CoordinateSpace.named)
+
+    def coordinates(*names, coeffs=QQ, fresh=False):
+        """Reuse the ring with these ordered coordinate names. Pass fresh=True for a separate ring."""
+        if type(fresh) is not bool:
+            raise ValueError("fresh must be True or False.")
+        make_parent = _CoordinateSpace.named if fresh else declared_parent
+        return _declare_coordinates(names, coeffs, make_parent)
+
+    return coordinates
