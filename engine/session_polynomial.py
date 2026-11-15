@@ -51,6 +51,7 @@ class _CoordinateSpace:
     generators: tuple[native.Expr, ...]
     has_relations: bool = False
     coeffs: _RationalField | _NumberField = QQ
+    _fields = {"coordinates", "variables", "coeffs"}
 
     @classmethod
     def named(cls, names, *, coeffs=QQ, has_relations=False):
@@ -67,8 +68,22 @@ class _CoordinateSpace:
         return tuple(generator.name for generator in self.generators)
 
     @property
+    def variables(self):
+        return self.names
+
+    @property
     def coordinates(self):
         return tuple(Polynomial(self, generator) for generator in self.generators)
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise AttributeError(f"A polynomial parent has no Atlas field {name!r}.")
+
+    def __repr__(self):
+        field = "QQ" if self.coeffs is QQ else f"QQ[{self.coeffs.parameter.name}]"
+        ring = f"{field}[{', '.join(self.names)}]" if self.generators else field
+        return ring + (" (quotient)" if self.has_relations else "")
 
 
 @dataclass(frozen=True, eq=False)
@@ -77,7 +92,7 @@ class Polynomial:
 
     _space: _CoordinateSpace
     _value: native.Expr
-    _fields = {"variables", "coeffs", "multiplicity"}
+    _fields = {"variables", "coeffs", "multiplicity", "parent"}
 
     def __post_init__(self):
         if self._space.coeffs is not QQ:
@@ -91,6 +106,10 @@ class Polynomial:
     @property
     def coeffs(self):
         return self._space.coeffs
+
+    @property
+    def parent(self):
+        return self._space
 
     def session_attribute(self, name):
         if name in self._fields:

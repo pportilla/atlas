@@ -64,21 +64,38 @@ class CliSessionTests(unittest.TestCase):
             self.assertEqual(limited.returncode, 2)
             self.assertIn("640 digits", limited.stderr)
 
+    def test_polynomial_uses_saved_parent_after_coordinate_redeclaration(self):
+        source = dedent("""
+            x, y = coordinates("x", "y")
+            f = y^2 - x^3
+            expected = x^2 + y
+            x, y = coordinates("x", "y")
+            g = polynomial("x^2+y", ring=f.parent)
+            print(g == expected, g == x^2+y, g.parent == f.parent, g.parent == x.parent)
+        """)
+        script = run_script(source)
+        self.assertEqual(script.returncode, 0, script.stderr)
+        self.assertEqual(script.stdout.strip(), "True False True False")
+        status, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((status, err), (0, ""))
+        self.assertIn("atlas> True False True False\n", out)
+
     def test_quoted_polynomials_reuse_chart_and_elimination_coordinates_at_both_entry_points(self):
         source = """
             x, y = coordinates("x", "y")
             R = resolve(y^2 - x^3)
             C = R.chart("B3.u")
             s = polynomial("v-1", variables=C.coordinates)
-            zero = polynomial("u-u", variables=C.coordinates)
+            zero = polynomial("u-u", ring=s.parent)
             print(s == C.strict_transform, zero+s == s)
             other = polynomial("v-1", variables=R.chart("B3.v").coordinates)
             print(s == other)
             E = eliminate(ideal(y-x^2, x-2), x, compute="cpu")
             q = polynomial("y^2/2-8", variables=E.coordinates)
-            print(membership(q, E, compute="cpu").value, q == y^2/2-8)
+            copy = polynomial("y^2/2-8", ring=q.parent)
+            print(membership(q, E, compute="cpu").value, q == y^2/2-8, copy == q)
         """
-        expected = ["True True", "False", "True False"]
+        expected = ["True True", "False", "True False True"]
         script = run_script(source)
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(script.stdout.splitlines(), expected)
@@ -240,7 +257,7 @@ class CliSessionTests(unittest.TestCase):
             print(total.multiplicity(C.strict_transform))
             recorded = polynomial("8+a6*v+v^2-u", variables=C.coordinates)
             print(recorded == C.strict_transform)
-            theta = polynomial("theta", variables=C.coordinates)
+            theta = polynomial("theta", ring=recorded.parent)
             print(4*theta == polynomial("a6", variables=C.coordinates), theta^2 == 2)
             print(polynomial("1/a6", variables=C.coordinates) * (4*theta) == 1,
                   polynomial("1/a6^2", variables=C.coordinates) == 1/32)

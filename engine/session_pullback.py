@@ -16,7 +16,7 @@ _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 _COEFFICIENT_TOKEN = re.compile(r"/\s*(?P<denominator>[A-Za-z][A-Za-z0-9_]*)|[A-Za-z][A-Za-z0-9_]*")
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True, eq=False, repr=False)
 class _ChartSpace(_CoordinateSpace):
     # Record names (e.g. a3 and a6) can represent elements of the same field.
     aliases: dict[str, str] = field(default_factory=dict)

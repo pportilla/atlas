@@ -23,13 +23,13 @@ class SessionWorkspaceTests(unittest.TestCase):
     def test_distinct_rings_follow_live_bindings_after_reassignment(self):
         session = new_session(None)
         list(session.run('x,y = coordinates("x","y")\na,b = coordinates("x","y")\nf = x+y'))
-        self.assertEqual(workspace(session.variables)[0], ["QQ[x, y] (x)", "QQ[x, y] (a)"])
+        self.assertEqual(workspace(session.variables)[0], ["QQ[x, y] → x, y, f", "QQ[x, y] → a, b"])
         list(session.run("x = 17"))
         rings, bindings = workspace(session.variables)
-        self.assertEqual(rings, ["QQ[x, y] (y)", "QQ[x, y] (a)"])
+        self.assertCountEqual(rings, ["QQ[x, y] → y, f", "QQ[x, y] → a, b"])
         self.assertIn("x = 17", bindings)
         list(session.run("f = 0\ny = 1"))
-        self.assertEqual(workspace(session.variables)[0], ["QQ[x, y]"])
+        self.assertEqual(workspace(session.variables)[0], ["QQ[x, y] → a, b"])
 
     def test_scalar_and_chart_rings_and_safe_value_previews(self):
         session = new_session(None)
@@ -37,7 +37,7 @@ class SessionWorkspaceTests(unittest.TestCase):
         resolution = Resolution({"variables": ["x", "y"], "dual_complex": {"vertices": []},
                                  "charts": [{"id": "C1", "coordinates": ["u", "v"], "ambient_ideal": ["u*v"]}]})
         rings, bindings = workspace(dict(session.variables, C=resolution.chart("C1"), q=Fraction(1, 3)))
-        self.assertEqual(rings, ["QQ", "QQ[u, v] (quotient)"])
+        self.assertEqual(rings, ["QQ → S", "QQ[u, v] (quotient) → C"])
         self.assertIn("n = number", bindings)
         self.assertIn("q = 1/3", bindings)
 
@@ -47,6 +47,12 @@ class SessionWorkspaceTests(unittest.TestCase):
         with patch("engine.session_values.chart_space", side_effect=AssertionError("unexpected field computation")):
             marked_rings, _ = workspace({"C": marked.chart("M")})
         self.assertIn("u", marked_rings[0])
+
+    def test_quotient_elements_and_polynomial_parent_handles_are_grouped_by_owner(self):
+        session = new_session(None)
+        list(session.run('x, y = coordinates("x", "y")\nP = x.parent\nA = quotient_ring(ideal(x))\nw = A(y)'))
+        rings, _ = workspace(session.variables)
+        self.assertEqual(rings, ["QQ[x, y] → x, y, P", "QQ[x, y]/(x) → A, w"])
 
     def test_narrow_panel_counts_omitted_bindings_and_clips_wide_text(self):
         stream = Terminal()

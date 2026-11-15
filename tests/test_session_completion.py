@@ -23,7 +23,7 @@ class SessionCompletionTests(unittest.TestCase):
         self.assertEqual(candidates("roots.", self.session), [])
         list(self.session.run('roots = coordinates("x")'))
         self.assertEqual(candidates("roots.", self.session),
-                         ["roots.coeffs", "roots.multiplicity(", "roots.variables"])
+                         ["roots.coeffs", "roots.multiplicity(", "roots.parent", "roots.variables"])
 
     def test_resolution_lists_methods_and_only_its_recorded_fields(self):
         self.session.variables["R"] = Resolution({

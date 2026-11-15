@@ -129,6 +129,15 @@ c = polynomial("2/3", variables=[])
             for n in range(1, 9):
                 self.assertEqual(polynomial(f"x+{n}*y", variables=(x, y)), x + n*y)
 
+    def test_polynomial_requires_one_live_ring_or_its_coordinates(self):
+        x = coordinates("x")
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            polynomial("x", ring=x.parent, variables=(x,))
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            polynomial("x")
+        with self.assertRaisesRegex(TypeError, "parent ring"):
+            polynomial("x", ring=ideal(x).ring)
+
     def test_worker_preserves_large_decimal_and_monomial_literals(self):
         from engine.worker_process import run_worker
 

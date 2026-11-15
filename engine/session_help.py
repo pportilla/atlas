@@ -12,7 +12,7 @@ _RING_EXAMPLES = {
     "recompute_dual_complex": "R = resolve(y^2 - x^3)\nD = recompute_dual_complex(R)\nD.vertices",
     "dual_complex": "R = resolve(y^2 - x^3)\ndual_complex(R).vertices",
     "monodromy_check": "monodromy_check(y^2 - x^3).status",
-    "polynomial": 'polynomial("y^2 - x^3", variables=(x, y))',
+    "polynomial": 'f = y^2 - x^3\ng = polynomial("x^2+y", ring=f.parent)\ng.parent == f.parent',
     "ideal": "ideal(x^2, y)",
     "groebner": "groebner(ideal(x^2, x*y + y))",
     "gcd": "gcd(x*y, x^2)",

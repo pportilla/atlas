@@ -18,6 +18,7 @@ HELP = """Define coordinates and keep the results of calculations:
 
   x, y = coordinates("x", "y")       # optional: coeffs=QQ
   f = y^2 - x^3
+  g = polynomial("x^2+y", ring=f.parent)
   R = resolve(f)
   R.polynomial == f                      # True in the original coordinates
   D = R.dual_complex                     # the recorded exceptional complex

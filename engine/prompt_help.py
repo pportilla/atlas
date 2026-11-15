@@ -10,7 +10,8 @@ from .session_hints import closest_name
 _TOPICS = {
     "variables": (
         "Use coordinates to declare polynomial variables and = to save a value under a name.\n"
-        "Type :workspace to see the current rings and saved variables.\n\n"
+        "Each declaration creates a fresh ring. The Rings row groups saved names by ring.\n"
+        "Use ring=f.parent to write another polynomial in the ring of f.\n\n"
         'Example\n  x, y = coordinates("x", "y")\n  f = y^2 - x^3\n  :workspace'
     ),
     "resolution.dual_complex": (
@@ -22,7 +23,7 @@ _TOPICS = {
         'Example\n  x, y = coordinates("x", "y")\n  R = resolve(y^2-x^3)\n'
         "  R.dual_complex.vertices\n  R.branches[0].meets"
     ),
-    ":workspace": "Show the rings and saved variables in this session.\n\nExample\n  :workspace",
+    ":workspace": "Show which saved names belong to each ring and list their values.\n\nExample\n  :workspace",
     ":save": "Write this session's successful statements to an Atlas script.\n\nExample\n  :save cusp.atlas",
     "QQ": 'The rational coefficient field. Coordinates use QQ by default.\n\nExample\n  x = coordinates("x", coeffs=QQ)',
     "quit": "Leave the Atlas prompt.\n\nExample\n  quit",

@@ -1,6 +1,5 @@
 """The interactive workspace header and its expanded :workspace view."""
 
-from collections import Counter
 from fractions import Fraction
 import os
 import sys
@@ -8,29 +7,37 @@ from unicodedata import combining, east_asian_width
 
 from .cli_style import paint, use_color
 from .session_algebra import Ideal, _RingValue, _Result
-from .session_polynomial import Polynomial, QQ
+from .session_polynomial import Polynomial, QQ, _CoordinateSpace
+from .session_quotient import QuotientElement, QuotientRing
 from .session_values import Chart, Resolution
 
 
 def _ring_label(space):
-    if isinstance(space, Chart):
-        chart = space._record
-        source = space._resolution._record
-        dual = source.get("dual_complex", {})
-        marked = (chart.get("coefficient_field") or chart.get("weight_field")
-                  or source.get("coefficient_field", {}).get("generator") or source.get("algebraic_numbers")
-                  or source.get("root_families") or dual.get("root_families") or dual.get("root_definition"))
-        field = f"chart {space.id}" if marked else "QQ"
-        names, quotient = chart["coordinates"], bool(chart.get("ambient_ideal"))
-    else:
-        field = "QQ" if space.coeffs is QQ else f"QQ[{space.coeffs.parameter.name}]"
-        names, quotient = space.names, space.has_relations
+    if isinstance(space, QuotientRing):
+        relations = space._record["result"]["relations"]
+        if len(relations) > 3 or sum(map(len, relations)) > 36:
+            return f"{space._space} (quotient)"
+        return f"{space._space}/({', '.join(relations) or '0'})"
+    if isinstance(space, _CoordinateSpace):
+        return str(space)
+    chart = space._record
+    source = space._resolution._record
+    dual = source.get("dual_complex", {})
+    marked = (chart.get("coefficient_field") or chart.get("weight_field")
+              or source.get("coefficient_field", {}).get("generator") or source.get("algebraic_numbers")
+              or source.get("root_families") or dual.get("root_families") or dual.get("root_definition"))
+    field = f"chart {space.id}" if marked else "QQ"
+    names, quotient = chart["coordinates"], bool(chart.get("ambient_ideal"))
     ring = f"{field}[{', '.join(names)}]" if names else field
     return ring + (" (quotient)" if quotient else "")
 
 
 def _space(value):
-    if isinstance(value, (Polynomial, _RingValue)):
+    if isinstance(value, (_CoordinateSpace, QuotientRing)):
+        return value
+    if isinstance(value, (Polynomial, QuotientElement)):
+        return value.parent
+    if isinstance(value, _RingValue):
         return value._space
     if isinstance(value, Resolution):
         return value._source_space
@@ -40,14 +47,18 @@ def _space(value):
         if "_space" in vars(value):
             return value._space
         return value
-    if isinstance(value, (tuple, list)) and value and isinstance(value[0], Polynomial):
-        space = value[0]._space
-        if all(isinstance(item, Polynomial) and item._space is space for item in value):
+    if isinstance(value, (tuple, list)) and value and isinstance(value[0], (Polynomial, QuotientElement)):
+        space = value[0].parent
+        if all(isinstance(item, (Polynomial, QuotientElement)) and item.parent is space for item in value):
             return space
     return None
 
 
 def _preview(value):
+    if isinstance(value, _CoordinateSpace):
+        return "ring"
+    if isinstance(value, QuotientElement):
+        return _preview(value.representative)
     if isinstance(value, Polynomial):
         if value._value.is_Symbol:
             return value._value.name
@@ -78,13 +89,11 @@ def workspace(variables):
     for name, value in variables.items():
         space = _space(value)
         if space is not None:
-            spaces.setdefault(space, name)
+            spaces.setdefault(space, []).append(name)
         preview = _preview(value)
         bindings.append(name if preview == name else f"{name} = {preview}")
 
-    rings = [_ring_label(space) for space in spaces]
-    counts = Counter(rings)
-    rings = [f"{ring} ({name})" if counts[ring] > 1 else ring for ring, name in zip(rings, spaces.values())]
+    rings = [f"{_ring_label(space)} → {', '.join(names)}" for space, names in spaces.items()]
     return rings, bindings
 
 
@@ -102,7 +111,7 @@ def print_workspace(variables):
         return paint(text, role, color)
 
     names = ["".join(ink(text, role) for text, role in _binding(entry, "name")) for entry in bindings]
-    print(ink("Rings", "label") + "     " + (ink("  ·  ", "muted").join(rings) if rings else ink("—", "muted")))
+    print(ink("Rings", "label") + "     " + ("\n          ".join(rings) if rings else ink("—", "muted")))
     print(ink("Variables", "label") + " " + ("\n          ".join(names) if names else ink("—", "muted")))
 
 

@@ -10,6 +10,31 @@ For a polynomial map germ, type `help ae_codimension`. The returned object's
 `.finite` field tells you how to interpret `.value`.
 [Map-germ inputs, results, and an example](../examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ)
 
+## Choose the ring of a polynomial
+
+Use `ring=f.parent` to write a polynomial in the same ring as `f`. This works
+even after you have reused the names `x` and `y` for another ring.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> x, y = coordinates("x", "y")
+atlas> g = polynomial("x^2+y", ring=f.parent)
+atlas> g.parent == f.parent
+True
+atlas> g.parent == x.parent
+False
+```
+
+Each call to `coordinates` creates a fresh ring. The second call binds the
+names `x` and `y` to its generators. In the constructor, Atlas reads the quoted
+expression using the generators of the ring you pass. To build the same
+expression in the second ring, type `h = x^2 + y`.
+
+The `Rings` row groups saved names by ring. In the example above it shows
+`QQ[x, y] → x, y` and `QQ[x, y] → f, g`. Type `:workspace` to see every group
+when the terminal is too narrow for the full list.
+
 ## Inspect a cusp
 
 ```text

@@ -573,14 +573,18 @@ def _coordinate_space(variables):
     return space
 
 
-def polynomial(source, *, variables):
-    """Parse a polynomial in the coordinate space owned by the supplied generators."""
+def polynomial(source, *, ring=None, variables=None):
+    """Parse a polynomial in an existing parent ring or in the space of its coordinate generators."""
     from .session_pullback import chart_source
     from .worker_process import run_worker
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("polynomial expects a nonempty expression string.")
-    space = _coordinate_space(variables)
+    if (ring is None) == (variables is None):
+        raise ValueError("Supply exactly one of ring=f.parent or variables=(x, y).")
+    if ring is not None and not isinstance(ring, _CoordinateSpace):
+        raise TypeError("Pass a polynomial parent ring, for example ring=f.parent.")
+    space = ring if ring is not None else _coordinate_space(variables)
     generators = space.polynomial_generators
     source = chart_source(source, space)
     names = [g.name for g in generators]
