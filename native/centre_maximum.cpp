@@ -1013,6 +1013,7 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
     unsigned attempts = 0;
     while (!remaining.empty()) {
         check_time();
+        bool yielded = false;
         FramePtr frame = current.frame;
         const auto& fresh = current.fresh;
         V ranks(Json::arrayValue);
@@ -1128,6 +1129,7 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
                         next.fresh.emplace_back(h, v);
                 next.working.clear();
                 for (const auto& w : hit) next.working.push_back(ideal(w));
+                yielded = true;
                 yield_(next, Choice{index_, k, attempts});
                 std::vector<Ideal> following;
                 for (const auto& w : remaining)
@@ -1150,6 +1152,12 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
             if (!divisor) bases.push_back(c);
         }
         if (attempts > 8 || bases.empty() || free.size() < 1) throw NoContact{"No hypersurface of maximal contact was found."};
+        // With one free coordinate that is the only base every shear is empty.
+        // An attempt that yielded nothing, with no choice banned for it, then
+        // repeats in every later attempt, which may try only fewer choices.
+        if (!yielded && free.size() == 1 && bases == free &&
+            std::none_of(banned.begin(), banned.end(), [&](const Choice& c) { return std::get<2>(c) == attempts - 1; }))
+            throw NoContact{"No hypersurface of maximal contact was found."};
         V shear_fields;
         shear_fields["attempt"] = attempts;
         shear_fields["free"] = Json::UInt(free.size());
@@ -1826,7 +1834,17 @@ V maximum(const V& request) {
             }
             return out;
         };
-        Ideal gens = ideal_basis(original, joined(chart, back(joined(joined(item.centre, frame.rows), frame.solved))));
+        // `back` is a substitution, a ring map: the images of any generators
+        // of the locus generate its image. The basis in the frame, where the
+        // centre is simplest, keeps the generators carried back small.
+        Ideal locus = joined(joined(item.centre, frame.rows), frame.solved);
+        if (variables.size() <= MAX_VARIABLES) {
+            try {
+                locus = ideal_basis(variables, locus);
+            } catch (const Declined&) {
+            }
+        }
+        Ideal gens = ideal_basis(original, joined(chart, back(locus)));
         for (const auto& unit : back(frame.units)) gens = saturate(original, gens, unit);
         gens = ideal_basis(original, gens);
         centre = !centre || *centre == gens ? gens : intersection(original, *centre, gens);

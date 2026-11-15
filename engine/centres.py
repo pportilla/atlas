@@ -221,6 +221,7 @@ def _contact(st, ctx, banned=frozenset()):
     current, attempts = st, 0
     while remaining:
         ctx.check()
+        yielded = False
         frame, new = current.frame, dict(current.new)
         ranks = [invariant_row((w, len(e), chart_expressions(frame.variables).count_ops(p))) for e,p,w in current.coll]
         ranked = level_weights("candidate_order", [w for _,_,w in current.coll], ranks=ranks, integral_weight=True)
@@ -286,6 +287,7 @@ def _contact(st, ctx, banned=frozenset()):
                     return tuple(g for g in map(move, gens) if g != 0)
 
                 coll.extend(({}, g, Fraction(1)) for g in ideal(current.extra) if not inside.vanishes(g))
+                yielded = True
                 yield replace(current, frame=inside, coll=tuple(coll), extra=(), locus=ideal(current.locus),
                               new=tuple((h, v) for h, v in current.new if h not in absent),
                               working=tuple(ideal(w) for w in hit)), (index, k, attempts)
@@ -299,6 +301,11 @@ def _contact(st, ctx, banned=frozenset()):
         free = [c for c in frame.coords if c not in ctx.fixed]
         bases = [c for c in frame.coords if c not in new.values()]
         if attempts > 8 or not bases or len(free) < 1:
+            raise NoContact("No hypersurface of maximal contact was found.")
+        # With one free coordinate that is the only base every shear is empty. An
+        # attempt that yielded nothing, with no choice banned for it, then repeats
+        # in every later attempt, which may try only fewer choices.
+        if not yielded and len(free) == 1 and bases == free and not any(c[2] == attempts - 1 for c in banned):
             raise NoContact("No hypersurface of maximal contact was found.")
         shear = level_weights("contact_shear", (), attempt=attempts, free=len(free), bases=len(bases))
         base = bases[shear["base"]]
@@ -737,8 +744,11 @@ def _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, 
                 gens = [frame_function(variables, chart_expressions(variables).sympify(g).xreplace(swap)) for g in gens]
             return [g for g in (frame_function(original, chart_expressions(variables).sympify(g).xreplace(graph)) for g in gens) if g != 0]
 
-        # The locus on the open set, then its closure in the chart.
-        gens = ideal_basis(original, (*chart, *back((*item.centre, *frame.rows, *frame.solved))))
+        # The locus on the open set, then its closure in the chart. `back` is a
+        # ring map, so it carries the basis in the frame, where the locus is
+        # simplest, to generators of the same image.
+        locus = ideal_basis(variables, (*item.centre, *frame.rows, *frame.solved))
+        gens = ideal_basis(original, (*chart, *back(locus)))
         for unit in back(frame.units):
             gens = saturate(original, gens, unit)
         gens = ideal_basis(original, gens)
