@@ -64,11 +64,13 @@ std::string centre_weights(std::istream& in, const std::string& operation) {
     Weight threshold;
     if (operation == "bm_requirements") threshold.read(in);
     std::set<Weight> values{Weight()};
+    Weight maximum;
     size_t size;
     while (in >> size) {
         std::vector<size_t> subset(size);
         for (auto& j : subset) if (!(in >> j) || j >= width)
             throw std::invalid_argument("Unknown exceptional divisor in this stratum.");
+        Weight minimum;
         for (size_t i = 0; i < count; ++i) {
             Weight sum, value;
             for (auto j : subset) fmpq_add(sum.q, sum.q, exponents[i][j].q);
@@ -83,6 +85,13 @@ std::string centre_weights(std::istream& in, const std::string& operation) {
             } else {
                 long order;
                 if (!(in >> order) || order < 0) throw std::invalid_argument("Invalid residual order.");
+                if (operation == "bm_point_maximum") {
+                    // All orders in this row are attained at the same point.
+                    fmpq_add_si(value.q, sum.q, order);
+                    fmpq_div(value.q, value.q, weights[i].q);
+                    if (i == 0 || value < minimum) fmpq_set(minimum.q, value.q);
+                    continue;
+                }
                 for (long k = 0; k <= order; ++k) {
                     fmpq_add_si(value.q, sum.q, k);
                     fmpq_div(value.q, value.q, weights[i].q);
@@ -90,9 +99,11 @@ std::string centre_weights(std::istream& in, const std::string& operation) {
                 }
             }
         }
+        if (operation == "bm_point_maximum" && maximum < minimum) fmpq_set(maximum.q, minimum.q);
         if (operation == "bm_requirements") out += '\n';
     }
     if (!in.eof()) throw std::invalid_argument("Invalid coefficient presentation.");
+    if (operation == "bm_point_maximum") return maximum.text() + "\n";
     if (operation == "bm_values") for (const auto& x : values) out += x.text() + "\n";
     return out;
 }
@@ -498,9 +509,9 @@ Json::Value level_weights(const Json::Value& request) {
     if (op == "contact_candidate") {
         const auto& w=weights.at(0);
         if (w.get_den()!=1 || w<=0) throw std::invalid_argument("Invalid contact weight.");
-        const auto order=Z(w.get_num()-1);
         Json::Value result;
-        result["derivatives"]=order.get_str();
+        result["degree"] = w.get_num().get_str();
+        result["probe_direction"] = w >= 3;
         result["support"]=Json::Value(Json::arrayValue);
         const auto exponents=read_row(request["exponents"]);
         for(unsigned i=0;i<exponents.size();++i) if(exponents[i]>0) result["support"].append(i);

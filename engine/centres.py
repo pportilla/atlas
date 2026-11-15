@@ -238,7 +238,16 @@ def _contact(st, ctx, banned=frozenset()):
                 continue
             names = [h for h in exps if h in new]
             candidate = level_weights("contact_candidate", [weight], exponents=[rational_text(exps[h]) for h in names])
-            monomial = chart_expressions(frame.variables).prod(new[names[i]] for i in candidate["support"])
+            factors = tuple(new[names[i]] for i in candidate["support"])
+            monomial = chart_expressions(frame.variables).prod(factors)
+            degree = integer_from_decimal(candidate["degree"])
+            points = None
+            if frame.rows and candidate["probe_direction"]:
+                # A finite superset suffices to rule out a direction. Try the
+                # working pieces before adding the previous differential ideals.
+                points = frame.working_points((), remaining)
+                if points is None:
+                    points = frame.working_points(current.locus, remaining)
             for k in frame.coords:
                 if (index, k, attempts) in banned:
                     continue
@@ -246,10 +255,12 @@ def _contact(st, ctx, banned=frozenset()):
                 # the point [BM, 5.12]: the coordinate of a new divisor serves
                 # only off that divisor, where the divisor is no longer counted.
                 absent = {h for h, v in new.items() if v == k}
-                z = poly
-                for _ in range(integer_from_decimal(candidate["derivatives"])):
-                    z = frame.derivative(z, k)
-                top = frame.derivative(z, k)
+                if points is not None:
+                    active = frame.contact_open_points(points, (*factors, k) if absent else factors)
+                    if not active or frame.direction_vanishes(poly, k, degree, active):
+                        continue
+                chain = frame.derivative_chain(poly, k, degree)
+                z, top = chain[-2:]
                 if frame.vanishes(top):
                     continue
                 unit = frame_function(frame.variables, top*monomial*(k if absent else 1))
@@ -261,7 +272,8 @@ def _contact(st, ctx, banned=frozenset()):
                     inside = Frame(inside.variables, inside.coords, inside.rows,
                                    (*inside.units, move(monomial), *((move(k),) if absent else ())), inside.solved)
                 else:
-                    inside = frame.restricted(z, k, unit, witness_loci=((*current.locus, *w) for w in hit))
+                    inside = frame.restricted(z, k, unit, witness_loci=((*current.locus, *w) for w in hit),
+                                              working=hit)
 
                     def move(f):
                         return frame_function(inside.variables, f)
@@ -269,11 +281,14 @@ def _contact(st, ctx, banned=frozenset()):
                 marks = level_weights("contact", [w for _, _, w in current.coll])
                 for (e, p, _), row_marks in zip(current.coll, marks):
                     e = {h: x for h, x in e.items() if h not in absent}
-                    for mark in row_marks:
-                        moved = move(p)
+                    if p == poly and len(row_marks) <= len(chain):
+                        derivatives = chain
+                    else:
+                        derivatives = frame.derivative_chain(p, k, len(row_marks) - 1)
+                    for derivative, mark in zip(derivatives, row_marks):
+                        moved = move(derivative)
                         if not inside.vanishes(moved):
                             coll.append((e, moved, coordinate_fraction(mark)))
-                        p = frame.derivative(p, k)
 
                 def ideal(gens):
                     return tuple(g for g in map(move, gens) if g != 0)
@@ -354,6 +369,11 @@ def _groups(st):
         if operation == "vanishes":
             return frame.vanishes(f)
         work = tuple(ideals[i] for i in task["work"])
+        if operation == "working_orders":
+            points = frame.working_points((), work)
+            if points is None and st.locus:
+                points = frame.working_points(st.locus, work)
+            return None if points is None else [frame.point_order(f, p) for p in points]
         if operation == "live":
             return pack(w for w in work if not frame.empty(*st.locus, *w))
         support = saturate(frame.variables, frame.rows, f)
@@ -415,19 +435,36 @@ def _residue(st, ctx):
                     gens.extend(frame.jet(p, need))
             yield tuple(gens)
 
-    bounds = []
-    for chosen in strata:
-        divisor = tuple(new[h] for h in chosen)
+    def point_maximum():
         orders = []
-        for _, p, _ in rest:
-            orders.append(jet_order(0, lambda k: here((*divisor, *frame.jet(p, k)))))
-        bounds.append(orders)
-    values = table.candidate_values(indices, bounds)
-    def live_threshold(task):
-        ctx.check()
-        return any(here(gens) for gens in conditions(values[task["i"]]))
-    selected = centre_search("maximum_threshold", live_threshold, count=len(values))
-    value = values[selected]
+        for chosen, ids in zip(strata, indices):
+            ctx.check()
+            divisor = tuple(new[h] for h in chosen)
+            points = frame.working_points((*st.locus, *divisor), st.working)
+            if points is None:
+                return None
+            for point in points:
+                row = [frame.point_order(p, point) for _, p, _ in rest]
+                if None in row:
+                    return None
+                orders.append((ids, row))
+        return table.point_maximum(orders) if orders else None
+
+    value = point_maximum() if frame.rows else None
+    if value is None:
+        bounds = []
+        for chosen in strata:
+            divisor = tuple(new[h] for h in chosen)
+            orders = []
+            for _, p, _ in rest:
+                orders.append(jet_order(0, lambda k: here((*divisor, *frame.jet(p, k)))))
+            bounds.append(orders)
+        values = table.candidate_values(indices, bounds)
+        def live_threshold(task):
+            ctx.check()
+            return any(here(gens) for gens in conditions(values[task["i"]]))
+        selected = centre_search("maximum_threshold", live_threshold, count=len(values))
+        value = values[selected]
     if value == 0:
         # The monomial case: the locus is the union of the N meet H_I [BM, (3.2)].
         minimal = level_weights("monomial", [alpha[h] for h in live], strata=indices)

@@ -31,7 +31,7 @@ std::string scalar_arithmetic(const std::string&, const std::string&, const std:
 std::string fan_cover(std::istream& in);
 std::string monomial_quotient(std::istream&, const std::string&);
 std::string field_factorization(std::istream&);
-std::string implicit_frame_operation(std::istream&, bool);
+std::string implicit_frame_operation(std::istream&, const std::string&);
 namespace local { std::string operations(std::istream&, const std::string&); }
 std::string centre_weights(std::istream& in, const std::string& operation);
 namespace {
@@ -1510,8 +1510,8 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
 std::string affine(std::istream& in) {
     const auto operation = line(in);
     if (operation == "centre_power_transforms") return centre_power_transforms(in);
-    if (operation == "implicit_jet" || operation == "implicit_coordinates")
-        return implicit_frame_operation(in,operation == "implicit_jet");
+    if (operation == "implicit_jet" || operation == "implicit_coordinates" || operation == "implicit_derivative_chain")
+        return implicit_frame_operation(in,operation);
     if (operation == "field_factorization") return field_factorization(in);
     if (operation == "scalar_arithmetic") {
         const auto op = line(in), left = line(in), right = line(in);
@@ -1527,7 +1527,8 @@ std::string affine(std::istream& in) {
         return primary::operation(in, operation);
     if (operation.rfind("local_", 0) == 0) return local::operations(in, operation);
     if (operation.rfind("monomial_", 0) == 0) return monomial_quotient(in, operation);
-    if (operation == "bm_residual" || operation == "bm_requirements" || operation == "bm_values")
+    if (operation == "bm_residual" || operation == "bm_requirements" || operation == "bm_values" ||
+        operation == "bm_point_maximum")
         return centre_weights(in, operation);
     if (operation == "fan_cover") return fan_cover(in);
     if (operation == "fan_charts" || operation == "fan_charts_with_projection" || operation == "fan_charts_with_boundary")

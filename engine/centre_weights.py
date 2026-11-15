@@ -116,6 +116,11 @@ class Presentation:
             return list(map(coordinate_fraction, self.request("bm_values", extra)))
         return checked_native(native, reference)
 
+    def point_maximum(self, point_orders):
+        rows = [" ".join(map(integer_text, (len(ids), *ids, *orders))) for ids, orders in point_orders]
+        value, = self.request("bm_point_maximum", rows)
+        return coordinate_fraction(value)
+
     def requirements(self, strata, value):
         def reference():
             from tests.centre_weight_oracle import requirements

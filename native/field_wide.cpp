@@ -1,6 +1,7 @@
 // Unbounded sparse Buchberger and ordered division for product monomial orders.
 // Each exponent is a FLINT integer; only the number of actual terms costs space.
-#include "groebner.hpp"
+#include "flint_polynomial.hpp"
+#include <memory>
 #include <flint/fmpq.h>
 #include <map>
 #include <set>
@@ -319,9 +320,139 @@ Terms product(const Terms& f, const Terms& g) {
     return result;
 }
 
+struct FrameRing {
+    fmpq_mpoly_ctx_t ctx;
+    explicit FrameRing(size_t width) { fmpq_mpoly_ctx_init(ctx, width, ORD_DEGREVLEX); }
+    ~FrameRing() { fmpq_mpoly_ctx_clear(ctx); }
+};
+
+struct PackedDivisors {
+    const fmpq_mpoly_ctx_struct* ctx;
+    std::vector<PolyValue> storage, scratch;
+    std::vector<fmpq_mpoly_struct*> rows, quotients;
+    std::vector<std::vector<ulong>> heads;
+    explicit PackedDivisors(const fmpq_mpoly_ctx_struct* c) : ctx(c) {}
+    void add(PolyValue&& polynomial) {
+        storage.push_back(std::move(polynomial));
+        scratch.emplace_back(ctx);
+    }
+    void prepare() {
+        for (auto& row : storage) {
+            rows.push_back(row.p);
+            auto& head = heads.emplace_back(fmpq_mpoly_ctx_nvars(ctx));
+            fmpq_mpoly_get_term_exp_ui(head.data(), row.p, 0, ctx);
+        }
+        for (auto& q : scratch) quotients.push_back(q.p);
+    }
+    bool irreducible_head(const PolyValue& f) const {
+        std::vector<ulong> term(fmpq_mpoly_ctx_nvars(ctx));
+        fmpq_mpoly_get_term_exp_ui(term.data(), f.p, 0, ctx);
+        return std::none_of(heads.begin(), heads.end(), [&](const auto& head) {
+            for (size_t i = 0; i < term.size(); ++i)
+                if (head[i] > term[i]) return false;
+            return true;
+        });
+    }
+    void reduce(PolyValue& f) {
+        if (rows.empty() || fmpq_mpoly_is_zero(f.p, ctx)) return;
+        PolyValue remainder(ctx);
+        fmpq_mpoly_divrem_ideal(quotients.data(), remainder.p, f.p, rows.data(), rows.size(), ctx);
+        fmpq_mpoly_swap(f.p, remainder.p, ctx);
+    }
+};
+
+struct PackingLimit {};
+
+// Store exponents in FLINT's graded ring. Bound expansion of packed
+// division for high powers, and the common denominator of each sparse row.
+PolyValue pack_frame_row(const Terms& f, const FrameRing& ring) {
+    PolyValue result(ring.ctx);
+    std::vector<ulong> powers(f.key_comp().n);
+    Z common;
+    fmpz_one(&common.v);
+    for (const auto& term : f) {
+        fmpz_lcm(&common.v, &common.v, fmpq_denref(term.second.q));
+        if (fmpz_bits(&common.v) > 16384 || fmpz_bits(fmpq_numref(term.second.q)) > 16384)
+            throw PackingLimit{};
+    }
+    Z coefficient;
+    for (const auto& [e, c] : f) {
+        unsigned degree = 0;
+        for (size_t i = 0; i < e.size(); ++i) {
+            if (fmpz_cmp_ui(&e[i].v, 512 - degree) > 0) throw PackingLimit{};
+            powers[i] = fmpz_get_ui(&e[i].v);
+            degree += powers[i];
+        }
+        fmpz_divexact(&coefficient.v, &common.v, fmpq_denref(c.q));
+        fmpz_mul(&coefficient.v, &coefficient.v, fmpq_numref(c.q));
+        fmpz_mpoly_push_term_fmpz_ui(result.p->zpoly, &coefficient.v, powers.data(), ring.ctx->zctx);
+    }
+    fmpz_one(fmpq_numref(result.p->content));
+    fmpz_set(fmpq_denref(result.p->content), &common.v);
+    // Input terms already use the FLINT ring's descending grevlex order.
+    fmpq_mpoly_reduce(result.p, ring.ctx);
+    return result;
+}
+
+Terms unpack_frame_row(const PolyValue& p, Order order) {
+    Terms result(order);
+    std::vector<ulong> e(order.n);
+    for (slong i = 0; i < fmpq_mpoly_length(p.p, p.ctx); ++i) {
+        fmpq_mpoly_get_term_exp_ui(e.data(), p.p, i, p.ctx);
+        Powers powers(order.n);
+        for (size_t j = 0; j < e.size(); ++j) fmpz_set_ui(&powers[j].v, e[j]);
+        auto pos = result.try_emplace(result.end(),std::move(powers));
+        fmpq_mpoly_get_term_coeff_fmpq(pos->second.q,p.p,i,p.ctx);
+    }
+    return result;
+}
+
+// Keep the derivative representatives identical to ordered chart division.
+// The saturated basis is needed only to discard globally vanishing jets.
+class PackedDerivatives {
+    FrameRing ring;
+    PackedDivisors reducers, saturated;
+    using Field = std::vector<std::pair<size_t, PolyValue>>;
+    std::vector<Field> fields;
+public:
+    PackedDerivatives(size_t n, const Rows& basis, const Rows& open_basis,
+                      const std::vector<VectorField>& directions)
+        : ring(n), reducers(ring.ctx), saturated(ring.ctx) {
+        for (const auto& f : basis) reducers.add(pack_frame_row(f, ring));
+        for (const auto& f : open_basis) saturated.add(pack_frame_row(f, ring));
+        reducers.prepare();
+        saturated.prepare();
+        for (const auto& field : directions) {
+            fields.emplace_back();
+            for (const auto& [axis, f] : field)
+                fields.back().emplace_back(axis, pack_frame_row(f, ring));
+        }
+    }
+
+    Terms apply(const Terms& f, size_t k, bool plain, bool jet) {
+        auto source = pack_frame_row(f, ring);
+        PolyValue sum(ring.ctx), part(ring.ctx), product(ring.ctx);
+        for (const auto& [axis, coefficient] : fields[k]) {
+            fmpq_mpoly_derivative(part.p, source.p, axis, ring.ctx);
+            fmpq_mpoly_mul(product.p, part.p, coefficient.p, ring.ctx);
+            fmpq_mpoly_add(sum.p, sum.p, product.p, ring.ctx);
+        }
+        if (!plain) reducers.reduce(sum);
+        // Once the leading term survives division, the saturated residue is
+        // nonzero. No quotient or representation of that residue is required.
+        if (jet && !fmpq_mpoly_is_zero(sum.p, ring.ctx) && !saturated.irreducible_head(sum)) {
+            PolyValue test(ring.ctx);
+            fmpq_mpoly_set(test.p, sum.p, ring.ctx);
+            saturated.reduce(test);
+            if (fmpq_mpoly_is_zero(test.p, ring.ctx)) return Terms(f.key_comp());
+        }
+        return unpack_frame_row(sum, f.key_comp());
+    }
+};
+
 // Derivatives and coordinate orders on a localized implicit chart. Bind the
 // chart's cached reduced bases once for all layers and repeated divisions.
-std::string implicit_frame(std::istream& input, bool jet) {
+std::string implicit_frame(std::istream& input, bool jet, bool chain) {
     auto line = [&]() {
         std::string value;
         if (!std::getline(input,value)) throw std::invalid_argument("Incomplete implicit frame.");
@@ -343,10 +474,10 @@ std::string implicit_frame(std::istream& input, bool jet) {
     const auto reducers = rows(chart);
     Terms f = read_row(line(),chart);
     std::string result;
-    if (jet) {
+    if (jet || chain) {
         auto order = integer();
-        const auto saturated = rows(chart);
-        const size_t count = integer();
+        const auto saturated = jet ? rows(chart) : Rows{};
+        const size_t count = jet ? integer() : 1;
         std::vector<VectorField> fields(count);
         std::vector<bool> plain(count,false);
         for (size_t k = 0; k < count; ++k) {
@@ -359,14 +490,35 @@ std::string implicit_frame(std::istream& input, bool jet) {
             }
         }
         print_row(result,f);
+        std::unique_ptr<PackedDerivatives> packed;
+        try {
+            packed = std::make_unique<PackedDerivatives>(n, reducers, saturated, fields);
+        } catch (const PackingLimit&) {}
+        auto apply = [&](const Terms& p, size_t k) {
+            if (packed) {
+                try {
+                    return packed->apply(p,k,plain[k],jet);
+                } catch (const PackingLimit&) {}
+            }
+            auto d = derivative(p,fields[k]);
+            if (!plain[k]) d = divide(std::move(d),reducers);
+            if (jet && !d.empty() && divide(d,saturated).empty()) d.clear();
+            return d;
+        };
+        if (chain) {
+            for (size_t i = 0; i < order; ++i) {
+                f = apply(f,0);
+                print_row(result,f);
+            }
+            return result;
+        }
         std::set<std::string> seen{result};
         Rows layer{std::move(f)};
         for (size_t i = 1; i < order && !layer.empty(); ++i) {
             Rows next;
             for (const auto& p : layer) for (size_t k = 0; k < count; ++k) {
-                auto d = derivative(p,fields[k]);
-                if (!plain[k]) d = divide(std::move(d),reducers);
-                if (d.empty() || divide(d,saturated).empty()) continue;
+                auto d = apply(p,k);
+                if (d.empty()) continue;
                 std::string row;
                 print_row(row,d);
                 if (seen.insert(row).second) {
@@ -448,7 +600,9 @@ std::string calculate(std::istream& input) {
     return result;
 }
 }  // namespace
-std::string implicit_frame_operation(std::istream& input, bool jet) { return implicit_frame(input,jet); }
+std::string implicit_frame_operation(std::istream& input, const std::string& operation) {
+    return implicit_frame(input,operation == "implicit_jet",operation == "implicit_derivative_chain");
+}
 }  // namespace atlas
 
 extern "C" char* atlas_wide_block(const char* input, size_t length) noexcept {

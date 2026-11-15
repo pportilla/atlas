@@ -11,6 +11,7 @@
 #include "local_io.hpp"
 #include "primary_decomposition.hpp"
 #include "polynomial_graph.hpp"
+#include "smooth_point_order.hpp"
 #include <flint/fmpz_mat.h>
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_mpoly_factor.h>
@@ -3366,6 +3367,68 @@ static std::string op_frame_membership(Reader& in) {
         return nonempty ? "no\n" : "scalar\n";
     return "unknown\n";
 }
+
+static std::vector<mpq_class> read_frame_point(std::string_view row, size_t width) {
+    std::istringstream values{std::string(row)};
+    std::vector<mpq_class> point(width);
+    for (auto& value : point) {
+        if (!(values >> value) || value.get_den() == 0)
+            throw std::invalid_argument("Invalid smooth frame point.");
+        value.canonicalize();
+    }
+    std::string extra;
+    if (values >> extra) throw std::invalid_argument("Wrong smooth frame point width.");
+    return point;
+}
+
+// A pure contact direction is eligible only on an open where the specified
+// exceptional coordinates are all nonzero. Filter an already certified
+// finite support without constructing any global derivatives.
+static std::string op_contact_open_points(Reader& in) {
+    const size_t width = in.count(0);
+    if (!width || width > 32) throw std::invalid_argument("Invalid contact frame width.");
+    std::istringstream axes{std::string(in.row_text())};
+    std::vector<size_t> required;
+    while (axes >> std::ws && !axes.eof()) {
+        long axis;
+        if (!(axes >> axis) || axis < 0 || static_cast<size_t>(axis) >= width)
+            throw std::invalid_argument("Invalid exceptional coordinate.");
+        required.push_back(static_cast<size_t>(axis));
+    }
+    std::string out = "points\n";
+    while (in.at != in.end) {
+        const auto point = read_frame_point(in.row_text(), width);
+        if (std::any_of(required.begin(), required.end(), [&](size_t axis) { return point[axis] == 0; }))
+            continue;
+        for (size_t i = 0; i < width; ++i) out += (i ? " " : "") + point[i].get_str();
+        out += '\n';
+    }
+    return out;
+}
+
+// Internal bounded local-ring certificates used by centre selection. The
+// order query may choose any nonsingular minor; the directional query must
+// hold the specified free parameters fixed other than its requested axis.
+static std::string op_smooth_point(Reader& in) {
+    const size_t width = in.count(0), equations = in.count(1), degree = in.count(2);
+    if (!width || width > 32 || equations > width || degree > 64 ||
+        in.end - in.at > 4 * 1024 * 1024) return "unknown\n";
+    local::Basis frame;
+    for (size_t i = 0; i < equations; ++i) frame.push_back(local::decode_row(in.row_text(), width));
+    const auto point = read_frame_point(in.row_text(), width);
+    const auto poly = local::decode_row(in.row_text(), width);
+    if (in.op == "smooth_point_order") {
+        if (in.at != in.end) throw std::invalid_argument("Extra point order rows.");
+        auto order = local::smooth_point_order(frame, point, poly, degree);
+        return order ? std::to_string(*order) + "\n" : "unknown\n";
+    }
+    std::istringstream axes(std::string(in.row_text()));
+    std::vector<size_t> coords;
+    for (size_t k; axes >> k;) coords.push_back(k);
+    if (!axes.eof() || in.at != in.end) throw std::invalid_argument("Invalid free coordinates.");
+    return local::smooth_point_direction_zero(frame, point, poly, coords, in.count(3), degree)
+        ? "yes\n" : "unknown\n";
+}
 }  // namespace atlas
 
 using namespace atlas;
@@ -3408,6 +3471,16 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "crossings" || in.op == "bounded_crossings") out = op_crossings(in);
         else if (in.op == "frame_basis" || in.op == "frame_empty") out = op_frame_locus(in);
         else if (in.op == "frame_membership") out = op_frame_membership(in);
+        else if (in.op == "contact_open_points") out = op_contact_open_points(in);
+        else if (in.op == "smooth_point_order" || in.op == "smooth_point_direction")
+            out = op_smooth_point(in);
+        else if (in.op == "frame_points") {
+            if (in.end - in.at > 4 * 1024 * 1024) out = "unknown\n";
+            else {
+                std::istringstream rows(std::string(in.at, in.end));
+                out = frame_points(rows, in.count(0), in.count(1), in.count(2));
+            }
+        }
         else if (in.op == "graph_regular") {
             std::istringstream rows(std::string(in.at, in.end));
             out = graph_regular(rows, in.count(0), in.count(1)) ? "yes\n" : "unknown\n";

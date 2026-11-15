@@ -32,6 +32,10 @@ class Frame:
         self._basis = None
         self._reducer = None
         self._jets = {}
+        self._point_supports = {}
+        self._point_orders = {}
+        self._witness_pieces = ()
+        self._witness_points = {}
         self._inverted = {}
         self._cuts = {}
         self._cut_coordinates = {}
@@ -115,6 +119,29 @@ class Frame:
             return value
         return self._reduced_terms(value)
 
+    def derivative_chain(self, f, k, degree):
+        """Represent f, D_k f, ..., D_k^degree f on the entire implicit chart."""
+        from . import native_library
+        if not degree:
+            return (f,)
+        if degree == 1 or not self.rows or native_library._MODE == "sympy":
+            chain = [f]
+            for _ in range(degree):
+                chain.append(self.derivative(chain[-1], k))
+            return tuple(chain)
+        from .affine_kernel import _request, _sparse_expression
+        rows = _request(["implicit_derivative_chain", *self._implicit_input(f), str(degree), *self._field_lines(k)])
+        return (f, *(_sparse_expression(self.variables, row) for row in rows[1:]))
+
+    def _field_lines(self, k):
+        from .field_wide import _expanded_row
+        field = self.field(k)
+        yield str(int(len(field) == 1 and field.get(k) == 1))
+        yield str(len(field))
+        for axis, c in field.items():
+            yield str(self.variables.index(axis))
+            yield _expanded_row(self.variables, c)
+
     def graph_regular(self, f):
         """Whether native graph elimination certifies a nonzerodivisor modulo the frame equations."""
         if self.known_scalar_unit(f):
@@ -130,6 +157,55 @@ class Frame:
     def known_scalar_unit(self, f):
         """Whether the native membership check already proved f is a nonzero rational on this frame."""
         return f in self._scalar_units
+
+    def working_points(self, locus, working):
+        """All geometric points on the open working pieces, when certified rational."""
+        from .field_wide import _expanded_row
+        from .native_library import ideal_request
+        points = {}
+        for piece in working:
+            key = (*locus, *piece)
+            if key not in self._point_supports:
+                equations = (*self.rows, *key)
+                rows = [_expanded_row(self.variables, g) for g in (*equations, *self.units)]
+                answer = ideal_request(f"frame_points {len(self.variables)} {len(equations)} {len(self.units)}", rows)
+                self._point_supports[key] = tuple(answer[1:]) if answer[0] == "points" else None
+                if self._point_supports[key]:
+                    self._known_nonempty = True
+                    self._witness_points.update(dict.fromkeys(self._point_supports[key]))
+            support = self._point_supports[key]
+            if support is None:
+                return None
+            points.update(dict.fromkeys(support))
+        return tuple(points)
+
+    def point_order(self, f, point):
+        from .field_wide import _expanded_row
+        from .native_library import ideal_request
+        key = (f, point)
+        if key not in self._point_orders:
+            rows = [_expanded_row(self.variables, g) for g in self.rows]
+            answer, = ideal_request(f"smooth_point_order {len(self.variables)} {len(rows)} 64",
+                                    [*rows, point, _expanded_row(self.variables, f)])
+            self._point_orders[key] = None if answer == "unknown" else int(answer)
+        return self._point_orders[key]
+
+    def direction_vanishes(self, f, k, degree, points):
+        from .field_wide import _expanded_row
+        from .native_library import ideal_request
+        rows = [_expanded_row(self.variables, g) for g in self.rows]
+        header = f"smooth_point_direction {len(self.variables)} {len(rows)} {degree} {self.variables.index(k)}"
+        free = " ".join(str(self.variables.index(v)) for v in self.coords)
+        query = _expanded_row(self.variables, f)
+        return all(ideal_request(header, [*rows, point, query, free]) == ["yes"] for point in points)
+
+    def contact_open_points(self, points, coordinates):
+        from .native_library import ideal_request
+        if not coordinates:
+            return points
+        axes = " ".join(str(self.variables.index(v)) for v in coordinates)
+        _, *survivors = ideal_request(f"contact_open_points {len(self.variables)}", [axes, *points])
+        return survivors
 
     def vanishes(self, f):
         """Whether f is zero on N."""
@@ -150,6 +226,15 @@ class Frame:
                 self._scalar_units.add(f)
             self._vanishing[f] = answer
             return answer
+        # A finite order proves that the germ is nonzero on this open frame,
+        # even if its value at the point is zero. It does not prove a unit.
+        if self._witness_pieces:
+            for piece in self._witness_pieces:
+                self.working_points((), (piece,))
+            self._witness_pieces = ()
+        if any(self.point_order(f, p) is not None for p in self._witness_points):
+            self._vanishing[f] = False
+            return False
         residue = self.reduced(f)
         if not residue:
             answer = True
@@ -182,14 +267,10 @@ class Frame:
                 return jet(self, f, order)
             from .affine_kernel import _request, _ring, _sparse_expression
             if self.rows:
-                from .field_wide import _expanded_row
                 lines = self._implicit_input(f)
                 lines.extend((str(order), *self._basis_lines(self.variables, self.basis()), str(len(self.coords))))
                 for k in self.coords:
-                    field = self.field(k)
-                    lines.extend((str(int(len(field) == 1 and field.get(k) == 1)), str(len(field))))
-                    for axis,c in field.items():
-                        lines.extend((str(self.variables.index(axis)), _expanded_row(self.variables,c)))
+                    lines.extend(self._field_lines(k))
                 rows = _request(["implicit_jet", *lines])
             else:
                 ring = _ring(self.variables)
@@ -230,10 +311,11 @@ class Frame:
                 self._known_nonempty = True
         return self._empty[key]
 
-    def restricted(self, z, k, unit, *, witness_loci=()):
+    def restricted(self, z, k, unit, *, witness_loci=(), working=()):
         """The submanifold z = 0 of N, where D_k z is invertible, on the open set unit != 0."""
         child = Frame(self.variables, tuple(c for c in self.coords if c != k), (*self.rows, z),
                       (*self.units, unit), self.solved)
+        child._witness_pieces = tuple(working)
         # A hit in the parent witnesses this child only if it lies on z=0
         # and all the child's units were inverted in the nonemptiness test.
         for gens in witness_loci:

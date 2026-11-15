@@ -1,0 +1,702 @@
+{
+  "conditions": "Same QQ inputs. Atlas includes decoding sparse input and returning a certificate. Singular enters with the ring and original polynomials loaded, translates them to the point, checks smoothness and computes local standard bases modulo successive powers of the maximal ideal. For directions it verifies the specified parameters and fixes all but the requested one. On support examples it computes minimal primes, filters at the open, and extracts rational coordinates. Process launch is excluded. Trial order alternates.",
+  "native_library_sha256": "7ade339b14bb13073e35fa559f50b05d1654ff9c1a2d4a06023bdde6862e7957",
+  "cpu_affinity": [
+    14
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "trials": 9,
+  "cases": [
+    {
+      "case": "curved_translated",
+      "operation": "order",
+      "answer": [
+        "4"
+      ],
+      "request": "smooth_point_order 3 1 8",
+      "native_packet_sha256": "54a20acfacdb3eabb4b95e6d894ae9082fa4ec8ac16d0b8b091860b1a827e41a",
+      "samples_ms": {
+        "Atlas": [
+          0.240905,
+          0.352846,
+          0.290097,
+          0.231106,
+          0.13756,
+          0.218753,
+          0.140846,
+          0.245805,
+          0.144222
+        ],
+        "Singular": [
+          1.639,
+          2.111,
+          1.697,
+          1.673,
+          1.7,
+          4.745,
+          1.675,
+          4.834,
+          1.753
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.231106,
+        "Singular": 1.7
+      }
+    },
+    {
+      "case": "mixed_tangent",
+      "operation": "order",
+      "answer": [
+        "4"
+      ],
+      "request": "smooth_point_order 3 1 8",
+      "native_packet_sha256": "f66343d378af6f19d56088329c2430884ca6a28c6695298790aab963381c6581",
+      "samples_ms": {
+        "Atlas": [
+          0.22736,
+          0.336726,
+          0.178316,
+          0.277745,
+          0.176794,
+          0.384837,
+          0.310876,
+          0.256384,
+          0.210197
+        ],
+        "Singular": [
+          1.751,
+          1.673,
+          1.711,
+          2.04,
+          4.84,
+          2.179,
+          3.798,
+          5.775,
+          4.829
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.256384,
+        "Singular": 2.179
+      }
+    },
+    {
+      "case": "coupled_codimension_two",
+      "operation": "order",
+      "answer": [
+        "6"
+      ],
+      "request": "smooth_point_order 4 2 8",
+      "native_packet_sha256": "0e6807fd74e301e584bf081fd9a94526c46b2d9b23891a2488e33d7298a4ff6f",
+      "samples_ms": {
+        "Atlas": [
+          0.095239,
+          0.114717,
+          0.04777,
+          0.124615,
+          0.057479,
+          0.167537,
+          0.087716,
+          0.17478,
+          0.097214
+        ],
+        "Singular": [
+          2.718,
+          5.643,
+          5.668,
+          5.402,
+          3.211,
+          3.321,
+          3.235,
+          3.111,
+          3.191
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.097214,
+        "Singular": 3.235
+      }
+    },
+    {
+      "case": "affine_threefold",
+      "operation": "order",
+      "answer": [
+        "7"
+      ],
+      "request": "smooth_point_order 3 0 8",
+      "native_packet_sha256": "a92cf663386cba394b93a3b5aefc2fc5104c104ae5c12e552665064b32b3296e",
+      "samples_ms": {
+        "Atlas": [
+          0.247508,
+          0.263788,
+          0.17506,
+          0.20127,
+          0.106031,
+          0.213173,
+          0.103806,
+          0.208434,
+          0.108074
+        ],
+        "Singular": [
+          1.182,
+          1.053,
+          1.138,
+          3.782,
+          0.658,
+          0.679,
+          0.654,
+          0.653,
+          0.667
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.20127,
+        "Singular": 0.679
+      }
+    },
+    {
+      "case": "separate_sheet",
+      "operation": "order",
+      "answer": [
+        "5"
+      ],
+      "request": "smooth_point_order 2 1 8",
+      "native_packet_sha256": "a8706f12488e69a8fb07d324c4140fefaf17c5d660de83905f9e4aaa9a99cf23",
+      "samples_ms": {
+        "Atlas": [
+          0.056076,
+          0.077656,
+          0.022803,
+          0.084549,
+          0.023424,
+          0.075763,
+          0.022833,
+          0.082196,
+          0.024557
+        ],
+        "Singular": [
+          1.733,
+          1.845,
+          1.799,
+          5.08,
+          1.784,
+          4.92,
+          4.9,
+          1.82,
+          1.733
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.056076,
+        "Singular": 1.82
+      }
+    },
+    {
+      "case": "unit_on_curve",
+      "operation": "order",
+      "answer": [
+        "0"
+      ],
+      "request": "smooth_point_order 2 1 8",
+      "native_packet_sha256": "3c3f54ed9b6b842a82c5fa37c411046bb7e37aed8ffe03645dd35a1a32a6dade",
+      "samples_ms": {
+        "Atlas": [
+          0.04257,
+          0.066957,
+          0.016331,
+          0.085592,
+          0.0267,
+          0.08469,
+          0.028263,
+          0.120898,
+          0.019777
+        ],
+        "Singular": [
+          0.677,
+          0.597,
+          0.557,
+          0.684,
+          0.69,
+          0.713,
+          0.706,
+          0.601,
+          0.606
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.04257,
+        "Singular": 0.677
+      }
+    },
+    {
+      "case": "b9_chart_23",
+      "operation": "order",
+      "answer": [
+        "6"
+      ],
+      "request": "smooth_point_order 6 4 8",
+      "native_packet_sha256": "c6b01d2c345503ca88db9de052e76427ff4b316485da29f0a2011b57afd14f7b",
+      "samples_ms": {
+        "Atlas": [
+          11.824504,
+          9.086916,
+          11.685592,
+          8.758145,
+          11.751767,
+          11.664483,
+          17.892591,
+          14.343501,
+          22.168935
+        ],
+        "Singular": [
+          37.365,
+          35.12,
+          32.202,
+          35.146,
+          31.905,
+          40.91,
+          35.792,
+          35.927,
+          48.555
+        ]
+      },
+      "median_ms": {
+        "Atlas": 11.751767,
+        "Singular": 35.792
+      }
+    },
+    {
+      "case": "b9_chart_23_direction_z",
+      "operation": "direction",
+      "answer": [
+        "1"
+      ],
+      "request": "smooth_point_direction 6 4 6 3",
+      "native_packet_sha256": "160cf6d4538fac75e2397ee88e43478dacd1332ce8d9d887364788d52c5de83a",
+      "samples_ms": {
+        "Atlas": [
+          11.890309,
+          6.493079,
+          6.416123,
+          5.435072,
+          6.597857,
+          8.361607,
+          11.992522,
+          6.320763,
+          5.825589
+        ],
+        "Singular": [
+          24.545,
+          10.503,
+          16.964,
+          17.289,
+          17.718,
+          12.416,
+          12.2,
+          13.281,
+          12.744
+        ]
+      },
+      "median_ms": {
+        "Atlas": 6.493079,
+        "Singular": 13.281
+      }
+    },
+    {
+      "case": "b9_chart_23_direction_b",
+      "operation": "direction",
+      "answer": [
+        "0"
+      ],
+      "request": "smooth_point_direction 6 4 6 5",
+      "native_packet_sha256": "3efb243aae0ba414458ecfffdc97ba28502c403577a2e6123c31cb6ce75c3d69",
+      "samples_ms": {
+        "Atlas": [
+          12.107078,
+          6.516574,
+          6.32916,
+          6.999495,
+          6.557581,
+          5.693791,
+          5.435623,
+          8.863144,
+          5.650378
+        ],
+        "Singular": [
+          30.386,
+          15.948,
+          22.372,
+          19.029,
+          25.823,
+          12.145,
+          22.062,
+          20.13,
+          14.33
+        ]
+      },
+      "median_ms": {
+        "Atlas": 6.516574,
+        "Singular": 20.13
+      }
+    },
+    {
+      "case": "translated_linear_point",
+      "operation": "support",
+      "answer": [
+        "points",
+        "2 -1"
+      ],
+      "request": "frame_points 2 2 0",
+      "native_packet_sha256": "30bdcb9d14632540c38af62d956ee801d6585a49fa2518e7803abe989d269331",
+      "samples_ms": {
+        "Atlas": [
+          0.209887,
+          0.19047,
+          0.105159,
+          0.207021,
+          0.102473,
+          0.155894,
+          0.061035,
+          0.148431,
+          0.05851
+        ],
+        "Singular": [
+          5.101,
+          4.91,
+          5.012,
+          5.295,
+          5.132,
+          4.055,
+          13.803,
+          10.832,
+          9.182
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.148431,
+        "Singular": 5.132
+      }
+    },
+    {
+      "case": "nonreduced_two_points",
+      "operation": "support",
+      "answer": [
+        "points",
+        "-3 -6",
+        "2 4"
+      ],
+      "request": "frame_points 2 2 0",
+      "native_packet_sha256": "3ebf2b459be2ad9505737303be28311e28cbccb0a9c6c59457715b0f246ece87",
+      "samples_ms": {
+        "Atlas": [
+          0.195368,
+          0.189948,
+          0.112201,
+          0.16956,
+          0.071816,
+          0.182134,
+          0.077807,
+          0.214505,
+          0.112943
+        ],
+        "Singular": [
+          17.452,
+          11.839,
+          18.282,
+          16.204,
+          12.867,
+          16.598,
+          7.626,
+          13.252,
+          15.157
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.16956,
+        "Singular": 15.157
+      }
+    },
+    {
+      "case": "open_removes_one_point",
+      "operation": "support",
+      "answer": [
+        "points",
+        "2 4"
+      ],
+      "request": "frame_points 2 2 1",
+      "native_packet_sha256": "903bf8e4ce17941e6e83cede02b42dc2c37df96bc3cbe0fc502acb32006d01aa",
+      "samples_ms": {
+        "Atlas": [
+          0.198725,
+          0.197583,
+          0.119866,
+          0.158068,
+          0.07453,
+          0.214575,
+          0.110729,
+          0.162186,
+          0.072647
+        ],
+        "Singular": [
+          13.672,
+          18.035,
+          8.534,
+          16.044,
+          17.256,
+          12.999,
+          13.603,
+          16.849,
+          17.968
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.158068,
+        "Singular": 16.044
+      }
+    },
+    {
+      "case": "contact_derivatives",
+      "operation": "chart_derivative_chain",
+      "degree": 5,
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "free_parameters": [
+        "x",
+        "y"
+      ],
+      "direction": "x",
+      "input_terms": [
+        3,
+        2
+      ],
+      "input_sha256": "e8d63c2caf88c81f045e8d1c676d9074c27681adaa257119f4486b9cfa6d1f09",
+      "answer_terms": [
+        2,
+        3,
+        3,
+        2,
+        1,
+        0
+      ],
+      "answer_sha256": "dd3a890e4e3e3dfb11c5164e08dfe8ed287d866f79939f9d983cdec914cc1511",
+      "agreement": "All global polynomial derivatives through the stated degree agree coefficient by coefficient.",
+      "timing": "Fresh frame basis and signed Jacobian minors, iterated differentiation and normal form. Inputs are loaded in both processes; Atlas includes conversion of returned rows into frame expressions. Comparison and process startup excluded.",
+      "samples_ms": {
+        "Atlas": [
+          0.219474,
+          0.322739,
+          0.171414,
+          0.223883,
+          0.124615,
+          0.308072,
+          0.156205,
+          0.277524,
+          0.160092
+        ],
+        "Singular": [
+          0.326,
+          0.317,
+          0.323,
+          0.237,
+          0.216,
+          0.221,
+          0.228,
+          0.289,
+          0.321
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.219474,
+        "Singular": 0.289
+      }
+    },
+    {
+      "case": "translated_contact_derivatives",
+      "operation": "chart_derivative_chain",
+      "degree": 4,
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "free_parameters": [
+        "x",
+        "y"
+      ],
+      "direction": "y",
+      "input_terms": [
+        8,
+        13
+      ],
+      "input_sha256": "130f05123d28d95a90110abbe5f4a325230ea7a5b18c87e4147838dbb8b7a154",
+      "answer_terms": [
+        13,
+        24,
+        27,
+        34,
+        42
+      ],
+      "answer_sha256": "13435706d7e8efc1f0c8434ef5ae48055fc694d8ab42a5f46533f822c29e241f",
+      "agreement": "All global polynomial derivatives through the stated degree agree coefficient by coefficient.",
+      "timing": "Fresh frame basis and signed Jacobian minors, iterated differentiation and normal form. Inputs are loaded in both processes; Atlas includes conversion of returned rows into frame expressions. Comparison and process startup excluded.",
+      "samples_ms": {
+        "Atlas": [
+          0.300878,
+          0.391089,
+          0.252356,
+          0.52966,
+          0.360811,
+          0.368746,
+          0.26481,
+          0.40233,
+          0.260702
+        ],
+        "Singular": [
+          0.294,
+          0.304,
+          0.443,
+          0.438,
+          0.429,
+          0.32,
+          0.304,
+          0.39,
+          0.289
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.360811,
+        "Singular": 0.32
+      }
+    },
+    {
+      "case": "coupled_contact_derivatives",
+      "operation": "chart_derivative_chain",
+      "degree": 4,
+      "variables": [
+        "u",
+        "x",
+        "z",
+        "y"
+      ],
+      "free_parameters": [
+        "x",
+        "y"
+      ],
+      "direction": "x",
+      "input_terms": [
+        4,
+        4,
+        3
+      ],
+      "input_sha256": "860313293be100b779e07236de6a78a886607a04c100a4d3cd1a5c18cf41df55",
+      "answer_terms": [
+        3,
+        20,
+        46,
+        85,
+        124
+      ],
+      "answer_sha256": "d6397b37d134811bdbfb9b31bec1b569b89b6263647d676c13494ff40f54e3b5",
+      "agreement": "All global polynomial derivatives through the stated degree agree coefficient by coefficient.",
+      "timing": "Fresh frame basis and signed Jacobian minors, iterated differentiation and normal form. Inputs are loaded in both processes; Atlas includes conversion of returned rows into frame expressions. Comparison and process startup excluded.",
+      "samples_ms": {
+        "Atlas": [
+          0.605483,
+          0.59896,
+          0.485697,
+          0.60874,
+          0.493992,
+          0.626363,
+          0.484915,
+          0.589032,
+          0.484315
+        ],
+        "Singular": [
+          0.625,
+          0.525,
+          0.436,
+          0.451,
+          0.425,
+          0.425,
+          0.525,
+          0.478,
+          0.414
+        ]
+      },
+      "median_ms": {
+        "Atlas": 0.589032,
+        "Singular": 0.451
+      }
+    },
+    {
+      "case": "b9_chart_23_derivative_b",
+      "operation": "chart_derivative_chain",
+      "degree": 6,
+      "variables": [
+        "x",
+        "y",
+        "u",
+        "z",
+        "a",
+        "b"
+      ],
+      "free_parameters": [
+        "z",
+        "b"
+      ],
+      "direction": "b",
+      "input_terms": [
+        8,
+        12,
+        4,
+        13,
+        435
+      ],
+      "input_sha256": "ed9d3c2d1d4cef6bfbf10977074227d6412edef0940ccc2f6645c5e8a67bf3a3",
+      "answer_terms": [
+        435,
+        1048,
+        1407,
+        1886,
+        2496,
+        3264,
+        4034
+      ],
+      "answer_sha256": "7339dcf8baa6babc93547a93a19016b44ce5026a012a9fb4d0101fd76cbc1b53",
+      "agreement": "All global polynomial derivatives through the stated degree agree coefficient by coefficient.",
+      "timing": "Fresh frame basis and signed Jacobian minors, iterated differentiation and normal form. Inputs are loaded in both processes; Atlas includes conversion of returned rows into frame expressions. Comparison and process startup excluded.",
+      "samples_ms": {
+        "Atlas": [
+          9624.061362,
+          10924.457193,
+          11849.33039,
+          13812.082372,
+          13184.201291,
+          14236.617736,
+          14966.319929,
+          17252.768016,
+          17302.65926
+        ],
+        "Singular": [
+          22446.204,
+          22963.975,
+          21662.806,
+          20097.184,
+          20897.554,
+          21698.841,
+          23224.731,
+          23067.551,
+          23044.985
+        ]
+      },
+      "median_ms": {
+        "Atlas": 13812.082372,
+        "Singular": 22446.204
+      }
+    }
+  ]
+}

@@ -252,7 +252,16 @@ struct Search : atlas::GeometryQuery {
             if (index==r["count"].asUInt()) {result.append(row({work,kept}));return;}
             V q;q["work"]=work;q["i"]=index;
             V more=kept;more.append(index);
-            if (call("regular",q).asBool()) {
+            bool regular = call("regular",q).asBool();
+            if (!regular) {
+                // A finite order in a smooth local ring proves that f is a
+                // nonzero germ there. Covering every working point suffices
+                // for this grouping, including if f kills a disjoint component.
+                const auto orders = call("working_orders", q);
+                regular = orders.isArray() && std::all_of(orders.begin(), orders.end(),
+                    [](const V& order) { return order.isUInt(); });
+            }
+            if (regular) {
                 auto live=call("live",q); if (!live.empty()) self(self,live,index+1,more);
             } else if (call("vanishes",q).asBool()) self(self,work,index+1,kept);
             else {
