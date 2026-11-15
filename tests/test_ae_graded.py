@@ -11,6 +11,9 @@ class AeGradedTests(unittest.TestCase):
         for (a, b, c), expected in [
             *((triple, 115) for triple in permutations((2, 3, 5))),
             ((1, 3, 5), 20), ((3, 4, 5), 529), ((2, 5, 7), 729), ((3, 5, 7), 1710),
+            # Their zero tails end at weights 165 and 195. Singular's module
+            # computation (benchmarks/ae_coprime_module.sing) gives the same lengths.
+            ((4, 5, 9), 5182), ((3, 7, 10), 7090),
         ]:
             with self.subTest(a=a, b=b, c=c):
                 result = calculate("ae-codimension", components=[f"x^{a}", f"y^{b}", f"(x+y)^{c}"])

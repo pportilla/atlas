@@ -303,9 +303,18 @@ divides a whole pullback, its contribution to the third position is a
 monomial shift of $-h^k\partial_x h$ or $-h^k\partial_y h$. The modular
 calculation reuses these products across rows and weights. It reduces entries
 as pivots are encountered and skips the zero suffix of each pivot row.
-A full-rank minor modulo the prime certifies full rank over $\mathbb Q$.
-Otherwise Atlas constructs the integer matrix independently and computes its
-exact rank with the surviving columns in their original order.
+A full-rank minor modulo the prime certifies full rank over $\mathbb Q$,
+so modular ranks alone prove the zero pieces of the tail below. Atlas
+looks for that tail first, modulo 65521. The search ends at weight
+$abc+\max(a,b)$ or when a piece exceeds the matrix bound. If no tail has
+been proved by then, the pieces left unproved are ranked again modulo 65519,
+since one prime can lower the ranks of every piece of a map. Once a tail is
+proved, Atlas constructs the integer matrix of each piece still unproved,
+in order of weight, and computes its exact rank with the surviving columns
+in their original order, stopping at the first tail proved over
+$\mathbb Q$. An unlucky prime can only postpone the modular proof. Maps of
+infinite codimension therefore never reach the exact ranks in this
+calculation, and graph elimination decides their codimension.
 
 The remaining quotient $N$ is generated over $S$ by the residue monomials in
 each position. Their maximum weight is $W=a+b-2-\min(a,b,c)$. For $w>W$,
