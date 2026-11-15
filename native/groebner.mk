@@ -62,6 +62,8 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp p
   ae_codimension.cpp ae_special.cpp ae_graded.cpp ae_graded_surface.cpp ae_weighted_ranks.cpp ae_weighted_quotient.cpp ae_surface_coordinates.cpp \
   resolution_candidate.cpp smooth_point_order.cpp graph_verify_entry.cpp fan_verification.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
+# The canonical blowup stage composes the operations above in one call.
+KERNEL_SOURCES += canonical_blowup.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp

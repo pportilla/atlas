@@ -182,7 +182,14 @@ def _eliminate(chart):
 def _failures(chart, dimension):
     """The sets of components whose intersection is not smooth of the expected
     dimension somewhere over the fibre: {labels: ideal of that locus}, and
-    those among them seen inside the chart's own region.
+    those among them seen inside the chart's own region (see
+    `_failures_stepwise`). The kernel answers in one call."""
+    _, (found,) = _checked_charts([chart], dimension, presence=False)
+    return found
+
+
+def _failures_stepwise(chart, dimension):
+    """The arbitrary-width route of `_failures`.
 
     The chart W is smooth, of codimension c in its affine space. At a point
     of k of the divisors, their intersection is smooth of codimension k in W
@@ -678,11 +685,116 @@ class _Canonical:
         self.births.append(label)
 
 
+_RAISED = {"GiveUp": GiveUp, "ArithmeticError": ArithmeticError, "ValueError": ValueError, "TypeError": TypeError}
+
+
+def _native_stage(operation, **fields):
+    """One call of native/canonical_blowup.cpp; None when a packed operation
+    is out of range and the arbitrary-width route has to answer."""
+    from .kernel_json import kernel_json
+    answer = kernel_json("atlas_canonical_blowup", operation, **fields)
+    if isinstance(answer, dict) and "declined" in answer:
+        return None
+    if isinstance(answer, dict) and "raise" in answer:
+        kind, message = answer["raise"], answer["message"]
+        if kind == "Uneven":
+            raise Uneven(message)
+        if kind == "Unavailable":
+            from .native_library import Unavailable
+            raise Unavailable(message)
+        if kind == "InputError":
+            from .polynomial import InputError
+            raise InputError(message)
+        raise _RAISED.get(kind, ArithmeticError)(message)
+    return answer
+
+
+def _packed_present():
+    """Whether emptiness may use the packed open-locus test, as in blowup_ideal.empty_locus."""
+    from .algebra_execution import current_execution
+    from .native_library import current_replay_scope
+    scope = current_replay_scope()
+    return current_execution() is None and (scope is None or scope.compute == "cpu")
+
+
+def _native_charts(charts):
+    """Whether the native stage can take these charts: their coordinates are native polynomial symbols."""
+    from .native_polynomial import native_ring
+    return all(native_ring(chart.variables) for chart in charts)
+
+
+def _chart_fields(chart, centre=None, **flags):
+    from .native_polynomial import row
+    from .polynomial import integer_text
+    variables = chart.variables
+
+    def rows(ideal):
+        return [row(variables, g) for g in ideal]
+
+    return dict(names=[v.name for v in variables], identities=[v._coords[0].identity for v in variables],
+                theta=variables.index(chart.coefficient_field[0]) if chart.coefficient_field else -1,
+                ambient=rows(chart.ambient), fibre=rows(chart.fibre), region=rows(chart.region),
+                components=[[label, integer_text(n), integer_text(nu), rows(ideal)]
+                            for label, n, nu, ideal in chart.components],
+                coordinates=rows(f for _, f in chart.coordinates), removed=[rows(z) for z in chart.removed],
+                centre=None if centre is None else rows(centre), **flags)
+
+
+def _chart_from_fields(parent, item, stage):
+    from .kernel import exprs
+    from .polynomial import integer_from_decimal
+    api = chart_expressions(parent.variables)
+    variables = tuple(parent.variables[source] if isinstance(source, int) else api.Symbol(source)
+                      for source in item["variables"])
+
+    def ideal(rows):
+        return exprs(variables, rows)
+
+    components = tuple((label, integer_from_decimal(n), integer_from_decimal(nu), ideal(rows))
+                       for label, n, nu, rows in item["components"])
+    coordinates = tuple((name, f) for (name, _), f in zip(parent.coordinates, ideal(item["coordinates"])))
+    return Chart(variables, ideal(item["ambient"]), components, ideal(item["fibre"]), ideal(item["region"]),
+                 coordinates, (*parent.history, (stage, item["pivot"])), tuple(ideal(z) for z in item["removed"]),
+                 parent.coefficient_field)
+
+
 def _blown_up(current, chosen, label, stage, dimension, size, deadline, retains=False):
     """The charts after the blowup of the centre given in each chart (None where it does not meet the chart).
 
     With `retains` the chart stays for its points off the centre, and each
-    chart of the blowup owns its part of the new divisor only."""
+    chart of the blowup owns its part of the new divisor only.
+
+    The kernel computes the whole stage (native/canonical_blowup.cpp); the
+    step-by-step route below answers for rings beyond its packed range.
+    Either way the parts of a centre in different charts must give the new
+    divisor the same numerical data."""
+    if _native_charts(chart for chart, centre in zip(current, chosen) if centre is not None):
+        answer = _native_stage("stage", charts=[_chart_fields(chart, centre) if centre is not None else dict(centre=None)
+                                                for chart, centre in zip(current, chosen)],
+                               label=label, stage=stage, dimension=dimension, size=size, retains=bool(retains),
+                               seconds=None if deadline is None else deadline - monotonic(),
+                               packed_present=_packed_present())
+        if answer is not None:
+            following = []
+            for item in answer["charts"]:
+                if "keep" in item:
+                    following.append(current[item["keep"]])
+                elif "retain" in item:
+                    chart = current[item["retain"]]
+                    older = tuple(chart.removed[i] for i in item["holes"])
+                    following.append(replace(chart, removed=(*older, tuple(chosen[item["retain"]]))))
+                else:
+                    following.append(_chart_from_fields(current[item["parent"]], item, stage))
+            return following
+    following = _blown_up_stepwise(current, chosen, label, stage, dimension, size, deadline, retains)
+    values = [[str(n), str(nu)] for chart in following for name, n, nu, _ in chart.components if name == label]
+    if values and level_weights("common_value", (), values=values) is None:
+        raise Uneven("The parts of a centre give the new divisor different numerical data.")
+    return following
+
+
+def _blown_up_stepwise(current, chosen, label, stage, dimension, size, deadline, retains=False):
+    """The arbitrary-width route of `_blown_up`: each native operation called in turn."""
     following = []
     codimension = stratum_dimension(dimension, size)
     for chart, centre in zip(current, chosen):
@@ -783,37 +895,115 @@ def _own_failures(chart, dimension, known):
     those of its region, off the centres removed from it. In the form of
     `_failures`; `known` keeps the answer for a chart that does not change."""
     if id(chart) not in known:
-        over, inside = _failures(chart, dimension)
-        own = {}
-        for labels in inside:
-            ideal = tuple(ideal_basis(chart.variables, (*over[labels], *chart.region)))
-            if _present(chart.variables, ideal, chart.removed):
-                own[labels] = ideal
-        known[id(chart)] = chart, (own, set(own))
+        _checked_charts([chart], dimension, known, presence=False)
     return known[id(chart)][1]
+
+
+def _owned(chart, over, inside, owned):
+    """Keep the failures seen in the chart's own part, in the order of `inside`."""
+    own = {}
+    for labels in inside:
+        here, ideal = owned(labels)
+        if here:
+            own[labels] = ideal
+    return own
+
+
+def _checked_charts(current, dimension, known=None, *, presence=True, crossings=True, seen=None):
+    """The charts that still own a point over the fibre (all of them without
+    `presence`) and, with `crossings`, their failures of normal crossings:
+    those of `_own_failures`, kept in `known`, or with `known` None those of
+    `_failures`. `seen` keeps whether a chart that does not change owns such
+    a point. The kernel answers for all the new charts in one call
+    (native/canonical_blowup.cpp, "failures")."""
+    from .kernel import exprs
+    own = known is not None
+    seen = {} if seen is None else seen
+    check = [presence and id(chart) not in seen for chart in current]
+    asked = [crossings and not (own and id(chart) in known) for chart in current]
+    sent = [i for i, chart in enumerate(current)
+            if check[i] or (asked[i] and (not presence or seen[id(chart)][1]))]
+    answers = {}
+    if sent:
+        if not _native_charts(current[i] for i in sent):
+            return _checked_stepwise(current, dimension, known, presence, crossings)
+        found = _native_stage("failures", dimension=dimension, packed_present=_packed_present(),
+                              charts=[_chart_fields(current[i], check=check[i], crossings=asked[i], own=own)
+                                      for i in sent])
+        if found is None:
+            return _checked_stepwise(current, dimension, known, presence, crossings)
+        answers = dict(zip(sent, found))
+    kept, failures = [], []
+    for i, chart in enumerate(current):
+        answer = answers.get(i, {})
+        if check[i]:
+            seen[id(chart)] = chart, answer["present"]
+        if presence and not seen[id(chart)][1]:
+            continue
+        kept.append(chart)
+        if not crossings:
+            continue
+        if asked[i]:
+            labels = [component[0] for component in chart.components]
+            over = {tuple(labels[i] for i in positions): exprs(chart.variables, rows)
+                    for positions, _, rows in answer["loci"]}
+            inside = {tuple(labels[i] for i in positions) for positions, flag, _ in answer["loci"] if flag}
+            if not own:
+                failures.append((over, inside))
+                continue
+            owned = {tuple(names): (here, tuple(exprs(chart.variables, rows))) for names, here, rows in answer["own"]}
+            mine = _owned(chart, over, inside, owned.__getitem__)
+            known[id(chart)] = chart, (mine, set(mine))
+        failures.append(known[id(chart)][1])
+    return kept, failures
+
+
+def _checked_stepwise(current, dimension, known, presence, crossings):
+    """The arbitrary-width route of `_checked_charts`."""
+    if presence:
+        current = [c for c in current if _present(c.variables, (*c.ambient, *c.fibre, *c.region), c.removed)]
+    if not crossings:
+        return current, []
+    failures = []
+    for chart in current:
+        if known is None:
+            failures.append(_failures_stepwise(chart, dimension))
+            continue
+        if id(chart) not in known:
+            over, inside = _failures_stepwise(chart, dimension)
+
+            def owned(labels):
+                ideal = tuple(ideal_basis(chart.variables, (*over[labels], *chart.region)))
+                return _present(chart.variables, ideal, chart.removed), ideal
+
+            mine = _owned(chart, over, inside, owned)
+            known[id(chart)] = chart, (mine, set(mine))
+        failures.append(known[id(chart)][1])
+    return current, failures
 
 
 def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None, count_strata=True):
     dimension = len(variables) if dimension is None else dimension
     current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
                      tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
-    centres, known = [], {}
+    centres, known, seen = [], {}, {}
     stages = count(1) if budget is None and isinstance(rule, _Canonical) else range(1, rule.stages + 1)
     for stage in stages:
         report(f"Checking charts for normal crossings ({rule.name} method)", len(centres))
         if deadline is not None and monotonic() > deadline:
             raise GiveUp("The time allowed for the blowups is over.")
         retains = getattr(rule, "retains", False)
-        current = [c for c in current if _present(c.variables, (*c.ambient, *c.fibre, *c.region), c.removed)]
-        failures = []
-        if hasattr(rule, "final_check") and rule.final_check():
+        final = hasattr(rule, "final_check") and rule.final_check()
+        needs = not final and (not hasattr(rule, "needs_failures") or rule.needs_failures())
+        # The charts that still own points over the fibre, and where normal crossings fail there.
+        current, failures = _checked_charts(current, dimension, known if retains else None, crossings=needs,
+                                            seen=seen)
+        if final:
             from .repeated_tangent import certify_fibre
             for chart in current:
                 certify_fibre(chart, dimension)
             return (*(_strata(current) if count_strata else ({}, {})), current, centres)
-        if not hasattr(rule, "needs_failures") or rule.needs_failures():
-            failures = [_own_failures(chart, dimension, known) if retains else _failures(chart, dimension)
-                        for chart in current]
+        if needs:
             if not any(inside for _, inside in failures):
                 return (*(_strata(current) if count_strata else ({}, {})), current, centres)
         report(f"Searching for the next centre ({rule.name} method)", len(centres))
@@ -849,14 +1039,10 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
         if size is None:
             raise GiveUp("A centre has parts of different dimensions.")
         def blown(centres):
+            # The parts of a centre may lie in different charts: `_blown_up`
+            # checks that the new divisor gets the same numerical data from all of them.
             keep_complement = retains or getattr(rule, "keep_complement", False)
-            charts = _blown_up(current, centres, label, stage, dimension, size, deadline, keep_complement)
-            # The parts of a centre may lie in different charts: the new divisor
-            # must get the same numerical data from all of them.
-            values = [[str(n), str(nu)] for chart in charts for name, n, nu, _ in chart.components if name == label]
-            if values and level_weights("common_value", (), values=values) is None:
-                raise Uneven("The parts of a centre give the new divisor different numerical data.")
-            return charts
+            return _blown_up(current, centres, label, stage, dimension, size, deadline, keep_complement)
 
         try:
             report(f"Blowing up centre {label} ({rule.name} method)", len(centres))
