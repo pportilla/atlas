@@ -649,6 +649,10 @@ Json::Value level_weights(const Json::Value& request) {
     throw std::invalid_argument("Unknown centre weight operation.");
 }
 } // namespace
+namespace atlas {
+// The same operations for a caller in C++.
+Json::Value centre_level(const Json::Value& request) { return level_weights(request); }
+}
 extern "C" const char* atlas_centre_level(const char* input) noexcept {
     return atlas::sparse_json::invoke(input, level_weights);
 }

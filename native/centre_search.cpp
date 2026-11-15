@@ -328,6 +328,13 @@ struct Search : atlas::GeometryQuery {
     }
 };
 }
+namespace atlas {
+// The same searches for a caller in C++.
+Json::Value centre_search(const Json::Value& request, std::function<Json::Value(const Json::Value&)> query) {
+    Search search{{nullptr, std::move(query)}};
+    return search.run(request);
+}
+}
 extern "C" const char* atlas_centre_search(const char* input, Callback callback) noexcept {
     return atlas::sparse_json::invoke(input,[&](const V& r){return Search{callback}.run(r);});
 }

@@ -608,7 +608,68 @@ def maximum(variables, ambient, dimension, strict, divisors, working, records, b
     The points of the closed sets V(Z), Z in `away`, are left out of the set:
     the rest is covered by the open sets where a product of one generator of
     each Z is invertible.
+
+    The kernel computes the whole procedure below in one call
+    (native/centre_maximum.cpp); this file's steps answer for rings beyond
+    its packed range.
     """
+    found = _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away)
+    if found is not _DECLINED:
+        return found
+    return _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away)
+
+
+_DECLINED = object()
+
+
+def native_failure(answer, **kinds):
+    """The exception that a native composition reports, as the Python steps raise it."""
+    from .native_library import Unavailable
+    from .polynomial import InputError
+    known = dict(GiveUp=GiveUp, NoContact=NoContact, Unavailable=Unavailable, InputError=InputError,
+                 ValueError=ValueError, TypeError=TypeError, KeyError=KeyError, **kinds)
+    return known.get(answer["raise"], ArithmeticError)(answer["message"])
+
+
+def _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away):
+    """One call of native/centre_maximum.cpp, or _DECLINED for the step-by-step route."""
+    from . import native_library
+    from .kernel import exprs
+    from .kernel_json import kernel_json
+    from .native_polynomial import native_ring, row
+    from .polynomial import kernel_fraction
+    variables = tuple(variables)
+    if not native_ring(variables):
+        return _DECLINED
+    from .algebra_execution import current_execution
+    scope = native_library.current_replay_scope()
+
+    def rows(ideal):
+        return [row(variables, g) for g in ideal]
+
+    answer = kernel_json(
+        "atlas_centre_maximum", "maximum", names=[v.name for v in variables],
+        identities=[v._coords[0].identity for v in variables], ambient=rows(ambient), dimension=dimension,
+        strict=rows(strict), divisors=[[label, rows(ideal)] for label, ideal in divisors],
+        working=[rows(w) for w in working], away=[rows(z) for z in away], births=list(births),
+        records={label: None if record is None else invariant_row(record) for label, record in records.items()},
+        seconds=None if deadline is None else deadline - monotonic(),
+        packed_present=current_execution() is None and (scope is None or scope.compute == "cpu"),
+        gpu=scope is not None and scope.compute == "gpu")
+    if "declined" in answer:
+        return _DECLINED
+    if "raise" in answer:
+        raise native_failure(answer)
+    found = answer["maximum"]
+    if found is None:
+        return None
+    value = tuple(INFINITE if entry == "inf" else kernel_fraction(entry) for entry in found["value"])
+    return value, tuple(found["key"]), exprs(variables, found["centre"])
+
+
+def _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, records, births, deadline=None,
+                      away=()):
+    """The arbitrary-width route of `maximum`: each native operation called in turn."""
     original, chart = tuple(variables), tuple(ambient)
     if deadline is None or monotonic() <= deadline:
         direct = _affine_maximum(original, chart, dimension, strict, divisors, working, records, away)

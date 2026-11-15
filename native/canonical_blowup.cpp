@@ -24,8 +24,7 @@
 // computation. Polynomials are sent in the canonical term order of
 // engine/native_polynomial.py. A packed operation that is out of range
 // declines the whole call; the caller then takes the arbitrary-width route.
-#include "local_io.hpp"
-#include "rational_sparse_json.hpp"
+#include "chart_expr.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -39,121 +38,23 @@
 #include <tuple>
 #include <vector>
 
-extern "C" {
-char* atlas_affine(const char*, size_t) noexcept;
-char* atlas_ideal(const char*, size_t) noexcept;
-char* atlas_binomial(const char*, size_t) noexcept;
-char* atlas_groebner_colon(const char*, size_t) noexcept;
-void* atlas_groebner(const char*, size_t) noexcept;
-const char* atlas_groebner_text(const void*) noexcept;
-char* atlas_groebner_reduce(void*, const char*, size_t) noexcept;
-int atlas_groebner_contains(void*, const char*, size_t) noexcept;
-void atlas_groebner_free(void*) noexcept;
-void atlas_groebner_release(char*) noexcept;
-const char* atlas_groebner_error() noexcept;
-const char* atlas_centre_level(const char*) noexcept;
-}
-
 namespace {
 using V = Json::Value;
 using atlas::local::Polynomial;
 using atlas::local::Powers;
 using Ideal = std::vector<Polynomial>;
-using Strings = std::vector<std::string>;
-
-constexpr size_t MAX_VARIABLES = 32;
-
-// An exception that the Python orchestration raised at this point; `kind`
-// names its class for the caller.
-struct Raise {
-    std::string kind, message;
-};
-// A packed operation is out of range: the caller takes the wide route.
-struct Declined {
-    std::string reason;
-};
-// A native operation returned no answer; its Python wrapper answered None.
-struct Unavailable {
-    std::string message;
-};
-
-bool out_of_range(const std::string& message) {
-    return message == "Degree out of range." || message == "Exponent out of range.";
-}
-
-Strings split_lines(const char* text) {
-    Strings lines;
-    std::string current;
-    bool open = false;
-    for (const char* at = text; *at; ++at) {
-        if (*at == '\n') {
-            lines.push_back(std::move(current));
-            current.clear();
-            open = false;
-        } else {
-            current += *at;
-            open = true;
-        }
-    }
-    if (open) lines.push_back(std::move(current));
-    return lines;
-}
-
-struct Released {
-    char* text;
-    ~Released() { atlas_groebner_release(text); }
-};
-
-Strings ideal_request(const std::string& header, const Strings& rows) {
-    std::string payload = header + "\n";
-    for (const auto& row : rows) payload += row + "\n";
-    char* answer = atlas_ideal(payload.data(), payload.size());
-    if (!answer) throw Unavailable{atlas_groebner_error()};
-    Released hold{answer};
-    return split_lines(answer);
-}
-
-Strings affine_request(const Strings& lines) {
-    std::string payload;
-    for (size_t i = 0; i < lines.size(); ++i) payload += (i ? "\n" : "") + lines[i];
-    payload += "\n";
-    char* answer = atlas_affine(payload.data(), payload.size());
-    if (!answer) {
-        const std::string message = atlas_groebner_error();
-        if (message == "Unsupported number of variables." || out_of_range(message)) throw Unavailable{message};
-        throw Raise{"ArithmeticError", message};
-    }
-    Released hold{answer};
-    return split_lines(answer);
-}
-
-Strings binomial_request(const std::string& operation, const std::vector<Strings>& rows) {
-    std::string payload = operation + "\n";
-    for (size_t i = 0; i < rows.size(); ++i) {
-        if (i) payload += "\n";
-        for (size_t j = 0; j < rows[i].size(); ++j) payload += (j ? " " : "") + rows[i][j];
-    }
-    char* answer = atlas_binomial(payload.data(), payload.size());
-    if (!answer) throw Raise{"ValueError", atlas_groebner_error()};
-    Released hold{answer};
-    return split_lines(answer);
-}
-
-V level(const std::string& operation, V fields) {
-    fields["operation"] = operation;
-    fields["weights"] = V(Json::arrayValue);
-    Json::StreamWriterBuilder writer;
-    writer["indentation"] = "";
-    const std::string text = Json::writeString(writer, fields);
-    const std::string answer = atlas_centre_level(text.c_str());
-    V response;
-    Json::CharReaderBuilder parser;
-    std::istringstream stream(answer);
-    std::string error;
-    if (!Json::parseFromStream(parser, stream, &response, &error)) throw Raise{"ArithmeticError", error};
-    if (response.isMember("error")) throw Raise{"InputError", response["error"].asString()};
-    return response["result"];
-}
+using atlas::chart::Declined;
+using atlas::chart::MAX_VARIABLES;
+using atlas::chart::Raise;
+using atlas::chart::Released;
+using atlas::chart::Strings;
+using atlas::chart::Unavailable;
+using atlas::chart::affine_request;
+using atlas::chart::binomial_request;
+using atlas::chart::ideal_request;
+using atlas::chart::level;
+using atlas::chart::out_of_range;
+using atlas::chart::split_lines;
 
 // ---------------------------------------------------------------- rings
 

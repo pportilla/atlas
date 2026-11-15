@@ -686,6 +686,25 @@ Json::Value centered_plan(const Point& p, const std::vector<Terms>& ideal) {
     return out;
 }
 
+}  // namespace
+namespace atlas {
+// The number of operations in the printed form of a polynomial: the cost used
+// to rank presentations (engine/native_polynomial.py `count_ops`).
+size_t expression_size(const std::map<std::vector<mpz_class>, mpq_class>& terms) {
+    size_t cost = terms.empty() ? 0 : terms.size()-1;
+    for (const auto& [powers, coefficient] : terms) {
+        size_t factors = 0;
+        for (const auto& k : powers) {
+            if (k > 1) ++cost;
+            if (k != 0) ++factors;
+        }
+        if (factors > 1) cost += factors-1;
+        if (!powers.empty() && abs(coefficient) != 1) ++cost;
+    }
+    return cost;
+}
+}  // namespace atlas
+namespace {
 Json::Value compute(const Json::Value& r) {
     const std::string op = r["operation"].asString();
     if (op == "row_space" || op == "residues") {
@@ -703,20 +722,7 @@ Json::Value compute(const Json::Value& r) {
             out.append(static_cast<Json::UInt>(mpz_fdiv_ui(n.get_mpz_t(), prime)));
         return out;
     }
-    if (op == "expression_size") {
-        const Terms terms = read_terms(r["terms"], r["width"].asUInt64());
-        size_t cost = terms.empty() ? 0 : terms.size()-1;
-        for (const auto& [powers, coefficient] : terms) {
-            size_t factors = 0;
-            for (const auto& k : powers) {
-                if (k > 1) ++cost;
-                if (k != 0) ++factors;
-            }
-            if (factors > 1) cost += factors-1;
-            if (!powers.empty() && abs(coefficient) != 1) ++cost;
-        }
-        return Json::UInt64(cost);
-    }
+    if (op == "expression_size") return Json::UInt64(atlas::expression_size(read_terms(r["terms"], r["width"].asUInt64())));
     if (op == "marked_coefficients") {
         const auto coefficients = read_row(r["coefficients"]);
         Z den = 1;

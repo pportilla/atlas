@@ -685,27 +685,16 @@ class _Canonical:
         self.births.append(label)
 
 
-_RAISED = {"GiveUp": GiveUp, "ArithmeticError": ArithmeticError, "ValueError": ValueError, "TypeError": TypeError}
-
-
 def _native_stage(operation, **fields):
     """One call of native/canonical_blowup.cpp; None when a packed operation
     is out of range and the arbitrary-width route has to answer."""
+    from .centres import native_failure
     from .kernel_json import kernel_json
     answer = kernel_json("atlas_canonical_blowup", operation, **fields)
     if isinstance(answer, dict) and "declined" in answer:
         return None
     if isinstance(answer, dict) and "raise" in answer:
-        kind, message = answer["raise"], answer["message"]
-        if kind == "Uneven":
-            raise Uneven(message)
-        if kind == "Unavailable":
-            from .native_library import Unavailable
-            raise Unavailable(message)
-        if kind == "InputError":
-            from .polynomial import InputError
-            raise InputError(message)
-        raise _RAISED.get(kind, ArithmeticError)(message)
+        raise native_failure(answer, Uneven=Uneven)
     return answer
 
 
@@ -723,7 +712,7 @@ def _native_charts(charts):
     return all(native_ring(chart.variables) for chart in charts)
 
 
-def _chart_fields(chart, centre=None, **flags):
+def _chart_fields(chart, centre=None, *, coordinates=True, **flags):
     from .native_polynomial import row
     from .polynomial import integer_text
     variables = chart.variables
@@ -736,8 +725,8 @@ def _chart_fields(chart, centre=None, **flags):
                 ambient=rows(chart.ambient), fibre=rows(chart.fibre), region=rows(chart.region),
                 components=[[label, integer_text(n), integer_text(nu), rows(ideal)]
                             for label, n, nu, ideal in chart.components],
-                coordinates=rows(f for _, f in chart.coordinates), removed=[rows(z) for z in chart.removed],
-                centre=None if centre is None else rows(centre), **flags)
+                coordinates=rows(f for _, f in chart.coordinates) if coordinates else [],
+                removed=[rows(z) for z in chart.removed], centre=None if centre is None else rows(centre), **flags)
 
 
 def _chart_from_fields(parent, item, stage):
@@ -928,8 +917,8 @@ def _checked_charts(current, dimension, known=None, *, presence=True, crossings=
         if not _native_charts(current[i] for i in sent):
             return _checked_stepwise(current, dimension, known, presence, crossings)
         found = _native_stage("failures", dimension=dimension, packed_present=_packed_present(),
-                              charts=[_chart_fields(current[i], check=check[i], crossings=asked[i], own=own)
-                                      for i in sent])
+                              charts=[_chart_fields(current[i], coordinates=False, check=check[i], crossings=asked[i],
+                                                    own=own) for i in sent])
         if found is None:
             return _checked_stepwise(current, dimension, known, presence, crossings)
         answers = dict(zip(sent, found))

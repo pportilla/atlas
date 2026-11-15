@@ -1,5 +1,6 @@
 #pragma once
 #include <json/json.h>
+#include <functional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -8,8 +9,11 @@ namespace atlas {
 struct GeometryQuery {
     using Callback=const char*(*)(const char*);
     Callback dispatch;
+    // A caller in C++ answers the queries directly, without JSON text.
+    std::function<Json::Value(const Json::Value&)> direct{};
     Json::Value call(const std::string& op, Json::Value args=Json::Value()) const {
         args["query"]=op;
+        if (direct) return direct(args);
         Json::StreamWriterBuilder w;w["indentation"]="";
         const auto input=Json::writeString(w,args);
         const char* value=dispatch(input.c_str());

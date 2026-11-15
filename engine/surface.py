@@ -375,7 +375,54 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
     Variables that an equation determines are eliminated first (the models
     below); the step on each model is the kernel's (native/ideal.cpp,
     op_surface). This file's own two forms answer when the kernel cannot.
+
+    The kernel computes the whole step in one call (native/centre_maximum.cpp,
+    "surface_step"); the steps below answer for rings beyond its packed range.
     """
+    found = _native_step(variables, ambient, strict, divisors, working, away)
+    if found is not _DECLINED:
+        return found
+    return _step_stepwise(variables, ambient, strict, divisors, working, deadline, away)
+
+
+_DECLINED = object()
+
+
+def _native_step(variables, ambient, strict, divisors, working, away):
+    """One call of native/centre_maximum.cpp, or _DECLINED for the step-by-step route."""
+    from . import native_library
+    from .kernel import exprs
+    from .kernel_json import kernel_json
+    from .native_polynomial import native_ring, row
+    variables = tuple(variables)
+    if not native_ring(variables):
+        return _DECLINED
+    from .algebra_execution import current_execution
+    scope = native_library.current_replay_scope()
+
+    def rows(ideal):
+        return [row(variables, g) for g in ideal]
+
+    answer = kernel_json(
+        "atlas_centre_maximum", "surface_step", names=[v.name for v in variables],
+        identities=[v._coords[0].identity for v in variables], ambient=rows(ambient), strict=rows(strict),
+        divisors=[[label, rows(ideal)] for label, ideal in divisors], working=[rows(w) for w in working],
+        away=[rows(z) for z in away], seconds=None,
+        packed_present=current_execution() is None and (scope is None or scope.compute == "cpu"))
+    if "declined" in answer:
+        return _DECLINED
+    if "raise" in answer:
+        from .centres import native_failure
+        raise native_failure(answer, NoModel=NoModel)
+    found = answer["step"]
+    if found is None:
+        return None
+    head, labels = found["key"]
+    return (*map(int, head), tuple(labels)), found["kind"], exprs(variables, found["centre"])
+
+
+def _step_stepwise(variables, ambient, strict, divisors, working, deadline=None, away=()):
+    """The arbitrary-width route of `step`: each native operation called in turn."""
     variables, ambient = tuple(variables), tuple(ambient)
     working = [tuple(w) for w in working]
     direct = _line_centre(variables, ambient, strict, divisors, working, away)
