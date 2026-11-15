@@ -677,7 +677,7 @@ print(membership(y^2-1, B).value)
 print(r.execution.device)
 ```
 
-Use `ideal(variables=(x,y))` for the empty generating list or `ideal(1, variables=(x,y))` for the unit ideal. Repeating `coordinates("x", "y")` in the same session reuses those generators. Pass `fresh=True` to declare an independent copy. Elimination supplies its own coordinates. To work with the ideal returned by `J = eliminate(I, x)`, unpack `t, = J.coordinates`. Then `membership(t^2-1, J).value` is true in `QQ[y]`. Each result exposes its `.ring`, `.execution`, and full `.json` record.
+Use `ideal(variables=(x,y))` for the empty generating list or `ideal(1, variables=(x,y))` for the unit ideal. After `use_ring(x.parent)`, `ideal()` and `ideal(1)` use that ring ([active ring](../docs/sessions.md#name-select-and-delete-rings)). Repeating `coordinates("x", "y")` in the same session reuses those generators. Pass `fresh=True` to declare an independent copy. Elimination supplies its own coordinates. To work with the ideal returned by `J = eliminate(I, x)`, unpack `t, = J.coordinates`. Then `membership(t^2-1, J).value` is true in `QQ[y]`. Each result exposes its `.ring`, `.execution`, and full `.json` record.
 
 `polynomial("y^2-1", variables=J.coordinates)` parses a literal in that same surviving coordinate space. Supply `variables=[]` for a rational constant in ℚ. A coordinate name can differ from its console binding, for example `t = coordinates("if")` followed by `f = polynomial("if+1", variables=[t])`.
 

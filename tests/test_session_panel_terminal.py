@@ -81,8 +81,9 @@ class SessionPanelTerminalTests(CliTerminalCase):
         for group in ("QQ[x, y] → x, y", "QQ[x, y] → f, g"):
             self.assertIn(group, update.split("Variables", 1)[0])
         workspace = self.command(":workspace").decode()
-        self.assertRegex(workspace, r"f\.parent = QQ\[x, y\]\r?\n  Polynomials\s+f = [^\n]+, g = ")
-        self.assertRegex(workspace, r"x\.parent = QQ\[x, y\]\r?\n  Coordinates\s+x, y")
+        # Atlas names the fresh ring R2, so the two copies of QQ[x, y] stay distinct.
+        self.assertRegex(workspace, r"R1 = QQ\[x, y\]\r?\n  Polynomials\s+f = [^\n]+, g = ")
+        self.assertRegex(workspace, r"R2 = QQ\[x, y\]\r?\n  Coordinates\s+x, y")
 
         self.command("f = 7")
         expression = self.command("f + 1")
@@ -106,16 +107,16 @@ class SessionPanelTerminalTests(CliTerminalCase):
         self.command("x,y = coordinates('x','y')")
         self.command("I = ideal(y^2+x^5)")
         before = self.panel_update(self.command("K = I.quotient_ring"))
-        self.assertIn("K = QQ[x, y]/(x^5+y^2)", before)
+        self.assertIn("K = R1/(x^5+y^2)", before)
         self.assertNotIn("→ K", before)
         header = self.panel_update(self.command("u,v = K.coordinates"))
         full = self.command(":workspace").decode()
-        for line in ("QQ[x, y] → x, y, I", "K = QQ[x, y]/(x^5+y^2) → u, v",
+        for line in ("R1 = QQ[x, y] → x, y, I", "K = R1/(x^5+y^2) → u, v",
                      "u = [x] in K", "v = [y] in K"):
             self.assertIn(line, header)
         expanded = full.replace("\r\n", "\n")
-        self.assertIn("QQ[x, y]\n  Coordinates     x, y\n  Ideals          I\n\n"
-                      "K = QQ[x, y]/(x^5+y^2)\n  Coordinates     u = [x], v = [y]", expanded)
+        self.assertIn("R1 = QQ[x, y]\n  Coordinates     x, y\n  Ideals          I\n\n"
+                      "K = R1/(x^5+y^2)\n  Coordinates     u = [x], v = [y]", expanded)
         self.assertNotIn("Variables", expanded)
         self.check_exit(b"quit\n")
 

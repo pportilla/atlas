@@ -10,6 +10,7 @@ from .session_maps import RingHomomorphism
 from .session_panel import workspace
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace, _NumberField
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing
+from .session_rings import RingDeletion
 
 
 POLYNOMIALS = "docs/sessions.md#choose-the-ring-of-a-polynomial"
@@ -18,6 +19,7 @@ IDEALS = "docs/sessions.md#add-multiply-and-raise-ideals-to-powers"
 QUOTIENT_IDEALS = "docs/sessions.md#create-an-ideal-in-a-quotient-ring"
 MAPS = "docs/sessions.md#move-a-polynomial-between-rings"
 SAVED_VALUES = "docs/sessions.md#inspect-a-saved-value"
+RINGS = "docs/sessions.md#name-select-and-delete-rings"
 CHARTS = "docs/sessions.md#look-inside-a-chart"
 
 
@@ -48,6 +50,11 @@ _GENERATORS = _FieldHelp("{n} contains the generators of the ideal {owner}.",
                          "{n}\n{owner}.parent", IDEALS)
 _QUOTIENT_GENERATORS = _FieldHelp("{n} contains residue classes generating {owner} in its quotient ring.",
                                   "{n}\n{owner}.parent", QUOTIENT_IDEALS)
+_DELETION_FIELDS = {
+    "ring": _FieldHelp("{n} is the presentation of the ring that {owner} deleted.", "{n}", RINGS),
+    "names": _FieldHelp("{n} lists the saved names that {owner} removed, in workspace order.", "{n}\nlen({n})", RINGS),
+    "was_active": _FieldHelp("{n} records whether {owner} deleted the active ring.", "{n}\nactive_ring()", RINGS),
+}
 
 _SIMPLE_TYPES = {bool: "a boolean", int: "an integer", Fraction: "a rational number", str: "a string",
                  list: "a list", tuple: "a tuple", dict: "a record", type(None): "None"}
@@ -98,6 +105,8 @@ def algebra_help_values(session):
         if isinstance(value, RingHomomorphism):
             values[name + ".domain"] = value.domain
             values[name + ".codomain"] = value.codomain
+        if isinstance(value, RingDeletion):
+            values.update((f"{name}.{field}", card) for field, card in _DELETION_FIELDS.items())
     return values
 
 
@@ -124,12 +133,17 @@ def _basic_card(name, value):
     return usage_card(f"{name} is {label}.", "\n".join(examples), SAVED_VALUES)
 
 
-def algebra_value_help(name, value, variables=None):
+def algebra_value_help(name, value, variables=None, active=None):
+    """Describe a saved value from session metadata. active is the session's active ring."""
     if isinstance(value, _FieldHelp):
         context = {"n": name, "owner": name.rpartition(".")[0]}
         return usage_card(value.description.format(**context), value.examples.format(**context), value.reference)
     if isinstance(value, _NumberField):
         return usage_card(f"{name} is the coefficient field {value}.", name, CHARTS)
+    if isinstance(value, RingDeletion):
+        removed = f"the names {', '.join(value.names)}" if value.names else "no saved names"
+        return usage_card(f"{name} records that deleting {value.ring} removed {removed}.",
+                          f"{name}.names\n{name}.was_active", RINGS)
     if not isinstance(value, _RING_VALUES):
         if callable(value):
             return function_help(name, {name: value})
@@ -146,14 +160,19 @@ def algebra_value_help(name, value, variables=None):
 
     if isinstance(value, (QuotientRing, _CoordinateSpace)):
         presentation = inventory.presentations.get(value) or ring_name(value)
-        if isinstance(value, QuotientRing):
-            return usage_card(f"{name} is the quotient ring {presentation}.",
-                              f"{name}.coordinates\n{name}.ambient.coordinates\n{name}.defining_ideal", QUOTIENTS)
         if value is QQ:
             return usage_card(f"{name} is the rational field QQ.", f'polynomial("1/2", ring={name})', POLYNOMIALS)
+        # The active ring reads polynomials without ring=. Any other ring can be selected.
+        selected = value is active
+        status = "the active " if selected else "the "
+        if isinstance(value, QuotientRing):
+            default = 'polynomial("1")' if selected else f"use_ring({name})"
+            return usage_card(f"{name} is {status}quotient ring {presentation}.",
+                              f"{name}.coordinates\n{name}.ambient.coordinates\n{name}.defining_ideal\n{default}",
+                              QUOTIENTS)
         kind = "coordinate ring" if value.has_relations else "polynomial ring"
-        return usage_card(f"{name} is the {kind} {presentation}.",
-                          f'{name}.coordinates\npolynomial("1", ring={name})', POLYNOMIALS)
+        default = f'polynomial("1")\nactive_ring() == {name}' if selected else f'polynomial("1", ring={name})\nuse_ring({name})'
+        return usage_card(f"{name} is {status}{kind} {presentation}.", f"{name}.coordinates\n{default}", RINGS)
     if isinstance(value, _Coordinates):
         reference = QUOTIENTS if isinstance(value.parent, QuotientRing) else POLYNOMIALS
         return usage_card(f"{name} contains the ordered coordinates of {ring_name(value.parent)}.",

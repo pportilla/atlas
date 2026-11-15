@@ -156,7 +156,7 @@ class PromptHelpTests(unittest.TestCase):
             output, err = self.ask(setup + command)
             self.assertEqual(err, "")
             card = output.rsplit("atlas> ", 1)[-1]
-            self.assertEqual(card.split("\n\n")[0], "f is a polynomial in QQ[x, y].")
+            self.assertEqual(card.split("\n\n")[0], "f is a polynomial in R1 (QQ[x, y]).")
             self.assertTrue(card.endswith(guide))
             self.assert_example_runs(setup, card)
         setup += 'A=f.parent\nX,Y=coordinates("x","y",fresh=True)\nB=X.parent\ng=X+Y\n'
@@ -174,8 +174,8 @@ class PromptHelpTests(unittest.TestCase):
 
     def test_saved_names_take_precedence_over_prompt_topics(self):
         setup = 't=coordinates("t")\nworkspace=t+1\nchart=workspace\nscript=[chart]\n'
-        for command, expected in (("help workspace", "workspace is a polynomial in QQ[t]."),
-                                  ("chart -h", "chart is a polynomial in QQ[t]."),
+        for command, expected in (("help workspace", "workspace is a polynomial in R1 (QQ[t])."),
+                                  ("chart -h", "chart is a polynomial in R1 (QQ[t])."),
                                   ("help script", "script is a list."), ("help :workspace", "grouped by")):
             with self.subTest(command=command):
                 card, err = self.ask(setup + command)
@@ -200,10 +200,55 @@ class PromptHelpTests(unittest.TestCase):
                 card = algebra_value_help(name, values[name], session.variables)
                 self.assertIn("\n\nDocs  ", card)
                 if name == "J":
-                    self.assertIn("J is an ideal in K (QQ[x, y]/(x^5+y^2)).", card)
+                    self.assertIn("J is an ideal in K (R1/(x^5+y^2)).", card)
         self.assertNotIn("gens", vars(ring))
         self.assertNotIn("generators", vars(ideal))
         self.assertNotIn("quotient_ring", vars(ideal))
+
+    def test_ring_names_and_deletions_have_cards_that_leave_the_session_unchanged(self):
+        import re
+        from engine.session_help import algebra_help_values, algebra_value_help
+
+        root = Path(__file__).resolve().parents[1]
+        setup = ('x, y = coordinates("x", "y")\nu, v = coordinates("x", "y", fresh=True)\n'
+                 'K = ideal(x).quotient_ring\nuse_ring(R2)\nt = coordinates("t")\nd = delete_ring(t.parent)\n')
+        for topic, first, part in (("R1", "R1 is the polynomial ring QQ[x, y].", "use_ring(R1)"),
+                                   ("R2", "R2 is the active polynomial ring QQ[x, y].", "active_ring() == R2"),
+                                   ("K", "K is the quotient ring R1/(x).", "use_ring(K)"),
+                                   ("d", "d records that deleting QQ[t] removed the names t, R3.", "d.names"),
+                                   ("d.names", "d.names lists the saved names that d removed", "len(d.names)"),
+                                   ("rings", "until you name it", "delete_ring(S)")):
+            with self.subTest(topic=topic):
+                card, error = self.ask(setup + "help " + topic)
+                self.assertEqual(error, "")
+                card = card.rsplit("atlas> ", 1)[-1]
+                self.assertIn(first, card)
+                self.assertIn(part, card)
+                self.assert_example_runs("" if topic == "rings" else setup, card)
+                path, anchor = card.rsplit("/blob/main/", 1)[1].split("#")
+                headings = re.findall(r"^#{1,6} (.+)$", (root / path).read_text(), re.MULTILINE)
+                self.assertIn(anchor, {re.sub(r"[^\w\- ]", "", h.lower()).replace(" ", "-") for h in headings})
+
+        session = new_session(None)
+        list(session.run(setup))
+        before, active = dict(session.variables), session.rings.active
+        values = algebra_help_values(session)
+        for name in ("R1", "R2", "K", "d", "d.names"):
+            algebra_value_help(name, values[name], session.variables, session.rings.active)
+        self.assertEqual(list(session.variables), list(before))
+        self.assertTrue(all(session.variables[name] is value for name, value in before.items()))
+        self.assertIs(session.rings.active, active)
+        self.assertNotIn("gens", vars(session.variables["K"]))
+
+    def test_ring_function_examples_run_in_a_fresh_session(self):
+        from engine.session_function_help import function_help
+
+        builtins = new_session(None).builtins
+        for name in ("use_ring", "active_ring", "delete_ring", "polynomial", "ideal"):
+            with self.subTest(name=name):
+                card = function_help(name, builtins)
+                self.assertIn(f"{name}(", card.split("\n\n", 1)[0])
+                self.assert_example_runs("", card)
 
     def test_error_suggestions_help_the_user_recover(self):
         for command, expected in (

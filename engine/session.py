@@ -12,6 +12,7 @@ from .session_maps import hom
 from .session_monodromy import check_resolution, unavailable_check
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_coordinates
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing, quotient_ring
+from .session_rings import ring_bindings
 from .session_values import Divisor, DualComplex, Resolution
 
 
@@ -40,14 +41,17 @@ def print_json(**fields):
     print(result_json(json_value(fields)), flush=True)
 
 
-def _resolution_input(polynomial, variables, ring, declare):
+def _resolution_input(polynomial, variables, ring, declare, active):
     if isinstance(polynomial, Polynomial):
         if variables is not None or ring is not None:
             raise ValueError("A polynomial already carries its coordinates.")
         ring = polynomial.parent
     elif isinstance(polynomial, str):
+        if ring is None and variables is None:
+            ring = active
         if (ring is None) == (variables is None):
-            raise ValueError('For a polynomial string, supply ring=f.parent or variables=["x", "y"].')
+            raise ValueError('For a polynomial string, supply ring=f.parent or variables=["x", "y"], '
+                             'or choose a default ring with use_ring(f.parent).')
         if variables is not None:
             if isinstance(variables, (tuple, list)) and variables and all(isinstance(v, str) for v in variables):
                 variables = declare(*variables)
@@ -62,10 +66,12 @@ def _resolution_input(polynomial, variables, ring, declare):
 def new_session(calculate):
     """Register session operations here so both entry points return the same values."""
     declare = session_coordinates()
+    session = Evaluator({}, reserved=("help", "quit", "exit"))
+    rings = session.rings
 
     def resolve(polynomial, *, variables=None, ring=None, mode="embedded", search="exhaustive",
                 compute=None, monodromy=False):
-        expression, names, parent = _resolution_input(polynomial, variables, ring, declare)
+        expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
         if type(monodromy) is not bool:
             raise ValueError("monodromy must be true or false.")
         options = {"monodromy": True} if monodromy else {}
@@ -83,7 +89,7 @@ def new_session(calculate):
                 raise ValueError("A resolution already carries its coordinates.")
             resolution = polynomial
         else:
-            expression, names, parent = _resolution_input(polynomial, variables, ring, declare)
+            expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
             status, record = calculate(expression, names, mode="embedded", search=search,
                                        compute=compute, monodromy=True)
             if status == 400:
@@ -104,11 +110,12 @@ def new_session(calculate):
     def recompute_dual_complex(resolution):
         return DualComplex(resolution, dual_complex(resolution))
 
-    return Evaluator({"QQ": QQ, "coordinates": declare, "resolve": resolve,
-                      "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
-                      "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
-                      "quotient_ring": quotient_ring, "hom": hom, **algebra_bindings()},
-                     reserved=("help", "quit", "exit"))
+    # The ring functions replace polynomial and ideal with readers that use the active ring.
+    session.builtins.update({"QQ": QQ, "coordinates": declare, "resolve": resolve,
+                             "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
+                             "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
+                             "quotient_ring": quotient_ring, "hom": hom, **algebra_bindings(), **ring_bindings(rings)})
+    return session
 
 
 def run_script(filename, calculate):

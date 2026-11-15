@@ -12,6 +12,8 @@ class SessionTranscriptTests(unittest.TestCase):
     def test_script_calls_observe_rebindings_and_keep_prior_assignments_on_error(self):
         from engine.session_expressions import Evaluator, SessionError
 
+        # Only calls with the names of ring-preserving operations run as a native
+        # group. This bare evaluator has no built-in functions under those names.
         for fallback in (False, True):
             with self.subTest(fallback=fallback):
                 session = Evaluator({})
@@ -21,14 +23,14 @@ class SessionTranscriptTests(unittest.TestCase):
 
                 def first(a, b):
                     calls.append((a, b))
-                    session.variables = dict(session.variables, op=lambda a, b: a - b)
+                    session.variables = dict(session.variables, gcd=lambda a, b: a - b)
                     return a + b
 
-                session.variables.update(op=first, a=3, b=2)
+                session.variables.update(gcd=first, a=3, b=2)
                 with self.assertRaises(SessionError) as context:
-                    list(session.run("x = op(a, b)\ny = op(x, b)\nz = op(y, missing)"))
+                    list(session.run("x = gcd(a, b)\ny = gcd(x, b)\nz = gcd(y, missing)"))
                 self.assertEqual((context.exception.line, context.exception.function,
-                                  context.exception.unknown_name), (3, "op", "missing"))
+                                  context.exception.unknown_name), (3, "gcd", "missing"))
                 self.assertEqual((session.variables["x"], session.variables["y"], calls), (5, 3, [(3, 2)]))
                 self.assertNotIn("z", session.variables)
 
@@ -36,9 +38,9 @@ class SessionTranscriptTests(unittest.TestCase):
                     session.reserved = frozenset({"locked"})
                     calls.append((a, b))
 
-                session.variables["reserve"] = reserve
+                session.variables["quotient"] = reserve
                 with self.assertRaisesRegex(SessionError, "reserved") as context:
-                    list(session.run("x = op(a, b)\nlocked = reserve(x, b)"))
+                    list(session.run("x = gcd(a, b)\nlocked = quotient(x, b)"))
                 self.assertEqual((context.exception.line, calls[-1]), (2, (1, 2)))
                 self.assertNotIn("locked", session.variables)
 

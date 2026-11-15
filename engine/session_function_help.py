@@ -16,7 +16,6 @@ _RING_EXAMPLES = {
     "recompute_dual_complex": "R = resolve(y^2 - x^3)\nD = recompute_dual_complex(R)\nD.vertices",
     "dual_complex": "R = resolve(y^2 - x^3)\ndual_complex(R).vertices",
     "monodromy_check": "monodromy_check(y^2 - x^3).status",
-    "polynomial": 'g = polynomial("x^2+y", ring=x.parent)\ng.parent',
     "ideal": "I = ideal(y^2+x^5)\nK = I.quotient_ring\nJ = ideal((y, x^5), ring=K)\nJ.generators",
     "groebner": "groebner(ideal(x^2, x*y + y))",
     "gcd": "gcd(x*y, x^2)",
@@ -69,7 +68,7 @@ _EXAMPLES = {
 
 _PURPOSES = {
     "coordinates": "Return the ordered generators of a polynomial ring.",
-    "ideal": "Create an ideal in its generators' parent ring or in the ring you specify.",
+    "ideal": "Create an ideal in its generators' parent ring, the ring you specify, or the active ring.",
     "quotient_ring": "Return the quotient of an ideal’s parent ring by that ideal.",
     "resolve": "Resolve a hypersurface at the origin and return its resolution.",
     "recompute_dual_complex": "Rebuild the exceptional dual complex from a resolution’s recorded charts.",

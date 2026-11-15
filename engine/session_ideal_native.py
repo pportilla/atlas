@@ -120,11 +120,8 @@ class _CtypesRing(_CtypesOwner):
         return NativeIdeal(self.library, ptr) if ptr else NativeIdeal._declined(self.library)
 
 
-def ideal_constructor(fallback, polynomial_type, ideal_type):
-    binding = _compiled()
-    if binding is None or not hasattr(binding, "constructor"):
-        return fallback
-
+@cache
+def _declared_ideal_type(binding, ideal_type):
     @dataclass(frozen=True, eq=False, repr=False, init=False)
     class DeclaredIdeal(ideal_type, binding):
         """A declared session ideal owns its immutable native generators directly."""
@@ -135,7 +132,18 @@ def ideal_constructor(fallback, polynomial_type, ideal_type):
         def _values(self):
             return tuple(f._value for f in self.generators)
 
-    return binding.constructor(DeclaredIdeal, polynomial_type, fallback)
+    return DeclaredIdeal
+
+
+def ideal_constructor(fallback, polynomial_type, ideal_type):
+    """Construct ideals of polynomial generators natively, and call fallback for every other input.
+
+    Constructors with different fallbacks share one native ideal type.
+    """
+    binding = _compiled()
+    if binding is None or not hasattr(binding, "constructor"):
+        return fallback
+    return binding.constructor(_declared_ideal_type(binding, ideal_type), polynomial_type, fallback)
 
 
 class _CompiledRing:

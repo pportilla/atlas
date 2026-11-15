@@ -355,7 +355,7 @@ def _session_loop(parser, panel, session, shell_names):
     while True:
         try:
             if panel.enabled:
-                panel.refresh(session.variables, assigned)
+                panel.refresh(session.variables, assigned, session.rings.active)
             assigned = None
             line = input(prompt)
             assignment = assignment_syntax(line)
@@ -412,7 +412,7 @@ def _session_loop(parser, panel, session, shell_names):
                 if len(argv) != 1:
                     print(f'Use {argv[0]} by itself. Type help {argv[0]} for an example.', file=sys.stderr)
                 elif argv[0] == ':workspace':
-                    print_workspace(session.variables)
+                    print_workspace(session.variables, session.rings.active)
                 else:
                     return 0
                 continue

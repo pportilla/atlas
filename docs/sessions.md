@@ -3,8 +3,9 @@
 Run `./atlas` at a terminal. Assignments bind names quietly. Enter a name or
 expression to inspect it. Tab completes names, fields such as `R.divisors`,
 and methods such as `R.chart(`. Use `:workspace` to inspect the rings and
-variables in use. Type `help functions` to list operations or `help resolve`
-for its arguments and an example.
+variables in use. Every ring has a name, and `use_ring` selects the ring that
+new polynomials use by default. Type `help functions` to list operations or
+`help resolve` for its arguments and an example.
 
 For a polynomial map germ, type `help ae_codimension`. The returned object's
 `.finite` field tells you how to interpret `.value`.
@@ -21,7 +22,7 @@ section for that kind of value.
 atlas> x, y = coordinates("x", "y")
 atlas> f = y^2 - x^3
 atlas> help f
-f is a polynomial in QQ[x, y].
+f is a polynomial in R1 (QQ[x, y]).
 
 Example
   f.parent
@@ -31,9 +32,9 @@ Example
 Docs  https://github.com/pportilla/atlas/blob/main/docs/sessions.md#choose-the-ring-of-a-polynomial
 ```
 
-`f -h` and `f help` open the same card. Use `help f.parent` to inspect the
-ring, `help polynomial` for the constructor, and `:workspace` to see all your
-saved names.
+Atlas named the ring `R1`. `f -h` and `f help` open the same card. Use
+`help R1` or `help f.parent` to inspect the ring, `help polynomial` for the
+constructor, and `:workspace` to see all your saved names.
 
 ## Choose the ring of a polynomial
 
@@ -51,8 +52,10 @@ atlas> g.parent == f.parent
 True
 ```
 
-The `Rings` row now shows `QQ[x, y] → x, y, f, g`. Here the four names
-are polynomials with that parent. If you save an ideal, Atlas lists it under
+The `Rings` row now shows `R1 = QQ[x, y] → x, y, f, g`. Here the four names
+are polynomials with that parent, and `R1` is the name Atlas gave the ring.
+[Name, select and delete rings](#name-select-and-delete-rings) explains these
+names and the active ring. If you save an ideal, Atlas lists it under
 its ambient ring. A resolution appears under the ring of its input equation.
 Type `:workspace` to see each ring's coordinates, polynomials and ideals together.
 Maps appear separately with their domain and codomain.
@@ -76,8 +79,8 @@ atlas> v^2 + u^5
 0
 ```
 
-The workspace groups `x, y` and `I` in the ambient polynomial ring. Under
-`K = QQ[x, y]/(x^5+y^2)`, the coordinate entry `u = [x]` means the class of
+The workspace groups `x, y` and `I` in the ambient polynomial ring `R1`. Under
+`K = R1/(x^5+y^2)`, the coordinate entry `u = [x]` means the class of
 `x` in this quotient. `K.ambient.coordinates` gives the original polynomials.
 If you also write `R = quotient_ring(I)`, the heading shows both names for one
 ring. A different compute backend still yields that same parent.
@@ -147,7 +150,8 @@ atlas> x.parent == f.parent
 True
 ```
 
-Here `x2` and `z2` name the generators spelled `x` and `z` in the second ring. Similarly,
+Here `x2` and `z2` name the generators spelled `x` and `z` in the second ring.
+The workspace lists that ring under the next free name, such as `R2`. Similarly,
 `x3, y3, z3 = coordinates("x", "y", "z")` selects `QQ[x, y, z]` while `x`,
 `y`, and `f` still belong to `QQ[x, y]`. Asking for
 `coordinates("y", "x")` also selects a different parent because the order changed.
@@ -169,9 +173,80 @@ True
 
 Another ordinary call to `coordinates("x", "y")` returns the generators of
 `f.parent`. A declaration with `fresh=True` explicitly requests a new ring
-and may reuse the names on the left. Ordinary assignment and unpacking a
+and may reuse the names on the left. The two copies of `QQ[x, y]` have
+different names in the workspace. Ordinary assignment and unpacking a
 saved tuple also rebind names. To restore the original generators,
 assign `x, y = f.parent.coordinates`.
+
+### Name, select and delete rings
+
+Every ring that holds a saved value has a name. When a declaration or a
+calculation introduces a ring that you have not named, Atlas binds the first
+free name among `R1`, `R2`, and so on. Assigning that ring to a name of your
+own renames it.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> u, v = coordinates("x", "y", fresh=True)
+atlas> R1 == x.parent, R2 == u.parent
+(True, True)
+atlas> P = R2
+atlas> P == u.parent
+True
+```
+
+The workspace now lists `R1 = QQ[x, y] → x, y` and `P = QQ[x, y] → u, v`.
+`R2` is free again, and the next unnamed ring receives it. Names you choose
+yourself stay until you rebind them. If you rebind a ring's last name while
+its values remain, Atlas gives the ring a free `R` name again.
+
+Use `use_ring` to choose the active ring. A string passed to `polynomial`
+without `ring=` or `variables=` is read in the active ring. `ideal()` and ideals
+generated only by numbers, such as `ideal(1)`, also belong to it.
+
+```text
+atlas> use_ring(R1)
+QQ[x, y]
+atlas> f = polynomial("y^2 - x^3")
+atlas> f.parent == R1
+True
+atlas> I = ideal()
+atlas> I.parent == R1
+True
+atlas> ideal(u).parent == P
+True
+```
+
+Polynomials and coordinates keep their own parent, so `ideal(u)` lies in `P`.
+`resolve("y^2-x^3")` and `monodromy_check` also read a string in the active
+ring when it is a polynomial ring over QQ. The workspace marks the active ring
+with `(active)`. `active_ring()` returns it, and `use_ring(None)` clears the
+choice. A quotient ring can be active as well. Then `polynomial("y^2")` gives
+a residue class in that quotient.
+
+`delete_ring` removes a ring and every saved name that depends on it. That
+includes the names of the ring and of its quotients, the values in these rings,
+maps to or from them, and resolutions of their polynomials with their charts.
+Other rings keep their values.
+
+```text
+atlas> J = ideal(f)
+atlas> K = J.quotient_ring
+atlas> use_ring(K)
+QQ[x, y]/(x^3-y^2) (grevlex)
+atlas> delete_ring(R1)
+Deleted QQ[x, y]: x, y, R1, f, I, J, K
+No ring is active.
+```
+
+The result lists the removed names in `.names`, and `.was_active` records
+whether the active ring was deleted. In that case no ring is active
+afterwards. A value that only refers to a deleted ring through a field stays.
+For example, the result of `eliminate` keeps its `.inclusion` map.
+
+At the prompt, a failed command that has already selected or deleted a ring
+leaves the names and the active ring as they were. These functions work the
+same way in scripts, and `:save` records them with your other statements.
 
 ## Add, multiply, and raise ideals to powers
 
@@ -343,7 +418,7 @@ coordinate, and computes a normal form in the resulting ring.
 At the prompt a blank line finishes an indented block. Use
 `:save "my session.atlas"` to save successful mathematical statements in
 order, including explicit prints. Saving again replaces the file. A failed or
-interrupted block restores the previous variable bindings. Replay the file with
+interrupted block restores the previous variable bindings and active ring. Replay the file with
 `./atlas run "my session.atlas"`, or use `./atlas run -` to read standard input.
 
 Use `len(I.generators)` to count the generators. To write the count as a JSON

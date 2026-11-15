@@ -123,7 +123,7 @@ class QuotientIdealTests(unittest.TestCase):
             self.assertEqual((str(generator), generator.result["representative"]), ("-y^2", "-y^2"))
             self.assertIn("residue", algebra_value_help("g", algebra_help_values(session)["g"]).lower())
             inventory = workspace(session.variables)
-            self.assertEqual(inventory.header()[0], ["QQ[x, y] → x, y", "K = QQ[x, y]/(x^5+y^2) → J, g, B"])
+            self.assertEqual(inventory.header()[0], ["R1 = QQ[x, y] → x, y", "K = R1/(x^5+y^2) → J, g, B"])
             self.assertEqual([binding.role for binding in inventory.rings[session.variables["K"]].members],
                              ["Ideals", "Residue classes", "Ideals"])
         record = generator.record

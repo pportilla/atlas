@@ -15,6 +15,7 @@ from .native_polynomial import scalar_arithmetic
 from .session_algebra import Ideal, _binary_ideals, ideal_power
 from .session_polynomial import Polynomial
 from .session_quotient import QuotientElement
+from .session_rings import RING_PRESERVING_CALLS, SessionRings
 from .session_values import Divisor, DualComplex
 
 
@@ -125,18 +126,22 @@ def _prepare_assignments(statement):
 
 class _CallGroup:
     """Consecutive named calls with simple arguments and single-name assignments."""
-    __slots__ = ("statements", "instructions", "execute")
+    __slots__ = ("statements", "instructions", "targets", "execute")
 
     def __init__(self, statements):
         self.statements = statements
         self.instructions = tuple((*s._atlas_pair, s.lineno) for s in statements)
+        self.targets = frozenset(s._atlas_pair[0] for s in statements)
         from .session_ideal_native import assignment_runner
         compiler = assignment_runner()
         self.execute = compiler(self.instructions) if compiler is not None else None
 
     def run(self, session):
         completed = 0
-        if self.execute is not None and session._assignment_runner is not None:
+        # These calls keep their operands' rings. Rebinding a ring name needs the
+        # evaluator, which keeps every ring that is still in use named.
+        if (self.execute is not None and session._assignment_runner is not None
+                and session.rings.may_group(self.targets)):
             completed = self.execute(session.__dict__)
             if completed == len(self.instructions):
                 return
@@ -155,8 +160,9 @@ class _CallGroup:
 
 
 def _simple_named_call(statement):
+    # Only calls that keep their operands' rings can run as a native group.
     pair = getattr(statement, "_atlas_pair", None)
-    return pair is not None and type(pair[1]) is str
+    return pair is not None and pair[1] in RING_PRESERVING_CALLS
 
 
 def _prepare_suite(statements):
@@ -199,6 +205,10 @@ def _assign_pair(session, pair, line):
     if target in session.builtins or target in session.reserved:
         raise SessionError(f"{target!r} is a reserved Atlas name.", line)
     session.variables[target] = result
+    # Arithmetic and ring-preserving calls stay in their operands' named rings.
+    rings = session.rings
+    if (type(operation) is str and operation not in RING_PRESERVING_CALLS) or target in rings.names:
+        rings.note(target, result)
     return True
 
 
@@ -278,6 +288,7 @@ class Evaluator:
         self.builtins = dict(builtins)
         self.reserved = frozenset(reserved)
         self.variables = {}
+        self.rings = SessionRings(self)
 
     @cached_property
     def _assignment_runner(self):
@@ -310,17 +321,24 @@ class Evaluator:
                     yield True, value
             return
         entries = transcript.entries(source, len(statements))
+        rings = self.rings
         for index, statement in enumerate(statements):
-            # A failed block can assign bindings before the line that fails.
+            # A failed block can assign bindings before the line that fails, and
+            # a failed call can change the active ring or delete names first.
             # Restore them so later saved statements replay in the same state.
             compound = isinstance(statement, (ast.For, ast.If))
-            before = self.variables.copy() if compound else None
+            before = (self.variables.copy(), rings.state()) if compound else None
+            rings.watch()
             try:
                 value = self._statement(statement)
             except (SessionError, KeyboardInterrupt):
+                before = before or rings.unwatch()
                 if before is not None:
-                    self.variables = before
+                    self.variables, ring_state = before
+                    rings.restore(ring_state)
                 raise
+            finally:
+                rings.unwatch()
             transcript.statements.append(entries[index])
             if value is not None:
                 yield True, value
@@ -337,7 +355,8 @@ class Evaluator:
                 return self._value(statement.value)
             if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
                 value, declared = self._assignment_value(statement.value)
-                self._bind(statement.targets[0], value, declaration=statement.value if declared else None)
+                self._bind(statement.targets[0], value, declaration=statement.value if declared else None,
+                           naming=True)
             elif isinstance(statement, ast.For) and not statement.orelse:
                 items = self._value(statement.iter)
                 if not isinstance(items, (tuple, list, dict)):
@@ -373,12 +392,14 @@ class Evaluator:
             return self._index(value, self._value(node.slice)), declared
         return self._value(node), False
 
-    def _bind(self, target, value, *, declaration=None):
+    def _bind(self, target, value, *, declaration=None, naming=False):
+        # naming marks a direct assignment, which renames a ring that Atlas named.
         if isinstance(target, ast.Name):
             name = self._target_name(target)
             if declaration is not None:
                 self._check_coordinate_bindings([name], [value], declaration)
             self.variables[name] = value
+            self.rings.note(name, value, naming=naming)
             return
         if not isinstance(target, (ast.Tuple, ast.List)):
             raise ValueError("Assign to a name or a list of names.")
@@ -393,6 +414,8 @@ class Evaluator:
         if declaration is not None:
             self._check_coordinate_bindings(names, value, declaration)
         self.variables.update(zip(names, value))
+        for name, item in zip(names, value):
+            self.rings.note(name, item, naming=naming)
 
     def _target_name(self, item):
         if not isinstance(item, ast.Name) or item.id.startswith("_"):
@@ -404,7 +427,9 @@ class Evaluator:
     def _check_coordinate_bindings(self, names, values, declaration):
         conflicts = {}
         for name, value in zip(names, values):
-            if name in self.variables and not _same_coordinates(self.variables[name], value):
+            # A name that Atlas chose for a ring is free. The ring receives another name.
+            if (name in self.variables and not _same_coordinates(self.variables[name], value)
+                    and not self.rings.is_automatic(name)):
                 previous = self.variables[name]
                 label = repr(name)
                 if isinstance(previous, (Polynomial, QuotientElement)):

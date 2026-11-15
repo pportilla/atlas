@@ -24,13 +24,24 @@ class SessionWorkspaceTests(unittest.TestCase):
         session = new_session(None)
         list(session.run('x,y = coordinates("x","y")\na,b = coordinates("x","y", fresh=True)\nf = x+y'))
         self.assertEqual(workspace(session.variables).header()[0],
-                         ["x.parent = QQ[x, y] → x, y, f", "a.parent = QQ[x, y] → a, b"])
+                         ["R1 = QQ[x, y] → x, y, f", "R2 = QQ[x, y] → a, b"])
+
+        def unnamed():
+            # Without saved ring names, equal presentations fall back to a path.
+            return workspace({k: v for k, v in session.variables.items() if k not in session.rings.names}).header()
+
+        self.assertEqual(unnamed()[0], ["x.parent = QQ[x, y] → x, y, f", "a.parent = QQ[x, y] → a, b"])
         list(session.run("x = 17"))
         rings, bindings = workspace(session.variables).header()
-        self.assertCountEqual(rings, ["y.parent = QQ[x, y] → y, f", "a.parent = QQ[x, y] → a, b"])
+        self.assertCountEqual(rings, ["R1 = QQ[x, y] → y, f", "R2 = QQ[x, y] → a, b"])
         self.assertIn("x = 17", bindings)
+        self.assertCountEqual(unnamed()[0], ["y.parent = QQ[x, y] → y, f", "a.parent = QQ[x, y] → a, b"])
+        # A named ring stays in the workspace until it is deleted.
         list(session.run("f = 0\ny = 1"))
-        self.assertEqual(workspace(session.variables).header()[0], ["QQ[x, y] → a, b"])
+        self.assertEqual(workspace(session.variables).header()[0], ["R1 = QQ[x, y]", "R2 = QQ[x, y] → a, b"])
+        self.assertEqual(unnamed()[0], ["QQ[x, y] → a, b"])
+        list(session.run("delete_ring(R1)"))
+        self.assertEqual(workspace(session.variables).header()[0], ["R2 = QQ[x, y] → a, b"])
 
     def test_maps_and_mixed_collections_keep_both_endpoint_rings_distinct(self):
         session = new_session(None)
@@ -42,7 +53,7 @@ class SessionWorkspaceTests(unittest.TestCase):
                          [("Coordinates", "x"), ("Polynomials", "f")])
         self.assertEqual([entry.text(expanded=True) for entry in second.members], ["a (generator x)"])
         self.assertEqual([entry.text(expanded=True) for entry in inventory.other],
-                         ["m = x.parent → a.parent", "pair = tuple[2]"])
+                         ["m = R1 → R2", "pair = tuple[2]"])
         map_only = workspace({"m": session.variables["m"]})
         self.assertFalse(map_only.rings)
         self.assertEqual(map_only.other[0].text(), "m = QQ[x] (m.domain) → QQ[x] (m.codomain)")
@@ -85,13 +96,13 @@ class SessionWorkspaceTests(unittest.TestCase):
         list(session.run('x, y = coordinates("x", "y")\nK = quotient_ring(ideal(x,y))\nu,v = K.coordinates\nz = K(x+y)\nA = K'))
         with patch("engine.session_quotient._evaluate", side_effect=AssertionError("workspace triggered reduction")):
             rings, bindings = workspace(session.variables).header()
-            self.assertEqual(rings, ["QQ[x, y] → x, y", "K = A = QQ[x, y]/(x, y) → u, v, z"])
+            self.assertEqual(rings, ["R1 = QQ[x, y] → x, y", "K = A = R1/(x, y) → u, v, z"])
             self.assertEqual(bindings, ["x", "y", "u = [x] in K", "v = [y] in K", "z = [0] in K"])
             del session.variables["K"]
             self.assertIn("u = [x] in A", workspace(session.variables).header()[1])
             del session.variables["A"]
             rings, bindings = workspace(session.variables).header()
-            self.assertIn("QQ[x, y]/(x, y) → u, v, z", rings)
+            self.assertIn("R1/(x, y) → u, v, z", rings)
             self.assertIn("v = [y]", bindings)
 
     def test_long_quotient_presentation_follows_rebinding_of_the_defining_ideal(self):
@@ -101,13 +112,13 @@ class SessionWorkspaceTests(unittest.TestCase):
         with patch.dict(os.environ, TERM="xterm"), patch("os.get_terminal_size", return_value=os.terminal_size((42, 12))):
             with SessionPanel(Terminal()) as panel:
                 panel.refresh(session.variables, assigned="I")
-                self.assertIn("K = QQ[a, b, c, d]/I", panel.rows[0])
+                self.assertIn("K = R1/I", panel.rows[0])
                 list(session.run("I = ideal(a,b,c)"))
                 panel.refresh(session.variables, assigned="I")
                 self.assertNotIn("/I", panel.rows[0])
                 session.variables["I"] = original
                 panel.refresh(session.variables, assigned="I")
-                self.assertIn("K = QQ[a, b, c, d]/I", panel.rows[0])
+                self.assertIn("K = R1/I", panel.rows[0])
                 self.assertLessEqual(len(panel.rows[0]), 38)
 
     def test_narrow_panel_counts_omitted_bindings_and_clips_wide_text(self):

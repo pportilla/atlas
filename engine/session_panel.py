@@ -13,11 +13,16 @@ from unicodedata import combining, east_asian_width
 
 from .cli_highlight import expression_pieces
 from .cli_style import paint, use_color
-from .session_algebra import Ideal, _RingValue, _Result
+from .session_algebra import Ideal, _Result
 from .session_maps import RingHomomorphism
 from .session_polynomial import Polynomial, _Coordinates, _CoordinateSpace
 from .session_quotient import QuotientElement, QuotientRing
+from .session_rings import RingDeletion, owner
 from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
+
+
+# Follows the heading of the ring that new polynomials and ideals use by default.
+ACTIVE = " (active)"
 
 
 def _ring_label(space, references, ideal_names, paths):
@@ -42,28 +47,6 @@ def _ring_label(space, references, ideal_names, paths):
     names, quotient = chart["coordinates"], bool(chart.get("ambient_ideal"))
     ring = f"{field}[{', '.join(names)}]" if names else field
     return ring + (" (quotient)" if quotient else "")
-
-
-def _space(value):
-    if isinstance(value, (_CoordinateSpace, QuotientRing)):
-        return value
-    if isinstance(value, (Polynomial, QuotientElement, _Coordinates)):
-        return value.parent
-    if isinstance(value, _RingValue):
-        return value._space
-    if isinstance(value, Resolution):
-        return value._source_space
-    if isinstance(value, Chart):
-        # A chart's cached space is authoritative. Its construction can involve
-        # a number-field calculation, so use only recorded data until then.
-        if "_space" in vars(value):
-            return value._space
-        return value
-    if isinstance(value, (tuple, list)) and value and isinstance(value[0], (Polynomial, QuotientElement)):
-        space = value[0].parent
-        if all(isinstance(item, (Polynomial, QuotientElement)) and item.parent is space for item in value):
-            return space
-    return None
 
 
 def _coordinate(value):
@@ -97,6 +80,8 @@ def _describe(value):
         return "Ideals", value.operation if isinstance(value, _Result) else "ideal"
     if isinstance(value, _Result):
         return "Results", value.operation
+    if isinstance(value, RingDeletion):
+        return "Results", "delete_ring"
     if isinstance(value, Chart):
         return "Charts", value.id
     if isinstance(value, Resolution):
@@ -158,6 +143,11 @@ class _RingGroup:
     aliases: list[str] = field(default_factory=list)
     members: list[_Binding] = field(default_factory=list)
     title: str = ""
+    active: bool = False
+
+    @property
+    def heading(self):
+        return self.title + (ACTIVE if self.active else "")
 
 
 @dataclass
@@ -175,7 +165,7 @@ class _Workspace:
         return label if reference == label else f"{reference} ({label})"
 
     def header(self):
-        rings = [ring.title + (" → " + ", ".join(b.name for b in ring.members) if ring.members else "")
+        rings = [ring.heading + (" → " + ", ".join(b.name for b in ring.members) if ring.members else "")
                  for ring in self.rings.values()]
         bindings = []
         for binding in self.bindings:
@@ -188,12 +178,12 @@ class _Workspace:
         return rings, bindings
 
 
-def workspace(variables):
-    """Inventory the live bindings once. Looking at a ring must never force its construction."""
+def workspace(variables, active=None):
+    """Inventory the live bindings once, marking the active ring. Looking at a ring must never force its construction."""
     rings, ideal_names, paths = defaultdict(_RingGroup), {}, {}
     bindings, other, maps = [], [], []
     for name, value in variables.items():
-        parent = _space(value)
+        parent = owner(value)
         group = rings[parent] if parent is not None else None
         if isinstance(value, (_CoordinateSpace, QuotientRing)):
             group.aliases.append(name)
@@ -240,6 +230,8 @@ def workspace(variables):
 
     for binding, mapping in maps:
         binding.preview = f"{endpoint(mapping.domain)} → {endpoint(mapping.codomain)}"
+    if active in rings:
+        rings[active].active = True
     return _Workspace(rings, bindings, other, references, presentations)
 
 
@@ -253,18 +245,21 @@ def _binding(entry, role, names=()):
 
 
 def _ring(entry, names=()):
-    """Split "QQ[x, y] → x, f" into the ring, its arrow and the names it holds."""
+    """Split "R1 = QQ[x, y] (active) → x, f" into the ring, its mark, its arrow and the names it holds."""
     ring, arrow, members = entry.partition(" → ")
-    return [*expression_pieces(ring, names=names, functions={"QQ"}), (arrow, "muted"),
-            *expression_pieces(members, names=names)]
+    active = ring.endswith(ACTIVE)
+    if active:
+        ring = ring.removesuffix(ACTIVE)
+    return [*expression_pieces(ring, names=names, functions={"QQ"}), *([(ACTIVE, "ok")] if active else []),
+            (arrow, "muted"), *expression_pieces(members, names=names)]
 
 
 def _names(variables):
     return {name for name in variables if name.isidentifier()}
 
 
-def print_workspace(variables):
-    inventory = workspace(variables)
+def print_workspace(variables, active=None):
+    inventory = workspace(variables, active)
     color = use_color(sys.stdout)
     known = _names(variables)
     width = shutil.get_terminal_size().columns
@@ -296,7 +291,7 @@ def print_workspace(variables):
                 used += len(separator) + size
             print(line)
 
-    sections = [(group.title, group.members) for group in inventory.rings.values()]
+    sections = [(group.heading, group.members) for group in inventory.rings.values()]
     if inventory.other:
         sections.append(("Other values", inventory.other))
     for index, (title, members) in enumerate(sections):
@@ -381,6 +376,7 @@ class SessionPanel:
         self._last_assignment = None
         self._quotient_displayed = False
         self.variables = {}
+        self.active = None
         self.enabled = stream.isatty() and os.environ.get("TERM", "") not in ("", "dumb", "unknown")
         self.color = not os.environ.get("NO_COLOR")
         self._previous_resize = None
@@ -406,14 +402,15 @@ class SessionPanel:
 
     def _resized(self, signum, frame):
         try:
-            self.refresh(self.variables)
+            self.refresh(self.variables, active=self.active)
         except RuntimeError:
             pass  # Output was being written. The next prompt redraws the frame.
 
-    def refresh(self, variables, assigned=None):
+    def refresh(self, variables, assigned=None, active=None):
         if not self.enabled:
             return
         self.variables = variables
+        self.active = active
         try:
             size = os.get_terminal_size(self.stream.fileno())
         except (OSError, ValueError):
@@ -434,17 +431,17 @@ class SessionPanel:
             self._last_assignment = None
         else:
             value = variables[assigned]
-            space, preview = _space(value), _describe(value)
+            space, preview = owner(value), _describe(value)
             last = self._last_assignment
             # A named ideal can also be the denominator of a quotient. Its
             # identity matters there even when its ordinary preview stays "ideal".
             identity = value if (value is space or isinstance(value, RingHomomorphism)
                                  or (self._quotient_displayed and isinstance(value, Ideal))) else None
-            self._last_assignment = assigned, space, preview, identity
+            self._last_assignment = assigned, space, preview, identity, active
             if (not resized and last and last[0] == assigned and last[1] is space
-                    and last[2] == preview and last[3] is identity):
+                    and last[2] == preview and last[3] is identity and last[4] is active):
                 return
-        inventory = workspace(variables)
+        inventory = workspace(variables, active)
         rings, bindings = inventory.header()
         self._quotient_displayed = any(isinstance(parent, QuotientRing) for parent in inventory.references)
         # Assigning another ideal in the same ring often leaves both header

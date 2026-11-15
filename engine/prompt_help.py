@@ -20,7 +20,7 @@ _TOPICS = {
         _SESSION_GUIDE + "reuse-and-rebind-coordinate-names",
     ),
     ":workspace": (
-        "Show saved values grouped by their parent ring.",
+        "Show saved values grouped by their parent ring, and mark the active ring.",
         'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
         _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
     ),
@@ -28,6 +28,11 @@ _TOPICS = {
         "A polynomial’s parent is the ring in which its coordinates and arithmetic are defined.",
         'x, y = coordinates("x", "y")\nf = x^2 + y\nf.parent\ng = polynomial("x+y", ring=f.parent)',
         _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
+    ),
+    "rings": (
+        "Atlas names each ring R1, R2, … until you name it, and use_ring selects the default ring.",
+        'x, y = coordinates("x", "y")\nuse_ring(R1)\nf = polynomial("x^2 + y")\nS = R1\ndelete_ring(S)',
+        _SESSION_GUIDE + "name-select-and-delete-rings",
     ),
     "QQ": (
         "QQ is the field of rational numbers.",
@@ -124,7 +129,7 @@ def show_help(words, session, parser, *, color=False):
     name = words[0]
     values = algebra_help_values(session)
     if name in values:
-        print(painted(algebra_value_help(name, values[name], session.variables)))
+        print(painted(algebra_value_help(name, values[name], session.variables, session.rings.active)))
         return
     if card := resolution_help(name, session.variables):
         print(painted(card))

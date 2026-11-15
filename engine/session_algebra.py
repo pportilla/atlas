@@ -846,7 +846,10 @@ def ideal(*generators, order=None, variables=None, ring=None):
     return Ideal(space, generators, order, _assemble_ideal(space, generators))
 
 
-ideal = ideal_constructor(ideal, Polynomial, Ideal)
+# Native construction handles polynomial generators that share a parent, and
+# falls back to this Python declaration for every other input.
+declare_ideal = ideal
+ideal = ideal_constructor(declare_ideal, Polynomial, Ideal)
 
 
 def _decode_algebra_polynomial(text, space):

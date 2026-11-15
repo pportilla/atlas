@@ -34,6 +34,13 @@ maps with a domain, codomain and ordered generator images for transport.
 Test changes to these rules with independent same-named
 rings at the prompt and in scripts, including what survives a failed command.
 
+Every ring that a saved value refers to has a saved name. The session binds
+the first free `R1`, `R2`, … to a new unnamed ring after each statement, in
+the same order at the prompt and in scripts, so only calls listed in
+`RING_PRESERVING_CALLS` may run as a native group. The active ring chosen
+with `use_ring` is a default only when no input determines the ring.
+`delete_ring` removes every saved name that depends on the ring.
+
 A ring owns its ordered coordinates, including an empty coordinate tuple.
 For a quotient `K`, `K.coordinates` belongs to `K` and
 `K.ambient.coordinates` belongs to its polynomial ring. A saved name is
