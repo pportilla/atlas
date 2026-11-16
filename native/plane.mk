@@ -12,7 +12,7 @@ endif
 # themselves instead of starting the program.
 HELPER_FLAGS := -DATLAS_HELPER_LIBRARY -fPIC -fvisibility=hidden $(HELPER_SHARED)
 PLANE_LIB := build/libplane.$(HELPER_SUFFIX)
-PLANE_INPUTS := plane.cpp common_field.cpp common_field.hpp algebraic_number.hpp binomial_root_family.hpp \
+PLANE_INPUTS := plane.cpp plane_resolver.hpp common_field.cpp common_field.hpp algebraic_number.hpp binomial_root_family.hpp \
                 three_graph_contact.inc quadratic_translate_contact.inc quadratic_translate_zetas.hpp three_graph_zetas.hpp four_graph_zetas.hpp sparse_flint.hpp flint_polynomial.hpp \
                 groebner.hpp local_basis.hpp
 all: $(PLANE) $(PLANE_LIB)
