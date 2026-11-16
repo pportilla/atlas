@@ -21,6 +21,10 @@ curl -s http://127.0.0.1:8765/api/resolve -H 'Content-Type: application/json' \
 | `POST /api/algebra` | Runs an algebra operation and returns its structured result. |
 | `POST /api/algebra/exhaustive` | Returns the algebra result on the same connection, with the ordinary input-size and worker time limits lifted. |
 
+A request can name a `"method"`: `"auto"` (the default) or `"weighted"`, which
+resolves by weighted blowups in embedded mode without zeta functions; see
+[Embedded resolution by weighted blowups](weighted-resolution.md#resolve-with-method-weighted).
+
 Background jobs accept `"search":"auto"` to try a bounded search first and
 continue exhaustively when needed. They also accept `"quick"` and `"exhaustive"`
 (the default). Running jobs can include a `progress` snapshot containing the

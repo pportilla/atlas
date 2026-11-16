@@ -222,8 +222,8 @@ def make_parser():
     return parser
 
 
-def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False):
-    return _calculate_resolution(polynomial, variables, mode=mode, search=search, compute=compute,
+def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto"):
+    return _calculate_resolution(polynomial, variables, mode=mode, search=search, compute=compute, method=method,
                                  monodromy=monodromy, job=run_job)
 
 

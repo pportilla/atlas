@@ -1,0 +1,322 @@
+{
+ "conditions": {
+  "date": "2026-11-16",
+  "machine": "13th Gen Intel Core i7-1355U, 12 threads",
+  "python": "3.14.7",
+  "cpus": 12,
+  "trials": 3,
+  "timeout_s": 60.0,
+  "search": "exhaustive",
+  "mode": "embedded"
+ },
+ "rows": [
+  {
+   "case": "E8",
+   "polynomial": "x^2+y^3+z^5",
+   "weighted": {
+    "certified": true,
+    "median_ms": 17.305,
+    "trials_ms": [
+     17.305,
+     16.539,
+     20.126
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 15.929,
+    "trials_ms": [
+     15.158,
+     15.929,
+     24.845
+    ],
+    "engine": "native-toric",
+    "note": ""
+   }
+  },
+  {
+   "case": "A20",
+   "polynomial": "x^2+y^2+z^21",
+   "weighted": {
+    "certified": true,
+    "median_ms": 12.071,
+    "trials_ms": [
+     12.838,
+     12.071,
+     11.272
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 34.018,
+    "trials_ms": [
+     34.018,
+     20.313,
+     39.764
+    ],
+    "engine": "native-a-series",
+    "note": ""
+   }
+  },
+  {
+   "case": "T444",
+   "polynomial": "x^4+y^4+z^4+x*y*z",
+   "weighted": {
+    "certified": true,
+    "median_ms": 96.201,
+    "trials_ms": [
+     116.262,
+     96.201,
+     83.562
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 45.59,
+    "trials_ms": [
+     42.296,
+     45.59,
+     57.856
+    ],
+    "engine": "newton-polyhedron",
+    "note": ""
+   }
+  },
+  {
+   "case": "canon_x2y_y4_z3",
+   "polynomial": "x^2*y+y^4+z^3",
+   "weighted": {
+    "certified": true,
+    "median_ms": 19.893,
+    "trials_ms": [
+     17.747,
+     19.893,
+     20.366
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 43.393,
+    "trials_ms": [
+     43.393,
+     39.963,
+     44.555
+    ],
+    "engine": "verified-monomial-modification",
+    "note": ""
+   }
+  },
+  {
+   "case": "whitney",
+   "polynomial": "x^2-y^2*z",
+   "weighted": {
+    "certified": true,
+    "median_ms": 18.06,
+    "trials_ms": [
+     22.425,
+     18.06,
+     17.597
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 9.353,
+    "trials_ms": [
+     12.066,
+     5.922,
+     9.353
+    ],
+    "engine": "binomial-coordinate-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "double_conic",
+   "polynomial": "(x*y-z^2)^2+x^5+y^5",
+   "weighted": {
+    "certified": true,
+    "median_ms": 27.424,
+    "trials_ms": [
+     36.97,
+     24.199,
+     27.424
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 223.971,
+    "trials_ms": [
+     223.971,
+     237.506,
+     197.565
+    ],
+    "engine": "canonical-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "double_conic_norat",
+   "polynomial": "(x^2+y^2+z^2)^2+x^5",
+   "weighted": {
+    "certified": true,
+    "median_ms": 50.234,
+    "trials_ms": [
+     49.027,
+     50.234,
+     50.516
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 41072.93,
+    "trials_ms": [
+     40288.024,
+     41072.93,
+     41856.133
+    ],
+    "engine": "canonical-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "double_elliptic",
+   "polynomial": "(x^3+y^3+z^3)^2+x^7",
+   "weighted": {
+    "certified": true,
+    "median_ms": 116.742,
+    "trials_ms": [
+     120.638,
+     103.969,
+     116.742
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 50464.569,
+    "trials_ms": [
+     54788.554,
+     50464.569,
+     45971.275
+    ],
+    "engine": "canonical-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "triple_conic",
+   "polynomial": "(x^2+y^2-z^2)^3+x^7",
+   "weighted": {
+    "certified": true,
+    "median_ms": 202.055,
+    "trials_ms": [
+     191.457,
+     202.055,
+     212.107
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": false,
+    "median_ms": null,
+    "trials_ms": [
+     null
+    ],
+    "engine": null,
+    "note": "inconclusive or timed out"
+   }
+  },
+  {
+   "case": "binomial4",
+   "polynomial": "x*y^2*z^3-t^6",
+   "weighted": {
+    "certified": true,
+    "median_ms": 93.281,
+    "trials_ms": [
+     93.281,
+     97.854,
+     89.574
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 9.894,
+    "trials_ms": [
+     10.247,
+     8.795,
+     9.894
+    ],
+    "engine": "binomial-coordinate-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "double_quadric3",
+   "polynomial": "(x*y-z*w)^2+x^5+y^5+z^5+w^5",
+   "weighted": {
+    "certified": true,
+    "median_ms": 6612.501,
+    "trials_ms": [
+     6044.465,
+     6612.501,
+     7103.334
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": true,
+    "median_ms": 385.605,
+    "trials_ms": [
+     385.605,
+     476.227,
+     342.781
+    ],
+    "engine": "canonical-blowups",
+    "note": ""
+   }
+  },
+  {
+   "case": "B9",
+   "polynomial": "z^2 - (x^2*(x+2*y)^2 + 4*y^3*(x+y)^2)*(x^2*(x+2*y)^2 + 4*y*(x+y)^2)",
+   "weighted": {
+    "certified": true,
+    "median_ms": 46.526,
+    "trials_ms": [
+     46.526,
+     42.762,
+     50.854
+    ],
+    "engine": "weighted",
+    "note": ""
+   },
+   "auto": {
+    "certified": false,
+    "median_ms": null,
+    "trials_ms": [
+     null
+    ],
+    "engine": null,
+    "note": "inconclusive or timed out"
+   }
+  }
+ ]
+}

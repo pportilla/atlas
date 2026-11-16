@@ -12,7 +12,7 @@ else
 endif
 
 .PHONY: all
-all: $(GROEBNER_LIB) build/graph_verify build/local_algebra build/primary_decomposition build/normalization build/localization build/ideal_sum build/ideal_product build/ideal_power build/symbolic_power build/quotient_ring
+all: $(GROEBNER_LIB) build/graph_verify build/weighted build/local_algebra build/primary_decomposition build/normalization build/localization build/ideal_sum build/ideal_product build/ideal_power build/symbolic_power build/quotient_ring
 
 # A headerless installation uses the same kernel through ctypes. When
 # available, build one stable-ABI binding usable by CPython 3.10 and newer.
@@ -32,6 +32,9 @@ build/_atlas_ideal.abi3.so: python_ideal.cpp python_session.cpp prepared_ideal.h
 endif
 
 build/graph_verify: graph_verify.cpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner
+
+build/weighted: weighted.cpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner
 
 LOCAL_SOURCES := local_cli.cpp
@@ -64,6 +67,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp p
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
 # The canonical blowup stage composes the operations above in one call.
 KERNEL_SOURCES += canonical_blowup.cpp centre_maximum.cpp
+KERNEL_SOURCES += weighted_resolution.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp

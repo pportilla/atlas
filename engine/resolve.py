@@ -27,9 +27,25 @@ def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
     return result
 
 
+METHODS = ("auto", "weighted")
+
+
+def requested_method(request):
+    """The resolution method a request selects.
+
+    ``auto`` runs the existing dispatch. ``weighted`` resolves the germ by the
+    weighted blowups of the native weighted engine.
+    """
+    method = request.get("method", "auto")
+    if method not in METHODS:
+        raise InputError("Method must be auto or weighted.")
+    return method
+
+
 def resolve(request):
     if not isinstance(request, dict):
         raise InputError("Expected an object containing polynomial, variables, and mode.")
+    requested_method(request)
     compute = request.get('compute')
     if compute is not None and compute not in ('cpu','auto','gpu'):
         raise InputError('Compute must be cpu, auto, or gpu.')
@@ -100,6 +116,8 @@ def _resolve(request, proofs):
         if exhaustive:
             raise
         return inconclusive(request,{'description':str(error)},(perf_counter()-start)*1000)
+    if request.get('method') == 'weighted':
+        return _resolve_weighted(p, request, kinds, start)
     try:
         verified = []
         result = _resolve_polynomial(p,request,start,verified=verified)
@@ -169,6 +187,24 @@ def _resolve(request, proofs):
         result.update(zetas_from_strata(record, kinds, found, companion=companion))
     result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
+
+
+def _resolve_weighted(p, request, kinds, start):
+    """Resolve by weighted blowups, after checking that the request allows it.
+
+    The weighted engine gives an embedded resolution of the germ at the origin
+    with a certificate of normal crossings. It computes no zeta functions yet.
+    """
+    if request.get('mode', 'embedded') != 'embedded':
+        raise InputError("The weighted resolution is embedded: use the embedded mode with method weighted.")
+    if kinds:
+        raise InputError("The weighted resolution does not compute zeta functions yet: drop monodromy and zetas, "
+                         "or use method auto.")
+    from .weighted_blowups import weighted_resolution
+    report("Resolving by weighted blowups", 0)
+    record = weighted_resolution(p, request['variables'])
+    record['elapsed_ms'] = round((perf_counter() - start) * 1000, 3)
+    return record
 
 
 def _resolve_polynomial(p, request, start, *, verified=None):

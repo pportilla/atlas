@@ -73,6 +73,9 @@ def add_resolution_options(calc):
     calc.add_argument('polynomial')
     calc.add_argument('--vars',required=True,metavar='x,y[,z,...]')
     calc.add_argument('--mode',choices=['embedded','intrinsic'],default='embedded')
+    calc.add_argument('--method',choices=['auto','weighted'],default='auto',
+                      help="auto chooses among Atlas's resolution engines; weighted resolves by weighted blowups "
+                           "(embedded mode, no zeta functions)")
     policies=calc.add_mutually_exclusive_group()
     policies.add_argument('--quick',dest='search',action='store_const',const='quick',
                           help='use a bounded search and return exit code 3 if inconclusive')
@@ -87,10 +90,13 @@ def add_resolution_options(calc):
                          help='use available GPU kernels (equivalent to --compute gpu)')
 
 
-def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, job=run_job):
+def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto",
+                         job=run_job):
     request = dict(polynomial=polynomial, variables=variables, mode=mode, search=search, compute=compute)
     if monodromy:
         request['monodromy'] = True
+    if method != 'auto':
+        request['method'] = method
     return job(request, timeout=MAX_SECONDS if search == 'quick' else None)
 
 
@@ -111,7 +117,7 @@ def session_decimals(unlimited):
 def resolution_arguments(argv):
     if '--' not in argv:
         # Protect a leading unary minus even when flags precede the polynomial.
-        options={'--vars','--mode','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
+        options={'--vars','--mode','--method','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
         for pos, token in enumerate(argv):
             if token.startswith('-') and token.partition('=')[0] not in options:
                 argv=[*argv[:pos],*argv[pos+1:],'--',token]
@@ -121,9 +127,10 @@ def resolution_arguments(argv):
 
 def run_resolution(args, calculate=calculate_resolution):
     try:
+        options = {'method': args.method} if getattr(args, 'method', 'auto') != 'auto' else {}
         status, r = calculate(args.polynomial, [v.strip() for v in args.vars.split(',')],
                               mode=args.mode, search=args.search, compute=args.compute,
-                              monodromy=args.monodromy)
+                              monodromy=args.monodromy, **options)
     except KeyboardInterrupt:
         print('Resolution interrupted.',file=sys.stderr)
         return 130
