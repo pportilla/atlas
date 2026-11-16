@@ -38,6 +38,16 @@ LOCAL_SOURCES := local_cli.cpp
 build/bench_local_dimension: ../benchmarks/local_dimension_kernel.cpp local_dimension.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
+build/bench_groebner_basis: ../benchmarks/bench_groebner_basis.cpp groebner.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner $(shell pkg-config --libs flint)
+
+# This independent comparison executable uses the headers and libraries of the installed Singular.
+SINGULAR_CFLAGS ?= $(shell pkg-config --cflags Singular)
+SINGULAR_LIBS ?= $(shell pkg-config --libs Singular)
+build/bench_singular_basis: ../benchmarks/bench_singular_basis.cpp
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) $(SINGULAR_CFLAGS) $< -o $@ $(SINGULAR_LIBS) -lgmpxx -lgmp
+
 build/bench_ae_codimension: ../benchmarks/ae_codimension_kernel.cpp ae_codimension.hpp ae_graded.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
 
