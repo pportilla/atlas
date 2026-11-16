@@ -1,6 +1,6 @@
 """Run a native helper program's entry in a forked copy of this process.
 
-The helper programs (plane, newton_fan, graph_verify, face_gb) read a request
+The helper programs (plane, newton_fan, graph_verify, face_gb, weighted) read a request
 on standard input and answer on standard output, so a calculation can be
 stopped at a deadline or bounded in memory without stopping the solver.
 Starting one used to cost 15-20 ms before any arithmetic, mostly the dynamic
@@ -34,6 +34,7 @@ HELPERS = {
     "newton_fan": ("libnewton_fan", "atlas_newton_fan_main"),
     "face_gb": ("libface_gb", "atlas_face_gb_main"),
     "graph_verify": ("libgroebner", "atlas_graph_verify_main"),
+    "weighted": ("libgroebner", "atlas_weighted_main"),
 }
 # Thread counts that the helper programs read from their environment at start.
 _THREAD_SETTINGS = {"OMP_NUM_THREADS": "omp_set_num_threads", "OPENBLAS_NUM_THREADS": "openblas_set_num_threads"}
@@ -89,7 +90,7 @@ def _entry(name):
         return None
     function.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)]
     function.restype = ctypes.c_int
-    reset = getattr(loaded, "atlas_groebner_reset_fork_child", None) if name == "graph_verify" else None
+    reset = getattr(loaded, "atlas_groebner_reset_fork_child", None) if library == "libgroebner" else None
     return function, reset
 
 

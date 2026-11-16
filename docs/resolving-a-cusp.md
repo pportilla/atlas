@@ -34,6 +34,11 @@ complex instead records the exceptional locus **on the resolved curve**.
 For the cusp this is one point. Use `help K.dual_complex` or `help K.branches`
 at the prompt.
 
+`resolve(f, method="weighted")` resolves the same germ by weighted blowups
+instead. Its record lists the blowups in `K.steps` and the exceptional divisors
+with their numerical data, and certifies normal crossings over the origin; see
+[Embedded resolution by weighted blowups](weighted-resolution.md#resolve-with-method-weighted).
+
 ## Look inside a chart
 
 `K.charts` returns chart objects. The prompt displays each by its ID.

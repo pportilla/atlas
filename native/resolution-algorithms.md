@@ -7,6 +7,7 @@ Over the algebraic closure of the rational input field, the verifier checks the 
 | A centre and the charts of its blowup | [Graph verifier](graph_verify.cpp) | [A smooth reduced centre that passes, and one that fails](../tests/test_reduced_centre_geometry.py) |
 | Exceptional components and their intersections over the origin | [Incidence on owned charts](owned_chart_incidence.cpp) | [Recompute a complex after removing cached incidence](../tests/test_resolution_complex.py) |
 | Strata contributions to the two zetas | [Monodromy](monodromy.cpp) and [topological zeta](zeta.cpp) | [A cusp and its repeated divisor](../tests/test_monodromy_blowups.py) |
+| Weighted blowups at points and along bad loci of positive dimension (`method="weighted"`) | [Weighted resolution](weighted_resolution.cpp), described in [its guide](../docs/weighted-resolution.md) | [A double conic blown up along its curve](../tests/test_weighted_resolution.py) |
 
 <a id="4-the-smooth-locus"></a>
 

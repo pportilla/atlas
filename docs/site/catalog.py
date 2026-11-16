@@ -255,8 +255,12 @@ _GROUPS = {
     "Resolution, exceptional divisors and monodromy": {
         "resolve": Entry(
             (native("Point blowups of plane curve germs", "plane", "void visit(Task&"),
+             native("Weighted blowups along points and bad curves", "weighted_resolution",
+                    "CurvePlan plan_curve(const Chart& chart"),
              session("Dispatch a resolution from the session", "session", "def resolve(polynomial")),
-            (resolve_example,)),
+            (resolve_example,
+             example("Blow up a double conic along its curve with method weighted", "weighted_resolution",
+                     "a_double_conic_is_blown_up_along_its_curve"))),
         "recompute_dual_complex": Entry(complex_sources, (complex_example,)),
         "dual_complex": Entry(complex_sources, (complex_example,)),
         "monodromy_check": Entry(

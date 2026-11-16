@@ -70,11 +70,13 @@ def new_session(calculate):
     rings = session.rings
 
     def resolve(polynomial, *, variables=None, ring=None, mode="embedded", search="exhaustive",
-                compute=None, monodromy=False):
+                compute=None, monodromy=False, method="auto"):
         expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
         if type(monodromy) is not bool:
             raise ValueError("monodromy must be true or false.")
         options = {"monodromy": True} if monodromy else {}
+        if method != "auto":
+            options["method"] = method
         status, record = calculate(expression, names, mode=mode, search=search, compute=compute, **options)
         if status != 200:
             raise ValueError(record["error"])

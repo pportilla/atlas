@@ -136,6 +136,10 @@ def _divisor_chart(divisor, name, field, variables):
 def _resolution_card(value, field, summary, example, context, variables):
     if not field:
         context.update(mode=value._record.get("mode", ""), equation=_source_label(value, variables))
+        if value._record.get("engine") == "weighted":
+            # The weighted engine records its blowups, charts and divisor data, without cells.
+            return ("{n} is the embedded resolution of {equation} in {ring} by weighted blowups.",
+                    "{n}.steps\n{n}.divisors\n{n}.certificate")
         return "{n} is the {mode} resolution record for {equation} in {ring}.", example
     if field in ("chart", "charts"):
         if not value._charts:
@@ -226,6 +230,8 @@ def resolution_help(topic, variables):
     if page is None:
         return None
     summary, example, reference = page
+    if kind is Resolution and not field and value is not None and value._record.get("engine") == "weighted":
+        reference = "docs/weighted-resolution.md#resolve-with-method-weighted"
     context = dict(n=name, owner=owner, ring=resolution._source_space if resolution else "QQ[x, y]",
                    source=f"{owner}.polynomial" if owner else "1", local_chart=name + ".charts[0]",
                    chart_id='"B3.u"', divisor_id='"E3"')

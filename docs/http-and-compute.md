@@ -15,6 +15,8 @@ Read the returned `status` first. For this cusp, the resolution is `resolved`. I
 
 `POST /api/resolve` with `"search":"quick"` returns the bounded result directly. Omit `search` to try quick resolution and continue in the background if the attempt is inconclusive, hits a computation limit or misses a requested zeta. A direct result is HTTP 200. A background job is HTTP 202 and includes an `id`. Setting `"search":"exhaustive"` starts a background job immediately.
 
+A request can name a `"method"`: `"auto"` (the default) or `"weighted"`, which resolves by weighted blowups in embedded mode without zeta functions. [Embedded resolution by weighted blowups](weighted-resolution.md#resolve-with-method-weighted)
+
 ## Follow a background search
 
 `POST /api/searches` accepts the same resolution input. It always returns a job on successful submission. The default search policy there is `"exhaustive"`. Set `"search":"auto"` to try quick first or `"search":"quick"` to keep the attempt bounded. Two jobs can run at once. Additional jobs start in submission order. The server retains finished jobs for 30 minutes.

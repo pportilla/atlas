@@ -82,7 +82,7 @@ class SearchJobs:
     def start(self, data):
         if not isinstance(data, dict):
             raise ValueError("Send a polynomial, its variables, and a resolution mode.")
-        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "search")
+        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "search", "method")
         request = {key: data[key] for key in fields if key in data}
         request.setdefault("search", "exhaustive")
         if request["search"] not in ("auto", "quick", "exhaustive"):
@@ -94,6 +94,8 @@ class SearchJobs:
                 not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", name) for name in names)
                 or len(set(names)) != len(names)):
             raise ValueError("Provide distinct variable names starting with a letter.")
+        if request.get("method", "auto") not in ("auto", "weighted"):
+            raise ValueError("Method must be auto or weighted.")
         if request.get("mode", "embedded") not in ("embedded", "intrinsic"):
             raise ValueError("Mode must be embedded or intrinsic.")
         if request.get("compute") not in (None, "auto", "cpu", "gpu"):
