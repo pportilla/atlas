@@ -74,7 +74,7 @@ def new_session(calculate):
     session = Evaluator({}, reserved=("help", "quit", "exit"))
     rings = session.rings
 
-    def resolve(polynomial, *, variables=None, ring=None, mode="embedded", search="exhaustive",
+    def resolve(polynomial, *, variables=None, ring=None, mode=None, search="exhaustive",
                 compute=None, monodromy=False, method="auto"):
         expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
         if type(monodromy) is not bool:
@@ -82,6 +82,9 @@ def new_session(calculate):
         options = {"monodromy": True} if monodromy else {}
         if method != "auto":
             options["method"] = method
+        if mode is None:
+            # Jung's method resolves the surface itself; every other method defaults to embedded.
+            mode = "intrinsic" if method == "jung" else "embedded"
         status, record = calculate(expression, names, mode=mode, search=search, compute=compute, **options)
         if status != 200:
             raise ValueError(record["error"])

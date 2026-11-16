@@ -23,7 +23,11 @@
 
 namespace jung {
 
-struct Declined : std::invalid_argument { using std::invalid_argument::invalid_argument; };
+// A hypothesis of the method fails for this input; `hypothesis` names it.
+struct Declined : std::invalid_argument {
+    string hypothesis;
+    Declined(string h, const string& message) : std::invalid_argument(message), hypothesis(move(h)) {}
+};
 
 // ---------------------------------------------------------------- rational polynomials
 struct MPoly {
@@ -363,6 +367,12 @@ static J run(const J& req) {
     for (const auto& v:req["variables"]) names.push_back(v.asString());
     fmpq_mpoly_ctx_t ctx; fmpq_mpoly_ctx_init(ctx,3,ORD_LEX);
     J record;
+    // Each hypothesis of the method, recorded when it has been verified.
+    J applicability(Json::arrayValue);
+    auto verified=[&](const char* key, const string& statement) {
+        J h; h["hypothesis"]=key; h["statement"]=statement; h["verified"]=true; applicability.append(h);
+    };
+    verified("surface","f is a polynomial in three variables over QQ");
     {
     MPoly f(ctx);
     for (const auto& t:req["terms"]) {
@@ -392,19 +402,24 @@ static J run(const J& req) {
             if (!vanishes) continue;
             const slong ex=fmpq_mpoly_factor_get_exp_si(fac,i,ctx);
             if (ex>1) { fmpq_mpoly_factor_clear(fac,ctx);
-                throw Declined("The surface germ is nonreduced: a repeated factor vanishes at the origin, so the singularity is not isolated."); }
+                throw Declined("reduced_irreducible_germ","The surface germ is nonreduced: a repeated factor vanishes at the origin, so the singularity is not isolated."); }
             ++through; fmpq_mpoly_mul(germ.p,germ.p,g.p,ctx);
         }
         fmpq_mpoly_factor_clear(fac,ctx);
-        if (through==0) throw invalid_argument("The origin does not lie on the surface.");
-        if (through>1) throw Declined("The surface germ is reducible at the origin; its components meet along a curve, so the singularity is not isolated.");
+        if (through==0) throw Declined("origin_on_surface","The origin does not lie on the surface.");
+        if (through>1) throw Declined("reduced_irreducible_germ","The surface germ is reducible at the origin; its components meet along a curve, so the singularity is not isolated.");
         f=germ;
     }
+    verified("origin_on_surface","f vanishes at the origin");
+    verified("reduced_irreducible_germ","exactly one rational factor of f vanishes at the origin, with multiplicity 1");
     const long m=total_degree_min(f);
     record["input"]=mpoly_string(f,names);
     record["order"]=Json::Int64(m);
     if (m==1) {
+        record["applicability"]=applicability;
         record["status"]="smooth";
+        J dj; dj["status"]="complete"; dj["convention"]="The surface is smooth at the origin; it has no exceptional curves.";
+        dj["vertices"]=J(Json::arrayValue); dj["cells"]=J(Json::arrayValue); record["dual_complex"]=dj;
         record["summary"]="The surface is smooth at the origin; no exceptional curves.";
         J g; g["vertices"]=J(Json::arrayValue); g["edges"]=J(Json::arrayValue);
         record["graph"]=g; record["minimal_good_resolution"]=g;
@@ -472,7 +487,7 @@ static J run(const J& req) {
             ftilde=move(g);
         }
     }
-    if (!best) throw Declined("No projection direction with small integer entries makes the surface regular of its order with simple remaining roots.");
+    if (!best) throw Declined("regular_projection","No projection direction with small integer entries makes the surface regular of its order with simple remaining roots.");
     const auto d=best->d; const int fibre=best->fibre;
     vector<int> base; for (int a=0;a<3;++a) if (a!=fibre) base.push_back(a);
     const bool permutation=(d[base[0]]==0 && d[base[1]]==0 && d[fibre]==1);
@@ -499,12 +514,14 @@ static J run(const J& req) {
         pr["equation"]=mpoly_string(*ftilde,nnames);
         record["projection"]=pr;
     }
+    verified("regular_projection","f is regular of order "+to_string(m)+" in the fibre direction ("+to_string(d[0])+","+
+             to_string(d[1])+","+to_string(d[2])+") and the other roots of f on that line are simple");
 
     // ---- 2. discriminant
     MPoly ft(nctx), disc(nctx);
     fmpq_mpoly_derivative(ft.p,ftilde->p,2,nctx);
     if (!fmpq_mpoly_resultant(disc.p,ftilde->p,ft.p,2,nctx)) throw Fail("The discriminant resultant failed.");
-    if (fmpq_mpoly_is_zero(disc.p,nctx)) throw Declined("The discriminant vanishes identically: the surface is not reduced.");
+    if (fmpq_mpoly_is_zero(disc.p,nctx)) throw Declined("reduced_discriminant","The discriminant vanishes identically: the surface is not reduced.");
     MPoly dred(nctx); fmpq_mpoly_one(dred.p,nctx);
     long nmax=1;
     J dfactors(Json::arrayValue);
@@ -541,7 +558,8 @@ static J run(const J& req) {
         }
         fmpq_clear(c);
     }
-    if (order(delta)<2) throw Declined("The discriminant is smooth at the origin, which happens only for a smooth or non-normal surface.");
+    verified("reduced_discriminant","the discriminant Res_t(f, f_t) is not zero");
+    if (order(delta)<2) throw Declined("isolated_singularity","The discriminant is smooth at the origin, which happens only for a smooth or non-normal surface.");
     quick=false;
     Resolver plane; plane.names={nnames[0],nnames[1]}; plane.embedded=true; plane.keep_charts=true;
     J plane_record=plane.run(delta);
@@ -598,9 +616,12 @@ static J run(const J& req) {
         s.strict=s.localize(Pair{ch.strict,Poly{}})[0];
         s.local=analyse(terms,m,D,s.localize(ch.map),&s.strict,box_for(plane.mults[s.a],1));
         if (!smooth_over_branch(*s.local.tree,D))
-            throw Declined("The surface is singular along a curve over a branch of the discriminant, so the singularity is not isolated.");
+            throw Declined("isolated_singularity","The surface is singular along a curve over a branch of the discriminant, so the singularity is not isolated.");
         specials.push_back(move(s));
     }
+
+    verified("isolated_singularity","over every branch of the discriminant the roots that agree form one orbit "
+             "with exponent 1/n, so the surface is smooth there away from the origin");
 
     // Generic points of the exceptional lines: the sheets of the covers.
     vector<std::map<long,long>> sheets(curves+1);   // e -> number of sheets
@@ -688,7 +709,7 @@ static J run(const J& req) {
         vector<size_t> cls;
         for (size_t k=0;k<members.size();++k) if (static_cast<long>(members[k].size())==eps) cls.push_back(k);
         const size_t f=cls.size();
-        if (f>20) throw Declined("Too many sheets over E"+to_string(e)+" for the global monodromy test.");
+        if (f>20) throw Declined("sheets_within_limit","Too many sheets over E"+to_string(e)+" for the global monodromy test.");
         auto separation=[&](unsigned long mask) {
             vector<bool> in(roots.size(),false);
             for (size_t b=0;b<f;++b) if (mask>>b&1) for (size_t r:members[cls[b]]) in[r]=true;
@@ -1133,6 +1154,25 @@ static J run(const J& req) {
     mj["invariants"]["geometric_genus"]=Json::Int64(pg);
     mj["invariants"]["milnor_number_from_laufer"]=record["invariants"]["milnor_number_from_laufer"];
     record["minimal_good_resolution"]=mj;
+    {
+        J dj, vs(Json::arrayValue), cs(Json::arrayValue);
+        dj["status"]="complete";
+        dj["convention"]="Exceptional curves of the minimal good resolution of the surface over the origin, "
+                         "over the algebraic closure of Q, with genus and self-intersection.";
+        for (const auto& x:Gmin.v) {
+            J v; v["id"]=x.id; v["dimension"]=1; v["genus"]=Json::Int64(x.genus);
+            v["self_intersection"]=Json::Int64(x.self); v["kind"]=x.kind; v["over"]=x.over;
+            vs.append(v);
+        }
+        for (const auto& [e,c]:Gmin.edges) {
+            J cell; const string a=Gmin.v[e.first].id, b=Gmin.v[e.second].id;
+            cell["id"]="C"+a+"-"+b; cell["dimension"]=1; cell["faces"]=arr({a,b}); cell["vertices"]=arr({a,b});
+            cell["points"]=Json::Int64(c);
+            cs.append(cell);
+        }
+        dj["vertices"]=vs; dj["cells"]=cs;
+        record["dual_complex"]=dj;
+    }
     const auto& inv=mj["invariants"];
     record["status"]="resolved";
     record["summary"]=to_string(Gmin.v.size())+" exceptional curves in the minimal good resolution ("+
@@ -1145,6 +1185,7 @@ static J run(const J& req) {
         numbers["a"+to_string(i+1)]["approximation"]=atlas::flint_string(qqbar_get_str_nd(plane.algebraics[i].n,10));
     }
     record["algebraic_numbers"]=numbers;
+    record["applicability"]=applicability;
     fmpq_mpoly_ctx_clear(nctx);
     }
     fmpq_mpoly_ctx_clear(ctx);
@@ -1160,7 +1201,7 @@ static int program() {
     try {
         std::cin>>req;
         out=jung::run(req);
-    } catch (const jung::Declined& e) { out=J(); out["error"]=e.what(); out["kind"]="declined"; }
+    } catch (const jung::Declined& e) { out=J(); out["error"]=e.what(); out["kind"]="declined"; out["hypothesis"]=e.hypothesis; }
     catch (const std::invalid_argument& e) { out=J(); out["error"]=e.what(); out["kind"]="input"; }
     catch (const std::exception& e) { out=J(); out["error"]=e.what(); out["kind"]="limit"; }
     Json::StreamWriterBuilder w; w["indentation"]="";

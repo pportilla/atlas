@@ -140,6 +140,10 @@ def _resolution_card(value, field, summary, example, context, variables):
             # The weighted engine records its blowups, charts and divisor data, without cells.
             return ("{n} is the embedded resolution of {equation} in {ring} by weighted blowups.",
                     "{n}.steps\n{n}.divisors\n{n}.certificate")
+        if value._record.get("engine") == "jung":
+            # Jung's method records curves with genus and self-intersection, and no charts.
+            return ("{n} is the resolution of the surface {equation} in {ring} by Jung's method.",
+                    "{n}.dual_complex.vertices\n{n}.invariants\n{n}.certificate")
         return "{n} is the {mode} resolution record for {equation} in {ring}.", example
     if field in ("chart", "charts"):
         if not value._charts:
@@ -232,6 +236,8 @@ def resolution_help(topic, variables):
     summary, example, reference = page
     if kind is Resolution and not field and value is not None and value._record.get("engine") == "weighted":
         reference = "docs/thematic/weighted-resolution.md#resolve-with-method-weighted"
+    elif kind is Resolution and not field and value is not None and value._record.get("engine") == "jung":
+        reference = "docs/thematic/jung-method.md#resolve-with-method-jung"
     context = dict(n=name, owner=owner, ring=resolution._source_space if resolution else "QQ[x, y]",
                    source=f"{owner}.polynomial" if owner else "1", local_chart=name + ".charts[0]",
                    chart_id='"B3.u"', divisor_id='"E3"')

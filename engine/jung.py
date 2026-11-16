@@ -16,15 +16,23 @@ from .polynomial import InputError, LimitError, parse_expression, rational_text
 
 
 class JungDeclined(InputError):
-    """The surface is outside the method's scope, for example a non-isolated singularity."""
+    """A hypothesis of Jung's method fails for this input, for example a non-isolated singularity."""
+
+    def __init__(self, message, hypothesis=None):
+        super().__init__(message)
+        self.hypothesis = hypothesis
 
 
-def jung_record(expression, variables, *, timeout=None):
-    """Run the native Jung resolver on a polynomial in three variables and return its record."""
+def jung_record(expression, variables, *, timeout=None, terms=None):
+    """Run the native Jung resolver on a polynomial in three variables and return its record.
+
+    ``terms`` is an already parsed polynomial (exponent tuple -> rational);
+    otherwise ``expression`` is parsed in ``variables``.
+    """
     variables = tuple(variables)
     if len(variables) != 3:
         raise InputError("Jung's method resolves surfaces: give exactly three variables.")
-    poly = parse_expression(expression, variables)
+    poly = parse_expression(expression, variables) if terms is None else terms
     payload = {"terms": [[*e, rational_text(c)] for e, c in poly.items()], "variables": list(variables)}
     from . import native_process
     try:
@@ -43,7 +51,7 @@ def jung_record(expression, variables, *, timeout=None):
     if "error" in record:
         kind = record.get("kind")
         if kind == "declined":
-            raise JungDeclined(record["error"])
+            raise JungDeclined(record["error"], record.get("hypothesis"))
         if kind == "input":
             raise InputError(record["error"])
         raise LimitError(record["error"])

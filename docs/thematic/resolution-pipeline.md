@@ -33,6 +33,11 @@ intersections. For a resolution by weighted blowups on quotient charts, use
 `method="weighted"`. That method has its own certificate and output fields.
 [Resolution records](resolution-records.md) · [Weighted resolution](weighted-resolution.md)
 
+With `method="jung"` (`--method jung`), Atlas skips this choice for a
+surface in three variables. It checks the request (intrinsic mode, no zeta
+functions) and then runs Jung's method, which verifies its own hypotheses on
+the surface before it uses them. [Jung's method](jung-method.md#resolve-with-method-jung) · [Dispatcher](../../engine/resolve.py) · [Jung resolver](../../native/jung.cpp)
+
 ## How Atlas chooses a modification
 
 The input consists of a nonzero rational polynomial vanishing at the origin,

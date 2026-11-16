@@ -30,6 +30,55 @@ contracting smooth rational $(-1)$-curves for as long as the exceptional set
 stays a normal crossing divisor of smooth curves. `J.jung_graph` keeps the
 graph before the contractions.
 
+## Resolve with method jung
+
+`resolve` and `atlas resolve` accept a method. The default, `auto`, keeps
+Atlas's usual choice among its engines. `method="jung"` asks for Jung's
+method: Atlas first checks that the method applies to this request and this
+surface, and then uses it in the same call.
+
+```text
+x, y, z = coordinates("x", "y", "z")
+R = resolve(x^2 + y^3 + z^5, method="jung")
+R.dual_complex.vertices
+R.invariants
+R.certificate
+```
+
+From the shell, `atlas resolve "x^2+y^3+z^5" --vars x,y,z --method jung`. The
+HTTP API takes `"method": "jung"` in the request object, for `/api/resolve`
+and for background searches.
+
+The request is checked first. Jung's method resolves the surface itself, so
+its mode is `intrinsic` (the default when the method is `jung`; asking for
+`embedded` is refused). The equation must have three variables. The method
+gives no embedded resolution, so it cannot supply zeta functions, and a
+request for `monodromy` or `zetas` is refused.
+
+The native resolver then verifies, on this surface, each hypothesis it
+uses, before using it:
+
+| Hypothesis | Checked by |
+| --- | --- |
+| `origin_on_surface` | $f(0)=0$ |
+| `reduced_irreducible_germ` | exactly one rational factor of $f$ vanishes at the origin, with multiplicity 1 |
+| `regular_projection` | a direction with $f_m(d)\ne0$ and simple remaining roots of $f(td)$ |
+| `reduced_discriminant` | $\operatorname{Res}_t(f,f_t)\ne0$ |
+| `isolated_singularity` | over every branch of the discriminant the roots that agree form one orbit with exponent $1/n$, so the surface is smooth there |
+
+The verified hypotheses are listed in `R.certificate["hypotheses"]`. When
+one fails, the call stops with an error that names it, for example
+`Jung's method does not apply here (isolated_singularity): ...`; the CLI
+exits with status 2.
+
+The result is an ordinary resolution record (`engine` is `jung`). Its dual
+complex lists the curves of the minimal good resolution with `genus` and
+`self_intersection`, and its cells carry the number of intersection points.
+`R.invariants` gives $K^2$, $\chi_{\mathrm{top}}(E)$, $p_g$, the canonical
+cycle and $12p_g+K^2+\chi-1$. `R.record["jung"]` is the complete record of
+the method, the same one `jung_resolution` returns. The record has no
+charts.
+
 ## How the method works
 
 1. **Projection.** A fixed search over directions $d$ with entries in

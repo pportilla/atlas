@@ -5,6 +5,7 @@ singularities. The Milnor number comes from Atlas's local algebra, a separate
 calculation; the graph shapes are compared with the known resolution graphs.
 """
 import json
+import re
 import subprocess
 import unittest
 from collections import Counter
@@ -157,6 +158,89 @@ class JungMethodTests(unittest.TestCase):
                      "J.geometric_genus is p_g", "docs/jung-method.md#fields-of-a-jung-resolution",
                      "docs/jung-method.md#resolve-a-surface-with-jungs-method"):
             self.assertIn(text, output)
+
+    def test_resolve_with_method_jung_checks_then_uses_the_method(self):
+        self.run_lines(f"R = resolve({KEY}, method=\"jung\")\nJ = jung_resolution({KEY})\nD = resolve(x^2+y^3+z^5)")
+        R, J, D = (self.session.variables[name] for name in ("R", "J", "D"))
+        record = R.record
+        self.assertEqual((record["engine"], record["mode"], record["status"], record["charts"]),
+                         ("jung", "intrinsic", "resolved", []))
+        self.assertEqual([h["hypothesis"] for h in record["certificate"]["hypotheses"]],
+                         ["surface", "origin_on_surface", "reduced_irreducible_germ", "regular_projection",
+                          "reduced_discriminant", "isolated_singularity"])
+        field = lambda v, name: v.session_attribute(name)
+        self.assertEqual([(v.id, field(v, "self_intersection"), field(v, "genus")) for v in R.dual_complex.vertices],
+                         [(c["id"], c["self_intersection"], c["genus"]) for c in J.curves])
+        self.assertEqual(sorted((tuple(c["vertices"]), c["points"]) for c in record["dual_complex"]["cells"]),
+                         sorted(((a, b), n) for a, b, n in J.edges))
+        self.run_lines("I = R.invariants")
+        invariants = self.session.variables["I"]
+        self.assertEqual((invariants["K2"], invariants["geometric_genus"],
+                          invariants["milnor_number_from_laufer"]), ("-8", 3, "39"))
+        # Without a method, resolve keeps its usual engines and the embedded mode.
+        self.assertEqual(D.record["mode"], "embedded")
+        self.assertNotEqual(D.record["engine"], "jung")
+
+    def test_resolve_with_method_jung_names_what_does_not_apply(self):
+        cases = {
+            'resolve(x^2+y^3+z^5, method="jung", mode="embedded")': "not its embedding",
+            'resolve(x^2+y^3+z^5, method="jung", monodromy=True)': "zeta functions",
+            'resolve((x+y+z)^2-z*(x-y)^2, method="jung")': "does not apply here (isolated_singularity)",
+            'resolve(x*y*z, method="jung")': "does not apply here (reduced_irreducible_germ)",
+            'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto or jung",
+        }
+        for source, message in cases.items():
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(ValueError, re.escape(message)):
+                    self.run_lines(source)
+        with self.assertRaisesRegex(ValueError, "exactly three variables"):
+            self.run_lines('u, v = coordinates("u", "v")\nresolve(v^2-u^3, method="jung")')
+
+    def test_resolve_method_jung_from_the_cli_and_http(self):
+        done = subprocess.run([str(ROOT / "atlas"), "resolve", "x^3+y^3+z^4", "--vars", "x,y,z",
+                               "--method", "jung", "--json"], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        record = json.loads(done.stdout)
+        self.assertEqual((record["engine"], record["invariants"]["geometric_genus"]), ("jung", 1))
+        shown = subprocess.run([str(ROOT / "atlas"), "resolve", "x^3+y^3+z^4", "--vars", "x,y,z", "--method", "jung"],
+                               capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertIn("Verified: f vanishes at the origin", shown.stdout)
+        self.assertIn("geometric genus 1", shown.stdout)
+        refused = subprocess.run([str(ROOT / "atlas"), "resolve", "(x+y+z)^2-z*(x-y)^2", "--vars", "x,y,z",
+                                  "--method", "jung"], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("isolated_singularity", refused.stderr)
+
+        import threading
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+        from engine.app import AtlasServer
+        from tests.http_support import QuietHandler
+        server = AtlasServer(("127.0.0.1", 0), QuietHandler)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.015}, daemon=True)
+        thread.start()
+
+        def post(path, body):
+            request = Request(f"http://127.0.0.1:{server.server_port}{path}", method="POST",
+                              data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            try:
+                with urlopen(request, timeout=60) as response:
+                    return response.status, json.load(response)
+            except HTTPError as error:
+                return error.code, json.load(error)
+        try:
+            body = {"polynomial": "x^2+y^3+z^5", "variables": ["x", "y", "z"], "method": "jung", "search": "quick"}
+            status, answer = post("/api/resolve", body)
+            self.assertEqual((status, answer["engine"], len(answer["dual_complex"]["vertices"])), (200, "jung", 8))
+            status, answer = post("/api/resolve", dict(body, polynomial="(x+y+z)^2-z*(x-y)^2"))
+            self.assertEqual(status, 400)
+            self.assertIn("isolated_singularity", answer["error"])
+            status, answer = post("/api/searches", dict(body, method="newton", search="exhaustive"))
+            self.assertEqual((status, answer["error"]), (400, "Method must be auto or jung."))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_completion_lists_the_fields_without_computing(self):
         from engine.session_completion import candidates

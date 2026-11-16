@@ -94,8 +94,10 @@ class SearchJobs:
                 not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", name) for name in names)
                 or len(set(names)) != len(names)):
             raise ValueError("Provide distinct variable names starting with a letter.")
-        if request.get("method", "auto") not in ("auto", "weighted"):
-            raise ValueError("Method must be auto or weighted.")
+        if request.get("method", "auto") not in ("auto", "weighted", "jung"):
+            raise ValueError("Method must be auto, weighted or jung.")
+        if request.get("method") == "jung":
+            request.setdefault("mode", "intrinsic")
         if request.get("mode", "embedded") not in ("embedded", "intrinsic"):
             raise ValueError("Mode must be embedded or intrinsic.")
         if request.get("compute") not in (None, "auto", "cpu", "gpu"):

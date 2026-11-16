@@ -73,7 +73,15 @@ def show(r, *, zetas_only=False):
                       f"{witness}")
         return
     dual=r['dual_complex'];print(f"\nDual complex ({dual['status']}): {dual['convention']}")
-    print("  Vertices:", ', '.join(v['id'] for v in dual['vertices']) or 'none')
+    weighted=bool(dual['vertices']) and all('genus' in v and 'self_intersection' in v for v in dual['vertices'])
+    print("  Vertices:", ', '.join(v['id']+(f" (genus {v['genus']}, self-intersection {v['self_intersection']})"
+                                            if weighted else '') for v in dual['vertices']) or 'none')
+    if r.get('invariants'):
+        inv=r['invariants']
+        print(f"  K^2 = {inv['K2']}, Euler characteristic {inv['euler_characteristic']}, "
+              f"geometric genus {inv['geometric_genus']}, 12 p_g + K^2 + chi - 1 = {inv['milnor_number_from_laufer']}")
+    for check in r.get('certificate',{}).get('hypotheses',()):
+        print('  Verified:',check['statement'])
     if r.get('coefficient_field',{}).get('description'): print('  Field:', r['coefficient_field']['description'])
     if r.get('algebraic_numbers'):
         for symbol,defn in r['algebraic_numbers'].items(): print(f"  {symbol} = {defn['exact']}")
@@ -96,10 +104,12 @@ def show(r, *, zetas_only=False):
 def add_resolution_options(calc):
     calc.add_argument('polynomial')
     calc.add_argument('--vars',required=True,metavar='x,y[,z,...]')
-    calc.add_argument('--mode',choices=['embedded','intrinsic'],default='embedded')
-    calc.add_argument('--method',choices=['auto','weighted'],default='auto',
+    calc.add_argument('--mode',choices=['embedded','intrinsic'],default=None,
+                      help='embedded (default) or intrinsic; method jung resolves the surface itself (intrinsic)')
+    calc.add_argument('--method',choices=['auto','weighted','jung'],default='auto',
                       help="weighted tries weighted blowups in embedded mode. An exhaustive search continues "
-                      "with ordinary resolution when the weighted method declines")
+                      "with ordinary resolution when the weighted method declines. jung checks that Jung's "
+                      "method applies to this surface and then uses it")
     policies=calc.add_mutually_exclusive_group()
     policies.add_argument('--quick',dest='search',action='store_const',const='quick',
                           help='use a bounded search and return exit code 3 if inconclusive')
@@ -118,6 +128,8 @@ def add_resolution_options(calc):
 
 def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto",
                          zetas_only=False, job=run_job):
+    if mode is None:
+        mode = 'intrinsic' if method == 'jung' else 'embedded'
     request = dict(polynomial=polynomial, variables=variables, mode=mode, search=search, compute=compute)
     if monodromy:
         request['monodromy'] = True

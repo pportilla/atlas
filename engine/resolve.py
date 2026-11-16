@@ -27,25 +27,31 @@ def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
     return result
 
 
-METHODS = ("auto", "weighted")
+METHODS = ("auto", "weighted", "jung")
 
 
 def requested_method(request):
-    """The resolution method a request selects.
+    """The resolution method a request selects, with the mode it implies when none is given.
 
-    ``weighted`` tries the native weighted engine before the ordinary
-    embedded search when exhaustive completion is requested.
+    ``auto`` runs the existing dispatch. ``weighted`` tries the native weighted
+    engine before the ordinary embedded search when exhaustive completion is
+    requested. ``jung`` runs Jung's method for surfaces, which resolves the
+    surface itself, so its default mode is intrinsic.
     """
     method = request.get("method", "auto")
     if method not in METHODS:
-        raise InputError("Method must be auto or weighted.")
-    return method
+        raise InputError("Method must be auto, weighted or jung.")
+    mode = request.get("mode")
+    if mode is None:
+        mode = "intrinsic" if method == "jung" else "embedded"
+    return method, mode
 
 
 def resolve(request):
     if not isinstance(request, dict):
         raise InputError("Expected an object containing polynomial, variables, and mode.")
-    requested_method(request)
+    method, mode = requested_method(request)
+    request = dict(request, method=method, mode=mode)
     compute = request.get('compute')
     if compute is not None and compute not in ('cpu','auto','gpu'):
         raise InputError('Compute must be cpu, auto, or gpu.')
@@ -118,6 +124,8 @@ def _resolve(request, proofs):
         if exhaustive:
             raise
         return inconclusive(request,{'description':str(error)},(perf_counter()-start)*1000)
+    if request.get('method') == 'jung':
+        return _resolve_jung(p, request, kinds, start)
     return _resolve_parsed(p, variables, mode, request, kinds, start, proofs)
 
 
@@ -311,6 +319,44 @@ def _resolve_weighted(p, request, kinds, start, proofs):
         return record
     if kinds:
         _complete_companion(record, request, kinds, proofs)
+    record['elapsed_ms'] = round((perf_counter() - start) * 1000, 3)
+    return record
+
+
+def _resolve_jung(p, request, kinds, start):
+    """Use Jung's method now, after checking that the request and the surface allow it.
+
+    The request must ask for the surface itself (intrinsic mode) in three
+    variables without zeta functions, which need an embedded resolution. The
+    native resolver then verifies the method's hypotheses on this surface
+    before using them, and names the one that fails.
+    """
+    variables = request['variables']
+    if len(variables) != 3:
+        raise InputError("Jung's method resolves surfaces f(x,y,z) = 0: give exactly three variables, "
+                         f"not {len(variables)}.")
+    if request['mode'] != 'intrinsic':
+        raise InputError("Jung's method resolves the surface itself, not its embedding in 3-space: "
+                         "use the intrinsic mode with method jung.")
+    if kinds:
+        raise InputError("Jung's method gives no embedded resolution, which the zeta functions need: "
+                         "drop monodromy and zetas, or use method auto.")
+    from .jung import JungDeclined, jung_record
+    report("Checking the hypotheses of Jung's method", 0)
+    try:
+        native = jung_record(None, variables, terms=p)
+    except JungDeclined as error:
+        raise InputError(f"Jung's method does not apply here ({error.hypothesis}): {error}") from None
+    minimal = native.get('minimal_good_resolution', {})
+    record = {
+        'status': 'resolved', 'engine': 'jung', 'mode': 'intrinsic', 'schema_version': 1,
+        'summary': native['summary'], 'polynomial': format_poly(p, variables), 'variables': variables,
+        'base_field': 'Q', 'geometric_field': 'algebraic closure of Q', 'origin': [0] * len(variables),
+        'charts': [], 'steps': [], 'dual_complex': native['dual_complex'],
+        'invariants': minimal.get('invariants', native.get('invariants', {})),
+        'certificate': {'method': "Jung's method", 'hypotheses': native['applicability']},
+        'jung': native,
+    }
     record['elapsed_ms'] = round((perf_counter() - start) * 1000, 3)
     return record
 
