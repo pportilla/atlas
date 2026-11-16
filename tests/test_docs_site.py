@@ -1,5 +1,6 @@
 from html.parser import HTMLParser
 import importlib.util
+import json
 from pathlib import Path
 import posixpath
 import sys
@@ -79,21 +80,48 @@ class DocsSiteTests(unittest.TestCase):
         self.assertIn('href="../docs/sessions.html#choose-the-ring-of-a-polynomial"', entry)
 
     def test_inline_calls_link_to_the_reference_and_back(self):
-        sessions = self.parsed["docs/sessions.html"].hrefs
-        self.assertIn("../reference/functions.html#recompute_dual_complex", sessions)
+        cusp = self.parsed["docs/resolving-a-cusp.html"].hrefs
+        self.assertIn("../reference/functions.html#recompute_dual_complex", cusp)
         html = (self.out / "reference/functions.html").read_text(encoding="utf-8")
         entry = html.split('id="recompute_dual_complex"', 1)[1].split("</section>", 1)[0]
         # The entry links back to the section of the guide that mentions it.
-        self.assertIn('href="../docs/sessions.html#', entry)
+        self.assertIn('href="../docs/resolving-a-cusp.html#', entry)
 
-    def test_repository_files_link_to_their_source(self):
+    def test_guide_and_reference_link_to_the_checkout(self):
         hrefs = self.parsed["docs/lean-verification-roadmap.html"].hrefs
-        self.assertTrue(any(h.endswith("/blob/main/native/groebner.cpp") for h in hrefs))
+        self.assertIn("../source/native/groebner.cpp.html", hrefs)
+        html = (self.out / "reference/functions.html").read_text(encoding="utf-8")
+        card = html.split('<section class="api-entry" id="ae_codimension">')[1].split("</section>")[0]
+        self.assertIn("<summary>Implementation and tests</summary>", card)
+        links = Links()
+        links.feed(card)
+        for file, needle in (("native/ae_codimension.cpp", "Json::Value ae_codimension("),
+                             ("tests/test_ae_codimension_interface.py", "def test_cusp_ordered_components_and_replay(")):
+            lines = (ROOT / file).read_text(encoding="utf-8").splitlines()
+            line, = (i for i, text in enumerate(lines, 1) if needle in text)
+            view = f"source/{file}.html"
+            self.assertIn(f"../{view}#L{line}", links.hrefs)
+            self.assertIn(f"L{line}", self.parsed[view].ids)
+            self.assertTrue(any(h.endswith("reference/functions.html#ae_codimension") for h in self.parsed[view].hrefs))
+
+    def test_index_and_search_share_one_result_per_operation(self):
+        script = (self.out / "_static/search-index.js").read_text(encoding="utf-8")
+        entries = json.loads(script.removeprefix("window.ATLAS_SEARCH = ").rstrip(";\n"))
+        operations = [e for e in entries if e["kind"] == "function"]
+        names = {e["title"] for e in operations}
+        self.assertEqual(len(operations), len(names))
+        saturation, = (e for e in operations if e["title"] == "saturation")
+        self.assertIn("saturate", saturation["aliases"])
+        self.assertNotIn("saturate", names)
+        index = self.parsed["genindex.html"].hrefs
+        self.assertEqual(index.count("reference/functions.html#ae_codimension"), 1)
 
     def test_maths_and_transcripts(self):
         kernel = (self.out / "native/KERNEL.html").read_text(encoding="utf-8")
         self.assertIn('<span class="math">', kernel)
         self.assertIn("katex.min.js", kernel)
+        records = (self.out / "docs/resolution-records.html").read_text(encoding="utf-8")
+        self.assertIn('<span class="math math-display">\\zeta_', records)
         sessions = (self.out / "docs/sessions.html").read_text(encoding="utf-8")
         self.assertIn('<span class="line in"><span class="t-brand">atlas</span>', sessions)
         self.assertIn('<span class="t-function">coordinates</span>', sessions)

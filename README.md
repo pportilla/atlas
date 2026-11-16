@@ -1,25 +1,44 @@
 # Atlas
 
-Atlas is a computer algebra system for exact computation in commutative algebra
-and algebraic geometry, with a focus on resolution of singularities. It works
-with multivariate polynomials, ideals, and quotient rings over the rationals.
-The C++ kernel performs the mathematics. Python provides the interactive
-console, scripting environment, and HTTP interface.
+Atlas computes with rational polynomials, ideals, quotient rings and hypersurface germs. You can use the same mathematical functions at the prompt and in an Atlas script. The C++ kernel computes the results.
 
-## Capabilities
+## Start here
 
-- **Polynomial and ideal arithmetic.** Factor polynomials, compute GCDs and
-  resultants, and use Gröbner bases for normal forms, ideal membership, and
-  elimination. Atlas also computes radicals, primary decompositions, and
-  ordinary and symbolic powers of ideals.
-- **Local algebra and geometry.** Compute in quotient rings and localizations,
-  normalize affine algebras, and study singular points through local dimension,
-  tangent cones, multiplicities, and Milnor and Tjurina numbers. For maps
-  between smooth germs, compute the [extended right-left codimension](examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ) with `ae_codimension`.
-- **Resolution of singularities.** Compute embedded and intrinsic resolutions
-  of hypersurface germs at the origin. Inspect the chart maps and strict
-  transforms, recover the labelled dual complex of the exceptional divisor,
-  and compute the local monodromy and topological zeta functions.
+After [building Atlas](#installation), run `./atlas` from the checkout. For example, the Milnor number of the plane cusp $y^2-x^3$ is the dimension of its local Jacobian algebra. The partial derivatives generate $(x^2,y)$, so the classes of $1$ and $x$ give a basis.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> milnor_number(f).value
+2
+```
+
+Use `help milnor_number` for its arguments or `help functions` to see the available operations. [Prompt and scripts](docs/sessions.md) · [Local algebra test cases](tests/test_local_algebra_session.py)
+
+## Find a calculation
+
+| What you want to do | Where to start |
+| --- | --- |
+| Compute with polynomials, ideals or rings, or study a germ at a point | [Algebra guides and worked examples](examples/algebra-api.md) |
+| Resolve a curve and inspect its exceptional divisors and chart equations | [Resolve a plane cusp](docs/resolving-a-cusp.md) |
+| Read a saved resolution or compute its dual complex and zeta functions | [Reading a resolution record](docs/resolution-records.md) |
+| Submit a calculation through the web interface or an HTTP client | [HTTP requests and compute options](docs/http-and-compute.md) |
+| Follow a resolution from search to verification | [Resolution algorithms](docs/resolution-pipeline.md) |
+
+## Browse the documentation and code
+
+From the checkout, build the site with the Python environment you use for Atlas.
+
+```sh
+python3 -m pip install markdown-it-py
+make docs
+```
+
+Open `build/docs/index.html` in a browser. In **Functions**, choose a topic and open **Implementation and tests** under a function to jump to its code or a test case in this checkout. Use **Related documentation** on either file to return to the guide. The alphabetical index includes alternate function names.
+
+- Follow a mathematical argument into the C++ implementation. [Kernel algorithms and proofs](native/KERNEL.md)
+- Compare timings for the same inputs and see the conditions of each run. [Benchmark reports](benchmarks/README.md)
+- Read about proposed operations and formal verification. [Development roadmap](docs/development-roadmap.md) · [Lean verification roadmap](docs/lean-verification-roadmap.md)
 
 ## Installation
 
@@ -47,24 +66,6 @@ make -j4
 ./atlas --help
 ```
 
-## Using Atlas
+## Command-line and web interfaces
 
-Run `./atlas` from the checkout to open the console. `./atlas run FILE`
-executes an Atlas script, and `./atlas algebra --help` lists the algebra
-commands. For the Resolution web interface and HTTP API, start `./atlas serve`
-and open `http://127.0.0.1:8765`. Submit a polynomial, then expand its row to
-follow the search. You can submit another polynomial while the first runs.
-Finished rows offer the recorded complex, charts, and follow-up zeta calculations.
-
-## Documentation
-
-- [Algebra operations](examples/algebra-api.md) and [console and scripting guide](docs/sessions.md)
-- [Resolution algorithms](docs/resolution-pipeline.md) and [resolution records](docs/resolution-records.md)
-- [HTTP API and optional GPU support](docs/http-and-compute.md)
-- [Kernel algorithms and proofs](native/KERNEL.md) and [benchmarks](benchmarks/README.md)
-- [Lean verification roadmap](docs/lean-verification-roadmap.md)
-
-Run `make docs` to build these pages as a website in `build/docs`, with a
-function reference read from the session's help cards. The build needs
-`markdown-it-py`. [docs/site](docs/site/build.py) holds the generator, its
-template and its stylesheet.
+Use `./atlas run FILE` to execute an Atlas script and `./atlas algebra --help` to list algebra commands. For the resolution workspace, start `./atlas serve` and open `http://127.0.0.1:8765`. Expand a submitted polynomial to follow its search. A finished row gives access to the charts, complex and follow-up zeta calculations.

@@ -41,7 +41,7 @@ Each trial starts a fresh CLI, parses the original expressions and point, perfor
 
 Two direct Singular formulations receive the same original generators and point as Atlas. The first translates the ideal into a local ring and computes `dim(std(J))`. The second computes a global standard basis and tests the dimension bounds. If the bounds differ, it uses `equidim` and takes the greatest dimension among components through the point. Both test support first. Smoothness uses the rank of the original Jacobian at the point. A rank attaining the number of equations or ambient dimension certifies a complete intersection or an isolated smooth point. We report the faster successful direct median where both are available.
 
-Singular’s ring-construction list supports a larger `maxExp` for the million-degree inputs. We use local `ds` when widening the direct reference ring. On this installation, constructing a widened `Ds` ring gives dimension 1 for `((x+y)^2,(x+z)^2,(y+z)^2)`, even though these three independent linear forms cut out a zero-dimensional thickening. Default `Ds`, default `ds` and widened `ds` give dimension 0. Each case records the Atlas order. [Singular manual on ring attributes](https://www.singular.uni-kl.de/ftp/pub/Math/Singular/src/4-1-1/singular.pdf)
+Singular’s ring-construction list supports a larger `maxExp` for the million-degree inputs. We use local `ds` when widening the direct reference ring. On this installation, constructing a widened `Ds` ring gives dimension 1 for `((x+y)^2,(x+z)^2,(y+z)^2)`, even though these three independent linear forms cut out a zero-dimensional thickening. Default `Ds`, default `ds` and widened `ds` give dimension 0. Each case records the Atlas order.
 
 ## Independent local oracle
 

@@ -88,10 +88,14 @@ if (tocLinks.length && "IntersectionObserver" in window) {
 // Search over the pages, sections and functions listed in search-index.js.
 const input = document.getElementById("search");
 const results = document.getElementById("search-results");
+function searchable(text) {
+  return text.normalize("NFKC").toLowerCase().replace(/\ba_e\b|\ba_e(?=_)/g, "ae")
+    .replace(/[_‐‑–-]+/g, " ").replace(/\s+/g, " ").trim();
+}
 const entries = (window.ATLAS_SEARCH || []).map((entry) => ({
   ...entry,
-  haystack: `${entry.title} ${entry.page} ${entry.text}`.toLowerCase(),
-  name: entry.title.toLowerCase(),
+  haystack: searchable(`${entry.title} ${entry.page} ${entry.text}`),
+  names: [entry.title, ...(entry.aliases || [])].map(searchable),
 }));
 let selected = -1;
 
@@ -99,33 +103,34 @@ function escapeHtml(text) {
   return text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 function mark(text, terms) {
-  let html = escapeHtml(text);
-  for (const term of terms) {
-    if (term.length < 2) continue;
-    const pattern = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-    html = html.replace(pattern, (match) => `<mark>${match}</mark>`);
-  }
-  return html;
+  const words = terms.filter((term) => term.length >= 2).map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!words.length) return escapeHtml(text);
+  return text.split(new RegExp(`(${words.join("|")})`, "gi"))
+    .map((part, i) => i % 2 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part)).join("");
 }
 function snippet(text, terms) {
   const lower = text.toLowerCase();
-  const at = Math.max(0, Math.min(...terms.map((term) => lower.indexOf(term)).filter((i) => i >= 0)) - 60);
+  const hits = terms.map((term) => lower.indexOf(term)).filter((i) => i >= 0);
+  const at = hits.length ? Math.max(0, Math.min(...hits) - 60) : 0;
   return (at > 0 ? "…" : "") + text.slice(at, at + 180);
 }
 function search(query) {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const phrase = searchable(query);
+  const terms = phrase.split(" ").filter(Boolean);
   if (!terms.length) return [];
   const scored = [];
   for (const entry of entries) {
     if (!terms.every((term) => entry.haystack.includes(term))) continue;
-    let score = 0;
+    let score = entry.names.includes(phrase) ? 80 : 0;
     for (const term of terms) {
-      if (entry.name === term) score += 40;
-      else if (entry.name.startsWith(term)) score += 18;
-      else if (entry.name.includes(term)) score += 10;
+      if (entry.names.some((name) => name.startsWith(term))) score += 18;
+      else if (entry.names.some((name) => name.includes(term))) score += 10;
       if (entry.page.toLowerCase().includes(term)) score += 3;
     }
-    if (entry.kind === "function") score += 4;
+    if (entry.kind === "function") {
+      score += 4;
+      if (searchable(entry.text).includes(phrase)) score += 20;
+    }
     scored.push([score, entry]);
   }
   return scored.sort((a, b) => b[0] - a[0]).slice(0, 14).map(([, entry]) => entry);
@@ -133,13 +138,13 @@ function search(query) {
 function render() {
   const query = input.value.trim();
   if (!query) { results.hidden = true; return; }
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = searchable(query).split(" ").filter(Boolean);
   const found = search(query);
   selected = found.length ? 0 : -1;
   results.innerHTML = found.length
     ? found.map((entry, i) => `<li><a role="option" href="${root}${entry.url}" class="${entry.kind === "function" ? "result-function" : ""}"
         aria-selected="${i === 0}"><span class="result-title">${mark(entry.title, terms)}</span>
-        ${entry.title !== entry.page ? `<span class="result-page">${escapeHtml(entry.page)}</span>` : ""}
+        <span class="result-page">${escapeHtml(entry.kind === "function" ? "Function" : entry.kind)}${entry.title !== entry.page ? " · " + escapeHtml(entry.page) : ""}</span>
         <span class="result-text">${mark(snippet(entry.text, terms), terms)}</span></a></li>`).join("")
     : `<li class="empty">Nothing matches “${escapeHtml(query)}”.</li>`;
   results.hidden = false;

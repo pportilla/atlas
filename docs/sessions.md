@@ -1,15 +1,32 @@
 # Prompt and scripts
 
-Run `./atlas` at a terminal. Assignments bind names quietly. Enter a name or
-expression to inspect it. Tab completes names, fields such as `R.divisors`,
-and methods such as `R.chart(`. Use `:workspace` to inspect the rings and
-variables in use. `R = ring("x", "y")` declares a polynomial ring and gives
-you `x` and `y` to use in expressions. Type `help functions` to list operations
-or `help resolve` for its arguments and an example.
+Start `./atlas` from the checkout. Enter an assignment to keep a value, then enter an expression to inspect it. Here the relation $t^2=1$ makes $t^3-t$ vanish in the quotient.
 
-For a polynomial map germ, type `help ae_codimension`. The returned object's
-`.finite` field tells you how to interpret `.value`.
-[Map-germ inputs, results, and an example](../examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ)
+```text
+atlas> t = coordinates("t")
+atlas> I = ideal(t^2 - 1)
+atlas> membership(t^3 - t, I).value
+True
+atlas> membership(t, I).value
+False
+```
+
+Use `^` for powers, `*` for multiplication and fractions such as `1/2` for exact coefficients. Functions return values you can assign, pass to another function or inspect through their fields. Type `help membership` for the signature and example, `help I` for the fields on this ideal, or `help functions` to list operations. Tab completes names, fields and methods. Type `:workspace` to inspect the rings and variables in use. To name a ring while binding its generators, enter `R = ring("x", "y")`.
+
+## Run or save a calculation
+
+Scripts share the prompt’s functions. To replay the membership calculation above and see its result, enter `print(membership(t^3 - t, I).value)` at the prompt. Then enter `:save "my session.atlas"`. From the shell, run the saved file.
+
+```sh
+./atlas run "my session.atlas"
+```
+
+The script prints `True`. Saving captures successful statements in order, including explicit prints. Saving again replaces the file. Use `./atlas run -` to read a script from standard input. At the prompt, a blank line finishes an indented block. A failed or interrupted block restores the previous variable bindings and active ring. [Session save and replay cases](../tests/test_session_transcript.py)
+
+Use `len(I.generators)` to count the generators. To write the count as a JSON
+record, use `print_json(count=len(I.generators))`.
+
+Use `quit` or `exit` to leave the prompt.
 
 ## Inspect a saved value
 
@@ -71,8 +88,11 @@ Every ring owns its coordinates. Assigning a name to a ring or to one of its
 coordinates gives you another way to refer to the same object.
 
 ```text
+atlas> x, y = coordinates("x", "y")
 atlas> I = ideal(y^2+x^5)
 atlas> K = I.quotient_ring
+atlas> K.variables
+('x', 'y')
 atlas> K.coordinates
 ([x], [y])
 atlas> u, v = K.coordinates
@@ -89,12 +109,26 @@ If you also write `A = quotient_ring(I)`, the heading shows both names for one
 ring. A different compute backend still yields that same parent.
 Use `quotient_ring(I, fresh=True)` to request an independent copy.
 
-Use `polynomial("x^5+y^2", ring=K)` to read an expression directly in the
-quotient. It gives the zero class. The same source with `ring=K.ambient` gives
-the ambient polynomial. Strings use the ring's declared names, so in this
-example you write `x, y` in a string and can use `u, v` as prompt variables.
-You can also pass `variables=K.coordinates`. A saved coordinate tuple carries
-its own `.parent`, including when the ring has no generators.
+`polynomial` reads a nonempty string. Select this quotient with `ring=K` or `variables=K.coordinates`. If you have made it active with `use_ring(K)`, you may omit both arguments. The string
+uses the names in `K.variables`, here `x` and `y`. For an existing ambient
+polynomial `f`, use `K(f)` to take its residue class directly.
+
+```text
+atlas> g = polynomial("y^2", ring=K)
+atlas> h = polynomial("x^5", ring=K)
+atlas> K(y^2) == g
+True
+atlas> g == h
+False
+atlas> g == -h
+True
+```
+
+The defining relation is `y^2 + x^5 = 0` in `K`, so the two classes are
+negatives of each other. In a script, `print(g == h, g == -h)` prints
+`False True`. With `ring=K.ambient`, the same strings give polynomials in
+`QQ[x, y]`. A saved coordinate tuple carries its own `.parent`, including
+when the ring has no generators.
 
 `K.defining_ideal` is the ideal you supplied. `K.relations` gives its reduced
 basis. The serializable presentation in `K.ring` includes the relations.
@@ -302,7 +336,7 @@ True
 `include.domain`, `include.codomain`, and `include.images` describe the map.
 The images follow the generator order of the domain and are substituted
 simultaneously. Between `QQ[x, y]` and `QQ[x, z]`, choosing images
-`(x2, z2)` sends `y` to the generator spelled `z`. This choice is explicit.
+`(x2, z2)` sends `y` to the generator spelled `z`.
 
 Use `I.parent` for the live ring of an ideal. For example,
 `I = ideal(f)`, then `polynomial("x+y", ring=I.parent)` uses the same
@@ -318,121 +352,9 @@ elements of `I.parent` to their classes. Compare inside the quotient with `A(f) 
 `J = eliminate(I, x)`, `J.inclusion` sends a polynomial in the surviving
 coordinates back into the original ring.
 
-## Inspect a cusp
+The [ring map tests](../tests/test_session_maps.py) check simultaneous substitution, quotient relations and the surviving coordinates after elimination.
 
-`resolve(f)` uses embedded resolution by default. For a plane curve, the
-vertices of its dual complex represent the exceptional curves above the
-origin. An edge records an intersection point of two exceptional curves.
-The strict transform is the closure of the original curve away from the
-origin, lifted to the resolved surface. Its branches have their own attachments.
+<a id="inspect-a-cusp"></a>
+<a id="look-inside-a-chart"></a>
 
-```text
-atlas> x, y = coordinates("x", "y")
-atlas> f = y^2 - x^3
-atlas> K = resolve(f)
-atlas> K.polynomial == f
-True
-atlas> K.dual_complex
-Dual complex (embedded, complete): 3 vertices, 2 edges
-  E1 — E3, E2 — E3
-atlas> K.branches
-[P1]
-atlas> b = K.branches[0]
-atlas> b.meets
-[E3]
-atlas> b.chart
-B3.u
-atlas> b.point
-['0', '1']
-```
-
-The cusp has one branch. In a decorated resolution graph you would draw its
-arrow at `E3`. Atlas records that arrow as `b.meets`. In intrinsic mode the
-complex instead records the exceptional locus **on the resolved curve**.
-For the cusp this is one point. Use `help K.dual_complex` or `help K.branches`
-at the prompt.
-
-### Look inside a chart
-
-`K.charts` returns chart objects. The prompt displays each by its ID.
-For the cusp, `B3.u` and `B3.v` are the two coordinate charts of the third
-blow-up. Select an entry by position, look it up by ID, or follow a branch
-directly to its chart.
-
-```text
-atlas> K.charts
-[B1.u, B1.v, B2.u, B2.v, B3.u, B3.v]
-atlas> K.charts[0].id
-B1.u
-atlas> C = K.chart("B3.u")
-atlas> C == b.chart
-True
-atlas> C.coordinates
-(u, v)
-atlas> C.map
-{'x': u^2*v, 'y': u^3*v^2}
-atlas> C.divisors
-[E3, E2]
-atlas> C.strict_transform
-v-1
-```
-
-`C.map` gives the original coordinates as polynomials in this chart.
-`C.pullback_map` is the corresponding ring homomorphism, with the chart's
-function ring `C.parent` as its codomain. In a chart with relations, read the
-defining polynomials through `C.ambient_ideal` in `C.ambient`; computations
-with `C.coordinates` respect these relations.
-`C.pullback(f)` substitutes those polynomials into `f`. The strict transform
-has equation `v-1 = 0`. The exceptional divisor `E3` has equation `u = 0`,
-so the branch meets it at `(u, v) = (0, 1)`.
-
-```text
-atlas> u, v = C.coordinates
-atlas> E = b.meets[0]
-atlas> E.equation_in(C)
-u
-atlas> total = C.pullback(f)
-atlas> total == u^6 * v^3 * C.strict_transform
-True
-atlas> total.multiplicity(u)
-6
-```
-
-Type `help K.charts` for chart access, or type `C.` and press Tab for the
-fields and methods on this chart. `E.charts` lists the charts containing
-a local equation for `E`. The same divisor has equation `v = 0` in `B3.v`.
-For a divisor defined by several equations, `E.ideal_in(C)` gives its generators.
-To read a polynomial from text in the chart, use
-`polynomial("v-1", variables=C.coordinates)`.
-
-`K.polynomial` belongs to the original coordinate ring. Its serialized text
-is available as `K.record.polynomial`. To rebuild the incidence from the charts,
-use `D = recompute_dual_complex(K)` and inspect `D.cells`. The result has its
-own vertex records. The old `dual_complex(K)` spelling returns the raw replay
-dictionary for existing scripts.
-
-## Run or save a calculation
-
-```sh
-./atlas run examples/cusp.atlas
-./atlas run examples/chart-elimination.atlas
-./atlas run examples/groebner.atlas
-```
-
-Scripts use the same functions, assignments, and field access as the prompt.
-In a script, use `print(...)` to write output. The chart-elimination example
-intersects the strict transform with the last exceptional curve, eliminates one
-coordinate, and computes a normal form in the resulting ring.
-[Chart elimination script](../examples/chart-elimination.atlas) ·
-[Algebra operations and examples](../examples/algebra-api.md)
-
-At the prompt a blank line finishes an indented block. Use
-`:save "my session.atlas"` to save successful mathematical statements in
-order, including explicit prints. Saving again replaces the file. A failed or
-interrupted block restores the previous variable bindings and active ring. Replay the file with
-`./atlas run "my session.atlas"`, or use `./atlas run -` to read standard input.
-
-Use `len(I.generators)` to count the generators. To write the count as a JSON
-record, use `print_json(count=len(I.generators))`.
-
-Use `quit` or `exit` to leave the prompt.
+For a map arising from a blowup, [follow a cusp into its chart](resolving-a-cusp.md#look-inside-a-chart).
