@@ -244,6 +244,10 @@ def make_parser():
     register_parser(sub)
     calc=sub.add_parser('resolve',help='resolve at the origin')
     add_resolution_options(calc)
+    jung=sub.add_parser('jung',help="resolve a surface singularity at the origin by Jung's method")
+    jung.add_argument('polynomial',help='equation of the surface germ over QQ')
+    jung.add_argument('--vars',default='x,y,z',help='the three ordered variables (default: x,y,z)')
+    jung.add_argument('--json',action='store_true',help='print the complete record as JSON')
     sub.add_parser('devices',help='list available Triton and OpenCL GPU backends')
     script=sub.add_parser('run',help='run an Atlas script')
     script.add_argument('file',help='UTF-8 Atlas script or - for standard input')
@@ -307,6 +311,15 @@ def run_command(parser, argv):
         if args.json: print(json.dumps(zeta,indent=2,ensure_ascii=False))
         else: show_zeta(zeta)
         return 0 if zeta['status']=='computed' else 3
+    if args.command=='jung':
+        from .jung import JungResolution, jung_record
+        try:
+            record=jung_record(args.polynomial,[v.strip() for v in args.vars.split(',')])
+        except ValueError as error:
+            print(f"Jung's method: {error}",file=sys.stderr)
+            return 2
+        print(json.dumps(record,indent=2,ensure_ascii=False) if args.json else repr(JungResolution(record)))
+        return 0
     if args.command=='devices':
         from .gpu_devices import available_devices
         print(json.dumps(available_devices(),indent=2))

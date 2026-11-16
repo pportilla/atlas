@@ -118,6 +118,19 @@ def new_session(calculate):
                 zetas = record.get("topological_zeta", {}), record.get("monodromy_zeta", {})
         return check_resolution(resolution, check_isolation=check_isolation, compute=compute, search=search, zetas=zetas)
 
+    def jung_resolution(polynomial, *, variables=None, ring=None):
+        """Return the resolution graph and invariants of a surface singularity at the origin from Jung's method.
+
+        >>> x, y, z = coordinates("x", "y", "z")
+        >>> J = jung_resolution(x^2 + y^3 + z^5)
+        >>> print(len(J.curves), J.K2, J.euler_characteristic, J.geometric_genus)  # 8 0 9 0
+
+        Docs: docs/jung-method.md#resolve-a-surface-with-jungs-method
+        """
+        expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
+        from .jung import JungResolution, jung_record
+        return JungResolution(jung_record(expression, names), parent)
+
     def dual_complex(resolution):
         # Older scripts use this function's raw replay dictionary.
         from .resolution_complex import dual_complex as replay
@@ -160,6 +173,7 @@ def new_session(calculate):
                              "matrix_analysis": matrix_analysis, "modular_arithmetic": modular_arithmetic,
                              "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                              "monodromy_check": monodromy_check, "zoo_search": zoo_search,
+                             "jung_resolution": jung_resolution,
                              "len": len, "print": print, "print_json": print_json,
                              "quotient_ring": quotient_ring, "hom": hom, **algebra, **ring_bindings(rings),
                              "polynomial_arithmetic": polynomial_arithmetic})

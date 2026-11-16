@@ -1,12 +1,14 @@
 PYTHON ?= python3
 DOCS_OUT ?= build/docs
 
-.PHONY: all ordinary plane chain toric newton groebner gpu test check-native-boundary test-gpu test-triton bench docs check-docs clean
-all: ordinary plane chain toric newton groebner
+.PHONY: all ordinary plane jung chain toric newton groebner gpu test check-native-boundary test-gpu test-triton bench docs check-docs clean
+all: ordinary plane jung chain toric newton groebner
 ordinary:
 	$(MAKE) -C native
 plane:
 	$(MAKE) -C native -f plane.mk
+jung:
+	$(MAKE) -C native -f jung.mk
 chain:
 	$(MAKE) -C native -f chain.mk
 toric:

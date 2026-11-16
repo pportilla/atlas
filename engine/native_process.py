@@ -1,6 +1,6 @@
 """Run a native helper program's entry in a forked copy of this process.
 
-The helper programs (plane, newton_fan, graph_verify, face_gb, weighted) read a request
+The helper programs (plane, jung, newton_fan, graph_verify, face_gb, weighted) read a request
 on standard input and answer on standard output, so a calculation can be
 stopped at a deadline or bounded in memory without stopping the solver.
 Starting one used to cost 15-20 ms before any arithmetic, mostly the dynamic
@@ -31,6 +31,7 @@ _SUFFIX = ".dylib" if sys.platform == "darwin" else ".so"
 # Program name -> (library, entry). graph_verify's entry is in the solver kernel.
 HELPERS = {
     "plane": ("libplane", "atlas_plane_main"),
+    "jung": ("libjung", "atlas_jung_main"),
     "newton_fan": ("libnewton_fan", "atlas_newton_fan_main"),
     "face_gb": ("libface_gb", "atlas_face_gb_main"),
     "graph_verify": ("libgroebner", "atlas_graph_verify_main"),

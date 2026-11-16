@@ -15,6 +15,7 @@ from .session_ideal_native import ideal_constructor
 from .session_maps import RingHomomorphism
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
 from .session_quotient import QuotientElement, QuotientRing
+from .jung import JungResolution
 from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
 
 
@@ -48,6 +49,8 @@ def owner(value):
     if isinstance(value, _RingValue):
         return value._space
     if isinstance(value, Resolution):
+        return value._source_space
+    if isinstance(value, JungResolution):
         return value._source_space
     if isinstance(value, Chart):
         if "_space" in vars(value):

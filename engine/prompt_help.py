@@ -6,6 +6,7 @@ import textwrap
 from .cli_highlight import paint_card, paint_hint, paint_value
 from .cli_style import paint
 from .help_card import usage_card
+from .jung import jung_help
 from .resolution_help import resolution_help, resolution_topics
 from .session_help import algebra_help_values, algebra_value_help, function_help
 from .session_hints import closest_name
@@ -128,6 +129,10 @@ def show_help(words, session, parser, *, color=False):
         print(painted(algebra_value_help(name, values[name], session.variables, session.rings.active)))
         return
     if card := resolution_help(name, session.variables):
+        print(painted(card))
+        return
+    from .session_panel import workspace
+    if card := jung_help(name, session.variables, workspace(session.variables).ring_name):
         print(painted(card))
         return
 
