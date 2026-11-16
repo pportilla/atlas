@@ -77,19 +77,31 @@ graph before the contractions.
 
 ### Which sheets form one curve
 
-When the local data at the crossings force the answer (one sheet; a crossing
-with a single point over it; an unramified cover through one crossing; the
-Galois double covers of order 2) the engine uses it. Otherwise it decides
-from the sheets at a generic point $(0,v^*)$ of the creation chart of $E$. A
-set $S$ of sheets is a union of curves exactly when the product $P_S$ of its
-root factors is single valued near $E$; then its coefficient of $u^j$ is a
-polynomial of degree at most $j$ in $v$. The engine checks the Taylor
-coefficients at $v^*$ up to degree $\binom fs\,j\,(1+N_E)$, where $N_E$ counts
-the blowups centred on $E$; any other $S$ has a nonzero coefficient below that
-bound. Only coefficients up to the separation exponent of $S$ matter. The
-exact factor, pulled back to every crossing, vanishes at the local roots of
-exactly the points of that curve. `record["global_monodromy_tests"]` counts
-how often this ran.
+Local data often decide: a single sheet; a crossing with a single point of
+the class over it; sections through one crossing; the two sheets of a double
+cover, exchanged by its involution. A cyclic cover $t^m+g(p,q)$ is decided by
+its group: the $m$-th roots of unity act on the roots compatibly with every
+local monodromy, so the branches at a crossing $p$ form one orbit
+$\mathbf Z/l_p$, and the curves over $E$ form $\mathbf Z/c_E$ with
+$c_E=\gcd_p l_p$. Each branch lies on the curve given by its label mod $c_E$.
+The labels start at an arbitrary branch at each crossing. Every choice gives
+the same graph, because the dual graph of the plane resolution is a tree.
+
+Otherwise the engine decides from the sheets at a generic point $(0,v^*)$ of
+the creation chart of $E$. A set $S$ of sheets is a union of curves exactly
+when the product $P_S$ of its root factors is single valued near $E$. Then
+its coefficient of $u^j$ is a polynomial of degree at most $j$ in $v$. The
+engine checks the Taylor coefficients at $v^*$ up to degree
+$\binom fs\,j\,(1+N_E)$, where $N_E$ counts the blowups centred on $E$. Any
+other $S$ has a nonzero coefficient below that bound, a bound that also
+counts the poles a conjugate coefficient can have at blown-up points of
+$E$. Only the coefficients up to the separation exponent of $S$ matter. A
+first pass with four extra degrees rejects most sets cheaply. Sets of at most
+half of the remaining sheets suffice, because the complement of an invariant
+set is invariant. The exact factor, pulled back to every crossing, vanishes
+at the local roots of exactly the points of that curve.
+`record["global_monodromy_tests"]` counts how often this test ran, and
+`record["cyclic_cover"]` whether the group labels were used.
 
 ### Geometric genus
 
