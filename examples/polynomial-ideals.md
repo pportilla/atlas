@@ -100,10 +100,9 @@ For $I=(x^2,xy)$, one primary decomposition is $(x)\cap(x^2,y)$. The associated 
 x, y = coordinates("x", "y")
 I = ideal(x^2, x*y)
 D = primary_decomposition(I)
-for c in D.components:
-    print(c.primary.generators, c.prime.generators)
-
 a, b = D.components
+print(a.primary.generators, a.prime.generators)          # (x,) (x,)
+print(b.primary.generators, b.prime.generators)          # (x^2, y) (x, y)
 J = intersection(a.primary, b.primary)
 print(groebner(J).generators == groebner(I).generators)  # True
 ```

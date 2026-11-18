@@ -189,6 +189,10 @@ pre.code:hover[data-lang]::before { opacity: 0; }
 .prose .api-signature code { padding: 0; background: none; font: inherit; }
 .api-signature .api-name { color: var(--brand-deep); font-weight: 700; }
 .api-label { margin: 18px 0 6px !important; color: var(--ink-faint); font: 600 13px/1.2 var(--font-mono); }
+.api-parameters { margin: 0; }
+.api-parameters dt { font-weight: 600; }
+.api-parameters dd { margin: 0 0 .65em 1.25em; }
+.api-parameters dd p { margin: 0; }
 .api-mentions { color: var(--ink-soft); font-size: 15px; }
 .api-mentions > span:first-child { margin-right: 4px; color: var(--ink-faint); font: 600 13px var(--font-mono); }
 .api-sources { margin-bottom: 14px; border: 1px solid var(--rule); border-radius: 6px; padding: 10px 14px; }

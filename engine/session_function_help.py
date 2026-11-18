@@ -1,5 +1,5 @@
 """Signatures, runnable examples and guide sections for the Atlas session functions."""
-from inspect import Parameter, getdoc, signature
+from inspect import getdoc, signature
 from io import StringIO
 import re
 from tokenize import NAME, generate_tokens, untokenize
@@ -80,7 +80,10 @@ _PURPOSES = {
 # Established functions share guide sections for related operations. New
 # functions can give their reference and example directly in their docstring.
 _SESSIONS = "docs/sessions.md#"
-_ALGEBRA = "examples/algebra-api.md#"
+_IDEALS = "examples/polynomial-ideals.md#"
+_QUOTIENTS = "examples/quotient-algebras.md#"
+_LOCAL = "examples/local-algebra.md#"
+_GEOMETRY = "examples/local-geometry.md#"
 _RECORDS = "docs/resolution-records.md#"
 _GUIDES = {
     _SESSIONS + "choose-the-ring-of-a-polynomial": ("coordinates", "polynomial"),
@@ -88,30 +91,29 @@ _GUIDES = {
     _SESSIONS + "name-a-quotient-and-its-coordinates": ("quotient_ring",),
     _SESSIONS + "add-multiply-and-raise-ideals-to-powers": ("ideal_power",),
     _SESSIONS + "move-a-polynomial-between-rings": ("hom",),
-    _SESSIONS + "inspect-a-cusp": ("resolve",),
+    "docs/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor": ("resolve",),
     _SESSIONS + "run-or-save-a-calculation": ("len", "print", "print_json"),
     _RECORDS + "chart-and-complex-conventions": ("dual_complex", "recompute_dual_complex"),
     _RECORDS + "topological-zeta-function": ("monodromy_check",),
-    _ALGEBRA + "shell-prompt-and-scripts": ("groebner", "normal_form", "membership", "eliminate"),
-    _ALGEBRA + "example-success": ("algebra_request",),
-    _ALGEBRA + "operands-and-results": ("intersection", "quotient", "saturation", "dimension"),
-    _ALGEBRA + "polynomial-factorization": ("factor",),
-    _ALGEBRA + "polynomial-gcd": ("gcd",),
-    _ALGEBRA + "polynomial-resultants": ("resultant",),
-    _ALGEBRA + "ordinary-and-symbolic-powers-over-qq": ("symbolic_power",),
-    _ALGEBRA + "radicals-of-polynomial-ideals": ("radical",),
-    _ALGEBRA + "primary-decomposition-over-qq": ("primary_decomposition",),
-    _ALGEBRA + "normalization-of-affine-algebras-over-qq": ("normalization",),
-    _ALGEBRA + "localization-at-a-prime-over-qq": ("localize",),
-    _ALGEBRA + "quotient-bases-and-local-hypersurface-invariants":
-        ("quotient_basis", "local_quotient_basis", "local_jacobian_algebra", "milnor_number", "tjurina_number"),
-    _ALGEBRA + "multiplicity-of-finite-colength-quotients": ("multiplicity",),
-    _ALGEBRA + "local-standard-bases-and-normal-forms-at-a-rational-point": ("local_standard_basis", "local_normal_form"),
-    _ALGEBRA + "hilbert-series-of-homogeneous-quotients": ("hilbert_series",),
-    _ALGEBRA + "hilbertsamuel-functions-and-multiplicities": ("hilbert_samuel_function", "hilbert_samuel_multiplicity"),
-    _ALGEBRA + "tangent-cones-and-their-hilbert-series": ("tangent_cone", "tangent_cone_hilbert_series"),
-    _ALGEBRA + "zariski-tangent-spaces-and-embedding-dimensions": ("zariski_tangent_space", "embedding_dimension"),
-    _ALGEBRA + "local-dimension-and-smoothness": ("local_dimension", "local_smoothness"),
+    _IDEALS + "reduce-a-polynomial-modulo-an-ideal": ("groebner", "normal_form", "membership"),
+    _IDEALS + "eliminate-a-coordinate": ("eliminate", "resultant"),
+    _IDEALS + "factor-and-reconstruct-a-polynomial": ("factor",),
+    _IDEALS + "find-a-common-factor": ("gcd",),
+    _IDEALS + "intersect-divide-and-saturate-ideals": ("intersection", "quotient", "saturation"),
+    _IDEALS + "recover-the-reduced-support": ("radical",),
+    _IDEALS + "reconstruct-an-ideal-from-its-primary-components": ("primary_decomposition",),
+    _IDEALS + "compare-ordinary-and-symbolic-powers": ("symbolic_power",),
+    _QUOTIENTS + "localize-at-a-prime": ("localize",),
+    _QUOTIENTS + "normalize-the-cusp": ("normalization",),
+    _QUOTIENTS + "read-the-graded-hilbert-series": ("hilbert_series",),
+    _LOCAL + "count-global-and-local-lengths": ("dimension", "multiplicity", "quotient_basis", "local_quotient_basis"),
+    _LOCAL + "compare-the-cusp-and-its-parametrization": ("local_jacobian_algebra", "milnor_number", "tjurina_number"),
+    _LOCAL + "reduce-at-a-rational-point": ("local_standard_basis", "local_normal_form"),
+    _GEOMETRY + "sample-the-hilbert-samuel-function": ("hilbert_samuel_function", "hilbert_samuel_multiplicity"),
+    _GEOMETRY + "compute-the-tangent-cone": ("tangent_cone", "tangent_cone_hilbert_series"),
+    _GEOMETRY + "compute-the-tangent-space": ("zariski_tangent_space", "embedding_dimension"),
+    _GEOMETRY + "compare-local-dimension-and-smoothness": ("local_dimension", "local_smoothness"),
+    "examples/algebra-http.md#specify-a-ring-and-its-operands": ("algebra_request",),
 }
 _FUNCTION_DOCS = {name: guide for guide, names in _GUIDES.items() for name in names}
 
@@ -144,6 +146,17 @@ def _aliased_example(example, canonical, alias):
     return untokenize(tokens)
 
 
+def session_signature(function):
+    """Read a session callable's signature, including print on CPython 3.10."""
+    try:
+        return signature(function)
+    except ValueError:
+        if function is not print:
+            raise
+        # CPython 3.10 implements these options but omits print.__text_signature__.
+        return signature(lambda *args, sep=" ", end="\n", file=None, flush=False: None)
+
+
 def function_help(name, builtins):
     """Render a signature, one-line summary, Atlas example and anchored guide link."""
     function = builtins.get(name)
@@ -170,7 +183,7 @@ def function_help(name, builtins):
     if name != canonical:
         example = _aliased_example(example, canonical, name)
 
-    sig = signature(function)
+    sig = session_signature(function)
     # Some session defaults distinguish omission from None with a sentinel.
     display = str(sig.replace(parameters=[
         p.replace(default=Ellipsis) if type(p.default) is object else p for p in sig.parameters.values()

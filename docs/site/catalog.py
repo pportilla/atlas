@@ -89,6 +89,10 @@ _GROUPS = {
             (session("Inspect the active ring", "session_rings", "def active_ring():"),),
             (example("See the selected ring in the workspace", "session_ring_names",
                      "workspace_marks_the_active_ring"),)),
+        "ring_name": Entry(
+            (session("Look up a live ring in the workspace", "session_rings", "def ring_name(ring):"),),
+            (example("Follow ring names through renaming and aliasing", "session_ring_names",
+                     "ring_name_follows_live_bindings"),)),
         "delete_ring": Entry(
             (session("Delete a ring and its dependent names", "session_rings", "def delete_ring(ring):"),),
             (example("Check which bindings survive deletion", "session_ring_names",

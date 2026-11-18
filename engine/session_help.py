@@ -20,7 +20,7 @@ QUOTIENT_IDEALS = "docs/sessions.md#create-an-ideal-in-a-quotient-ring"
 MAPS = "docs/sessions.md#move-a-polynomial-between-rings"
 SAVED_VALUES = "docs/sessions.md#inspect-a-saved-value"
 RINGS = "docs/sessions.md#name-select-and-delete-rings"
-CHARTS = "docs/sessions.md#look-inside-a-chart"
+CHARTS = "docs/resolving-a-cusp.md#look-inside-a-chart"
 
 
 class _FieldHelp(NamedTuple):

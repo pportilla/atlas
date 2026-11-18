@@ -2,8 +2,10 @@
 
 from textwrap import indent
 
+REPOSITORY_URL = "https://github.com/pportilla/atlas"
+
 
 def usage_card(summary, examples, reference, *, signature=None):
     heading = f"{signature}\n{summary}" if signature else summary
-    url = f"https://github.com/pportilla/atlas/blob/main/{reference}"
+    url = f"{REPOSITORY_URL}/blob/main/{reference}"
     return f"{heading}\n\nExample\n{indent(examples, '  ')}\n\nDocs  {url}"

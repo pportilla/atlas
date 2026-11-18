@@ -4,7 +4,6 @@ import json
 import re
 import os
 from pathlib import Path
-import subprocess
 import sys
 
 from .polynomial import InputError, LimitError, NonReducedError, parse_expression, rational_text

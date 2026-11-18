@@ -1,8 +1,10 @@
 """Short recovery suggestions for errors at the interactive prompt."""
 
 from difflib import get_close_matches
-from inspect import Parameter, signature
+from inspect import Parameter
 import re
+
+from .session_function_help import session_signature
 
 
 def closest_name(name, candidates):
@@ -44,7 +46,7 @@ def error_hint(error, statement, session, topics):
     if error.method is not None:
         if callable(error.method):
             try:
-                return f"Usage: {function}{signature(error.method)}."
+                return f"Usage: {function}{session_signature(error.method)}."
             except (TypeError, ValueError):
                 return "Type 'help' to browse commands and functions."
         return f"Read {function} without parentheses."
@@ -52,7 +54,7 @@ def error_hint(error, statement, session, topics):
         keyword = re.search(r"unexpected keyword argument '([A-Za-z_]\w*)'", str(error))
         if keyword:
             try:
-                parameters = signature(session.builtins[function]).parameters.values()
+                parameters = session_signature(session.builtins[function]).parameters.values()
             except (KeyError, ValueError, TypeError):
                 parameters = ()
             match = closest_name(keyword[1], (p.name for p in parameters

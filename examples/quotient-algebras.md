@@ -2,6 +2,52 @@
 
 Start with an ideal in $\mathbb Q[x_1,\dots,x_n]$. Declare a quotient to compute with residue classes, localize to make chosen denominators invertible, or normalize to describe the integral closure on each irreducible component.
 
+## Compare ideals before and after quotienting
+
+Can two distinct ideals have the same image in a quotient ring? Start in the
+polynomial ring $R=\mathbb Q[x,y]$ with the principal ideals $I=(x)$ and
+$J=(x(1+y))$. The declaration below names the ring and binds its coordinates
+in the given order. Enter both blocks in the same session or save them together
+as an Atlas script.
+
+```atlas
+R = ring("x", "y", coeffs=QQ)
+f = x
+g = x*(1+y)
+I = ideal(f)
+J = ideal(g)
+print(membership(g, I).value)           # True
+print(membership(f, J).value)           # False
+```
+
+Each ideal here has one generator, so the two membership tests check both
+inclusions. The first says $J\subseteq I$. The second gives a witness that
+the inclusion is strict. Substituting $y=-1$ sends every multiple of $g$ to
+zero and sends $f$ to $x$.
+
+Now impose $y^2=0$. The names `x` and `y` still belong to $R$, while
+`K.coordinates` gives their classes in $K=R/(y^2)$. Apply `K` to take the
+class of a polynomial, or pass `ring=K` to `ideal` to project the generators
+as you build the ideal.
+
+```atlas
+K = quotient_ring(ideal(y^2))
+u, v = K.coordinates
+IK = ideal(K(f))
+JK = ideal(g, ring=K)
+print(IK.parent == K, JK.parent == K)  # True True
+print(membership(K(g), IK).value)      # True
+print(membership(K(f), JK).value)      # True
+print((1+v)*(1-v) == 1)                # True
+```
+
+Both inclusions now hold, so $IK=JK$. The last line explains the change.
+Since $v^2=0$, the factor $1+v$ has inverse $1-v$ in $K$. Multiplying the
+generator $u(1+v)$ by $1-v$ recovers $u$. For an ideal with several
+generators, check membership of **each** generator in the other ideal in
+both directions. The expression `IK == JK` checks whether two names refer
+to the same saved ideal object. [Quotient ideal operations](../docs/sessions.md#create-an-ideal-in-a-quotient-ring)
+
 ## Compute with residue classes
 
 In $\mathbb Q[x,y]/(xy-1)$ the classes of $x$ and $y$ are inverses. In $\mathbb Q[x,y]/(x^2)$ the class of $x$ is nilpotent, and $1+x$ has inverse $1-x$.

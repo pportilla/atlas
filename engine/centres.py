@@ -81,7 +81,6 @@ from .rational_point import coordinate_fraction
 
 from .affine_kernel import frame_function, frame_linear, frame_minor
 from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
-from .groebner import groebner
 
 INFINITE = float("inf")
 

@@ -19,6 +19,7 @@ Use `help milnor_number` for its arguments or `help functions` to see the availa
 
 | What you want to do | Where to start |
 | --- | --- |
+| Create a quotient ring and prove that two distinct ideals have the same image in it | [Compare ideals before and after quotienting](examples/quotient-algebras.md#compare-ideals-before-and-after-quotienting) |
 | Compute with polynomials, ideals or rings, or study a germ at a point | [Algebra guides and worked examples](examples/algebra-api.md) |
 | Resolve a curve and inspect its exceptional divisors and chart equations | [Resolve a plane cusp](docs/resolving-a-cusp.md) |
 | Read a saved resolution or compute its dual complex and zeta functions | [Reading a resolution record](docs/resolution-records.md) |
@@ -27,14 +28,25 @@ Use `help milnor_number` for its arguments or `help functions` to see the availa
 
 ## Browse the documentation and code
 
-From the checkout, build the site with the Python environment you use for Atlas.
+The manual builds from a source checkout or archive with Python 3.10 or later and GNU Make. You can build it before compiling Atlas. From the repository root, create a virtual environment for the documentation. On Debian and Ubuntu, `python3-venv` supplies the environment creator.
 
 ```sh
-python3 -m pip install markdown-it-py
+python3 -m venv build/docs-env
+. build/docs-env/bin/activate
+python -m pip install -r requirements-docs.txt
 make docs
 ```
 
-Open `build/docs/index.html` in a browser. In **Functions**, choose a topic and open **Implementation and tests** under a function to jump to its code or a test case in this checkout. Use **Related documentation** on either file to return to the guide. The alphabetical index includes alternate function names.
+Open `build/docs/index.html` in a browser. Under **Functions**, each entry explains its inputs, options and return value, gives an example and links to a worked guide. **Implementation and tests** opens the corresponding lines from this checkout. The alphabetical index includes alternate function names.
+
+To publish the manual, serve the contents of `build/docs/` with any static web server. To build into a fresh directory of your choice, run `make docs DOCS_OUT=path/to/site`. Search works locally. Browsers fetch KaTeX and Mermaid from jsDelivr to typeset formulas and draw diagrams.
+
+Once you have installed the native build dependencies, `make check-docs` builds Atlas, checks the generated links and function reference, and executes the documented examples. For the full release check, use the active virtual environment to install the test dependencies and run the suite. The comparison tests use Singular when it is installed. [Native installation](#installation)
+
+```sh
+python -m pip install -r requirements-test.txt
+make test
+```
 
 - Follow a mathematical argument into the C++ implementation. [Kernel algorithms and proofs](native/KERNEL.md)
 - Compare timings for the same inputs and see the conditions of each run. [Benchmark reports](benchmarks/README.md)

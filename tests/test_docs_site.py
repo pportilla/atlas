@@ -6,6 +6,7 @@ import posixpath
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from urllib.parse import unquote, urlsplit
 
 from engine.session import new_session
@@ -24,7 +25,7 @@ def load_builder():
 class Links(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.hrefs, self.ids = [], set()
+        self.hrefs, self.assets, self.ids = [], [], set()
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -32,6 +33,10 @@ class Links(HTMLParser):
             self.ids.add(attrs["id"])
         if tag == "a" and attrs.get("href"):
             self.hrefs.append(attrs["href"])
+        if tag == "link" and attrs.get("href"):
+            self.assets.append(attrs["href"])
+        if tag in {"script", "img"} and attrs.get("src"):
+            self.assets.append(attrs["src"])
 
 
 @unittest.skipUnless(importlib.util.find_spec("markdown_it"), "The docs build needs markdown-it-py")
@@ -69,6 +74,17 @@ class DocsSiteTests(unittest.TestCase):
                     self.assertIn(target, self.parsed)
                     if parts.fragment:
                         self.assertIn(unquote(parts.fragment), self.parsed[target].ids)
+
+    def test_published_source_links_use_web_addresses(self):
+        builder = load_builder()
+        for origin, expected in [
+            ("/tmp/atlas.git", builder.REPOSITORY_URL),
+            ("git@github.com:example/fork.git", "https://github.com/example/fork"),
+            ("ssh://git@github.com/example/fork.git", "https://github.com/example/fork"),
+            ("https://builder:example@github.com/example/fork.git", "https://github.com/example/fork"),
+        ]:
+            with self.subTest(origin=origin), patch.object(builder.subprocess, "check_output", return_value=origin):
+                self.assertEqual(builder.repository_url(), expected)
 
     def test_reference_holds_every_session_function_card(self):
         session = new_session(None)
@@ -132,6 +148,12 @@ class DocsSiteTests(unittest.TestCase):
         self.assertIn('"title":"milnor_number"', index)
         for name in ("identity.css", "docs.css", "docs.js", "fonts/source-code-pro.woff2"):
             self.assertTrue((self.out / "_static" / name).is_file(), name)
+        for page, links in self.parsed.items():
+            for href in links.assets:
+                parts = urlsplit(href)
+                if not parts.scheme and not parts.netloc:
+                    asset = self.out / posixpath.dirname(page) / unquote(parts.path)
+                    self.assertTrue(asset.is_file(), f"{page} needs {href}")
 
 
 if __name__ == "__main__":

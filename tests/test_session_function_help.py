@@ -66,5 +66,5 @@ class FunctionHelpTests(unittest.TestCase):
     def test_help_for_a_saved_result_uses_the_functions_own_docstring_reference(self):
         functions = new_session(None).builtins
         reference = function_documentation("ae_codimension")
-        self.assertEqual(reference, "examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ")
+        self.assertEqual(reference, "examples/local-algebra.md#compare-the-cusp-and-its-parametrization")
         self.assertTrue(function_help("ae_codimension", functions).endswith(reference))

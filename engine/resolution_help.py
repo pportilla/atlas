@@ -5,8 +5,8 @@ from .help_card import usage_card
 from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
 
 
-_CHART_DOC = "docs/sessions.md#look-inside-a-chart"
-_CUSP_DOC = "docs/sessions.md#inspect-a-cusp"
+_CHART_DOC = "docs/resolving-a-cusp.md#look-inside-a-chart"
+_CUSP_DOC = "docs/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor"
 _COMPLEX_DOC = "docs/resolution-records.md#chart-and-complex-conventions"
 _MODE_DOC = "docs/resolution-records.md#resolution-modes"
 

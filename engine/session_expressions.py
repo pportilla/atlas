@@ -12,11 +12,11 @@ from subprocess import TimeoutExpired
 import tokenize
 
 from .native_polynomial import scalar_arithmetic
-from .session_algebra import Ideal, _binary_ideals, ideal_power
+from .session_algebra import Ideal, _Result, _binary_ideals, ideal_power
 from .session_polynomial import Polynomial
 from .session_quotient import QuotientElement
 from .session_rings import RING_PRESERVING_CALLS, SessionRings
-from .session_values import Divisor, DualComplex
+from .session_values import Divisor, DualComplex, Resolution
 
 
 _EVALUATION_ERRORS = (ValueError, TypeError, KeyError, IndexError, AttributeError,
@@ -356,12 +356,13 @@ class Evaluator:
                 return self._value(statement.value)
             if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
                 target = statement.targets[0]
-                value, function, fresh = self._assignment_value(statement.value)
+                value, function, fresh, known = self._assignment_value(statement.value)
                 if isinstance(target, ast.Name) and function is not None and function is self.builtins.get("ring"):
                     self._bind_ring(target, value, fresh)
                 else:
                     protected = function is not None and function is self.builtins.get("coordinates") and not fresh
-                    self._bind(target, value, declaration=statement.value if protected else None, naming=True)
+                    self._bind(target, value, declaration=statement.value if protected else None,
+                               naming=True, known_collection=known)
             elif isinstance(statement, ast.For) and not statement.orelse:
                 items = self._value(statement.iter)
                 if not isinstance(items, (tuple, list, dict)):
@@ -389,13 +390,22 @@ class Evaluator:
                 self._statement(child)
 
     def _assignment_value(self, node):
-        """Keep the called constructor and its fresh flag without evaluating the expression twice."""
+        """Keep constructor flags and the provenance of a collection without evaluating it twice."""
         if isinstance(node, ast.Call):
-            return self._call(node)
+            return (*self._call(node), False)
         if isinstance(node, ast.Subscript):
-            value, function, fresh = self._assignment_value(node.value)
-            return self._index(value, self._value(node.slice)), function, fresh
-        return self._value(node), None, False
+            value, function, fresh, known = self._assignment_value(node.value)
+            # Evaluating a call in the index can delete the collection's rings.
+            known = known and isinstance(node.slice, (ast.Constant, ast.Name))
+            return self._index(value, self._value(node.slice)), function, fresh, known
+        if isinstance(node, ast.Attribute):
+            source, _, _, known = self._assignment_value(node.value)
+            # These documented properties return detached JSON. A field called
+            # "record" on an arbitrary dictionary may still contain Atlas values.
+            detached = (node.attr == "record" and isinstance(source, (Resolution, DualComplex, _Result))
+                        or node.attr == "result" and isinstance(source, _Result))
+            return _field(source, node.attr), None, False, detached or (known and isinstance(source, dict))
+        return self._value(node), None, False, isinstance(node, ast.Name) and node.id in self.variables
 
     def _bind_ring(self, target, ring, fresh):
         name = self._target_name(target)
@@ -403,14 +413,14 @@ class Evaluator:
         self._check_coordinate_bindings(ring.variables, generators, None, ring_name=name, fresh=fresh)
         self._store_bindings((name, *ring.variables), (ring, *generators), naming=True)
 
-    def _bind(self, target, value, *, declaration=None, naming=False):
+    def _bind(self, target, value, *, declaration=None, naming=False, known_collection=False):
         # naming marks a direct assignment, which renames a ring that Atlas named.
         if isinstance(target, ast.Name):
             name = self._target_name(target)
             if declaration is not None:
                 self._check_coordinate_bindings([name], [value], declaration)
             self.variables[name] = value
-            self.rings.note(name, value, naming=naming)
+            self.rings.note(name, value, naming=naming, known_collection=known_collection)
             return
         if not isinstance(target, (ast.Tuple, ast.List)):
             raise ValueError("Assign to a name or a list of names.")

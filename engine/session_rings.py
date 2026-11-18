@@ -6,9 +6,11 @@ deletions only rebind session names. They never construct or change a ring.
 """
 
 from fractions import Fraction
+from types import MethodType
 from typing import NamedTuple
 
-from .session_algebra import Ideal, _RingValue, declare_ideal, polynomial as read_polynomial
+from .session_algebra import (Ideal, _EliminatedIdeal, _Normalization, _NormalizedComponent, _Resultant,
+                              _RingValue, declare_ideal, polynomial as read_polynomial)
 from .session_ideal_native import ideal_constructor
 from .session_maps import RingHomomorphism
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
@@ -63,72 +65,86 @@ def is_ring(value):
     return isinstance(value, (_CoordinateSpace, QuotientRing)) and value is not QQ
 
 
-def _foundations(ring):
-    # A quotient is built over its ambient polynomial ring and the parent of
-    # its defining ideal. For K/J that parent is K itself.
-    if isinstance(ring, QuotientRing):
-        return ring.ambient, ring.defining_ideal.parent
-    return ()
+def _collection(value):
+    return isinstance(value, (dict, list, tuple)) and not isinstance(value, _Coordinates)
 
 
-def referenced_rings(value):
-    """Return the rings a saved value refers to, each after the rings it is built over."""
+def _collection_rings(value, cache):
+    if id(value) in cache:
+        return cache[id(value)]
+    if isinstance(value, (tuple, list)) and value:
+        first = value[0]
+        if isinstance(first, (Polynomial, QuotientElement)) and not isinstance(first, _Resultant):
+            # A homogeneous polynomial list has one parent. A resultant can
+            # also carry an inclusion, so handle mixed types individually.
+            kind, parent = type(first), first.parent
+            if all(type(item) is kind and item.parent is parent for item in value):
+                return referenced_rings(parent)
+    ordered, seen = {}, set()
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if type(item) in _PLAIN:
+            continue
+        if _collection(item):
+            key = id(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            if key in cache:
+                ordered.update(dict.fromkeys(cache[key]))
+            else:
+                contents = item.values() if isinstance(item, dict) else item
+                pending.extend(reversed(contents))
+        else:
+            ordered.update(dict.fromkeys(referenced_rings(item, cache)))
+    rings = tuple(ordered)
+    cache[id(value)] = rings
+    return rings
+
+
+def referenced_rings(value, containers=None):
+    """Read ring dependencies from live metadata in declaration order, foundations first.
+
+    A deletion shares the collection cache across bindings, since several saved
+    names can point to the same large list or record.
+    """
+    if type(value) in _PLAIN:
+        return ()
     if isinstance(value, RingHomomorphism):
-        roots = (value.domain, value.codomain)
+        items = (value.domain, value.codomain)
+    elif isinstance(value, MethodType):
+        return referenced_rings(value.__self__, containers)
+    elif isinstance(value, (_EliminatedIdeal, _Resultant)):
+        # The inclusion retains the original ring even when the result is a scalar.
+        items = (value.inclusion,)
+    elif isinstance(value, _Normalization):
+        items = (value.ambient, *value.components)
+    elif isinstance(value, _NormalizedComponent):
+        items = (value.prime.parent, value.ambient)
+    elif isinstance(value, (Chart, Divisor, Branch, DualComplex)):
+        # Inspect the chart ring only if it has already been constructed.
+        items = (value._resolution._source_space, vars(value).get("_space"))
+    elif _collection(value):
+        return _collection_rings(value, {} if containers is None else containers)
     else:
-        root = owner(value)
-        if not is_ring(root):
-            return ()
-        if not isinstance(root, QuotientRing):
-            return (root,)
-        roots = (root,)
-    ordered = {}
-
-    def visit(ring):
-        if ring in ordered or not is_ring(ring):
-            return
-        for foundation in _foundations(ring):
-            visit(foundation)
-        ordered[ring] = None
-
-    for root in roots:
-        visit(root)
-    return tuple(ordered)
-
-
-class _Dependents:
-    """Decide which saved values live in a ring or in a ring built over it."""
-
-    def __init__(self, ring):
-        self._rings = {ring: True}
-        self._containers = {}  # The answer for each list, tuple or record, by identity.
-
-    def ring(self, ring):
-        known = self._rings.get(ring)
-        if known is None:
-            known = self._rings[ring] = any(self.ring(foundation) for foundation in _foundations(ring))
-        return known
-
-    def __call__(self, value):
-        if isinstance(value, RingHomomorphism):
-            return self.ring(value.domain) or self.ring(value.codomain)
-        if isinstance(value, (Chart, Divisor, Branch, DualComplex)):
-            # These views belong to a resolution of a polynomial in its source ring.
-            source = value._resolution._source_space
-            chart_ring = vars(value).get("_space")
-            return self.ring(source) or (chart_ring is not None and self.ring(chart_ring))
         parent = owner(value)
-        if is_ring(parent):
-            return self.ring(parent)
-        if isinstance(value, (tuple, list, dict)):
-            known = self._containers.get(id(value))
-            if known is None:
-                # A container that holds itself does not depend on the ring through that cycle.
-                self._containers[id(value)] = False
-                items = value.values() if isinstance(value, dict) else value
-                known = self._containers[id(value)] = any(self(item) for item in items)
-            return known
-        return False
+        if not is_ring(parent):
+            return ()
+        if not isinstance(parent, QuotientRing):
+            return (parent,)
+        # Every further quotient retains its intermediate parents, down to the ambient ring.
+        chain = [parent]
+        while isinstance(parent, QuotientRing):
+            defining = parent.defining_ideal
+            if isinstance(defining, _EliminatedIdeal):
+                # K.defining_ideal.inclusion still exposes both endpoint rings.
+                return (*referenced_rings(defining, containers), *reversed(chain))
+            parent = defining.parent
+            if is_ring(parent):
+                chain.append(parent)
+        return tuple(reversed(chain))
+    return tuple(dict.fromkeys(ring for item in items for ring in referenced_rings(item, containers)))
 
 
 class RingDeletion(NamedTuple):
@@ -186,7 +202,7 @@ class SessionRings:
         """Native groups of calls may run unless one of them rebinds a ring name."""
         return targets.isdisjoint(self._ring_of)
 
-    def note(self, name, value, *, naming=False):
+    def note(self, name, value, *, naming=False, known_collection=False):
         """Record a new binding and name each ring it introduces.
 
         naming marks a direct assignment. Assigning a ring to a name of your
@@ -194,7 +210,7 @@ class SessionRings:
         """
         if name in self._ring_of:
             self._unbind(name, value)
-        elif type(value) in _PLAIN:
+        if type(value) in _PLAIN or (known_collection and _collection(value)):
             return
         rings = referenced_rings(value)
         if not rings:
@@ -220,7 +236,8 @@ class SessionRings:
     def _in_use(self, ring):
         if self.active is not None and ring in referenced_rings(self.active):
             return True
-        return any(ring in referenced_rings(value) for value in self._session.variables.values())
+        containers = {}
+        return any(ring in referenced_rings(value, containers) for value in self._session.variables.values())
 
     def _withdraw_automatic(self, ring, keep):
         variables = self._session.variables
@@ -291,9 +308,9 @@ class SessionRings:
         if not is_ring(ring):
             raise TypeError("Pass a ring, for example delete_ring(R1) or delete_ring(f.parent).")
         variables = self._session.variables
-        depends = _Dependents(ring)
-        names = tuple(name for name, value in variables.items() if depends(value))
-        was_active = self.active is not None and depends.ring(self.active)
+        containers = {}
+        names = tuple(name for name, value in variables.items() if ring in referenced_rings(value, containers))
+        was_active = ring in referenced_rings(self.active, containers)
         self._save()
         for name in names:
             del variables[name]
@@ -338,6 +355,22 @@ def ring_bindings(rings):
         """
         return rings.active
 
+    def ring_name(ring):
+        """Return a saved name of the given ring in this session, or None.
+
+        >>> x = coordinates("x")
+        >>> ring_name(x.parent)
+        >>> A = x.parent
+        >>> ring_name(A)
+
+        Docs: docs/sessions.md#name-select-and-delete-rings
+        """
+        if ring is QQ:
+            return "QQ"
+        if not is_ring(ring):
+            raise TypeError("Pass a live ring, for example ring_name(f.parent).")
+        return rings.name_of(ring)
+
     def delete_ring(ring):
         """Delete a ring with every saved value in it, and return the names removed.
 
@@ -374,5 +407,5 @@ def ring_bindings(rings):
         return declare_ideal(*generators, order=order, variables=variables, ring=ring)
 
     ideal.__doc__ = declare_ideal.__doc__
-    return {"use_ring": use_ring, "active_ring": active_ring, "delete_ring": delete_ring,
+    return {"use_ring": use_ring, "active_ring": active_ring, "delete_ring": delete_ring, "ring_name": ring_name,
             "polynomial": polynomial, "ideal": ideal_constructor(ideal, Polynomial, Ideal)}

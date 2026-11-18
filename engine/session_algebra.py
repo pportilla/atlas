@@ -1187,7 +1187,7 @@ def ae_codimension(*components, order=None, variables=None, compute="auto"):
     >>> r = ae_codimension(t^2, t^3)
     >>> print(r.finite, r.value)  # True 1
 
-    Docs: examples/algebra-api.md#extended-right-left-codimension-of-a-map-germ
+    Docs: examples/local-algebra.md#compare-the-cusp-and-its-parametrization
     """
     space, values, order = _polynomial_inputs(_unpack(components), order, variables, QQ)
     request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},

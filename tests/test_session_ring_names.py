@@ -171,6 +171,90 @@ class RingNameTests(unittest.TestCase):
             print(g.parent == u.parent, g == u^2 + v)
         """, ["True True False", "True True"])
 
+    def test_ring_name_follows_live_bindings(self):
+        self.check_at_both_entry_points("""
+            x = coordinates("x")
+            u = coordinates("x", fresh=True)
+            lookup = ring_name
+            print(lookup(x.parent), lookup(u.parent), lookup(QQ))
+            A = x.parent
+            B = A
+            print(lookup(B), lookup(ring("unsaved")))
+            A = 10
+            print(lookup(x.parent))
+            K = ideal(x^2).quotient_ring
+            print(lookup(K), lookup(K.ambient))
+        """, ["R1 R2 QQ", "A None", "B", "K B"])
+
+        session = session_with('x = coordinates("x")\nA = x.parent')
+        original = session.variables["A"]
+        lookup = session.builtins["ring_name"]
+        self.assertIsNone(lookup(session_with('x = coordinates("x")').variables["R1"]))
+        list(session.run("d = delete_ring(A)"))
+        self.assertIsNone(lookup(original))
+        status, out, err = run_prompt('lookup = ring_name\nhelp lookup\nx = coordinates("x")\n'
+                                      'x = lookup(x)\nprint(lookup(x.parent))\nquit\n')
+        self.assertEqual(status, 0)
+        self.assertIn("lookup(ring)", out)
+        self.assertIn("docs/sessions.md#name-select-and-delete-rings", out)
+        self.assertIn("Pass a live ring", err)
+        self.assertIn("atlas> R1\n", out)
+
+    def test_names_reach_nested_collections_at_both_entry_points(self):
+        self.check_at_both_entry_points("""
+            values = [coordinates("x"), [1, coordinates("x", fresh=True)]]
+            both = (values, values)
+            print(R1 == values[0].parent, R2 == values[1][1].parent)
+            R1 = "occupied"
+            print(R3 == values[0].parent)
+            d = delete_ring(R2)
+            print(d.names, ring_name(R3))
+        """, ["True True", "True", "('values', 'R2', 'both') R3"])
+
+    def test_ring_lookup_and_record_traversal_use_only_existing_metadata(self):
+        session = session_with('x = coordinates("x")\nK = ideal(x^2).quotient_ring\na = K(x)')
+        quotient = session.variables["K"]
+        snapshot = dict(vars(quotient))
+        with patch("engine.session_quotient._evaluate", side_effect=AssertionError("unexpected reduction")):
+            list(session.run("name = ring_name(a.parent)\ncheck_unit = a.is_unit"))
+            self.assertEqual(session.variables["name"], "K")
+            self.assertEqual(vars(quotient).keys(), snapshot.keys())
+            self.assertTrue(all(vars(quotient)[key] is value for key, value in snapshot.items()))
+            # Linked records may share subcollections. Entries retain the same
+            # dependencies regardless of which root the session scans first.
+            items = []
+            record = {"items": items, "class": session.variables["a"]}
+            items.append(record)
+            session.variables.update(record=record, items=items)
+            self.assertEqual(session.builtins["delete_ring"](quotient).names,
+                             ("K", "a", "check_unit", "record", "items"))
+
+    def test_detached_records_and_saved_aliases_avoid_revisiting_their_contents(self):
+        session = session_with('x = coordinates("x")\nJ = groebner(ideal(x))\nvalues = [1, x]')
+        with patch("engine.session_rings._collection_rings", side_effect=AssertionError("rescanned a saved collection")):
+            list(session.run("receipt = J.record\nrows = receipt.result.generators\ncopy = values"))
+            self.assertIs(session.variables["copy"], session.variables["values"])
+            self.assertEqual(session.variables["receipt"], session.variables["J"].record)
+
+        self.check_at_both_entry_points("""
+            x = coordinates("x")
+            items = [[x]]
+            restored = items[len(delete_ring(x.parent).names) - 3]
+            print(ring_name(restored[0].parent))
+        """, ["R1"])
+
+    def test_names_and_deletion_follow_inclusions_and_normalization_components(self):
+        self.check_at_both_entry_points("""
+            R = ring("x", "y")
+            E = eliminate(ideal(x-y), x)
+            C = normalization(ideal(y^2-x^3)).components[0]
+            K = E.quotient_ring
+            print(ring_name(E.inclusion.domain), ring_name(E.inclusion.codomain))
+            print(ring_name(C.ambient), ring_name(C.prime.parent))
+            deleted = delete_ring(R)
+            print(deleted.names, ring_name(R1), ring_name(R2))
+        """, ["R1 R", "R2 R", "('R', 'x', 'y', 'E', 'C', 'K') R1 R2"])
+
     def test_calculations_name_new_rings_in_statement_order_in_both_entry_points(self):
         # The two ideal sums at the end run as one native group in the script.
         self.check_at_both_entry_points("""

@@ -175,22 +175,6 @@ def algebra_device_unavailable(backend, index):
     return False  # Preserve an explicitly requested reference replay.
 
 
-def _use_gpu(library):
-    """Install the standalone OpenCL replay hook for legacy library callers."""
-    path = _LIBRARY.with_name(_LIBRARY.name.replace("libgroebner", "libgroebner_opencl"))
-    try:
-        plugin = ctypes.CDLL(str(path))
-        if not plugin.atlas_replay_opencl_available():
-            return False
-        library.atlas_groebner_use_batch.argtypes = [ctypes.c_void_p]
-        library.atlas_groebner_use_batch.restype = None
-        library.atlas_groebner_use_batch(ctypes.cast(plugin.atlas_replay_opencl, ctypes.c_void_p))
-        library._replay_device = plugin
-        return True
-    except (OSError, AttributeError):
-        return False
-
-
 _HostCounts = namedtuple("_HostCounts", "batches primes layers pairs bases attempts lift_ns verify_ns")
 
 
