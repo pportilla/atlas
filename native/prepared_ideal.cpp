@@ -3,12 +3,15 @@
 #include "ideal_arithmetic.hpp"
 #include "ideal_powers.hpp"
 #include "local_io.hpp"
+#include "polynomial_gcd.hpp"
 #include "sparse_flint.hpp"
 #include <algorithm>
+#include <charconv>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -25,9 +28,17 @@ struct Ring {
     // FLINT arithmetic itself only reads the context and needs no lock.
     mutable std::mutex conversion_mutex;
     mutable std::optional<local::SparseLexRing> converter;
+    mutable std::once_flag init_graded;
+    mutable std::optional<local::SparseFlintRing> graded;
     const fmpq_mpoly_ctx_struct* ctx;
     explicit Ring(size_t n, bool named = false) : width(n), named_parent(named),
         ctx(n <= 32 ? converter.emplace(n).ctx : nullptr) {}
+
+    local::SparseFlintRing& ordered(bool lex) const {
+        if (lex) return *converter;
+        std::call_once(init_graded,[&]{ graded.emplace(width,ORD_DEGREVLEX); });
+        return *graded;
+    }
 };
 using RingPtr = std::shared_ptr<const Ring>;
 
@@ -59,15 +70,53 @@ PackedGenerator pack_generator(const RingPtr& ring, const local::Polynomial& row
     return {std::move(f), static_cast<size_t>(bits), false};
 }
 
+// Most large session rows contain only machine integers. Write their terms
+// straight into FLINT's primitive integer part; the general reader handles
+// other coefficients, exponent sizes and input spellings.
+bool read_integer_row(PolyValue& out, std::string_view row, size_t width) {
+    auto* poly = out.p->zpoly;
+    const auto* ctx = out.ctx->zctx;
+    const char* pos = row.data();
+    const char* end = pos + row.size();
+    std::vector<ulong> powers(width);
+    fmpz_mpoly_fit_length(poly,1 + std::count(pos,end,';'),ctx);
+    while (pos < end) {
+        slong coeff;
+        const auto c = std::from_chars(pos,end,coeff);
+        if (c.ec != std::errc() || !coeff) return false;
+        pos = c.ptr;
+        for (auto& power : powers) {
+            if (pos == end || *pos++ != ' ') return false;
+            const auto e = std::from_chars(pos,end,power);
+            if (e.ec != std::errc()) return false;
+            pos = e.ptr;
+        }
+        fmpz_mpoly_push_term_si_ui(poly,coeff,powers.data(),ctx);
+        if (pos != end && *pos++ != ';') return false;
+    }
+    fmpz_mpoly_sort_terms(poly,ctx);
+    // A repeated exponent must be diagnosed by the normal sparse reader.
+    if (!fmpz_mpoly_is_canonical(poly,ctx)) return false;
+    fmpq_one(out.p->content);
+    fmpq_mpoly_reduce(out.p,out.ctx);
+    return true;
+}
+
 // The sparse polynomial is exact, including zero and the scale of constants.
 // Its packed generator can be shared by every ideal containing this value.
 // Over-budget values retain their sparse transport for the isolated worker.
 struct PreparedPolynomial {
     RingPtr ring;
-    size_t row_bytes;
-    std::optional<std::string> worker_row;
-    local::Polynomial sparse;
-    PackedGenerator packed;
+    mutable size_t row_bytes = 0;
+    mutable std::optional<std::string> worker_row;
+    mutable local::Polynomial sparse;
+    mutable PackedGenerator packed;
+    // A computed polynomial owns its already normalized FLINT value. Building
+    // an ideal or exporting the row may also require the older representations.
+    std::optional<PolyValue> result;
+    mutable std::once_flag for_ideal, for_lex, for_graded, check_gcd_size;
+    mutable std::unique_ptr<PolyValue> lex_value, graded_value;
+    mutable bool live_gcd = false;
 
     PreparedPolynomial(RingPtr parent, std::string_view text) : ring(std::move(parent)), row_bytes(text.size()) {
         if (ring->width > 32 || row_bytes > 4096 || std::count(text.begin(),text.end(),';') >= 512) {
@@ -77,6 +126,71 @@ struct PreparedPolynomial {
             std::lock_guard lock(ring->conversion_mutex);
             packed = pack_generator(ring,sparse,*ring->converter);
         }
+    }
+
+    PreparedPolynomial(RingPtr parent, PolyValue answer) : ring(std::move(parent)), result(std::move(answer)) {}
+
+    void prepare_for_ideal() const {
+        if (result) std::call_once(for_ideal,[&]{
+            auto& converter = ring->ordered(fmpq_mpoly_ctx_ord(result->ctx) == ORD_LEX);
+            std::lock_guard lock(ring->conversion_mutex);
+            sparse = converter.read(result->p);
+            auto text = local::encode_row(sparse);
+            row_bytes = text.size();
+            if (row_bytes > 4096 || sparse.size() > 512) worker_row.emplace(std::move(text));
+            else packed = pack_generator(ring,sparse,*ring->converter);
+        });
+    }
+
+    bool fits_live_gcd(bool lex) const {
+        std::call_once(check_gcd_size,[&]{
+            if (!ring->ctx || (!result && row_bytes > (1u << 20))) return;
+            // General rational rows can accumulate a large common denominator
+            // during packing. Do that conversion in the isolated worker.
+            if (!result && worker_row && row_bytes > 32768 && worker_row->find('/') != std::string::npos) return;
+            const auto& f = result ? *result : packed.value ? packed.value->value : gcd_operand(lex);
+            const auto* p = f.p;
+            // A short sparse row can still induce a dense univariate GCD of
+            // enormous degree. Use the actual degree and primitive coefficient
+            // sizes once per immutable input, even when it is itself a GCD.
+            if (p->zpoly->length > 16384 || p->zpoly->bits > FLINT_BITS ||
+                !fmpq_mpoly_total_degree_fits_si(p,f.ctx) || fmpq_mpoly_total_degree_si(p,f.ctx) > 128)
+                return;
+            const slong bits = fmpz_mpoly_max_bits(p->zpoly);
+            live_gcd = bits >= -4096 && bits <= 4096 &&
+                       fmpz_bits(fmpq_numref(p->content)) <= 4096 &&
+                       fmpz_bits(fmpq_denref(p->content)) <= 4096;
+        });
+        return live_gcd;
+    }
+
+    bool is_zero() const {
+        if (result) return fmpq_mpoly_is_zero(result->p,result->ctx);
+        return worker_row ? local::decode_row(*worker_row,ring->width).empty() : sparse.empty();
+    }
+
+    const PolyValue& gcd_operand(bool lex) const {
+        auto& converter = ring->ordered(lex);
+        if (result && result->ctx == converter.ctx) return *result;
+        // The ideal generator of a nonzero constant is 1. Its rational
+        // associate gives exactly the same monic GCD as the original value.
+        if (!result && lex && packed.value) return packed.value->value;
+        auto& value = lex ? lex_value : graded_value;
+        std::call_once(lex ? for_lex : for_graded,[&]{
+            auto f = std::make_unique<PolyValue>(converter.ctx);
+            if (result || packed.value) {
+                const PolyValue& source = result ? *result : packed.value->value;
+                std::vector<slong> images(ring->width);
+                std::iota(images.begin(),images.end(),0);
+                fmpq_mpoly_compose_fmpq_mpoly_gen(f->p,source.p,images.data(),source.ctx,f->ctx);
+            } else if (worker_row && !read_integer_row(*f,*worker_row,ring->width)) {
+                const auto decoded = local::decode_row(*worker_row,ring->width);
+                std::lock_guard lock(ring->conversion_mutex);
+                converter.write(f->p,decoded);
+            }
+            value = std::move(f);
+        });
+        return *value;
     }
 };
 using PreparedPtr = std::shared_ptr<const PreparedPolynomial>;
@@ -267,10 +381,31 @@ extern "C" void* atlas_ideal_polynomial(void* ring, const char* row) noexcept {
     });
 }
 extern "C" void atlas_ideal_polynomial_release(void* p) noexcept { delete static_cast<PreparedPtr*>(p); }
+extern "C" void* atlas_ideal_polynomial_gcd(void* left, void* right, int lex) noexcept {
+    return guarded([&]() -> void* {
+        if (!left || !right) throw std::invalid_argument("Missing polynomial GCD operand.");
+        const auto& a = **static_cast<PreparedPtr*>(left);
+        const auto& b = **static_cast<PreparedPtr*>(right);
+        if (a.ring != b.ring) throw std::invalid_argument("The polynomials belong to different parent rings.");
+        if (!a.fits_live_gcd(lex) || !b.fits_live_gcd(lex)) return nullptr;
+        const auto& f = a.gcd_operand(lex), &g = b.gcd_operand(lex);
+        atlas::PolyValue answer(f.ctx);
+        atlas::monic_polynomial_gcd(answer.p,f.p,g.p,f.ctx);
+        return new PreparedPtr(std::make_shared<PreparedPolynomial>(a.ring,std::move(answer)));
+    });
+}
+extern "C" int atlas_ideal_polynomial_is_zero(void* p) noexcept {
+    const int zero = guarded([&]{
+        if (!p) throw std::invalid_argument("Missing polynomial.");
+        return int((**static_cast<PreparedPtr*>(p)).is_zero());
+    });
+    return error.empty() ? zero : -1;
+}
 extern "C" char* atlas_ideal_polynomial_row(void* p) noexcept {
     return guarded([&]{
         if (!p) throw std::invalid_argument("Missing polynomial.");
         const auto& f = **static_cast<PreparedPtr*>(p);
+        f.prepare_for_ideal();
         return f.worker_row ? copy_text(*f.worker_row) : copy_text(atlas::local::encode_row(f.sparse));
     });
 }
@@ -285,6 +420,7 @@ extern "C" void* atlas_ideal_from_polynomials(void* parent, void* const* polys, 
             const auto& f = *static_cast<PreparedPtr*>(polys[i]);
             if (f->ring != ring) throw std::invalid_argument("The generator belongs to a different parent ring.");
             if (eligible) {
+                f->prepare_for_ideal();
                 terms += f->sparse.size();
                 bytes += f->row_bytes;
                 eligible = !f->worker_row && terms <= 512 && bytes <= 4096;

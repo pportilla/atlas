@@ -76,6 +76,47 @@ class PolynomialGCD(unittest.TestCase):
         coefficient = Fraction(2**20000 + 1, 2**19000 + 1)
         self.assertEqual(result["polynomial"], "x+" + rational_text(coefficient) + "*y")
 
+    def test_certified_shortcuts_and_their_failed_candidates(self):
+        from engine.session_algebra import gcd, polynomial
+        from engine.session_polynomial import coordinates
+
+        prime = 65537
+        names = ("x", "y")
+        product = "(x+2)*(y+2)"
+        cases = [
+            # The common divisor evaluates to one on x=y=t. Both operands lose degree.
+            ("diagonal degree drop", "1+x^10-y^10", "2*x+3*y+1", "x-y+2", "1+x^10-y^10"),
+            # Reduction modulo the probe prime can hide a genuine rational factor.
+            ("prime degree drop", f"{prime}*x^7+1", "x+y+3", "x-y+2", f"x^7+1/{prime}"),
+            ("dense prime degree drop", f"1+{prime}*({product})", "(x+1)*(y+1)",
+             "(x+3)*(y+3)+11", f"({product})+1/{prime}"),
+            # Kronecker substitution gives both cofactors a root at t=1. Lifting t-1
+            # yields a factor of the first cofactor that does not divide the second.
+            ("spurious Kronecker factor", product + "+1", "(x-1)*(y-1)",
+             "(x+3)*(y+3)-16", product + "+1"),
+            # A centered modular lift changes this coefficient. Exact division rejects it.
+            ("coefficient wraps", product + "+40000", "(x+1)*(y+1)",
+             "(x+3)*(y+3)+11", product + "+40000"),
+            # Both operands are exact squares, with a nonmonic rational common factor.
+            ("two squares", "(3*x+2*y-1)^2", "(x+2*y+3)^2/9",
+             "(2*x-y+1)^2/25", "(3*x+2*y-1)^2/9"),
+            # Just one square: taking both multiplicities to be even would lose one copy.
+            ("one square", "(x+y+1)^3", "(x+y+1)*(x-2)^2", "y-3", "(x+y+1)^3"),
+            # Cancelling the leading terms produces h*y. It cannot divide the input h*A.
+            ("sparse difference nondivisor", "x+y+1", f"(-{2**200+3}/7)*(x^3+3*x*y^2+1)",
+             "(5/9)*(x^3+3*x*y^2+1+y)", "x+y+1"),
+        ]
+        ring = coordinates(*names)[0].parent
+        for name, h, a, b, expected in cases:
+            with self.subTest(name=name):
+                left, right = f"({h})*({a})", f"({h})*({b})"
+                f, g = (polynomial(source, ring=ring) for source in (left, right))
+                want = polynomial(expected, ring=ring)
+                result = gcd(f, g, compute="cpu")
+                self.assertEqual(result, want)
+                record = dispatch(gcd_request(left, right, variables=names))
+                self.assertEqual(record["result"], result.result)
+
     @unittest.skipUnless(os.getenv("ATLAS_GROEBNER", "native") == "native",
                          "The native sparse representation handles multi-word exponents")
     def test_sparse_exponent_beyond_one_machine_word(self):

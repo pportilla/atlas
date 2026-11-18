@@ -70,7 +70,11 @@ def _describe(value):
         representative = str(value)
         return "Residue classes", f"[{representative}]" if len(representative) <= 36 else "residue class"
     if isinstance(value, Polynomial):
-        terms = value._value._terms
+        expression = vars(value).get("_value")
+        if expression is None:
+            # A prepared result can report zero without expanding its native value.
+            return "Polynomials", "polynomial" if value else "0"
+        terms = expression._terms
         if len(terms) <= 3 and all(len(p) <= 6 and all(k.bit_length() < 30 for k in p)
                                    and c.numerator.bit_length() < 80 and c.denominator.bit_length() < 80
                                    for p, c in terms):

@@ -110,7 +110,7 @@ _GROUPS = {
             (example("Reconstruct the input from its unit and factors", "factor_session",
                      "prompt_and_script_reconstruct_the_polynomial"),)),
         "gcd": Entry(
-            (native("Monic polynomial GCD", "affine", 'if (!fmpq_mpoly_gcd(result.p, a.p, b.p, ring.ctx))'),),
+            (native("Monic polynomial GCD", "polynomial_gcd", "void monic_polynomial_gcd("),),
             (example("Check the leading coefficient in each order", "polynomial_gcd",
                      "monic_in_the_declared_order"),)),
         "resultant": Entry(

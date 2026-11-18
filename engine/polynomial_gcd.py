@@ -34,12 +34,11 @@ def monic_gcd(variables, left, right, *, order="grevlex"):
             any(not isinstance(v, np.Expr) or not v.is_Symbol for v in variables) or
             not (left.free_symbols | right.free_symbols).issubset(variables)):
         raise ValueError("Supply polynomials in the same declared rational coordinates.")
-    if not variables:
-        with cpu_stage("polynomial_gcd", algorithm="rational_constants"):
-            return np.S.One if left or right else np.S.Zero
-
     run = current_execution()
-    ring = _ring(variables)
+    # The affine wire protocol needs a coordinate even for constant inputs.
+    # A constant decoded in this auxiliary ring has no active coordinates.
+    coordinates = variables or (np.Symbol("x"),)
+    ring = _ring(coordinates)
     if (run is not None and run.replay.compute == "gpu" and
             len(left._terms) > 1 and len(right._terms) > 1 and
             not left.free_symbols.isdisjoint(right.free_symbols)):
@@ -65,4 +64,4 @@ def monic_gcd(variables, left, right, *, order="grevlex"):
 
     with cpu_stage("polynomial_gcd", algorithm="flint", order=order):
         row, = _request(["polynomial_gcd", ring.header, order, ring.text(left), ring.text(right)])
-    return np.from_row(variables, row)
+    return np.from_row(coordinates, row)

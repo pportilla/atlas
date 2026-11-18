@@ -158,9 +158,15 @@ For the Katsura-6 ideal $K$ and an independent $z$, the following run used OpenC
 
 For $(zK):(z)$, dividing first reduced the warm median request time from 29.12 ms to 18.61 ms on this device. Eight alternating pairs of requests returned the same sequence of 41 generators. For Katsura-5 the corresponding times were 11.87 ms and 7.14 ms, with 22 generators.
 
+## Multivariate polynomial GCD over QQ
+
+Seven trials on a Ryzen 7 6800H compared the public `gcd(f,g)` call to Singular 4.4.1 on nine Liao–Fateman examples and one case with a 401-bit coefficient. Each system computed the expected monic polynomial in grevlex order. The largest dense case had 6,561 terms per input in eight variables and a 256-term GCD. On one logical CPU, the median Atlas call fell from 159.66 ms to 8.02 ms. First use on fresh expanded operands took 10.29 ms. Singular took 24.78 ms per warmed call. [Benchmark and reproduction commands](polynomial_gcd.py) · [Original samples](polynomial-gcd-ryzen-6800h.json) · [Updated samples](polynomial-gcd-prepared-ryzen-6800h.json)
+
+Atlas had the lower median on all ten cases when both systems timed repeated calls in batches. The original comparison times one Atlas call against Singular's per-call mean in a warmed batch. In that comparison the two pinned coprime cases still favored Singular. At three variables the medians were 10.91 µs for Atlas and 6.54 µs for Singular. At six variables they were 15.37 µs and 12.01 µs. With default scheduling, the three-variable fully dense case also favored Singular (53.73 µs and 33.83 µs). [Default-scheduling samples](polynomial-gcd-prepared-unpinned-ryzen-6800h.json)
+
 ## Polynomial GCD on the Radeon 680M
 
-The [physical-device test](../tests/test_polynomial_gcd.py) uses $hA$ and $h(A+1)$, with $h=3x^2+4yz-5z+1$ and a 401-bit coefficient in $A$. Each input has 25 terms. Since $A$ and $A+1$ are coprime, the expected grevlex result is $h/3$. On the Radeon 680M, OpenCL replayed 62 primes in five batches. The CPU certified one basis and performed both exact divisions. After one warm-up per mode, median dispatch time over three runs was 1.15 ms for direct FLINT and 10.24 ms for the GPU-assisted calculation. Automatic mode uses direct FLINT for this operation.
+The [physical-device test](../tests/test_polynomial_gcd.py) uses $hA$ and $h(A+1)$, with $h=3x^2+4yz-5z+1$ and a 401-bit coefficient in $A$. Each input has 25 terms. Since $A$ and $A+1$ are coprime, the expected grevlex result is $h/3$. On the Radeon 680M, OpenCL replayed 62 primes in five batches. The CPU certified one basis and performed both exact divisions. After one warm-up per mode, median dispatch time over three runs was 1.15 ms for direct FLINT and 10.24 ms for the GPU-assisted calculation. Automatic mode uses the native CPU kernel for this operation.
 
 ## Ring homomorphisms
 

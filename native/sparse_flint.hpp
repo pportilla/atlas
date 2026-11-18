@@ -5,19 +5,18 @@
 
 namespace atlas::local {
 
-// Direct interchange between sparse GMP polynomials and FLINT's QQ lex ring.
-// The two representations have opposite term iteration order.
-struct SparseLexRing {
+// Direct interchange between sparse GMP polynomials and FLINT's ordered QQ rings.
+struct SparseFlintRing {
     fmpq_mpoly_ctx_t ctx;
     Exponents powers;
     fmpq_t coefficient;
 
-    explicit SparseLexRing(size_t width) : powers(width) {
-        fmpq_mpoly_ctx_init(ctx, width, ORD_LEX);
+    explicit SparseFlintRing(size_t width, ordering_t order = ORD_LEX) : powers(width) {
+        fmpq_mpoly_ctx_init(ctx, width, order);
         fmpq_init(coefficient);
     }
-    SparseLexRing(const SparseLexRing&) = delete;
-    ~SparseLexRing() { fmpq_clear(coefficient); fmpq_mpoly_ctx_clear(ctx); }
+    SparseFlintRing(const SparseFlintRing&) = delete;
+    ~SparseFlintRing() { fmpq_clear(coefficient); fmpq_mpoly_ctx_clear(ctx); }
 
     void write(fmpq_mpoly_t out, const Polynomial& f) {
         fmpq_mpoly_zero(out, ctx);
@@ -28,6 +27,8 @@ struct SparseLexRing {
                 fmpz_set_mpz(powers.entries[j], it->first[j].get_mpz_t());
             fmpq_mpoly_push_term_fmpq_fmpz(out, coefficient, powers.entries.data(), ctx);
         }
+        // Reverse map iteration already gives descending lexicographic order.
+        if (fmpq_mpoly_ctx_ord(ctx) != ORD_LEX) fmpq_mpoly_sort_terms(out,ctx);
         fmpq_mpoly_reduce(out, ctx);
     }
 
@@ -45,4 +46,5 @@ struct SparseLexRing {
         return result;
     }
 };
+using SparseLexRing = SparseFlintRing;
 }

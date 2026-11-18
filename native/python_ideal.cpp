@@ -31,6 +31,16 @@ PyObject* make_ring(PyObject*, PyObject* width) {
     return result;
 }
 
+PyObject* owned_polynomial(void* polynomial, PyObject* parent) {
+    auto* result = PyCapsule_New(polynomial,polynomial_name,destroy_polynomial);
+    if (result) {
+        // A generator carries its exact ring through the C++ and Python calls.
+        if (PyCapsule_SetContext(result,parent) < 0) { Py_DECREF(result); return nullptr; }
+        Py_INCREF(parent);
+    } else atlas_ideal_polynomial_release(polynomial);
+    return result;
+}
+
 PyObject* make_polynomial(PyObject*, PyObject* args) {
     PyObject *parent, *data;
     char* row;
@@ -51,13 +61,35 @@ PyObject* make_polynomial(PyObject*, PyObject* args) {
         PyErr_SetString(PyExc_ArithmeticError,atlas_ideal_error());
         return nullptr;
     }
-    auto* result = PyCapsule_New(polynomial,polynomial_name,destroy_polynomial);
-    if (result) {
-        // A generator carries its exact ring through the C++ and Python calls.
-        if (PyCapsule_SetContext(result,parent) < 0) { Py_DECREF(result); return nullptr; }
-        Py_INCREF(parent);
-    } else atlas_ideal_polynomial_release(polynomial);
-    return result;
+    return owned_polynomial(polynomial,parent);
+}
+
+PyObject* polynomial_gcd(PyObject*, PyObject* args) {
+    PyObject *left, *right;
+    int lex;
+    if (!PyArg_ParseTuple(args,"OOp",&left,&right,&lex)) return nullptr;
+    auto* f = PyCapsule_GetPointer(left,polynomial_name);
+    if (!f) return nullptr;
+    auto* g = PyCapsule_GetPointer(right,polynomial_name);
+    if (!g) return nullptr;
+    void* result;
+    Py_BEGIN_ALLOW_THREADS
+    result = atlas_ideal_polynomial_gcd(f,g,lex);
+    Py_END_ALLOW_THREADS
+    if (!result) {
+        if (!*atlas_ideal_error()) Py_RETURN_NONE;
+        PyErr_SetString(PyExc_ArithmeticError,atlas_ideal_error());
+        return nullptr;
+    }
+    return owned_polynomial(result,static_cast<PyObject*>(PyCapsule_GetContext(left)));
+}
+
+PyObject* polynomial_is_zero(PyObject*, PyObject* obj) {
+    auto* f = PyCapsule_GetPointer(obj,polynomial_name);
+    if (!f) return nullptr;
+    const int result = atlas_ideal_polynomial_is_zero(f);
+    if (result < 0) { PyErr_SetString(PyExc_ArithmeticError,atlas_ideal_error()); return nullptr; }
+    return PyBool_FromLong(result);
 }
 
 PyObject* polynomial_row(PyObject*, PyObject* obj) {
@@ -333,6 +365,8 @@ PyMethodDef methods[] = {
     {"prepare", prepare, METH_CLASS | METH_VARARGS, nullptr},
     {"ring", make_ring, METH_CLASS | METH_O, nullptr},
     {"polynomial", make_polynomial, METH_CLASS | METH_VARARGS, nullptr},
+    {"polynomial_gcd", polynomial_gcd, METH_CLASS | METH_VARARGS, nullptr},
+    {"polynomial_is_zero", polynomial_is_zero, METH_CLASS | METH_O, nullptr},
     {"polynomial_row", polynomial_row, METH_CLASS | METH_O, nullptr},
     {"from_polynomials", from_polynomials, METH_CLASS | METH_VARARGS, nullptr},
     {"constructor", make_constructor, METH_CLASS | METH_VARARGS, nullptr},

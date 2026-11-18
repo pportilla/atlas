@@ -44,6 +44,10 @@ build/bench_local_dimension: ../benchmarks/local_dimension_kernel.cpp local_dime
 build/bench_groebner_basis: ../benchmarks/bench_groebner_basis.cpp groebner.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner $(shell pkg-config --libs flint)
 
+build/bench_polynomial_gcd: ../benchmarks/bench_polynomial_gcd.cpp
+	@mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< -o $@ $(LDFLAGS) $(shell pkg-config --libs flint)
+
 # This independent comparison executable uses the headers and libraries of the installed Singular.
 SINGULAR_CFLAGS ?= $(shell pkg-config --cflags Singular)
 SINGULAR_LIBS ?= $(shell pkg-config --libs Singular)
@@ -78,6 +82,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp p
 # The canonical blowup stage composes the operations above in one call.
 KERNEL_SOURCES += canonical_blowup.cpp centre_maximum.cpp
 KERNEL_SOURCES += weighted_resolution.cpp
+KERNEL_SOURCES += polynomial_gcd.cpp polynomial_gcd_image.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp

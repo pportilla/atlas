@@ -7,6 +7,8 @@ extern "C" {
 void* atlas_ideal_ring(size_t width) noexcept;
 void atlas_ideal_ring_release(void* ring) noexcept;
 void* atlas_ideal_polynomial(void* ring, const char* row) noexcept;
+void* atlas_ideal_polynomial_gcd(void* left, void* right, int lex) noexcept;
+int atlas_ideal_polynomial_is_zero(void* polynomial) noexcept;
 char* atlas_ideal_polynomial_row(void* polynomial) noexcept; // free with atlas_groebner_release
 void atlas_ideal_polynomial_release(void* polynomial) noexcept;
 void* atlas_ideal_from_polynomials(void* ring, void* const* polynomials, size_t count) noexcept;

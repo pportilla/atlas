@@ -4,6 +4,7 @@
 #include "local_dimension.hpp"
 #include "local_io.hpp"
 #include "polynomial_factors.hpp"
+#include "polynomial_gcd.hpp"
 #include "primary_decomposition.hpp"
 #include "normalization.hpp"
 #include "localization.hpp"
@@ -1460,8 +1461,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
         const auto a = read(in, ring), b = read(in, ring);
         Polynomial result(ring);
         if (operation != "gcd_from_lcm") {
-            if (!fmpq_mpoly_gcd(result.p, a.p, b.p, ring.ctx))
-                throw Limit("FLINT could not compute the polynomial gcd.");
+            monic_polynomial_gcd(result.p,a.p,b.p,ring.ctx);
         } else {
             const auto lcm = read(in, ring);
             Polynomial cofactor(ring);
@@ -1470,9 +1470,9 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
                 !fmpq_mpoly_divides(cofactor.p, lcm.p, a.p, ring.ctx) ||
                 !fmpq_mpoly_divides(result.p, b.p, cofactor.p, ring.ctx))
                 throw std::logic_error("Inexact division while recovering a gcd from its principal intersection.");
+            if (!fmpq_mpoly_is_zero(result.p,ring.ctx))
+                fmpq_mpoly_make_monic(result.p,result.p,ring.ctx);
         }
-        if (!fmpq_mpoly_is_zero(result.p, ring.ctx))
-            fmpq_mpoly_make_monic(result.p, result.p, ring.ctx);
         if (operation == "primitive_gcd_cofactors") {
             if (fmpq_mpoly_is_zero(result.p, ring.ctx)) throw std::invalid_argument("Zero polynomial gcd.");
             // A monic rational polynomial has positive primitive integer part.

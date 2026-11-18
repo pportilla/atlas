@@ -13,7 +13,7 @@ from . import native_polynomial as native
 from .algebra import QUOTIENT_IDEAL_OPERATIONS
 from .exact_json import result_json
 from .native_library import affine_request, current_replay_scope
-from .polynomial import LimitError, integer_text, parse_expression, rational_text, sparse_row
+from .polynomial import LimitError, format_poly, integer_text, parse_expression, rational_text, sparse_row
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
@@ -428,6 +428,52 @@ class _PolynomialResult(_Result, _OrderedPolynomial):
     @property
     def polynomial(self):
         return self
+
+
+class _NativeGCDResult(_PolynomialResult):
+    """A computed GCD with its native value and the operands needed for replay."""
+
+    status = "ok"
+    type = "polynomial"
+    operation = "gcd"
+
+    def __init__(self, parent, order, handle, left, right, compute, elapsed):
+        self.__dict__.update(_space=parent, order=order, _native_polynomial=handle,
+                             _operands=(left, right), _compute=compute, _elapsed=elapsed)
+
+    def __bool__(self):
+        return not self._space._native_ring.polynomial_is_zero(self._native_polynomial)
+
+    def _expression(self, handle):
+        row = self._space._native_ring.polynomial_row(handle)
+        return native.from_row(self._space.generators, row.decode("ascii"))
+
+    @cached_property
+    def _value(self):
+        return self._expression(self._native_polynomial)
+
+    @property
+    def result(self):
+        text = format_poly(native.terms(self._space.generators, self._value), self.variables)
+        return {"type": self.type, "ring": self.ring, "polynomial": text}
+
+    @property
+    def execution(self):
+        stage = {"operation": "polynomial_gcd", "backend": "cpu", "algorithm": "flint",
+                 "order": self.order, "elapsed_ns": self._elapsed}
+        return {"requested": self._compute, "backend": "cpu", "device": "CPU", "stages": [stage],
+                "fallback_reasons": [], "elapsed_ms": round(self._elapsed / 1e6, 3)}
+
+    @cached_property
+    def _record(self):
+        from .algebra_replay import make_replay
+
+        prepared = {key: self._expression(handle) for key, handle in
+                    zip(("polynomial", "other_polynomial"), self._operands)}
+        request = {"operation": self.operation, "ring": self.ring, "compute": self._compute,
+                   "operands": {key: str(poly) for key, poly in prepared.items()}}
+        return {"status": self.status, "operation": self.operation, "result": self.result,
+                "execution": self.execution, "replay": make_replay(request, prepared)}
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -1148,6 +1194,22 @@ def _calculate_polynomials(operation, order, variables, compute, *, point=None, 
 
 def gcd(left, right, *, order=None, variables=None, compute="auto"):
     """Monic polynomial GCD in the common coordinate space, or QQ for scalars."""
+    if compute in ("auto", "cpu") and current_replay_scope() is None:
+        # Ordinary polynomials already carry their complete parent, and
+        # native handles exist only for polynomial rings over QQ.
+        if (variables is None and type(left) is Polynomial and type(right) is Polynomial
+                and left._space is right._space and order in (None, "grevlex", "lex")):
+            space = left._space
+            order = order or "grevlex"
+        else:
+            space, (left, right), order = _polynomial_inputs((left, right), order, variables, QQ)
+        calculate = getattr(space._native_ring, "polynomial_gcd", None)
+        if calculate is not None:
+            a, b = left._native_polynomial, right._native_polynomial
+            started = perf_counter_ns()
+            handle = calculate(a, b, order == "lex")
+            if handle is not None:
+                return _NativeGCDResult(space, order, handle, a, b, compute, perf_counter_ns() - started)
     return _calculate_polynomials("gcd", order, variables, compute, polynomial=left, other_polynomial=right)
 
 

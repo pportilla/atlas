@@ -1,0 +1,621 @@
+{
+  "source": "https://people.eecs.berkeley.edu/~fateman/282/readings/liao.pdf#page=5",
+  "started_utc": "2026-11-18T08:43:58.099722+00:00",
+  "atlas_revision": "3057a1bdf9888e3aaa461ff0dce52b3d3abd53da",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "system": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "python": "3.14.4",
+  "singular": [
+    "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+    "with",
+    "\tGMP(6.3.0),NTL(11.5.1),FLINT(3.4.0),"
+  ],
+  "trials": 7,
+  "field": "QQ",
+  "order": "grevlex (dp)",
+  "conditions": {
+    "atlas_session": "Public gcd on expanded session polynomials, CPU, with the prompt's fork server enabled. Includes per-call worker, transport and materialization. One warmup per case.",
+    "flint_kernel": "Same FLINT gcd and monic normalization calls as native/affine.cpp, on prebuilt inputs. Fresh helper per batch, one untimed warmup, steady-clock wall time.",
+    "singular": "Prepared poly objects, gcd and division by leadcoef inside Singular. One thread, no rc, fresh interpreter per batch, one untimed warmup, wall time via rtimer at 1000000 ticks/s.",
+    "sampling": "Sequential, rotating method order, median of trial means. Setup, warmup, and exact checks excluded. Singular seeds 2 through trials+1, seed 1 for pilot.",
+    "agreement": "Each method checks exact equality with the specified monic polynomial outside timing, on every trial. The pilot also compares expanded term counts."
+  },
+  "cases": [
+    {
+      "name": "LF1 coprime",
+      "variables": [
+        "x",
+        "y1",
+        "y2"
+      ],
+      "left": "(x+y1+y2+1)*(x+y1+y2+2)",
+      "right": "(x^2+y1^2+y2^2+1)*(-3*y1*x^2+y1^2-1)",
+      "expected": "1",
+      "terms_left_right_gcd": [
+        10,
+        10,
+        1
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 4096,
+        "singular": 676
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          38.776129,
+          39.354431,
+          40.371191,
+          38.007978,
+          37.883844,
+          37.999191,
+          37.850581
+        ],
+        "flint_kernel": [
+          0.0030314450683599998,
+          0.00311582543945,
+          0.00340355908203,
+          0.00294200610352,
+          0.00291447119141,
+          0.00314051342773,
+          0.0030159052734400004
+        ],
+        "singular": [
+          0.010096153846153845,
+          0.010035502958579882,
+          0.010164201183431953,
+          0.010088757396449705,
+          0.009986686390532544,
+          0.010357988165680473,
+          0.012676035502958581
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 38.007978,
+        "flint_kernel": 0.0030314450683599998,
+        "singular": 0.010096153846153845
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF2 dense quartic",
+      "variables": [
+        "x",
+        "y1",
+        "y2"
+      ],
+      "left": "(x+y1+y2+1)^2*(x-(y1+y2)-2)^2",
+      "right": "(x+y1+y2+1)^2*(x+y1+y2+2)^2",
+      "expected": "(x+y1+y2+1)^2",
+      "terms_left_right_gcd": [
+        29,
+        35,
+        10
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 77,
+        "singular": 66
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          40.100209,
+          40.278516,
+          28.343467,
+          28.238148,
+          27.857329,
+          28.92776,
+          27.341835
+        ],
+        "flint_kernel": [
+          0.283877922078,
+          0.269212961039,
+          0.19934997402600002,
+          0.198588415584,
+          0.179821025974,
+          0.177585103896,
+          0.18649154545500002
+        ],
+        "singular": [
+          0.30136363636363633,
+          0.2959848484848485,
+          0.2827878787878788,
+          0.1962878787878788,
+          0.20777272727272728,
+          0.2280909090909091,
+          0.19677272727272727
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 28.343467,
+        "flint_kernel": 0.198588415584,
+        "singular": 0.2280909090909091
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF3 sparse",
+      "variables": [
+        "x",
+        "y1",
+        "y2"
+      ],
+      "left": "(x^3+y1^3+y2^3+1)*(x^3+y1^3+y2^3-2)",
+      "right": "(x^3+y1^3+y2^3+1)*(x^3+y1^3+y2^3+2)",
+      "expected": "(x^3+y1^3+y2^3+1)",
+      "terms_left_right_gcd": [
+        10,
+        10,
+        4
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 261,
+        "singular": 216
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          28.319671,
+          28.806801,
+          28.502297,
+          27.590224,
+          28.134381,
+          26.824819,
+          27.516595
+        ],
+        "flint_kernel": [
+          0.07815525670500001,
+          0.0819365363985,
+          0.079742394636,
+          0.0839827777778,
+          0.078176256705,
+          0.0783595900383,
+          0.0820352298851
+        ],
+        "singular": [
+          0.0917175925925926,
+          0.08849537037037036,
+          0.08717592592592592,
+          0.09119444444444444,
+          0.08994907407407407,
+          0.08722222222222221,
+          0.08856481481481482
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 28.134381,
+        "flint_kernel": 0.079742394636,
+        "singular": 0.08856481481481482
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF5 fully dense",
+      "variables": [
+        "x",
+        "y1",
+        "y2"
+      ],
+      "left": "((x+1)*(y1+1)*(y2+1)-3)*((x-2)*(y1-2)*(y2-2)+3)",
+      "right": "((x+1)*(y1+1)*(y2+1)-3)*((x+2)*(y1+2)*(y2+2)-3)",
+      "expected": "((x+1)*(y1+1)*(y2+1)-3)",
+      "terms_left_right_gcd": [
+        27,
+        27,
+        8
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 709,
+        "singular": 439
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          27.493451,
+          29.530809,
+          27.372843,
+          28.097793,
+          27.286711,
+          27.8687,
+          26.168589
+        ],
+        "flint_kernel": [
+          0.0252532341326,
+          0.0259433653032,
+          0.0249120959097,
+          0.026414086036699997,
+          0.0258556135402,
+          0.025551031029599998,
+          0.025136864598
+        ],
+        "singular": [
+          0.03488382687927107,
+          0.03690888382687927,
+          0.03264009111617312,
+          0.034876993166287014,
+          0.03290432801822323,
+          0.03235990888382688,
+          0.034997722095671986
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 27.493451,
+        "flint_kernel": 0.025551031029599998,
+        "singular": 0.034876993166287014
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF1 coprime",
+      "variables": [
+        "x",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5"
+      ],
+      "left": "(x+y1+y2+y3+y4+y5+1)*(x+y1+y2+y3+y4+y5+2)",
+      "right": "(x^2+y1^2+y2^2+y3^2+y4^2+y5^2+1)*(-3*y1*x^2+y1^2-1)",
+      "expected": "1",
+      "terms_left_right_gcd": [
+        28,
+        19,
+        1
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 3062,
+        "singular": 893
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          27.013775,
+          25.85129,
+          27.215346,
+          27.652021,
+          27.586157,
+          29.17126,
+          25.180774
+        ],
+        "flint_kernel": [
+          0.00582810646636,
+          0.006482192684519999,
+          0.00578668582626,
+          0.00610455258001,
+          0.00660590757675,
+          0.00610443794905,
+          0.00593496407577
+        ],
+        "singular": [
+          0.012594624860022397,
+          0.012198208286674133,
+          0.014357222844344904,
+          0.014040313549832026,
+          0.013189249720044793,
+          0.012313549832026876,
+          0.014326987681970884
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 27.215346,
+        "flint_kernel": 0.00610443794905,
+        "singular": 0.013189249720044793
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF2 dense quartic",
+      "variables": [
+        "x",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5"
+      ],
+      "left": "(x+y1+y2+y3+y4+y5+1)^2*(x-(y1+y2+y3+y4+y5)-2)^2",
+      "right": "(x+y1+y2+y3+y4+y5+1)^2*(x+y1+y2+y3+y4+y5+2)^2",
+      "expected": "(x+y1+y2+y3+y4+y5+1)^2",
+      "terms_left_right_gcd": [
+        170,
+        210,
+        28
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 37,
+        "singular": 34
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          13.562933,
+          15.09132,
+          13.799059,
+          13.528418,
+          12.915481,
+          14.244451,
+          13.870254
+        ],
+        "flint_kernel": [
+          0.671087081081,
+          0.6556820540539999,
+          0.6762619729730001,
+          0.723754648649,
+          0.652522297297,
+          0.7169404324319999,
+          0.6537212972969999
+        ],
+        "singular": [
+          0.7048235294117647,
+          0.7132058823529412,
+          0.7255882352941176,
+          0.7053823529411765,
+          0.7088529411764706,
+          0.7185294117647059,
+          0.7367941176470588
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 13.799059,
+        "flint_kernel": 0.671087081081,
+        "singular": 0.7132058823529412
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF3 sparse",
+      "variables": [
+        "x",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5"
+      ],
+      "left": "(x^6+y1^6+y2^6+y3^6+y4^6+y5^6+1)*(x^6+y1^6+y2^6+y3^6+y4^6+y5^6-2)",
+      "right": "(x^6+y1^6+y2^6+y3^6+y4^6+y5^6+1)*(x^6+y1^6+y2^6+y3^6+y4^6+y5^6+2)",
+      "expected": "(x^6+y1^6+y2^6+y3^6+y4^6+y5^6+1)",
+      "terms_left_right_gcd": [
+        28,
+        28,
+        7
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 174,
+        "singular": 140
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          27.705471,
+          29.220163,
+          28.347835,
+          26.691046,
+          29.187661,
+          29.184275,
+          27.799539
+        ],
+        "flint_kernel": [
+          0.136191741379,
+          0.138912281609,
+          0.131469195402,
+          0.13171535632200002,
+          0.130702057471,
+          0.130351798851,
+          0.12948516092
+        ],
+        "singular": [
+          0.15041428571428572,
+          0.1448785714285714,
+          0.14450714285714286,
+          0.14702142857142858,
+          0.14602857142857142,
+          0.14411428571428572,
+          0.14547857142857143
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 28.347835,
+        "flint_kernel": 0.131469195402,
+        "singular": 0.14547857142857143
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF5 fully dense",
+      "variables": [
+        "x",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5"
+      ],
+      "left": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)-3)*((x-2)*(y1-2)*(y2-2)*(y3-2)*(y4-2)*(y5-2)+3)",
+      "right": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)-3)*((x+2)*(y1+2)*(y2+2)*(y3+2)*(y4+2)*(y5+2)-3)",
+      "expected": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)-3)",
+      "terms_left_right_gcd": [
+        729,
+        729,
+        64
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 18,
+        "singular": 16
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          28.158999,
+          27.27549,
+          28.019404,
+          27.868479,
+          28.142587,
+          28.115336,
+          27.199737
+        ],
+        "flint_kernel": [
+          1.5183235,
+          1.47477955556,
+          1.46412777778,
+          1.4634442777799999,
+          1.44228594444,
+          1.4857268888900002,
+          1.48726644444
+        ],
+        "singular": [
+          1.5910625,
+          1.539125,
+          1.5361875,
+          1.539375,
+          1.563125,
+          1.5808125,
+          1.5846875
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 28.019404,
+        "flint_kernel": 1.47477955556,
+        "singular": 1.563125
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "LF5 fully dense",
+      "variables": [
+        "x",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "y7"
+      ],
+      "left": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)*(y6+1)*(y7+1)-3)*((x-2)*(y1-2)*(y2-2)*(y3-2)*(y4-2)*(y5-2)*(y6-2)*(y7-2)+3)",
+      "right": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)*(y6+1)*(y7+1)-3)*((x+2)*(y1+2)*(y2+2)*(y3+2)*(y4+2)*(y5+2)*(y6+2)*(y7+2)-3)",
+      "expected": "((x+1)*(y1+1)*(y2+1)*(y3+1)*(y4+1)*(y5+1)*(y6+1)*(y7+1)-3)",
+      "terms_left_right_gcd": [
+        6561,
+        6561,
+        256
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 2,
+        "singular": 2
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          162.755203,
+          163.215903,
+          163.54768,
+          158.943535,
+          161.594932,
+          159.518531,
+          160.45517
+        ],
+        "flint_kernel": [
+          23.9127245,
+          24.3053155,
+          24.0504645,
+          23.847987,
+          23.9573735,
+          24.112662,
+          23.851744
+        ],
+        "singular": [
+          24.8875,
+          25.0095,
+          24.658,
+          24.8545,
+          24.8215,
+          24.8605,
+          25.163
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 161.594932,
+        "flint_kernel": 23.9573735,
+        "singular": 24.8605
+      },
+      "exact_agreement": true
+    },
+    {
+      "name": "Atlas 401-bit coefficient",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "left": "(3*x^2+4*y*z-5*z+1)*(2582249878086908589655919172003011874329705792829223512830659356540647622016841194629645353280137831435903171972747493407*(x^3+4*x^2*y+3*y^2*z-3*x*y+2*z+5)+x+y)",
+      "right": "(3*x^2+4*y*z-5*z+1)*((2582249878086908589655919172003011874329705792829223512830659356540647622016841194629645353280137831435903171972747493407*(x^3+4*x^2*y+3*y^2*z-3*x*y+2*z+5)+x+y)+1)",
+      "expected": "(3*x^2+4*y*z-5*z+1)/3",
+      "terms_left_right_gcd": [
+        25,
+        25,
+        4
+      ],
+      "calls_per_trial": {
+        "atlas_session": 1,
+        "flint_kernel": 68,
+        "singular": 59
+      },
+      "samples_ms_per_gcd": {
+        "atlas_session": [
+          28.914024,
+          29.913331,
+          29.536339,
+          28.778858,
+          27.862599,
+          29.363964,
+          27.807605
+        ],
+        "flint_kernel": [
+          0.333606191176,
+          0.33443732352899996,
+          0.37255179411800005,
+          0.363922411765,
+          0.33539,
+          0.34479054411800003,
+          0.35799091176500003
+        ],
+        "singular": [
+          0.3637627118644068,
+          0.36366101694915254,
+          0.35927118644067796,
+          0.35994915254237286,
+          0.3988983050847458,
+          0.37828813559322033,
+          0.36098305084745763
+        ]
+      },
+      "median_ms_per_gcd": {
+        "atlas_session": 28.914024,
+        "flint_kernel": 0.34479054411800003,
+        "singular": 0.36366101694915254
+      },
+      "exact_agreement": true
+    }
+  ],
+  "flint_version": "3.6.0"
+}

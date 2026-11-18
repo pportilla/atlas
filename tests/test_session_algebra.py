@@ -1,6 +1,9 @@
+from contextlib import nullcontext
+from fractions import Fraction
 import json
 import sys
 import unittest
+from textwrap import dedent
 from unittest.mock import patch
 
 from engine.session import new_session
@@ -8,6 +11,7 @@ from engine.session_polynomial import coordinates
 from engine.session_algebra import (
     algebra_request, eliminate, gcd, groebner, ideal, intersection, membership, normal_form, polynomial,
 )
+from tests.cli_support import run_prompt, run_script
 
 
 class AlgebraSessionTests(unittest.TestCase):
@@ -56,8 +60,78 @@ x, y = coordinates("x", "y", coeffs=QQ)
         other_x, _ = coordinates("x", "y")
         with self.assertRaisesRegex(ValueError, "different coordinate spaces"):
             gcd(other_x, f)
-        self.assertEqual(gcd(0, 0).variables, ())
-        self.assertEqual(gcd(0, 3, variables=[x,y]).variables, ("x", "y"))
+        zero = gcd(0, 0)
+        self.assertEqual((zero, zero.variables), (0, ()))
+        unit = gcd(0, Fraction(-3, 7), variables=[x, y])
+        self.assertEqual(unit, 1)
+        self.assertIs(unit.parent, x.parent)
+
+    def test_gcd_uses_prepared_operands_and_preserves_records(self):
+        from engine import session_ideal_native
+        from engine.algebra import dispatch
+        from engine.session_polynomial import Polynomial
+
+        for binding in ("installed", "ctypes"):
+            backend = (patch.object(session_ideal_native, "_compiled", return_value=None)
+                       if binding == "ctypes" else nullcontext())
+            with backend:
+                z, a, b = coordinates("z", "a", "b")
+                h = 2*z*b + 3*a**2 - 1
+                left, right = -h*z/7, h*(z+1)/5
+                for compute, order, expected in (("auto", "lex", h/2), ("cpu", "grevlex", h/3)):
+                    with (self.subTest(binding=binding, compute=compute, order=order),
+                          patch("engine.worker_process.run_worker", side_effect=AssertionError("GCD started a worker"))):
+                        with patch.object(Polynomial, "__str__", side_effect=AssertionError("GCD serialized an operand")):
+                            value = gcd(left, right, order=order, compute=compute)
+                            chained = gcd(value, left)
+                        self.assertIs(value.polynomial, value)
+                        self.assertIs(value.parent, h.parent)
+                        self.assertEqual((value, chained, chained.order), (expected, expected, order))
+                        self.assertEqual((value.status, value.operation, value.type), ("ok", "gcd", "polynomial"))
+                        recorded = dispatch({"operation": "gcd", "ring": value.ring, "compute": compute,
+                                             "operands": {"polynomial": str(left), "other_polynomial": str(right)}})
+                        self.assertEqual(value.result, recorded["result"])
+                        self.assertEqual(value.record["replay"], recorded["replay"])
+                        self.assertEqual(json.loads(value.json), value.record)
+                        self.assertEqual((value.execution["requested"], value.execution["backend"]), (compute, "cpu"))
+                        self.assertEqual(value.execution["stages"][0]["operation"], "polynomial_gcd")
+
+    def test_wide_gcd_survives_failed_assignment_and_replays_after_rebinding(self):
+        setup = dedent("""
+            x, y, z = coordinates("x", "y", "z")
+            h = x^(2^70+3) + (2^200+7)*y/3
+            d = gcd(h*z, h*(z+1))
+            x, y, z = coordinates("x", "y", "z", fresh=True)
+        """).lstrip()
+        bad = "d = gcd(d, x)\n"
+        check = "print(d == h, d.parent == h.parent, d.parent == x.parent)\n"
+        status, out, err = run_prompt(setup + bad + check + "quit\n")
+        self.assertEqual(status, 0)
+        self.assertIn("different coordinate spaces", err)
+        self.assertIn("True True False", out)
+
+        script = run_script(setup + check + "print(d.json)\n" + bad)
+        self.assertEqual(script.returncode, 2)
+        self.assertIn("different coordinate spaces", script.stderr)
+        check_output, raw = script.stdout.splitlines()
+        self.assertEqual(check_output, "True True False")
+        record = json.loads(raw)
+        replay = run_script(record["replay"]["script"])
+        self.assertEqual((replay.returncode, replay.stderr), (0, ""))
+        self.assertEqual(json.loads(replay.stdout)["result"], record["result"])
+
+    def test_short_sparse_gcd_with_large_degree_or_coefficient_uses_the_worker(self):
+        from engine import session_algebra
+
+        x, y, z = coordinates("x", "y", "z")
+        for h in (x**129 + y, x + (2**4100 + 7)*y):
+            with self.subTest(common_factor=str(h)[:40]):
+                left, right = h*z, h*(z+1)
+                with patch.object(session_algebra, "_evaluate", wraps=session_algebra._evaluate) as worker:
+                    value = gcd(left, right)
+                    worker.assert_called_once()
+                self.assertEqual(value, h)
+                self.assertIs(value.parent, x.parent)
 
     def test_reuse_basis_and_polynomial_in_original_coordinates(self):
         from engine.algebra import calculate_algebra

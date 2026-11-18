@@ -58,6 +58,24 @@ class SessionWorkspaceTests(unittest.TestCase):
         self.assertFalse(map_only.rings)
         self.assertEqual(map_only.other[0].text(), "m = QQ[x] (m.domain) → QQ[x] (m.codomain)")
 
+    def test_help_and_workspace_leave_native_gcd_results_unexpanded(self):
+        from engine.session_help import algebra_help_values, algebra_value_help
+
+        session = new_session(None)
+        list(session.run('x,y = coordinates("x","y")\nf = gcd(x*y, x^2)\nz = gcd(0*x, 0*y)\nalias = f'))
+        f, z = (session.variables[name] for name in ("f", "z"))
+        topics = algebra_help_values(session)
+        card = algebra_value_help("alias", topics["alias"], session.variables)
+        self.assertIn("alias is a polynomial in R1 (QQ[x, y]).", card)
+        card = algebra_value_help("z.multiplicity", topics["z.multiplicity"], session.variables)
+        self.assertIn("z is zero and has no finite factor multiplicity.", card)
+        inventory = workspace(session.variables)
+        self.assertIs(session.variables["alias"], f)
+        self.assertIn("z = 0", [v.text(expanded=True) for v in inventory.rings[f.parent].members])
+        for value in (f, z):
+            self.assertNotIn("_value", vars(value))
+            self.assertNotIn("_record", vars(value))
+
     def test_saved_empty_coordinate_tuples_belong_to_their_own_ring(self):
         session = new_session(None)
         list(session.run('A = quotient_ring(ideal(ring=QQ))\ng = A.coordinates\np = QQ.coordinates\na = ()'))

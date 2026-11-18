@@ -78,7 +78,7 @@ def algebra_help_values(session):
             method = _MULTIPLICITY
             if value.parent.has_relations:
                 method = _FieldHelp("{n} requires a polynomial ring without chart relations.", "{owner}.parent", CHARTS)
-            elif not value._value._terms:
+            elif not value:
                 method = _FieldHelp("{owner} is zero and has no finite factor multiplicity.", "{owner}", CHARTS)
             elif not value.parent.generators:
                 method = _FieldHelp("{n} requires a nonconstant factor in the parent ring.", "{owner}.parent", CHARTS)

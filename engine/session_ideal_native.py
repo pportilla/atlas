@@ -72,6 +72,12 @@ def _api():
             ("atlas_ideal_polynomial_release", None, (ptr,)),
             ("atlas_ideal_from_polynomials", ptr, (ptr, ctypes.POINTER(ptr), size)),
         )
+    if hasattr(library, "atlas_ideal_polynomial_gcd"):
+        signatures += (
+            ("atlas_ideal_polynomial_gcd", ptr, (ptr, ptr, ctypes.c_int)),
+            ("atlas_ideal_polynomial_row", ptr, (ptr,)),
+            ("atlas_ideal_polynomial_is_zero", ctypes.c_int, (ptr,)),
+        )
     for name, result, args in signatures:
         function = getattr(library, name)
         function.restype, function.argtypes = result, args
@@ -111,6 +117,29 @@ class _CtypesRing(_CtypesOwner):
             raise ArithmeticError(self.library.atlas_ideal_error().decode())
         return _CtypesOwner(ptr, self.library.atlas_ideal_polynomial_release)
 
+    def polynomial_gcd(self, left, right, lex):
+        if not hasattr(self.library, "atlas_ideal_polynomial_gcd"):
+            return None
+        ptr = self.library.atlas_ideal_polynomial_gcd(left.ptr, right.ptr, lex)
+        if not ptr:
+            return NativeIdeal._declined(self.library)
+        return _CtypesOwner(ptr, self.library.atlas_ideal_polynomial_release)
+
+    def polynomial_row(self, handle):
+        ptr = self.library.atlas_ideal_polynomial_row(handle.ptr)
+        if not ptr:
+            raise ArithmeticError(self.library.atlas_ideal_error().decode())
+        try:
+            return ctypes.string_at(ptr)
+        finally:
+            self.library.atlas_groebner_release(ptr)
+
+    def polynomial_is_zero(self, handle):
+        value = self.library.atlas_ideal_polynomial_is_zero(handle.ptr)
+        if value < 0:
+            raise ArithmeticError(self.library.atlas_ideal_error().decode())
+        return bool(value)
+
     def ideal(self, generators):
         count = len(generators)
         if count > 128:
@@ -147,12 +176,16 @@ def ideal_constructor(fallback, polynomial_type, ideal_type):
 
 
 class _CompiledRing:
-    __slots__ = ("polynomial", "ideal")
+    __slots__ = ("polynomial", "ideal", "polynomial_gcd", "polynomial_row", "polynomial_is_zero")
 
     def __init__(self, binding, width):
         ring = binding.ring(width)
         self.polynomial = partial(binding.polynomial, ring)
         self.ideal = partial(binding.from_polynomials, ring)
+        self.polynomial_gcd = getattr(binding, "polynomial_gcd", None)
+        if self.polynomial_gcd is not None:
+            self.polynomial_row = binding.polynomial_row
+            self.polynomial_is_zero = binding.polynomial_is_zero
 
 
 def native_ring(width):
