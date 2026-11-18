@@ -1,87 +1,186 @@
 # How Atlas resolves a hypersurface germ
 
-A request specifies a polynomial over the rationals, its ordered coordinates, and a resolution mode. Atlas resolves the germ at the origin. The `charts` field describes the modification. The `atlas` field records the pieces of those charts used to verify the answer and count strata over the origin. [Request and dispatch](../engine/resolve.py) · [Atlas serialization](../engine/atlas.py)
-
-A request can also name a method. The default, `auto`, chooses among the engines below. `method="weighted"` resolves the germ by the weighted blowups of Abramovich, Temkin and Włodarczyk in the native weighted engine, in embedded mode and without zeta functions. [Weighted resolution](weighted-resolution.md#resolve-with-method-weighted)
-
-The CLI, prompt, scripts and HTTP workers call the same solver. An invalid variable list, a zero equation or a hypersurface missing the origin is an input error. Exceeding a quick parsing limit gives an inconclusive result. [Session entry point](../engine/session.py) · [Worker](../engine/worker.py) · [Input parser](../engine/polynomial.py)
-
-Each resolution still runs in a process of its own, in its own session, so it can be stopped at a deadline or on interruption. On Linux the prompt, scripts and the HTTP server fork these workers from a preloaded engine instead of starting an interpreter. The fork server imports the solver and loads the native libraries but never computes. Until it is ready, and in a one-shot `atlas resolve`, which finishes before such a server could be ready, workers start an interpreter as before. A worker forked from it requests its search lanes from the same server, and the server stops a requester's children when that requester exits. A solver without a server, such as the one-shot `atlas resolve`, forks its search lanes from itself when it has a single thread and computes on the CPU. Each lane leads its own session, keeps only its standard streams and its coordinator pipe, and starts from fresh replay and face-check contexts. Otherwise each lane starts an interpreter. It declines requests that change interpreter settings fixed at startup and requests made after the engine sources or native build changed, and the caller then starts the interpreter. The native helper programs (plane curves, Newton fans, face and graph checks) also run in forked copies of the calling solver, with the same timeouts and exit status as the programs. [Fork server](../engine/fork_server.py) · [Helper entries](../engine/native_process.py)
+An embedded resolution gives a map under which the hypersurface and the
+exceptional divisors have normal crossings over the origin. There are often
+several ways to obtain such a map. For example, the plane cusp takes three
+ordinary point blowups, while a hypersurface with a suitable Newton polyhedron
+can be resolved directly from a fan. After choosing a modification, Atlas
+checks the equations on its charts. [Work through the cusp](resolving-a-cusp.md)
 
 ```mermaid
 flowchart TD
-    A["Parse the equation and validate the request"] --> B["Try eligible structured methods in order"]
-    B -->|success| V["Verify the owned charts or reuse their native proof"]
-    B -->|no result| X["Try eligible exhaustive embedded fan and coordinate-centre proofs"]
-    X -->|no result or ineligible| G["Try blowing up the smooth reduced singular locus"]
-    G -->|all graph charts certified| V
-    G -->|declined, timed out or ineligible| P{"Search policy and dimension"}
-    P -->|quick| Q["Bounded Newton, origin blowups and priority ideals where eligible"]
-    P -->|exhaustive, singular in 3 to 8 variables| N{"Does the native tangent test rule out Newton?"}
-    N -->|yes| O["Start origin blowups, joined by ideal search after 250 ms or on decline"]
-    N -->|no| W["Start Newton, joined by origin and ideal search after two seconds or on decline"]
-    P -->|other exhaustive cases| I["Eligible serial Newton, then exhaustive ideal search"]
-    Q -->|success| V
-    Q -->|budget exhausted| U["Inconclusive with diagnostic"]
-    X -->|success| V
-    O -->|success| V
-    W -->|success| V
-    I -->|success| V
-    V --> R["Resolution record with owned atlas and exceptional dual complex"]
-    R -->|zetas requested| S["Use embedded strata from this atlas or an embedded companion"]
-    S --> Z["Monodromy and topological zeta functions"]
-    H["Saved resolution JSON"] -->|incidence| D["Recompute the dual complex in the saved mode"]
-    H -->|integrals| T["Recover embedded strata from the record"]
-    T --> Z
+    F["Hypersurface germ at the origin"] --> M["Choose a modification"]
+    M --> C["Construct charts and pull back the equation"]
+    C --> V["Check smoothness and crossings over the origin"]
+    V -->|more blowups needed| M
+    V -->|certified| D["Identify exceptional components and their intersections"]
+    D -->|zetas requested| Z["Compute Euler characteristics of the strata"]
 ```
+
+This chapter describes `method="auto"`, the default at the prompt, in scripts,
+on the command line and over HTTP. Its `charts` field describes the maps, and
+its `atlas` field describes the regions used to check them and count
+intersections. For a resolution by weighted blowups on quotient charts, use
+`method="weighted"`. That method has its own certificate and output fields.
+[Reading a resolution record](resolution-records.md) · [Weighted resolution](weighted-resolution.md)
 
 ## How Atlas chooses a modification
 
-Atlas first tries algorithms whose hypotheses can be checked on the input. A failed candidate passes control to the next search. A successful candidate supplies charts that still have to certify the result in the requested mode. [Dispatch order](../engine/resolve.py)
+The input consists of a nonzero rational polynomial vanishing at the origin,
+the ordered coordinates, and a choice of embedded or intrinsic resolution.
+A particular family often admits a short construction. If its hypotheses
+fail, the search moves on to a more general method. Any candidate must still
+supply the charts and satisfy the checks for the requested mode.
 
 ### Structured inputs
 
-For an embedded singular germ in three to eight variables, Atlas first checks for a divisor with normal crossings at the origin. Coordinate powers or smooth factors through the origin with independent differentials certify the identity map. Singular plane curves go to the plane blowup algorithm. A smooth germ outside the size range of the ordinary engine gets the identity from its nonzero linear part. [Dispatcher](../engine/resolve.py) · [Normal crossings test](../engine/monodromy_special.py) · [Plane resolver](../native/plane.cpp)
+| Geometry of the input | Construction |
+| --- | --- |
+| Smooth germ, or an embedded divisor already having normal crossings | The identity suffices. For an embedded singular germ in three to eight coordinates, Atlas checks for coordinate powers or smooth factors through the origin with independent differentials. |
+| Singular plane curve | Blow up points and follow the branches through the new charts until the requested crossings hold. [Plane blowups](../native/plane.cpp) |
+| A-series surface singularity | Try the chain of surface charts before the ordinary-point test. [Surface chains](../native/chain.cpp) |
+| Smooth projectivized tangent cone | Try the ordinary blowup of the origin. [Ordinary points](../native/ordinary.cpp) |
+| Diagonal surface or binomial | Try a fan adapted to the diagonal surface, or coordinate blowups for the binomial. [Diagonal surface fans](../native/toricfan.cpp) · [Binomial charts](../native/binomial_fan.cpp) |
 
-Within the ordinary engine's range (two to eight variables, at most 4,096 terms, total degree at most 128), singular three-variable inputs first try the A-series surface chain. The ordinary engine handles smooth germs and tests for a smooth projective tangent cone. In three variables, a diagonal Newton surface is the next candidate. If still unresolved, two-term inputs in two to eight variables can try coordinate blowups, except after an exhaustive plane-worker limit. [Surface chains](../native/chain.cpp) · [Ordinary points](../native/ordinary.cpp) · [Diagonal surface fans](../native/toricfan.cpp) · [Binomial charts](../native/binomial_fan.cpp)
+The ordinary engine accepts two to eight variables, at most 4,096 expanded
+terms and total degree at most 128. Outside that range a nonzero linear part
+can still certify a smooth germ. After reaching a plane worker limit in
+exhaustive search the solver skips the binomial shortcut. For a repeated
+input factor, embedded mode can resolve the reduced support and recover the
+original multiplicities from its transforms. Intrinsic mode requires a
+reduced germ. [Dispatch and size checks](../engine/resolve.py) · [Recovering multiplicities](../engine/weighted_record.py)
 
 ### Bounded centre proofs
 
-Exhaustive search, the CLI and session default, tries two bounded embedded proofs where eligible. A small fan can certify the first monomial ideal candidate. For a ternary pencil `H(x,y) + z*K(x,y)`, the next test requires binary homogeneous forms of equal degree 2–15, with `H` a scalar times a power of a noncoordinate rational linear form and `K` nonzero at its projective root. After certifying that the preceding Newton candidates cannot resolve the germ, an isolated graph worker tests the identity, origin and coordinate-line centres in their scheduled order. The third must pass and both predecessors must fail. [Bounded trials](../engine/newton_trials.py) · [Pencil test and size limits](../native/resolution_candidate.cpp) · [Graph worker](../native/graph_verify.cpp)
+A natural centre to try is the reduced singular locus. Consider
+$f=A^2-TB^2$, where $A=x+y+z$, $B=x-y$ and $T=z$. In these linear
+coordinates the Jacobian ideal is $(A,TB,B^2)$, whose radical $(A,B)$ defines
+a line. Blowing up this line gives two charts.
 
-Both search policies can then try the reduced singular locus. The C++ kernel forms the Jacobian ideal `(f, ∂f/∂x₁, …, ∂f/∂xₙ)` and computes its radical. If that radical presents a smooth complete intersection through the origin, of positive dimension and codimension at least two, its generators define a candidate blowup. The kernel saturates each standard open and checks the transforms and crossings. Embedded mode can certify a single exceptional divisor when the centre is a polynomial graph over free coordinates. Other centres and intrinsic requests go through geometric component analysis. Eligibility includes three to eight variables and four to 128 input terms. The native trial has a 100 ms deadline. A failed proof or budget limit returns control to the existing search. [Native centre and chart proofs](../native/ideal.cpp) · [Trial limits](../engine/reduced_centre.py) · [Record construction](../engine/general_resolution.py)
+| Chart | Pullback of $f$ | Strict transform |
+| --- | --- | --- |
+| $A=Bu$ | $B^2(u^2-T)$ | $u^2=T$ |
+| $B=Av$ | $A^2(1-Tv^2)$ | $Tv^2=1$ |
 
-For example, set `A=x+y+z`, `B=x-y` and `T=z`. The equation `A²−TB²` has Jacobian ideal `(A, TB, B²)`, whose radical is the line `(A,B)`. On the two opens of its blowup, the strict transforms are `u²−T=0` for `u=A/B` and `1−Tv²=0` for `v=B/A`. They agree where `uv=1`. A smooth centre alone cannot certify this outcome. For `(y−x²)²−z⁵`, the reduced singular locus is also smooth, but the chart with pivot `z` has strict equation `u²−z³=0` and the search continues. [Positive and negative regression cases](../tests/test_reduced_centre_geometry.py)
+The equations agree on the overlap $uv=1$. In the first chart $B$ is a
+coordinate independent of $u,T$, so the smooth strict transform crosses the
+exceptional divisor $B=0$ transversely. In the second, $A$ plays the same
+role. Compare $(y-x^2)^2-z^5$. Its reduced singular locus is also smooth,
+but on the blowup chart $y-x^2=zu$ the strict equation is still the cusp
+$u^2=z^3$. Here a further modification is needed. [Centre and chart calculations](../native/ideal.cpp)
+
+Both search policies can try this construction for inputs in three to eight
+variables with four to 128 terms. The reduced Jacobian locus must be a smooth
+complete intersection through the origin, of positive dimension and
+codimension at least two. Atlas saturates each chart by its pivot before
+checking the transforms. An embedded polynomial-graph centre can directly
+certify a single exceptional divisor. Other presentations and intrinsic
+requests require component analysis. This trial has a 100 ms budget.
+[Candidate limits](../engine/reduced_centre.py) · [Component analysis](../engine/general_resolution.py)
+
+Exhaustive search also tries two cheaper embedded proofs first. A small fan
+may certify the first monomial ideal candidate. For a pencil $H(x,y)+zK(x,y)$
+of binary homogeneous forms of equal degree 2–15, the second shortcut applies
+when $H$ is a multiple of a power of a noncoordinate rational linear form
+and $K$ is nonzero at its projective root. After ruling out the preceding
+Newton candidates, the verifier tests the identity, origin and coordinate-line
+centres in order. The shortcut succeeds when only the third centre works.
+[Bounded trials](../engine/newton_trials.py) · [Pencil test](../native/resolution_candidate.cpp)
 
 ### Quick search
 
-Quick search uses bounded parsing and a 55-second CLI worker deadline. Eligible inputs try a regular Newton modification, including coordinate changes, monomial ideals or repairs of failed crossings. An unresolved singular three-variable input can try blowups from the origin. In four to eight variables the quick origin attempt is limited to the repeated-tangent rule. The final search tests priority blowup ideals with bounded effort. Exhausting the quick search yields an inconclusive record. [CLI deadline](../engine/resolve_cli.py) · [Newton](../engine/newton_backend.py) · [Origin blowups](../engine/origin_backend.py) · [Ideal search](../engine/general_resolution.py)
+Use `--quick` for a bounded attempt. The search tries an eligible regular
+Newton modification, including available coordinate changes and repairs of
+failed crossings. For unresolved singularities in three variables it can
+start blowups from the origin. In four to eight variables that attempt is
+limited to the repeated-tangent rule. The final attempt tests priority ideals.
+The CLI worker has 55 seconds. If it exhausts its budget, its diagnostic
+reports an inconclusive calculation. [Newton modifications](../engine/newton_backend.py) · [Origin blowups](../engine/origin_backend.py) · [Ideal search](../engine/general_resolution.py)
 
 ### Exhaustive search
 
-In the exhaustive worker search, Atlas can rule out Newton on embedded ternary inputs of total degree at most 16, with at most 128 terms and 64-bit rational numerators and denominators. The test requires a higher-order term and a lowest-degree part exactly equal to `c*L^d`, with `d ≥ 2` and all three coefficients of the linear form `L` nonzero. All axial intercepts then have degree `d`. The only coordinate choice in Atlas's Newton search gives the ordinary origin blowup. Its exceptional plane meets the strict transform along the repeated line `L=0`. That line meets the dense torus in a curve, beyond the scope of Newton's finite-point repair. With this proof, Atlas starts the origin-blowup worker immediately and starts ideal certification if that worker declines, fails, or is still running after 250 ms. [Native tangent test](../native/resolution_candidate.cpp) · [Newton repair](../engine/newton_repair.py) · [Worker coordination](../engine/exhaustive_resolution.py)
+The CLI and session default to exhaustive search. Atlas increases the time
+available to an undecided candidate and retries it. On eligible singular
+inputs in three to eight variables it can search for a Newton modification,
+point blowups and an ideal blowup concurrently. In the usual schedule Newton
+has a two-second head start. Its verified chart data can be reused directly.
+Outside the parallel case, eligible inputs try Newton before general ideal
+enumeration. HTTP requests that omit a policy first try quick search and may
+return a background exhaustive job. [Search schedule](../engine/resolution_search.py) · [HTTP policy](../engine/app.py)
 
-In the usual parallel search Newton gets a two-second head start. Origin blowups and general ideal certification join as soon as Newton gives no result or its head start expires. When the lanes are forked, from the preloaded engine or from the solver, and the process may use a processor for each of them, the later lanes start with Newton, but their answers wait until Newton answers or its head start expires. Newton keeps its priority. With fewer processors, lanes forked from the solver are created with Newton and receive their request when they join. A Newton lane that certifies a regular monomial modification returns its verified atlas, and the solver attaches it without verifying the same charts again unless zetas need its integrals. A certificate search that starts alongside a live worker warms one verifier. An undecided proof or timeout enables its spare for later candidates. The first successful worker supplies the charts for verification. Outside the parallel case, eligible inputs try Newton serially before general ideal enumeration. The exhaustive scheduler increases allowances and retries undecided candidates. For HTTP requests with no search policy, the server tries quick first and can return a background exhaustive job. [Candidate schedule](../engine/resolution_search.py) · [HTTP policy](../engine/app.py)
+One tangent-cone test changes this order. Suppose an embedded ternary input
+has a higher-order term and initial form $cL^d$, with $d\ge2$ and all three
+coefficients of $L$ nonzero. Its axial intercepts all have degree $d$. In
+the coordinate choices available to this search the Newton modification is
+the ordinary origin blowup. The exceptional plane meets the strict transform
+along a repeated line whose intersection with the dense torus is a curve.
+Newton's finite-point repair cannot resolve that curve. For degree at most
+16, at most 128 terms and 64-bit rational numerators and denominators, Atlas
+can detect this case and start origin blowups immediately. Ideal certification
+joins on failure or after 250 ms. [Tangent test](../native/resolution_candidate.cpp) · [Newton repair](../engine/newton_repair.py)
 
-When a producer reports a component repeated through the origin, embedded mode can resolve the reduced support and lift each original multiplicity back to the charts. Intrinsic resolution requires a reduced germ. [Weighted divisors](../engine/weighted_record.py)
+### Workers and deadlines
+
+Each solve runs in its own process so that a deadline or interruption can
+stop it. On Linux, interactive and HTTP sessions can fork workers from a
+preloaded engine. A one-shot CLI solve starts an interpreter. If no fork
+server is available, a single-threaded CPU solver can fork its own search
+workers. Each starts with fresh verification state. Changed engine sources,
+changes to startup-only settings, or multithreading can require a fresh
+interpreter. Helper programs for plane curves, fans and graph charts use the
+same deadlines in forked mode. [Fork server](../engine/fork_server.py) · [Native helper processes](../engine/native_process.py)
+
+When enough processors are available the other workers may start alongside
+Newton, holding their answers until its head start ends. Otherwise a forked
+worker receives its candidate when its turn begins. A parallel certificate
+search preloads one verifier and starts a spare if a proof is undecided or
+times out. [Exhaustive worker coordination](../engine/exhaustive_resolution.py)
 
 ## Constructing and verifying charts
 
-For a **Newton modification**, each maximal cone of a regular fan gives an affine chart. Its rays specify a monomial substitution for the original coordinates, and factoring the exceptional monomial from the pullback gives the strict-transform equation. **Successive smooth blowups** use a generator of the centre as pivot on each standard open, express the other generators as ratios times that pivot, and transform the strict ideal and existing divisors there. For an **ideal blowup**, saturating the graph equations by the pivot gives the ambient chart ideal. Adjoining the pulled-back hypersurface equation to the ambient chart ideal and saturating that ideal by the pivot gives the strict transform. Comparing boundary components on overlapping opens determines which labels glue. [Newton chart construction](../engine/newton_backend.py) · [Blowups of smooth centres](../engine/local_blowups.py) · [Graph reconstruction](../engine/graph_record.py) · [Boundary gluing](../engine/general_resolution.py)
+For a **Newton modification**, each maximal cone of a regular fan gives an
+affine chart. The rays specify a monomial substitution. Removing the
+exceptional monomial from the pullback gives the strict-transform equation.
+[Newton chart construction](../engine/newton_backend.py)
+
+For a **smooth blowup**, each chart uses one generator of the centre as a
+pivot. The new coordinates include the ratios of the remaining generators
+to this one, as in the line example above. For a general **ideal blowup**,
+the verifier saturates these graph equations by the pivot to recover the
+closure of the graph away from the exceptional divisor. Adding the pulled-back
+hypersurface equation and saturating again gives the strict transform.
+Comparing the boundary components on overlaps determines which local pieces
+glue. [Smooth centres](../engine/local_blowups.py) · [Graph charts](../engine/graph_record.py) · [Boundary gluing](../engine/general_resolution.py)
 
 ### Where the resolution decisions run
 
-| Stage | Native computation |
+For canonical point and curve blowups, Atlas uses the invariant of Bierstone
+and Milman to choose a smooth centre while the strict transform is singular.
+On eligible affine hypersurface charts it computes the invariant and centre
+by successive restriction to hypersurfaces of maximal contact. When a surface
+in a threefold has become smooth, the curves cut out on it by the exceptional
+divisors determine the remaining blowups. [Bierstone and Milman, *Desingularization algorithms I. Role of exceptional divisors*, Theorem 1.14 (2003)](https://arxiv.org/abs/math/0207098) · [Centre calculation](../native/centre_affine_maximum.cpp) · [Surface step](../native/surface_centre_choice.cpp)
+
+| Charts | What the native verifier checks |
 | --- | --- |
-| Canonical point or curve blowup | At each blowup the kernel classifies the failing charts together. On an eligible affine hypersurface chart it computes the whole maximal-contact descent and returns the invariant and the ordered centre ideal. On a smooth surface presented as a rational graph it can certify a boundary curve directly from its traces, multiplicities and ownership. Other charts go through the general frame and surface procedures, each in one native call per chart. The blowup of a whole stage (strict transforms, exceptional orders and data, elimination of graph coordinates, retained charts) and the presence and crossing tests of the new charts are one native call each. Rings beyond the packed kernel take the step-by-step route through the same operations. [Affine descent](../native/centre_affine_maximum.cpp) · [Surface centre](../native/surface_centre_choice.cpp) · [General centre search](../native/centre_search.cpp) · [Frame and surface procedures](../native/centre_maximum.cpp) · [Blowup stage](../native/canonical_blowup.cpp) |
-| Exceptional intersections on canonical charts | For each chart the kernel receives the exceptional ideals, fibre, ownership equations and removed loci together. It tests intersections, counts the owned geometric and rational components, and returns the unresolved strata to the general component verifier. Saved canonical charts use the same computation. [Owned chart incidence](../native/owned_chart_incidence.cpp) · [Component verification](../engine/geometric_components.py) |
-| Ideal-blowup charts | The graph verifier checks the strict transform, its crossings, the exceptional orders and the projection. Component decomposition over rational and marked fields and the comparisons on chart overlaps determine which pieces glue. [Graph replay](../native/graph_replay.cpp) · [Unpacked graph verification](../native/graph_wide.cpp) · [Geometric projections](../native/component_projection.cpp) |
-| Newton charts | The regular fan gives the substitution. One native call verifies a fresh fan: the owned supports, pullbacks and projections, region generators, exceptional data shared by the charts, crossings on each owned fibre and the torus-section plan. [Fan verification](../native/fan_verification.cpp) The native torus and surface kernels compute component incidence and identify the faces of each cell. When a torus stratum is degenerate, the repair kernel uses its saturated Jacobian and a finite-locus test to choose the repair. [Surface incidence](../native/fan_surface.cpp) · [Torus sections](../native/torus_sections.cpp) · [Newton repair](../native/newton_repair.cpp) |
-| Verification of saved charts | The verifier reconstructs chart maps, ownership and exceptional ideals from the saved equations. General gluing uses native component and face decisions. The zeta kernels use the multiplicities, volume orders and Euler characteristics of the verified strata. [Projection coefficients](../native/projection_coefficients.hpp) · [Gluing](../native/chart_gluing.cpp) · [Zeta computation](../native/monodromy.cpp) |
+| Canonical blowups | Each stage computes strict transforms, exceptional orders and charts. It checks which new charts meet the fibre and where crossings still fail. For intersections it uses the exceptional ideals, equations of the fibre, and exclusions on each chart. [Blowup stage](../native/canonical_blowup.cpp) · [Chart incidence](../native/owned_chart_incidence.cpp) |
+| Ideal blowups | The graph equations give the strict transform, projection and exceptional orders. Decomposition over the rationals or a marked number field, followed by comparison on overlaps, identifies the geometric components. [Graph verification](../native/graph_replay.cpp) · [Wide inputs](../native/graph_wide.cpp) · [Component projections](../native/component_projection.cpp) |
+| Newton charts | The fan verifier checks the substitutions, pullbacks, face domains and crossings. Torus sections give incidence and the faces of each cell. On a degenerate stratum the saturated Jacobian and a finite-locus test guide the repair. [Fan verification](../native/fan_verification.cpp) · [Torus sections](../native/torus_sections.cpp) · [Newton repair](../native/newton_repair.cpp) |
+| Saved charts | The verifier recovers the projection, chart domains and exceptional ideals from the saved equations, then glues components and computes the requested invariants. [Projection coefficients](../native/projection_coefficients.hpp) · [Gluing](../native/chart_gluing.cpp) |
 
 ## What the record certifies
 
-Each owned chart specifies its projection, ambient equations, components, origin fibre, and the region and exclusions that assign points to that chart. These assignments prevent counting an overlap twice. The dispatcher can reuse a native monomial construction that already verified the same record. Otherwise it tries dedicated verifiers for identity, plane, ideal-blowup, point and fan charts, then reconstructs the general atlas when those verifiers decline. [Attachment](../engine/resolve.py) · [Native monomial construction](../native/monomial_resolution.cpp) · [Verifier dispatch](../engine/strata.py) · [General chart checks](../engine/atlas.py)
+Two affine charts of one blowup overlap. For instance, the two charts of a
+plane point blowup both contain all nonzero finite slopes of its exceptional
+line. To count that line once, one chart can take all finite slopes and the
+other the single missing point. The `atlas` field makes such assignments
+precise. Each piece specifies its projection, ambient equations, components,
+origin fibre and the region and exclusions it owns.
+
+An identity, plane, ideal-blowup, point or fan chart can have a dedicated
+verifier. A monomial construction can also supply its verified atlas directly.
+When these routes decline, Atlas reconstructs the charts and performs the
+general checks. [Monomial constructions](../native/monomial_resolution.cpp) · [Verifier selection](../engine/strata.py) · [General chart checks](../engine/atlas.py)
 
 To compare divisor pieces on affine charts, Atlas equates their original coordinates and saturates away from the exceptional divisors to obtain the closure of the overlap. From this graph it can recover the rational coordinate changes in both directions. Two pieces glue when these changes are regular at their generic points, carry each generic point to the other, and respect the loci removed from both charts. A meeting confined to a smaller closed subset therefore leaves the components distinct. [Overlap construction](../engine/atlas_gluing.py) · [Native coordinate comparisons](../native/primary_decomposition.cpp)
 

@@ -16,6 +16,26 @@ def expected_output(section, source):
 
 
 class DocumentedExamplesTests(unittest.TestCase):
+    def test_prompt_transcripts(self):
+        guides = ("README.md", "examples/algebra-api.md", "docs/sessions.md", "docs/resolving-a-cusp.md",
+                  "docs/resolution-records.md", "docs/weighted-resolution.md")
+        for guide in guides:
+            contents = (ROOT / guide).read_text(encoding="utf-8")
+            # The ring naming example explicitly starts a fresh session.
+            for section in contents.split("\n### Name, select and delete rings\n"):
+                blocks = re.findall(r"^```text\n(atlas> .*?)^```$", section, re.MULTILINE | re.DOTALL)
+                with self.subTest(guide=guide, section=section.splitlines()[0]):
+                    self.assertTrue(blocks)
+                    commands = []
+                    expected = []
+                    for statement in "".join(blocks).split("atlas> ")[1:]:
+                        command, _, response = statement.partition("\n")
+                        commands.append(command)
+                        expected.append(response)
+                    status, output, error = run_prompt("\n".join([*commands, "quit"]))
+                    self.assertEqual((status, error), (0, ""))
+                    self.assertEqual(output.split("atlas> ")[1:-1], expected)
+
     def test_worked_guides(self):
         for guide in ("examples/polynomial-ideals.md", "examples/quotient-algebras.md",
                       "examples/local-algebra.md", "examples/local-geometry.md", "docs/value-methods.md"):

@@ -57,7 +57,7 @@ class DocsSiteTests(unittest.TestCase):
         cls.temp.cleanup()
 
     def test_markdown_pages_follow_the_readme_links(self):
-        for page in ("index.html", "docs/sessions.html", "examples/algebra-api.html", "native/KERNEL.html",
+        for page in ("index.html", "docs/sessions.html", "docs/installation.html", "examples/algebra-api.html", "native/KERNEL.html",
                      "benchmarks/index.html", "reference/functions.html", "genindex.html"):
             self.assertIn(page, self.parsed)
         self.assertEqual(self.pages[0].out, "index.html")
@@ -93,6 +93,7 @@ class DocsSiteTests(unittest.TestCase):
         html = (self.out / "reference/functions.html").read_text(encoding="utf-8")
         self.assertIn("Compute the dimension over QQ of the Jacobian algebra", html)
         entry = html.split('<section class="api-entry" id="polynomial">', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<span class="line out">', entry)
         self.assertIn('href="../docs/sessions.html#choose-the-ring-of-a-polynomial"', entry)
 
     def test_inline_calls_link_to_the_reference_and_back(self):

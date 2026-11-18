@@ -1,6 +1,6 @@
 # Development roadmap
 
-The public interface currently supports rational polynomial and quotient rings, maps defined by generator images in a session, ideal operations, local invariants and resolution of a hypersurface germ at the origin. The examples below describe proposed extensions. For available operations, start with the [algebra guides](../examples/algebra-api.md), [prompt and scripts](sessions.md) or [resolution records](resolution-records.md).
+Atlas can compute with ideals in rational polynomial rings and their quotients, study a germ at a rational point, and resolve a hypersurface germ at the origin. What would it take to compute a free resolution of a module, or to resolve a germ defined by several equations? The examples below are proposed extensions. Each gives a concrete calculation that a future implementation should handle. For computations available today, see the [algebra reference](../examples/algebra-api.md), [prompt and scripts](sessions.md) or [resolution records](resolution-records.md).
 
 ## Rings and modules
 

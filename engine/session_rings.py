@@ -336,9 +336,9 @@ def ring_bindings(rings):
         """Make a ring the default for new polynomials and ideals, and return that ring.
 
         >>> x, y = coordinates("x", "y")
-        >>> use_ring(x.parent)
+        >>> use_ring(x.parent)  # QQ[x, y]
         >>> f = polynomial("x^2 + y")
-        >>> f.parent
+        >>> f.parent  # QQ[x, y]
 
         Docs: docs/sessions.md#name-select-and-delete-rings
         """
@@ -348,8 +348,8 @@ def ring_bindings(rings):
         """Return the ring that new polynomials and ideals use by default, or None.
 
         >>> x, y = coordinates("x", "y")
-        >>> use_ring(x.parent)
-        >>> active_ring() == x.parent
+        >>> use_ring(x.parent)  # QQ[x, y]
+        >>> active_ring() == x.parent  # True
 
         Docs: docs/sessions.md#name-select-and-delete-rings
         """
@@ -359,9 +359,9 @@ def ring_bindings(rings):
         """Return a saved name of the given ring in this session, or None.
 
         >>> x = coordinates("x")
-        >>> ring_name(x.parent)
+        >>> ring_name(x.parent)  # R1
         >>> A = x.parent
-        >>> ring_name(A)
+        >>> ring_name(A)  # A
 
         Docs: docs/sessions.md#name-select-and-delete-rings
         """
@@ -376,7 +376,7 @@ def ring_bindings(rings):
 
         >>> x, y = coordinates("x", "y")
         >>> f = y^2 - x^3
-        >>> delete_ring(x.parent)
+        >>> delete_ring(x.parent)  # Deleted QQ[x, y]: x, y, R1, f
 
         Docs: docs/sessions.md#name-select-and-delete-rings
         """
@@ -387,8 +387,9 @@ def ring_bindings(rings):
 
         >>> x, y = coordinates("x", "y")
         >>> g = polynomial("x^2+y", ring=x.parent)
-        >>> use_ring(x.parent)
+        >>> use_ring(x.parent)  # QQ[x, y]
         >>> h = polynomial("x*y")
+        >>> g + h  # x^2+x*y+y
 
         Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
         """

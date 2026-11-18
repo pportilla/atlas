@@ -1,10 +1,7 @@
 # Resolve a plane cusp
 
-`resolve(f)` uses embedded resolution by default. For a plane curve, the
-vertices of its dual complex represent the exceptional curves above the
-origin. An edge records an intersection point of two exceptional curves.
-The strict transform is the closure of the original curve away from the
-origin, lifted to the resolved surface. Its branches have their own attachments.
+Where does the cusp $y^2=x^3$ meet the exceptional divisor after resolution?
+We can read the answer from the resolution graph, then check it in local coordinates.
 
 ## Follow the branch to the exceptional divisor
 
@@ -28,23 +25,33 @@ atlas> b.point
 ['0', '1']
 ```
 
-The cusp has one branch. In a decorated resolution graph you would draw its
-arrow at `E3`. Atlas records that arrow as `b.meets`. In intrinsic mode the
-complex instead records the exceptional locus **on the resolved curve**.
-For the cusp this is one point. Use `help K.dual_complex` or `help K.branches`
-at the prompt.
+The edges join `E1` to `E3` and `E2` to `E3`. Each vertex represents an
+exceptional curve above the origin. The cusp contributes one branch, `P1`.
+In a drawing of the graph, its arrowhead would attach to `E3`. The branch
+record even tells us where to look for that point, in the chart `B3.u`.
 
-`resolve(f, method="weighted")` resolves the same germ by weighted blowups
-instead. Its record lists the blowups in `K.steps` and the exceptional divisors
-with their numerical data, and certifies normal crossings over the origin; see
-[Embedded resolution by weighted blowups](weighted-resolution.md#resolve-with-method-weighted).
+Why did the calculation take three blowups? Look at the chart through the
+branch immediately after the first one.
+
+```text
+atlas> first = K.chart("B1.u")
+atlas> first.map
+{'x': u, 'y': u*v}
+atlas> first.strict_transform
+v^2-u
+```
+
+Substituting $x=u$, $y=uv$ gives $u^2(v^2-u)$. The strict transform
+$u=v^2$ is already smooth, but at the origin it is tangent to the exceptional
+curve $u=0$. The default, embedded resolution continues until the whole divisor
+has normal crossings. To resolve the curve intrinsically, ask for
+`resolve(f, mode="intrinsic")`. Its exceptional locus on the smooth curve
+consists of one point. [Resolution modes](resolution-records.md#resolution-modes)
 
 ## Look inside a chart
 
-`K.charts` returns chart objects. The prompt displays each by its ID.
-For the cusp, `B3.u` and `B3.v` are the two coordinate charts of the third
-blow-up. Select an entry by position, look it up by ID, or follow a branch
-directly to its chart.
+The names `B3.u` and `B3.v` denote the two charts of the third blowup.
+We can look up the first by name or reach it directly from the branch.
 
 ```text
 atlas> K.charts
@@ -64,14 +71,9 @@ atlas> C.strict_transform
 v-1
 ```
 
-`C.map` gives the original coordinates as polynomials in this chart.
-`C.pullback_map` is the corresponding ring homomorphism, with the chart's
-function ring `C.parent` as its codomain. In a chart with relations, read the
-defining polynomials through `C.ambient_ideal` in `C.ambient`. Computations
-with `C.coordinates` respect these relations.
-`C.pullback(f)` substitutes those polynomials into `f`. The strict transform
-has equation `v-1 = 0`. The exceptional divisor `E3` has equation `u = 0`,
-so the branch meets it at `(u, v) = (0, 1)`.
+The map expresses the original $x,y$ in the new coordinates $u,v$.
+Here `E3` has equation $u=0$, and the strict transform has equation $v-1=0$.
+They meet transversely at $(0,1)$, precisely the point in the branch record.
 
 ## Check the multiplicity in the pullback
 
@@ -87,19 +89,20 @@ atlas> total.multiplicity(u)
 6
 ```
 
-Type `help K.charts` for chart access, or type `C.` and press Tab for the
-fields and methods on this chart. `E.charts` lists the charts containing
-a local equation for `E`. The same divisor has equation `v = 0` in `B3.v`.
-For a divisor defined by several equations, `E.ideal_in(C)` gives its generators.
-To read a polynomial from text in the chart, use
-`polynomial("v-1", variables=C.coordinates)`.
+Thus `E3` occurs with multiplicity six in the total transform. The factor
+$v^3$ belongs to `E2`, which misses the branch point because $v=1$ there.
+The same `E3` has a different local equation in the other chart of this
+blowup. Use `E.charts` to find its charts and `E.equation_in(C)` to ask for
+its equation in a particular one. For a divisor defined by several equations,
+`E.ideal_in(C)` gives the local ideal.
 
-`K.polynomial` belongs to the original coordinate ring. Its serialized text
-is available as `K.record.polynomial`. To rebuild the incidence from the charts,
-use `D = recompute_dual_complex(K)` and inspect `D.cells`. The result has its
-own vertex records. The old `dual_complex(K)` spelling returns the raw replay
-dictionary for existing scripts.
+The ring of the chart is `C.parent`. For example, use `C.pullback_map` to
+transport a polynomial from the original ring, or read an expression directly
+in the chart with `polynomial("v-1", variables=C.coordinates)`. In a chart
+with relations, `C.ambient_ideal` gives those relations in the ambient ring
+`C.ambient`. [Rings and ideals](sessions.md#choose-the-ring-of-a-polynomial)
 
-The [cusp script](../examples/cusp.atlas) follows the branch through both charts containing `E3`. The [prompt and script checks](../tests/test_cli_session.py) verify the factorization and multiplicity shown above. The [plane-curve kernel](../native/plane.cpp) constructs the blowups. To inspect a saved calculation, continue to [resolution records](resolution-records.md).
-
-To compute the intersection in this chart, run `./atlas run examples/chart-elimination.atlas`. The script imposes $u=0$ and $v-1=0$, eliminates $u$, then reduces $v^2+v+1$ to $3$. [Chart elimination script](../examples/chart-elimination.atlas)
+To reconstruct the incidence from the charts, use `recompute_dual_complex(K)`.
+The cusp script also follows `E3` through both charts. The chart elimination
+example computes the ideal of the branch point and reduces $v^2+v+1$ there
+to $3$. [Reading a resolution record](resolution-records.md) · [Cusp script](../examples/cusp.atlas) · [Chart elimination script](../examples/chart-elimination.atlas)

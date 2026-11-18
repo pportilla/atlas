@@ -1,12 +1,12 @@
 # Polynomial, ideal and quotient algorithms
 
-These algorithms operate in an ordered polynomial ring over $\mathbb Q$. They use the reduced basis for the requested order as a canonical representation of an ideal. Follow a worked example for the session interface, or use the source links below for the algorithm. [Polynomial and ideal examples](../examples/polynomial-ideals.md) · [Quotient algebra examples](../examples/quotient-algebras.md) · [Bibliographic references for the proof table](KERNEL.md#references)
+How do ideal computations change when we impose equations on the coordinates? In a polynomial ring over $\mathbb Q$, a Gröbner basis gives a test for membership in an ideal. In a quotient ring we can use the same test once we include the equations of the ring among the ideal generators. This chapter follows that idea through elimination, arithmetic in a quotient, localization and decomposition. [Polynomial and ideal examples](../examples/polynomial-ideals.md) · [Quotient algebra examples](../examples/quotient-algebras.md)
 
 <a id="3-operations-on-ideals"></a>
 
 ## Operations on ideals
 
-Each is the standard reduction to a Gröbner basis.
+Many operations reduce to one membership test or one elimination. In the table $t$ is a fresh variable, eliminated before the original coordinates. The references give proofs of the formulas. [Bibliography](KERNEL.md#references)
 
 | Operation | Method | Reference |
 |---|---|---|
@@ -15,12 +15,12 @@ Each is the standard reduction to a Gröbner basis.
 | $I\cap\mathbf Q[x]$ for $I\subset\mathbf Q[t,x]$ | the elements without $t$ of a Gröbner basis for an elimination order; they form the reduced basis of the intersection when the basis is reduced | [CLO, Ch. 3 §1] |
 | $I:f^\infty$ | $(I+(tf-1))\cap\mathbf Q[x]$ | [CLO, Ch. 4 §4] |
 | $A\cap B$ | $(tA+(1-t)B)\cap\mathbf Q[x]$ | [CLO, Ch. 4 §3] |
-| $I:(g)$ | $(I\cap(g))/g$ | [CLO, Ch. 4 §4] |
+| $I:(g)$ for $g\ne0$ | divide generators of $I\cap(g)$ by $g$ | [CLO, Ch. 4 §4] |
 | $I:(g_1,\dots,g_r)$ | $\bigcap_j I:(g_j)$ | [CLO, Ch. 4 §4] |
 
-The resolver's native `saturate` returns the reduced lexicographic basis of $I:f^\infty$, as the SymPy route does. It computes the reduced graded basis first, by elimination with $t$ compared first, and then the lexicographic basis of the ideal that basis generates. Uniqueness of the reduced basis makes the result the same as that of a direct lexicographic elimination.
+The resolution kernel uses this saturation formula to get a reduced lexicographic basis of $I:f^\infty$. It first eliminates $t$ using a graded order on the original coordinates, then computes the lexicographic basis of the resulting ideal. Uniqueness of the reduced basis gives the same answer as direct lexicographic elimination.
 
-The division by $g$ in a quotient is exact: every element of a Gröbner basis of $I\cap(g)$ is a multiple of $g$, and dividing leading term by leading term never leaves a remainder.
+For $g\ne 0$, the division in the formula for $I:(g)$ is exact because every element of $I\cap(g)$ is a multiple of $g$. For $g=0$ the defining condition $ag\in I$ holds for every $a$, so $I:(0)$ is the whole ring.
 
 For a principal monomial divisor $d$, Atlas first attempts exact division of the input generators by $d$. If they all divide, $I=dJ$ and cancellation in the polynomial ring gives $I:(d)=J$. A single reduced basis computation on the quotients gives the result in the requested order. A nonzero remainder sends the original generators through the intersection calculation above. The coefficient of $d$ may be any nonzero rational.
 
@@ -36,7 +36,9 @@ The execution record attributes modular trace screening and prime replays to the
 
 For $A=\mathbb Q[x_1,\ldots,x_n]/I$, the native kernel computes the reduced global Gröbner basis of $I$ in the declared order. Each residue class has a unique representative supported on monomials outside the leading ideal. Reduction after arithmetic gives that representative. For powers, reducing the intermediate products keeps nilpotents and algebraic relations available at every step. The unit ideal gives the zero ring, including $1=0$. [Quotient kernel](quotient_ring.cpp)
 
-To invert $a$ in general, introduce $t$ and compute a lexicographic basis for $(I,ta-1)$ with $t$ first. If $a$ is a unit, this ideal contains $t-b(x)$ and its contraction is $I$. The kernel reduces a candidate $b$ in the declared order and checks $ab=1$ there. This final check also handles elements invertible only after discarding a component. A univariate Bézout identity or division of a defining relation by $a$ with a nonzero scalar remainder gives an inverse directly when applicable. On small tensor products of univariate binomial quotients, solving the multiplication matrix against the vector of $1$ also decides invertibility. The kernel also uses direct inversion for rational units, suitable binomial relations, and nilpotent perturbations of units. [Univariate arithmetic](quotient_inverse.cpp) · [FLINT extended GCD](https://flintlib.org/doc/fmpq_poly.html#greatest-common-divisor)
+For an ideal $J=(\bar g_1,\ldots,\bar g_r)$ in $A$, a residue class $\bar f$ belongs to $J$ exactly when $f$ belongs to $I+(g_1,\ldots,g_r)$ in the polynomial ring. Atlas reduces $f$ against a basis of this inverse image. To compare two ideals of $A$, test each generator of either ideal for membership in the other. For instance, in $\mathbb Q[x,y]/(y^2)$ the ideals generated by $x$ and by $x(1+y)$ agree because $1+y$ has inverse $1-y$. In $\mathbb Q[x,y]$ they are distinct, as evaluation at $y=-1$ shows. [Run both membership tests](../examples/quotient-algebras.md#compare-ideals-before-and-after-quotienting) · [Quotient ideal implementation](quotient_ideal.cpp)
+
+To invert $a$ in general, introduce $t$ and compute a lexicographic basis for $(I,ta-1)$ with $t$ first. If $a$ is a unit, this ideal contains $t-b(x)$ and its contraction is $I$. The kernel reduces a candidate $b$ in the declared order and checks $ab=1$ there. Checking the product in the original quotient rules out a candidate that works only on the components where $a$ is invertible. A univariate Bézout identity or division of a defining relation by $a$ with a nonzero scalar remainder gives an inverse directly when applicable. On small tensor products of univariate binomial quotients, solving the multiplication matrix against the vector of $1$ also decides invertibility. The kernel also uses direct inversion for rational units, suitable binomial relations, and nilpotent perturbations of units. [Univariate arithmetic](quotient_inverse.cpp) · [FLINT extended GCD](https://flintlib.org/doc/fmpq_poly.html#greatest-common-divisor)
 
 ### Ordinary and symbolic powers of rational ideals
 
@@ -74,7 +76,7 @@ The comparison tests work inside each component’s actual fraction field. They 
 
 Two product rules avoid expanding a large lexicographic basis. If the generators share a factor $h$ and $h$ avoids every associated prime of their quotient ideal $J$, then $(h)\cap J=hJ$. The components of $(h)$ and $J$ give the decomposition. If a generator is a product of pairwise comaximal powers, the Chinese remainder theorem splits the computation into one quotient per power. Gröbner unit-ideal tests certify comaximality. Factors of the complementary product are units on that branch and can be cancelled from its other generators. [Special decompositions](primary_special.cpp)
 
-For general ideals the native kernel chooses a maximal set of independent coordinates $U$ and computes a lexicographic Gröbner basis with the remaining coordinates first. Over $\mathbb Q(U)$ the quotient is finite. When it has a single generating coordinate, the powers of the irreducible factors of its minimal polynomial give the primary components. Otherwise the kernel forms the reduced quotient using square-free coordinate relations and finds a linear form separating its geometric points. Saturation by the product of the other factors isolates each component of the original finite algebra, including its nilpotents. [Native algorithm](primary_decomposition.cpp)
+For general ideals, Atlas follows the strategy of Gianni, Trager and Zacharias. Choose a maximal independent set of coordinates $U$ and compute a lexicographic Gröbner basis with the remaining coordinates first. Over the field $\mathbb Q(U)$ the quotient is finite-dimensional. When a single coordinate generates this algebra, the powers of the irreducible factors of its minimal polynomial give the primary components. Otherwise Atlas first finds a linear form separating the geometric points of the reduced quotient. Saturation by the product of the other factors isolates each component of the original finite algebra, including its nilpotents. [Gianni, Trager and Zacharias, *Gröbner bases and primary decomposition of polynomial ideals* (1988)](https://doi.org/10.1016/S0747-7171(88)80040-3) · [Native algorithm](primary_decomposition.cpp)
 
 To contract back to $\mathbb Q[x]$, the kernel chooses one row per minimal leading monomial over the parameter field and saturates by the square-free product $h$ of their nonconstant leading coefficients. It finds a power $h^m$ satisfying $h^m(I:h^\infty)\subseteq I$. This yields the exact splitting $I=(I:h^\infty)\cap(I+(h^m))$. Recursion on the second ideal recovers components on the exceptional locus. When the input has as many generators as its height, it is a complete intersection and all associated primes have the same dimension. The kernel then discards exceptional branches whose entire support has smaller dimension. Intersections merge equal associated primes and containment tests remove redundant components. The comparison tests check the reconstructed intersection, primaryness, the reported radicals and irredundancy with Singular. [Singular tests](../tests/test_primary_decomposition_singular.py)
 

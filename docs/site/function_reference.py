@@ -21,8 +21,8 @@ COMPUTE = ('Device policy. Use `"auto"` to let Atlas choose, `"cpu"` for the CPU
            'or `"gpu"` to request acceleration on eligible stages.')
 ORDER = ('Monomial order, either `"lex"` (lexicographic) or `"grevlex"` (graded reverse '
          'lexicographic). Omission inherits an order carried by the input or uses `"grevlex"`.')
-VARIABLES = ('All generators of one live ring in declaration order, such as `R.coordinates`. '
-             'This can specify a parent even when every input is a scalar.')
+VARIABLES = ('All generators of one ring in declaration order, such as `R.coordinates`. '
+             'Supply them when the other arguments are numbers and you want the result in this ring.')
 POINT_COORDINATES = ('List or tuple with one rational entry per coordinate in declaration order. '
                      'Both `(1/2, 0)` and `("1/2", 0)` specify the same point.')
 POINT = POINT_COORDINATES + ' The default is the origin.'
@@ -50,8 +50,8 @@ DECLARATION = dict(
 )
 POLYNOMIAL_OPTIONS = dict(order=ORDER, variables=VARIABLES, compute=COMPUTE)
 IDEAL_INPUT = dict(ideal=GLOBAL_IDEAL, compute=COMPUTE)
-IDEAL_PAIR = dict(left=QUOTIENT_IDEAL, right='Ideal with the same live parent as `left`.', compute=COMPUTE)
-ORDERED_IDEALS = dict(ideal=GLOBAL_IDEAL, other_ideal='Ideal with the same live parent and monomial order.',
+IDEAL_PAIR = dict(left=QUOTIENT_IDEAL, right='Ideal with the same parent ring as `left`.', compute=COMPUTE)
+ORDERED_IDEALS = dict(ideal=GLOBAL_IDEAL, other_ideal='Ideal with the same parent ring and monomial order.',
                       compute=COMPUTE)
 LOCAL_INPUT = dict(ideal=LOCAL_IDEAL, point=LOCAL_POINT, compute=COMPUTE)
 CONE_INPUT = dict(ideal=CONE_IDEAL, point=CONE_POINT, compute=COMPUTE)
@@ -59,10 +59,10 @@ SCHEME_POINT_INPUT = dict(CONE_INPUT, point=CONE_POINT + ' All ideal generators 
 HYPERSURFACE = dict(polynomial='Polynomial over `QQ` defining the hypersurface germ.',
                     point=POINT + ' The polynomial must vanish there.', **POLYNOMIAL_OPTIONS)
 RESOLUTION_INPUT = dict(
-    variables='For a formula string, use an ordered list of coordinate names or the ring’s live generators. '
+    variables='For a formula string, give the coordinate names or the generators of a ring, in order. '
               'Choose either `variables` or `ring`.',
-    ring='For a formula string, supply its live affine polynomial ring over `QQ`. '
-         'Omitting both `ring` and `variables` uses the active ring. A typed input carries its own ring.',
+    ring='For a formula string, supply its polynomial ring over `QQ`. '
+         'If both options are omitted, a string uses the active ring. A polynomial already knows its ring.',
     search='Use `"quick"` for a bounded attempt or `"exhaustive"` to continue the search.',
     compute=COMPUTE + ' With `None`, resolution uses the configured backend (normally CPU).',
 )
@@ -71,31 +71,31 @@ FUNCTIONS = {
     'coordinates': entry('One polynomial generator for a single name, or an ordered tuple of generators '
                          'for multiple names. Each generator has the declared ring as its `.parent`.',
                          **DECLARATION),
-    'ring': entry('The live polynomial ring. A direct assignment such as `R = ring("x", "y")` also '
+    'ring': entry('The polynomial ring over `QQ`. A direct assignment such as `R = ring("x", "y")` also '
                   'binds its generators to `x` and `y`. Read them in order from `R.coordinates`.', **DECLARATION),
     'use_ring': entry('The selected ring, or `None` after clearing the selection.',
-                     ring='Live polynomial, chart or quotient ring to select, or `None` to clear it. '
+                     ring='Polynomial, chart or quotient ring to select, or `None` to clear it. '
                            'The ground field `QQ` has no coordinates to select.'),
     'active_ring': entry('The selected ring, or `None` when the session has no active ring.'),
     'ring_name': entry('A saved name as a string, including an automatic name such as `"R1"`. '
                        'Returns `"QQ"` for the ground field and `None` for an unnamed ring.',
-                       ring='Live ring to look up, such as `f.parent`. A ring with several names gives one alias.'),
+                       ring='Ring to look up, such as `f.parent`. A ring with several names gives one alias.'),
     'delete_ring': entry('A report with the removed bindings in `.names` and the Boolean `.was_active` '
                          'indicating whether the active selection was removed.',
-                         ring='Live ring to delete with its dependent bindings. The built-in ground field is permanent.'),
+                         ring='Ring to delete. Its dependent names are removed as well. The ground field `QQ` is permanent.'),
     'polynomial': entry('A polynomial in the selected ring, or a reduced residue class if that ring is a quotient.',
                         source='Nonempty expression string in the ring’s names, such as `"x^2 + y/2"`.',
-                        ring='Live parent in which to read the formula. If both parent options are omitted, '
+                        ring='Ring in which to read the formula. If both `ring` and `variables` are omitted, '
                              'the active ring supplies the coordinates.',
                         variables='All generators of the parent in order. Use this in place of `ring`.'),
-    'ideal': entry('An ideal with its live `.parent`, `.generators` and monomial `.order`.',
+    'ideal': entry('An ideal with fields `.parent`, `.generators` and `.order`.',
                    generators='Polynomials, exact rational scalars or residue classes, passed separately or '
                               'as one list or tuple. No generators gives the zero ideal.',
                    order=ORDER + ' A quotient ideal uses its parent’s order.',
                    variables='Ordered generators of the target ring. Use this in place of `ring`.',
-                   ring='Live parent ring. Ring-valued generators normally supply it. For an empty or '
-                        'scalar-only ideal, name the ring or select an active one. Explicit `ring=K` '
-                        'projects ambient generators into the quotient `K`.'),
+                   ring='Ring in which to form the ideal. Polynomials and residue classes supply their own parent. '
+                        'For zero generators or for numbers alone, pass the ring or select it with `use_ring`. '
+                        'With `ring=K`, ambient polynomials are projected into the quotient `K`.'),
     'quotient_ring': entry('The ring of residue classes. Its `.coordinates` belong to the quotient, '
                            '`.ambient` gives the polynomial ring, and `.projection` maps the '
                            'defining ideal’s parent to the quotient.',
@@ -104,8 +104,8 @@ FUNCTIONS = {
                                  'ideal object gives the same parent, including across compute policies.'),
     'hom': entry('A callable ring homomorphism with `.domain`, `.codomain` and ordered `.images`. '
                  'Apply it to an element of the domain to substitute all generator images simultaneously.',
-                 domain='Live source ring over `QQ`. Its defining relations must vanish on the supplied images.',
-                 codomain='Live target ring in which to evaluate. A chart over an algebraic coefficient field '
+                 domain='Source ring over `QQ`. Its defining relations must vanish on the supplied images.',
+                 codomain='Ring in which to evaluate the images. A chart over an algebraic coefficient field '
                           'can also serve as the target.',
                  images='List or tuple of one target element per source generator, in declaration order. '
                         'For a quotient target, use its residue classes or rational scalars.'),
@@ -206,7 +206,7 @@ FUNCTIONS = {
                            'derivatives. An infinite length has value `None`.', **HYPERSURFACE),
     'tjurina_number': entry('A local length with `.finite` and `.value`, computed modulo the equation '
                             'and its partial derivatives. An infinite length has value `None`.', **HYPERSURFACE),
-    'ae_codimension': entry('A codimension result. When `.finite` is true, `.value` is exact. False certifies '
+    'ae_codimension': entry('When `.finite` is true, `.value` is the extended left-right codimension. False certifies '
                             'infinity. When it is `None`, inspect `.lower_bound` and `.reason`.',
                             components='One or more map components in target order, all vanishing at the origin. '
                                        'Use one source ring over `QQ` with at least one coordinate. Pass the '

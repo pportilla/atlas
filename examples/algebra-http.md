@@ -1,13 +1,13 @@
 # Algebra requests and replay
 
-Start `./atlas serve` and send JSON to `POST /api/algebra`. For a one-off calculation from a shell, use `./atlas algebra OPERATION --help` for the corresponding flags and add `--json` to get the same record format.
+The algebra endpoint accepts the same ring and polynomials you would use at the Atlas prompt. Each request describes its ring explicitly, so a client can reproduce a calculation without recreating an interactive session.
 
 ## Reduce a polynomial
 
-In $\mathbb Q[x,y]/(x^2-1,y-x)$, the remainder of $x^2+y/2$ in lex order is $1+y/2$. Paste this request into a second terminal while the server is running.
+What is the class of $x^2+y/2$ subject to $x^2=1$ and $y=x$? With the Atlas server running (`./atlas serve`), send this request from a second terminal.
 
 ```sh
-curl -s http://127.0.0.1:8765/api/algebra \
+curl -sS http://127.0.0.1:8765/api/algebra \
   -H 'Content-Type: application/json' \
   -d '{
     "operation": "normal-form",
@@ -17,7 +17,7 @@ curl -s http://127.0.0.1:8765/api/algebra \
   }'
 ```
 
-The HTTP 200 response has `status: "ok"`. Its `result` object is
+The server returns HTTP 200 with `"status": "ok"`. The answer is in `result`.
 
 ```json
 {
@@ -27,28 +27,39 @@ The HTTP 200 response has `status: "ok"`. Its `result` object is
 }
 ```
 
-Use `execution.requested`, `execution.stages` and `execution.fallback_reasons` to inspect the device policy and stages used. The top-level `replay.command` and `replay.script` reproduce the mathematical request. Elapsed times depend on the run. These shell commands perform the same calculation directly.
+This is the expected class $1+y/2$. The ring accompanies the polynomial so that a client knows how to interpret its variables and its normal form. For a calculation you want to keep, save the full response. Its `replay.command` and `replay.script` reproduce the calculation from the shell and from an Atlas script. The `execution` fields describe the device and stages used on this particular run.
+
+You can also enter the original calculation directly from the shell. Use `./atlas algebra normal-form --help` to see its options. [Equivalent Atlas script](algebra-normal-form.atlas) · [Gröbner bases at the prompt](polynomial-ideals.md#reduce-a-polynomial-modulo-an-ideal)
 
 ```sh
 ./atlas algebra normal-form --vars x,y --order lex --compute cpu \
   --gen 'x^2-1' --gen 'y-x' --poly 'x^2+y/2' --json
-./atlas run examples/algebra-normal-form.atlas
 ```
-
-[Runnable script](algebra-normal-form.atlas) · [Algebra interface tests](../tests/test_algebra_interface.py) · [Request parser and dispatch](../engine/algebra.py)
 
 ## Specify a ring and its operands
 
-`ring.variables` gives distinct names from highest to lowest priority. Use `[]` for the scalar field. `ring.field` defaults to `"QQ"`, `ring.order` to `"grevlex"`, and `compute` to `"auto"`. The supported orders are `"lex"` and `"grevlex"`. Polynomial strings accept integer literals, division by a nonzero rational constant, multiplication with `*`, and powers with `^` or `**`. An `ideal` is an array of polynomial strings. Either `[]` or `["0"]` declares the zero ideal.
+Supply the operation name, the ring, and its operands as three JSON fields. The optional top-level `compute` field selects `"auto"` (default), `"cpu"` or `"gpu"`.
 
-Supply `ring.relations` to work in a quotient. For example, with
-`"ring": {"variables": ["x","y"], "relations": ["y^2+x^5"]}`,
-the `ideal` operation on `{"ideal": ["y","x^5"]}` returns a
-`quotient-ideal` with generators `["y","-y^2"]`. The same presentation
-works for `ideal-sum`, `ideal-product`, `ideal-power`, `groebner`,
-`membership`, `normal-form` and a further `quotient-ring` declaration.
-At the shell, use one `--relation` per equation, or `--quotient-ring` for
-a quotient by the zero ideal.
+| Ring field | Meaning |
+| --- | --- |
+| `variables` | Required. An array of distinct names in descending variable priority. An empty array denotes the scalar field. |
+| `field` | The coefficient field, currently `"QQ"` (default). |
+| `order` | The monomial order, either `"grevlex"` (default) or `"lex"`. |
+| `relations` | Equations defining a quotient of the declared polynomial ring. An empty array declares a quotient by the zero ideal. Omit the field to use the polynomial ring itself. |
+
+Write a polynomial as a string. Use `*` for multiplication, `^` or `**` for powers, and division by a nonzero rational constant for exact coefficients. Write an ideal as an array of generators. Both `[]` and `["0"]` describe the zero ideal.
+
+For example, is $x$ a multiple of $x(1+y)$ in $\mathbb Q[x,y]/(y^2)$? Sending the following request body to `POST /api/algebra` gives `true` in `result.value`. Omit `relations` to ask the same question in the ambient polynomial ring, where the answer is `false`.
+
+```json
+{
+  "operation": "membership",
+  "ring": {"variables": ["x", "y"], "relations": ["y^2"]},
+  "operands": {"ideal": ["x*(1+y)"], "polynomial": "x"}
+}
+```
+
+The relation makes $1+y$ a unit with inverse $1-y$. The same quotient presentation works for `ideal`, `ideal-sum`, `ideal-product`, `ideal-power`, `groebner`, `normal-form` and a further `quotient-ring` declaration. On the command line give one `--relation` per equation, or use `--quotient-ring` for the quotient by the zero ideal. [The two ideals at the prompt](quotient-algebras.md#compare-ideals-before-and-after-quotienting)
 
 | Operation | Keys in `operands` | Read from `result` |
 | --- | --- | --- |
@@ -71,9 +82,9 @@ a quotient by the zero ideal.
 | `hilbert-series` | `ideal` | `numerator`, `denominator_power`, `dimension`, `multiplicity` |
 | `ae-codimension` | `components` (ordered array of source polynomials vanishing at the origin) | `finite`, `value`, `method` and proof details |
 
-For `quotient-ring` the default action is `declare`. Supply `polynomial` for `reduce`, `negate`, `unit` or `inverse`. Also supply `other_polynomial` for `add`, `subtract`, `multiply`, `divide` or `equal`. Use `polynomial` and a signed integer `exponent` for `power`. Decimal strings preserve exponents wider than a client's native integer representation. [Quotient action and replay tests](../tests/test_quotient_ring_interface.py)
+For `quotient-ring` the default action is `declare`. Supply `polynomial` for `reduce`, `negate`, `unit` or `inverse`. Supply both `polynomial` and `other_polynomial` for `add`, `subtract`, `multiply`, `divide` or `equal`. For `power` give `polynomial` and a signed integer `exponent`. A decimal string preserves an exponent wider than a client’s native integer type. [Quotient actions and return values](../docs/value-methods.md#quotient-rings-and-residue-classes)
 
-For example, the parametrized cusp from the [map-germ example](local-algebra.md#compare-the-cusp-and-its-parametrization) has this request body. Its result has `finite: true` and `value: 1`.
+For a parametrization, the variables are those of the source and the ordered components describe the target. The cusp $t\mapsto(t^2,t^3)$ gives `finite: true` and `value: 1`. [The cusp and its parametrization](local-algebra.md#compare-the-cusp-and-its-parametrization)
 
 ```json
 {"operation":"ae-codimension","ring":{"variables":["t"]},"operands":{"components":["t^2","t^3"]}}
@@ -81,7 +92,17 @@ For example, the parametrized cusp from the [map-germ example](local-algebra.md#
 
 ## Supply a rational point
 
-Each of the following operations also accepts optional `operands.point`, an ordered array of exact integers or rational strings such as `["1/2", 0]`. An omitted point selects the origin. A local standard basis and a local normal form always return their point. Other point operations distinguish an omitted origin from an explicitly supplied point through `scope`.
+For local calculations, `operands.point` is an optional array in declared coordinate order. Use JSON integers or rational strings such as `"1/2"`. Omitting the point selects the origin. To compute the Milnor number at the cusp $(1/2,2)$, send the translated equation together with that point.
+
+```json
+{
+  "operation": "milnor-number",
+  "ring": {"variables": ["x", "y"]},
+  "operands": {"polynomial": "(y-2)^2-(x-1/2)^3", "point": ["1/2", 2]}
+}
+```
+
+The result gives `value: 2` and `point: ["1/2", "2"]`. When a client compares answers at several points, keep `scope` as well as `value`. A local standard basis or normal form always records its point. Other point operations distinguish an omitted origin from an explicitly supplied point through `scope`. [Local calculations at rational points](local-algebra.md#evaluate-one-curve-at-three-points)
 
 | Operation | Other keys in `operands` | Read from `result` |
 | --- | --- | --- |
@@ -96,28 +117,52 @@ Each of the following operations also accepts optional `operands.point`, an orde
 | `hilbert-samuel-function` | `ideal`, optional `degrees` | `degrees`, `values`, `graded_values`, `dimension`, `multiplicity` |
 | `hilbert-samuel-multiplicity` | `ideal` | `dimension`, integer `value` |
 
-Use the polynomial and point together for a Milnor or Tjurina number. For a local quotient basis, supply generators of an ideal. [Local algebra requests and expected responses](../tests/test_point_local_algebra_interface.py)
-
 ## Reuse a basis over HTTP
 
-A successful Gröbner basis, quotient ring or quotient element response can return a top-level `basis_ref`. Use this token in place of `operands.ideal` for `normal-form`, `membership`, `multiplicity` or `quotient-ring`. The field, variable order and monomial order must match the recorded ring. Each request chooses its own compute policy.
+When reducing several polynomials modulo the same ideal, compute the Gröbner basis once. The server returns a `basis_ref` token for a basis it has retained. Send that token in place of `operands.ideal` on the next request. Here is a complete Python client using the standard library.
 
-```json
-{
-  "operation": "normal-form",
-  "ring": {"variables": ["x", "y"], "order": "lex"},
-  "operands": {"basis_ref": "TOKEN_FROM_GROEBNER_RESPONSE", "polynomial": "x^2+y/2"}
-}
+```python
+import json
+from urllib.request import Request, urlopen
+
+url = "http://127.0.0.1:8765/api/algebra"
+ring = {"variables": ["x", "y"], "order": "lex"}
+
+def calculate(operation, operands):
+    payload = {"operation": operation, "ring": ring, "operands": operands}
+    request = Request(url, data=json.dumps(payload).encode(),
+                      headers={"Content-Type": "application/json"})
+    with urlopen(request) as response:
+        return json.load(response)
+
+basis = calculate("groebner", {"ideal": ["x^2-1", "y-x"]})
+key = basis["basis_ref"]
+reduced = calculate("normal-form", {"basis_ref": key, "polynomial": "x^2+y/2"})
+member = calculate("membership", {"basis_ref": key, "polynomial": "y^2-1"})
+print(reduced["result"]["polynomial"], member["result"]["value"])  # 1/2*y+1 True
 ```
 
-The server keeps a bounded set of verified bases in memory. An oversized basis can be returned with its generators alone. HTTP 410 with `stale_basis_ref` means the token is stale, for example after eviction or a server restart. Recompute the basis to obtain a new token. HTTP 400 with `basis_ring_mismatch` identifies a ring mismatch. Replay forms carry their own operands and remain usable independently of the token. [Basis reuse and expiry tests](../tests/test_http_basis_refs.py) · [Server basis store](../engine/algebra_basis_store.py)
+You can use a reference with `normal-form`, `membership`, `multiplicity` or `quotient-ring`. Quotient ring and residue class responses can also supply a reference for their relation basis. Keep the field, variable order and monomial order fixed when reusing it. Each call may choose its own compute policy.
+
+The server retains bases in memory and can return a large basis with generators alone. If a response has no token, send the generators in `operands.ideal`. If a token expires, for example after a server restart, the response is HTTP 410 with `stale_basis_ref`. Recompute the basis or send the generators. A saved `replay` already contains the necessary operands.
 
 ## Read an error response
 
-Sending the first example with `"order": "local"` returns HTTP 400. To request a local normal form use the operation `local-normal-form` with one of the supported monomial orders.
+Suppose the first request has `"order": "local"`. The server returns HTTP 400 with the following body.
 
 ```json
 {"status":"error","error":{"code":"invalid_request","message":"Unsupported monomial order. Choose lex or grevlex."}}
 ```
 
-HTTP 413 signals an oversized standard request, 422 a computation limit or unsuccessful computation, and 503 an unavailable worker or kernel. Errors carry `error.code` and `error.message`. The exhaustive endpoint accepts larger requests and lifts the ordinary worker deadline. [HTTP endpoints and compute policies](../docs/http-and-compute.md)
+To reduce in a local ring, choose `local-normal-form` as the operation and supply `operands.point`. The ring order remains `"lex"` or `"grevlex"`.
+
+| HTTP status | What to do |
+| --- | --- |
+| 400 | Read `error.message` for the invalid field. For `basis_ring_mismatch`, use the same ring as the request that produced the token. |
+| 410 | The server no longer has this basis reference. Send the ideal or compute the basis again. |
+| 413 | Check that the request body is nonempty. For a large calculation use `POST /api/algebra/exhaustive`. |
+| 422 | Inspect `error.code` and `error.message` for the failed computation or limit. |
+| 429 | Both computation slots are in use. Retry after one becomes free. |
+| 503 | The worker or kernel is unavailable. Check the server before retrying. |
+
+The exhaustive algebra endpoint also lifts the ordinary worker deadline. [Server limits and compute options](../docs/http-and-compute.md#submit-an-algebra-request)

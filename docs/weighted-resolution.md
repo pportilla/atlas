@@ -1,113 +1,142 @@
 # Embedded resolution by weighted blowups
 
-The weighted engine resolves a hypersurface germ $f = 0$ at the origin of
-$\mathbf A^n$ over $\mathbf Q$ by the weighted blowups of Abramovich, Temkin
-and Włodarczyk, in their logarithmic form (Abramovich and Quek). Every centre,
-blowup, search for bad points and certificate runs in the native engine
-[`native/weighted_resolution.cpp`](../native/weighted_resolution.cpp); Python
-only sends the polynomial and presents the record
-([`engine/weighted_blowups.py`](../engine/weighted_blowups.py)).
+The surface $x^2+y^3+z^5=0$ has three terms of different degrees, but all
+three have **weighted degree 30** if we give $x,y,z$ weights $15,10,6$.
+A single weighted blowup with these weights resolves the germ on quotient
+charts. We can see the weights in the chart maps and read the exceptional
+multiplicity directly from the pulled-back equation.
 
 ## Resolve with method weighted
 
-`resolve` and `atlas resolve` accept a method. The default, `auto`, keeps
-Atlas's usual choice among its engines. `method="weighted"` resolves by
-weighted blowups.
-
 ```text
-x, y, z = coordinates("x", "y", "z")
-R = resolve((x*y - z^2)^2 + x^5 + y^5, method="weighted")
-R.steps
-R.divisors
-R.certificate
+atlas> x, y, z = coordinates("x", "y", "z")
+atlas> R = resolve(x^2 + y^3 + z^5, method="weighted")
+atlas> R.steps[0].invariant
+['2', '3', '5']
+atlas> R.divisors
+[E1]
+atlas> R.charts
+[W1.c0, W1.c1, W1.c2]
+atlas> C = R.charts[0]
+atlas> C.map
+{'x': t1^15, 'y': t1^10*t2, 'z': t1^6*t3}
+atlas> C.strict_transform
+t3^5+t2^3+1
 ```
 
-From the shell, `atlas resolve "(x*y-z^2)^2+x^5+y^5" --vars x,y,z --method weighted`
-prints the charts, and `--json` the complete record. The HTTP API takes
-`"method": "weighted"` in the request object, for `/api/resolve` and for
-background searches.
+In this chart $E_1$ has equation $t_1=0$. Substituting the chart map into
+the input gives $t_1^{30}(1+t_2^3+t_3^5)$. The exponent of $t_1$ is the
+order $N$ of the input along $E_1$. The pulled-back volume form
+$dx\wedge dy\wedge dz$ has order $15+10+6-1=30$, so the numerical datum $\nu$ is $30+1=31$.
 
-The resolution is embedded, so the mode must be `embedded` (the default). The
-engine computes no zeta functions yet, so a request for `monodromy` or `zetas`
-is refused; use `method="auto"` for them. The origin must lie on the
-hypersurface. A germ that is smooth at the origin gets the identity chart.
+```text
+atlas> E = R.divisors[0]
+atlas> E.total_multiplicity
+30
+atlas> E.nu
+31
+atlas> R.certificate.certified
+True
+```
 
-The record has `engine: "weighted"`:
+The input to `resolve` is a rational hypersurface equation vanishing at the
+origin. `method="weighted"` takes up to 16 variables and requires
+`mode="embedded"`, the default. A smooth germ gets the identity chart. Choose
+`method="auto"` when the calculation calls for the intersections between
+divisors or either local zeta function. [Resolution modes](resolution-records.md#resolution-modes)
 
-- `steps` lists the weighted blowups in order. Each gives the point or locus it
-  was made at, the invariant $(a_1, \dots, a_k)$ of its centre
-  $J = (x_1^{a_1}, \dots, x_k^{a_k}) + M$, the monomial part $M$ as exponent
-  vectors on the boundary coordinates, and whether the centre is a point or a
-  locus of positive dimension.
-- `charts` gives each chart's coordinates `t1, t2, …`, the original
-  coordinates as polynomials in them (`map`), the strict transform and the
-  exceptional divisors through the chart. A chart made at an orbit of points
-  defined over a number field carries that field as `coefficient_field`; one
-  chart then stands for the whole Galois orbit. A chart that carries equations
-  in `ambient_ideal` is the subvariety they define (see below). `over` holds
-  equations of the locus whose preimage the chart owns, and `owned_faces` the
-  sets of its coordinates whose common zeros, with the other coordinates of its
-  cone nonzero, it owns there.
-- `divisors` (the vertices of `dual_complex`) are the exceptional divisors,
-  each with its order `total_multiplicity` $N$ of $f$ and $\nu$, its log
-  discrepancy plus one. The engine does not compute their intersections, so the
-  dual complex has no cells and the status `unavailable`.
-- `certificate` says that the strict transform and the exceptional divisors
-  cross normally over the origin on every face that each chart owns. The
-  kernel's normal-crossings test checks every chart; points that a chart hands
-  to a later blowup are compared with the bad loci it found.
+The same example from the repository directory is `./atlas resolve 'x^2+y^3+z^5' --vars x,y,z --method weighted`.
+Add `--json` to save the full record. For `/api/resolve` or an HTTP background
+search, include `"method": "weighted"` in the request object. [HTTP requests](http-and-compute.md)
 
 ## How a centre is chosen
 
-At a point, the engine computes the invariant from coefficient collections in
-Tschirnhausen coordinates on a jet of $f$. The jet grows until the centre is
-admissible for $f$ itself. The blowup is the toric modification given by the
-normal fan of the Newton polyhedron of $J$; each chart is the monomial map of
-one cone. The points over the centre where the strict transform still has
-logarithmic order at least two are found as the prime components of a finite
-set over $\mathbf Q$, one Galois orbit at a time.
+In the first example the invariant $(2,3,5)$ records the exponents in the
+centre $(x^2,y^3,z^5)$. Its Newton polyhedron has a face whose primitive
+inward normal is $(15,10,6)$. In general the engine chooses local
+coordinates adapted to the centre. It computes successive coefficient
+collections in Tschirnhausen coordinates on a jet of the equation and
+increases the jet order until the original equation satisfies the
+admissibility test. The normal fan of the centre's Newton polyhedron gives
+the chart maps. The record of each step includes the invariant
+$(a_1,\ldots,a_k)$ and the monomial part $M$ of the centre
+$J=(x_1^{a_1},\ldots,x_k^{a_k})+M$ along the existing boundary.
 
-A bad locus over the centre can have positive dimension: after one blowup the
-strict transform of $(xy - z^2)^2 + x^5 + y^5$ is singular along a conic in the
-exceptional plane. The engine decomposes such a locus with the native primary
-decomposition and computes the centre at the generic point of each component
-$Z$. On its boundary stratum, $Z$ is cut out by a Gröbner basis
-$X_1, \dots, X_c$. An $X_i$ that is linear in a variable of its own becomes
-that variable by a triangular change of coordinates. Any other $X_i$ becomes a
-new coordinate $w_i$ with the ambient equation $w_i = X_i$, and $f$ is written
-in powers of the $w_i$. Its coefficients are then units at the generic point of
-$Z$, where the centre is read off in the coordinates $X$. When a Tschirnhausen
-change could alter the result, the engine checks the invariant against the jet
-centre at a random point of $Z$. An admissible centre with that invariant is
-the centre of Abramovich, Temkin and Włodarczyk along $Z$, the unique
-admissible centre of maximal invariant there.
+For the theory of the centre and invariant, see Abramovich, Temkin and
+Włodarczyk. Abramovich and Quek describe the logarithmic construction in the
+presence of a boundary. [*Functorial embedded resolution via weighted blowings up* (2024)](https://arxiv.org/abs/1906.07106) · [*Logarithmic resolution via multi-weighted blow-ups* (2024)](https://epiga.episciences.org/14648)
 
-Blowing up a centre with a new coordinate $w$ gives charts that are
-subvarieties of affine space, given by `ambient_ideal`. On them the engine
-searches bad points with the logarithmic Jacobian minors of the ambient
-equations and $f$. At a point it puts the ambient equations into the
-coefficient collection, where they have order one, so the centres and blowups
-there stay toric in a full set of coordinates.
+### A centre of positive dimension
 
-A point of a chart's face that lies on a bad locus whose general points belong
-to another chart gets that locus's centre, blown up for the points over it
-only. A locus inside a larger bad locus is blown up with the larger one, and
-where two loci meet, the one with the larger invariant owns the points.
+For $(xy-z^2)^2+x^5+y^5$ the projectivized tangent cone is a double conic.
+In the $x$-chart of the first blowup, put $y=xv$ and $z=xw$. The strict
+transform has equation $(v-w^2)^2+x(1+v^5)=0$. Along a general point of
+the conic $x=v-w^2=0$ the surface is smooth and tangent to the exceptional
+plane. The next step therefore needs a centre of positive dimension.
+
+```text
+atlas> S = resolve((x*y - z^2)^2 + x^5 + y^5, method="weighted")
+atlas> S.steps[0].locus
+point
+atlas> S.steps[1].locus
+positive dimension
+atlas> len(S.steps)
+4
+atlas> S.certificate.certified
+True
+```
+
+To find the next centre Atlas decomposes the locus where the strict transform
+still has logarithmic order at least two. An isolated point defined over a
+number field stands for its whole Galois orbit. For a positive-dimensional
+component $Z$, the calculation takes place at its generic point. A Gröbner
+basis supplies equations $X_1,\ldots,X_c$ in the boundary stratum. A basis
+element linear in a variable of its own can replace that variable. For any
+other element the engine introduces a chart coordinate $w_i$ and the relation
+$w_i=X_i$. Expanding the equation in these coordinates exposes coefficients
+that are units at the generic point. When a Tschirnhausen change could alter
+the invariant, the engine also compares it with the jet calculation at a
+random point of $Z$ and tests admissibility.
+
+In a chart with these extra relations, logarithmic Jacobian minors of the
+ambient equations together with the strict equation locate the remaining
+bad points. At a point the ambient equations have order one and enter the
+coefficient collection. A chart that meets a centre along a face uses the
+centre already chosen at its generic point. A locus contained in a larger
+one is blown up with it. Where two loci meet, the one with the larger
+invariant governs their common points.
 
 ## Charts of weighted blowups
 
-A cone of the fan that is not regular gives a chart that covers the blowup
-with a finite cyclic group of order `orbifold_order`, its determinant; the
-blowup has a cyclic quotient singularity there. The certificate concerns these
-charts. Every other chart is a chart of the blowup itself.
+Each maximal cone gives a chart. For a regular cone the map is a chart of
+the blowup itself. For a nonregular cone Atlas writes the monomial map on a
+finite cover. `orbifold_order` gives its degree, the absolute determinant
+of the ray matrix. For example, the first chart above has degree 15.
+
+```text
+atlas> C.orbifold_order
+15
+```
+
+The certificate checks that the strict transform and exceptional divisors
+cross normally **on these chart covers over the origin**. The following
+fields explain the extent of a chart and its role in the certificate.
+
+| Field | How to read it |
+| --- | --- |
+| `ambient_ideal` | Equations satisfied by the chart coordinates, including any added to describe a centre. |
+| `coefficient_field` | Field of definition for a chart at a Galois orbit of points. |
+| `over` and `owned_faces` | Equations for the locus covered and the coordinate faces assigned to this chart. On each face the listed coordinates vanish and the other cone coordinates are nonzero. |
+| `divisors` on the resolution | Exceptional components with $N$ and $\nu$. The weighted engine currently lists the components only, so the status of their dual complex is `unavailable`. |
+
+When a later blowup replaces part of an earlier chart, the certificate
+compares the removed points with the locus where normal crossings failed.
+[Weighted chart construction and verification](../native/weighted_resolution.cpp)
 
 ## Limits
 
-- A bad locus of positive dimension on a chart that already carries ambient
-  equations is declined with its reason.
-- Each resolution and its certificate have 40 seconds; the engine runs in a
-  forked helper that Atlas stops at the deadline.
-- No zeta functions yet: they need the strata of the weighted charts.
-
-The timings against `method="auto"` on the same inputs, with their conditions,
-are in [the weighted resolution benchmark](../benchmarks/weighted-resolution.md).
+The engine reports a diagnostic if it encounters a positive-dimensional bad
+locus on a chart that already carries ambient equations. Resolution and its
+certificate run with a 40-second deadline. Examples comparing the weighted
+and default methods, including inputs and timing conditions, appear in the
+[weighted resolution benchmark](../benchmarks/weighted-resolution.md).

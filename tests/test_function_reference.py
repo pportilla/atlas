@@ -1,13 +1,11 @@
 """The published session examples stay runnable as command implementations change."""
-from contextlib import redirect_stdout
-from io import StringIO
 import unittest
 
 from docs.site.catalog import ALIASES, ENTRIES
 from docs.site.function_reference import FUNCTIONS, reference_for
-from engine.app import calculate_resolution
 from engine.session import new_session
 from engine.session_function_help import function_help
+from tests.cli_support import run_prompt
 
 
 class FunctionReferenceTests(unittest.TestCase):
@@ -26,9 +24,11 @@ class FunctionReferenceTests(unittest.TestCase):
     def test_examples_run_in_fresh_sessions(self):
         for name in (*ENTRIES, *ALIASES):
             with self.subTest(name=name):
-                session = new_session(calculate_resolution)
-                card = function_help(name, session.builtins)
+                card = function_help(name, new_session(None).builtins)
                 example = card.split("\n\nExample\n", 1)[1].split("\n\nDocs  ", 1)[0]
-                source = "\n".join(line.removeprefix("  ") for line in example.splitlines())
-                with redirect_stdout(StringIO()):
-                    list(session.run(source))
+                commands = [line.removeprefix("  ") for line in example.splitlines()]
+                expected = [line.partition("  # ")[2] for line in commands]
+                self.assertTrue(any(expected), "Show a result that the reader can check")
+                status, output, error = run_prompt("\n".join([*commands, "quit"]))
+                self.assertEqual((status, error), (0, ""))
+                self.assertEqual([chunk.rstrip("\n") for chunk in output.split("atlas> ")[1:-1]], expected)

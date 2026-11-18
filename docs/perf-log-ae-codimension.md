@@ -1,10 +1,13 @@
 # Performance log: `ae_codimension`
 
-This log records the performance work on the extended left-right
-codimension (`ae_codimension`, `atlas algebra ae-codimension`). Each entry
-names the hot spot and explains why the change applies to arbitrary inputs.
-It also gives timings before and after, and says how the results were
-compared.
+How expensive is it to certify the extended left-right codimension of the map
+$(x^a,y^b,(x+y)^c)$? The baseline sweep below includes examples that finished
+in milliseconds and examples that reached the sixty-second limit.
+The three experiments record how the cost changed when Atlas reused Hilbert
+data, computed graded ranks, and reduced jet rows more efficiently.
+Read the workload and baseline sweep first if you want to interpret a timing.
+For the mathematical reason each method yields a certificate, see the
+algorithm notes. [Tangent quotient algorithms](../native/map-germ-algorithms.md) · [Atlas and Singular comparisons](../benchmarks/map-germ-timings.md)
 
 * Baseline: commit `bd68f89` ("Create and name polynomial rings with ring()
   in Atlas sessions"), built with `make -j8`. A copy of its `native/build`

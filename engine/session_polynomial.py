@@ -355,8 +355,8 @@ def session_declarations():
 
         >>> R = ring("x", "y")
         >>> f = y^2 + x^5
-        >>> f.parent == R
-        >>> R.coordinates
+        >>> f.parent == R  # True
+        >>> R.coordinates  # (x, y)
 
         Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
         """

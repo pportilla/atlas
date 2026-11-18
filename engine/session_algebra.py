@@ -1237,7 +1237,7 @@ def ideal_sum(left, right, *, compute="auto"):
     >>> x, y = coordinates("x", "y")
     >>> I, J = ideal(x^2, y), ideal(x, y^2)
     >>> S = ideal_sum(I, J)
-    >>> membership(x, S).value
+    >>> membership(x, S).value  # True
 
     Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
     """
@@ -1250,7 +1250,7 @@ def ideal_product(left, right, *, compute="auto"):
     >>> x, y = coordinates("x", "y")
     >>> I, J = ideal(x^2, y), ideal(x, y^2)
     >>> P = ideal_product(I, J)
-    >>> membership(x*y, P).value
+    >>> membership(x*y, P).value  # True
 
     Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
     """

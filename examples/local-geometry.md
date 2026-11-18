@@ -1,10 +1,10 @@
 # Geometry at a rational point
 
-Choose a point in the declared coordinate order. Use `local_dimension(I)` to find the dimension at the origin. To distinguish smooth and singular points, compare the local ring with its tangent space. To retain higher-order information, compute the tangent cone and its graded dimensions.
+Where is a variety singular, and what do its equations look like near a singular point? We begin with two components of different dimensions, then follow one plane cusp from its tangent space to its Hilbert–Samuel function. Give points in the order of the declared coordinates.
 
 ## Compare local dimension and smoothness
 
-The ideal $I=(xy,xz)$ cuts out a plane $x=0$ and a line $y=z=0$ in affine three-space. Each component is smooth away from the origin. At their intersection the local ring has dimension two, and its tangent space is all of affine three-space.
+The equations $xy=xz=0$ cut out a plane $x=0$ together with the line $y=z=0$. Take one point on each component and then their intersection at the origin. A smooth point should have tangent space of the same dimension as its component.
 
 ```atlas
 x, y, z = coordinates("x", "y", "z", coeffs=QQ)
@@ -20,55 +20,53 @@ for p in [(0,1/2,0), (2/3,0,0), (0,0,0)]:
 | $(2/3,0,0)$ on the line | 1 | 1 | True |
 | $(0,0,0)$ at the intersection | 2 | 3 | False |
 
-Every generator must vanish at the selected point. The smoothness result also gives the Jacobian rank. A saved local standard basis can supply the ideal and its point. For a saved tangent cone, use its vertex. [Plane and line tests](../tests/test_local_dimension_interface.py) · [C++ dimension calculation](../native/point_geometry.cpp)
+At the intersection, both equations have zero linear part. Every direction is tangent there, even though the largest component has dimension two. If you only want the local dimension, call `local_dimension(I, point=p)`. For smoothness, `p` must lie on the scheme. A saved local standard basis supplies both the ideal and its point. [Local dimension and smoothness algorithms](../native/local-algorithms.md#local-dimension-and-smoothness)
 
 ## Compute the tangent space
 
-Take the translated cusp $I=((y-2)^2-(x-1/2)^3)$. The Zariski tangent space consists of directions $v$ with $df_p(v)=0$ for every ideal generator $f$. Its dimension is the embedding dimension. At the cusp $p=(1/2,2)$ the gradient vanishes, so both coordinate directions survive. At $q=(3/2,3)$, the gradient gives $3\Delta x-2\Delta y=0$.
+Consider the translated cusp $(y-2)^2=(x-1/2)^3$. The point $(3/2,3)$ is smooth. Linearizing the equation there gives $-3\Delta x+2\Delta y=0$. Ask for the equations or for a basis of tangent directions.
 
 ```atlas
 x, y = coordinates("x", "y")
 I = ideal((y-2)^2-(x-1/2)^3)
 V = zariski_tangent_space(I, point=(3/2,3))
+print(V.equations)                                         # (x-2/3*y,)
 vx, vy = V.basis[0]
-print(V.dimension, 3*vx-2*vy == 0)                       # 1 True
-print(embedding_dimension(I, point=(1/2,2)).value)       # 2
+print(vx, vy)                                              # 2/3 1
+print(embedding_dimension(I, point=(1/2,2)).value)         # 2
 ```
 
-`V.equations` gives independent linear equations in the direction coordinates `V.coordinates`. Each entry of `V.basis` is a vector of exact rationals in that order. Equations retain scheme structure. For example, $(x^2)$ and $(x)$ have embedding dimensions one and zero respectively at the origin of the affine line. [Tangent vector checks](../tests/test_session_zariski_tangent.py) · [C++ point and Jacobian arithmetic](../native/point_geometry.cpp)
+The output variables `x` and `y` in `V.equations` are direction coordinates. The vector $(2/3,1)$ spans the tangent line. At the cusp $(1/2,2)$ both partial derivatives vanish and the tangent space is the entire plane. Its dimension, the embedding dimension, depends on the local scheme structure. For instance, $(x^2)$ and $(x)$ define the same point on the affine line and have embedding dimensions one and zero there. [Tangent space calculation](../native/local-algorithms.md#zariski-tangent-spaces)
 
 ## Compute the tangent cone
 
-The tangent cone has coordinate ring $\operatorname{gr}_{\mathfrak m}(A)$ for the local ring $A$ at the point. For the translated cusp at $(1/2,2)$, the lowest-degree term gives the double line $(\Delta y)^2=0$. Its tangent space in the preceding example had no linear constraints, while the cone detects multiplicity two.
+The tangent space at the cusp allowed every direction. The first *nonzero* homogeneous part of its equation tells us more. With the cusp as origin the equation is $v^2-u^3$, whose lowest-degree part is $v^2$.
 
 ```atlas
 x, y = coordinates("x", "y")
 I = ideal((y-2)^2-(x-1/2)^3)
 C = tangent_cone(I, point=(1/2,2))
-u, v = C.coordinates
-print(C.generators[0] == v^2, C.dimension, C.multiplicity)  # True 1 2
-S = tangent_cone_hilbert_series(C)
-print(S.numerator[1].degree, S.numerator[1].coefficient)     # 2 -1
-print(S.denominator_power)                                 # 2
+print(C.generators)                                        # (y^2,)
+print(C.dimension, C.multiplicity)                         # 1 2
+print(tangent_cone_hilbert_series(C))                      # (1 - t^2)/(1 - t)^2
 ```
 
-The cone's generator prints as `y^2` because Atlas reuses the coordinate names in its tangent ring. Compare it to $v^2$ formed with `C.coordinates`. A cone passed to a local operation uses the vertex as its point. Its series is $(1-t^2)/(1-t)^2$. At the smooth point $(3/2,3)$ the cone is a single line and the series is $(1-t)/(1-t)^2$. [Cone and series tests](../tests/test_session_tangent_cone.py) · [C++ initial forms](../native/point_geometry.cpp) · [C++ series calculation](../native/monomial_quotient.cpp)
+The equation `y^2` describes a double line. Atlas has reused the coordinate names in a new ring, with origin at the vertex. Use `u, v = C.coordinates` to work with those directions. The graded coordinate ring is $\mathbb Q[u,v]/(v^2)$. It has one independent class in degree zero and two in each positive degree, as the displayed series confirms.
+
+For an ideal with several equations, the cone uses the lowest-degree forms of **all** elements of the ideal. Taking just the initial forms of the given generators can miss relations. For general ideals Atlas computes a local standard basis to find these extra relations. [Tangent cones and graded series](../native/local-algorithms.md#tangent-cones-and-graded-hilbert-series)
 
 ## Sample the Hilbert-Samuel function
 
-For the maximal ideal $\mathfrak m$ of the local ring $A$, the cumulative Hilbert–Samuel function is $H(n)=\dim_{\mathbb Q} A/\mathfrak m^{n+1}$. Its successive differences $h(n)=H(n)-H(n-1)$, with $H(-1)=0$, are the coefficients of the Hilbert series of the tangent cone. Read `values` for $H$ and `graded_values` for $h$.
+How many classes survive if we discard terms above degree $n$ at a point? If $A$ is the local ring and $\mathfrak m$ its maximal ideal, this number is $H(n)=\dim_{\mathbb Q} A/\mathfrak m^{n+1}$. At the cusp degree zero contributes one class and each positive degree contributes two. We therefore expect $H(n)=1+2n$.
 
 ```atlas
 x, y = coordinates("x", "y")
 I = ideal((y-2)^2-(x-1/2)^3)
-H = hilbert_samuel_function(I, point=(1/2,2), degrees=[5,0,1])
-print(H.values, H.graded_values)                            # [11, 1, 3] [2, 1, 2]
+H = hilbert_samuel_function(I, point=(1/2,2), degrees=[0,1,2,5])
+print(H.values, H.graded_values)                           # [1, 3, 5, 11] [1, 2, 2, 2]
 print(hilbert_samuel_multiplicity(I, point=(3/2,3)).value)  # 1
 ```
 
-| Point | $H(0),H(1),H(2),H(5)$ | $h(0),h(1),h(2),h(5)$ | Multiplicity |
-| --- | --- | --- | ---: |
-| $(1/2,2)$, cusp | 1, 3, 5, 11 | 1, 2, 2, 2 | 2 |
-| $(3/2,3)$, smooth point | 1, 2, 3, 6 | 1, 1, 1, 1 | 1 |
+`values` contains the cumulative lengths in the requested order. `graded_values` gives the contribution in each requested degree, even when some intermediate degrees were omitted. At the smooth point there is one contribution per degree and $H(n)=1+n$. The slopes of these two functions give multiplicities two and one, respectively.
 
-The default degrees run from zero through five. You can supply nonnegative degrees in any order, including repeated degrees. An empty list returns dimension and multiplicity with empty value lists. For local dimension $d$, the multiplicity is $d!$ times the leading coefficient of the eventual polynomial for $H(n)$. At dimension zero the eventual value equals the local length. Outside the support Atlas gives dimension $-1$, multiplicity zero and all function values zero. [Hilbert–Samuel value tests](../tests/test_session_hilbert_samuel.py) · [C++ graded counts](../native/monomial_quotient.cpp)
+By default `degrees` runs from zero through five. You can request nonnegative degrees in any order, including repeated degrees. In local dimension $d$, the multiplicity is $d!$ times the leading coefficient of the eventual polynomial for $H$. For a zero-dimensional local algebra, $H$ stabilizes at its length. Outside the support the multiplicity and all values are zero. [Local algebra algorithms](../native/local-algorithms.md)

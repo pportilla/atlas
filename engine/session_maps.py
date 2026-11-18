@@ -70,7 +70,7 @@ def hom(domain, codomain, *, images):
     >>> x, y = coordinates("x", "y")
     >>> u, v, w = coordinates("u", "v", "w")
     >>> phi = hom(x.parent, u.parent, images=(u, w))
-    >>> phi(x*y + 1) == u*w + 1
+    >>> phi(x*y + 1) == u*w + 1  # True
     """
     rings = (_CoordinateSpace, QuotientRing)
     if not isinstance(domain, rings) or not isinstance(codomain, rings):

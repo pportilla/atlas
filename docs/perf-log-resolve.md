@@ -1,9 +1,12 @@
 # Performance log: resolve() and canonical blowups
 
-Test surface: `z^2 - (x^2*(x+2*y)^2 + 4*y^3*(x+y)^2)*(x^2*(x+2*y)^2 + 4*y*(x+y)^2)`,
-origin lane (`engine/origin_backend._resolve`), run in process, single machine.
-Every change is generic: an exact algorithm or data-structure change that returns
-the same mathematical result for any input. None of them looks at the shape of this example.
+This log follows the cost of successive blowups above the origin of the surface
+`z^2 - (x^2*(x+2*y)^2 + 4*y^3*(x+y)^2)*(x^2*(x+2*y)^2 + 4*y*(x+y)^2)`.
+The measurements use the in-process resolution routine on one machine.
+The numbered entries record changes to basis computation, substitutions and
+centre selection. The correction below identifies which observations at the
+ninth blowup must be discarded. For complete resolutions with comparable
+inputs and recorded trial conditions, see the benchmark reports. [Resolution and zeta timings](../benchmarks/resolution-timings.md) · [Resolution algorithms](../native/resolution-algorithms.md)
 
 > **Correction (later the same day).** Item 4 had a bug, now fixed.
 >

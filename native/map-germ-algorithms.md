@@ -1,13 +1,16 @@
 # Certificates for the extended tangent quotient
 
-The public function `ae_codimension` certifies a finite dimension or proves that the tangent quotient has infinite dimension. When the jet work limit is reached first, it returns an inconclusive result with the certified lower bound. The criteria below explain when each computation can decide the answer. [Cusp and parametrization example](../examples/local-algebra.md#compare-the-cusp-and-its-parametrization) · [Public interface cases](../tests/test_ae_codimension_interface.py) · [Native dispatcher and filtered jets](ae_codimension.cpp#L327) · [Timing reports](../benchmarks/map-germ-timings.md)
+For a parametrized cusp $f(t)=(t^2,t^3)$, which infinitesimal changes of the map survive changes of coordinates in source and target? The function `ae_codimension` counts the independent directions that survive. It returns a certified finite dimension, a proof of infinite dimension, or a lower bound when the finite-jet calculation reaches its work limit. [Compare the cusp equation and its parametrization](../examples/local-algebra.md#compare-the-cusp-and-its-parametrization)
 
 For a single map germ $f:(\mathbb Q^n,0)\to(\mathbb Q^p,0)$ let
 $R=\mathbb Q[[x]]$, $B=\mathbb Q[[y]]$ and regard $R$ as a $B$-module by
 substitution $y\mapsto f$. The extended tangent quotient is
 $N=R^p/(df\,R^n+f^*(B^p))$. Its vector-space dimension is the
 $\mathcal A_e$-codimension. Constant vector fields on both spaces take part.
-[Definition and cusp computation, Mond §1.1](https://www.journalofsingularities.com/volume12/mond.pdf)
+
+For the cusp, substitution from the target produces the constants and all powers of $t$ of degree at least two. Thus only $(t,0)$ and $(0,t)$ survive the target vector fields. The derivative $(2t,3t^2)$ kills the first direction modulo those fields. Its multiples by $t$ have order at least two in both entries, so the second direction survives. The quotient has dimension one. [David Mond, *Some Open Problems in the Theory of Singularities of Mappings* (2015), §1.1](https://www.journalofsingularities.com/volume12/mond.pdf)
+
+For more complicated germs, the sections below describe how Atlas certifies that the tangent quotient has the reported dimension. [Native dispatcher and filtered jets](ae_codimension.cpp#L395) · [Public interface cases](../tests/test_ae_codimension_interface.py) · [Timing reports](../benchmarks/map-germ-timings.md)
 
 ## Filtered jets
 

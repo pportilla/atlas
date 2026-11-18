@@ -1,6 +1,6 @@
 # Lean verification roadmap for Atlas
 
-The proposed release guarantee is a theorem about **every supported input to a named Atlas operation**. Start with rational ideal membership. It has a Boolean answer, a mathematical definition independent of Atlas, and a native implementation shared with much of the algebra system. Begin by proving one operation used by that implementation directly from its C++ source.
+Suppose a release of Atlas reports that $y^2$ belongs to $(x-y,x^2)$. We can check this case by writing $y^2=x^2-(x+y)(x-y)$. The proposed Lean theorem asks for a guarantee about **every valid rational ideal membership request** handled by a named release, including requests whose answer is false. Membership is a natural first case because it already has a precise mathematical specification and its native reduction code is used throughout Atlas.
 
 This proposal uses checkout `66a47b6694a5` as its baseline. The existing kernel has written correctness arguments, consistency checks and independent comparison tests. The Lean project and the milestones below are proposed work. [Kernel algorithms and proofs](../native/KERNEL.md) · [Public algebra operations](../examples/algebra-api.md) · [Benchmarks](../benchmarks/README.md)
 
