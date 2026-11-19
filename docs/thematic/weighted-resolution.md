@@ -47,7 +47,7 @@ divisors or either local zeta function. [Resolution modes](resolution-records.md
 
 The same example from the repository directory is `./atlas resolve 'x^2+y^3+z^5' --vars x,y,z --method weighted`.
 Add `--json` to save the full record. For `/api/resolve` or an HTTP background
-search, include `"method": "weighted"` in the request object. [HTTP requests](http-and-compute.md)
+search, include `"method": "weighted"` in the request object. [HTTP requests](../reference/http-and-compute.md)
 
 ## How a centre is chosen
 
@@ -131,7 +131,7 @@ fields explain the extent of a chart and its role in the certificate.
 
 When a later blowup replaces part of an earlier chart, the certificate
 compares the removed points with the locus where normal crossings failed.
-[Weighted chart construction and verification](../native/weighted_resolution.cpp)
+[Weighted chart construction and verification](../../native/weighted_resolution.cpp)
 
 ## Limits
 
@@ -139,4 +139,4 @@ The engine reports a diagnostic if it encounters a positive-dimensional bad
 locus on a chart that already carries ambient equations. Resolution and its
 certificate run with a 40-second deadline. Examples comparing the weighted
 and default methods, including inputs and timing conditions, appear in the
-[weighted resolution benchmark](../benchmarks/weighted-resolution.md).
+[weighted resolution benchmark](../../benchmarks/weighted-resolution.md).

@@ -29,7 +29,7 @@ class ResolutionHelpTests(unittest.TestCase):
         for label in ("K is the embedded resolution record for f in QQ[x, y].",
                       "patch is chart B3.u of K.", "branch is branch P1 of K.",
                       "E is exceptional divisor E3 of K.", "D is the complete exceptional dual complex of K",
-                      "E.ideal_in(patch)", "docs/resolution-records.md#chart-and-complex-conventions"):
+                      "E.ideal_in(patch)", "docs/thematic/resolution-records.md#chart-and-complex-conventions"):
             self.assertIn(label, output)
 
     def test_inspection_of_partial_or_rebuilt_records_performs_no_algebra(self):

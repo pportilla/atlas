@@ -52,7 +52,7 @@ class PromptHelpTests(unittest.TestCase):
         self.assertEqual(error, "")
         self.assertIn("coordinates(", script)
         self.assertIn("./atlas run", script)
-        self.assertIn("docs/sessions.md#run-or-save-a-calculation", script)
+        self.assertIn("docs/tutorial/prompt-and-scripts.md#run-or-save-a-calculation", script)
         example = "\n".join(line[2:] for line in script.splitlines() if line.startswith("  "))
         replay = run_script(example)
         self.assertEqual(replay.returncode, 0, replay.stderr)
@@ -151,7 +151,7 @@ class PromptHelpTests(unittest.TestCase):
 
     def test_polynomial_help_identifies_its_live_ring_and_links_to_the_guide(self):
         setup = 'x,y=coordinates("x","y")\nf=x^2+y\n'
-        guide = "docs/sessions.md#choose-the-ring-of-a-polynomial"
+        guide = "docs/tutorial/rings.md#choose-the-ring-of-a-polynomial"
         for command in ("help f", "f -h", "f help"):
             output, err = self.ask(setup + command)
             self.assertEqual(err, "")

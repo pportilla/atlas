@@ -20,7 +20,7 @@ curl -sS http://127.0.0.1:8765/api/resolve \
   }'
 ```
 
-For the cusp the response is HTTP 200 and `status` is `"resolved"`. In the record, `monodromy_zeta.expression` gives `(1-T^6)/((1-T^2)*(1-T^3))`. The topological zeta function has poles $-1$ and $-5/6$. Their entries in `monodromy_check.poles` report monodromy eigenvalues of order one and six respectively. [Reading the exceptional divisors and zeta functions](resolution-records.md)
+For the cusp the response is HTTP 200 and `status` is `"resolved"`. In the record, `monodromy_zeta.expression` gives `(1-T^6)/((1-T^2)*(1-T^3))`. The topological zeta function has poles $-1$ and $-5/6$. Their entries in `monodromy_check.poles` report monodromy eigenvalues of order one and six respectively. [Reading the exceptional divisors and zeta functions](../thematic/resolution-records.md)
 
 Choose `search` according to how your client will receive the result.
 
@@ -30,7 +30,7 @@ Choose `search` according to how your client will receive the result.
 | Omit `search` | Tries quick resolution first. If the attempt is inconclusive, reaches a computation limit, or leaves a requested zeta unavailable, Atlas returns HTTP 202 with a background job ID. |
 | `"search": "exhaustive"` | Starts a background job immediately. Use its returned `id` to follow progress. |
 
-The default `method` is `"auto"`. For embedded resolution by weighted blowups, choose `"method": "weighted"` and request geometry alone with `"zetas": []`. [Weighted resolution options and output](weighted-resolution.md#resolve-with-method-weighted)
+The default `method` is `"auto"`. For embedded resolution by weighted blowups, choose `"method": "weighted"` and request geometry alone with `"zetas": []`. [Weighted resolution options and output](../thematic/weighted-resolution.md#resolve-with-method-weighted)
 
 ## Follow a background search
 
@@ -67,11 +67,11 @@ curl -sS "http://127.0.0.1:8765/api/searches/$job_id/zetas" \
 
 The updated job contains `result.topological_zeta`. For the cusp its expression is $(4s+5)/((s+1)(6s+5))$. To request both functions together, give `["monodromy", "topological"]`. If one was already computed, Atlas recomputes the pair using the same strata.
 
-Once the job has expired, use `POST /api/zetas`. Its JSON body takes the saved resolution object as `record` and the names as `zetas`. This endpoint returns the zeta outputs directly. For an intrinsic resolution, replay can use a saved embedded companion. If the available charts do not determine the required strata, the zeta entry gives `status: "unavailable"` and a `reason`. [Local monodromy zeta function](resolution-records.md#local-monodromy-zeta-function) · [Topological zeta function](resolution-records.md#topological-zeta-function)
+Once the job has expired, use `POST /api/zetas`. Its JSON body takes the saved resolution object as `record` and the names as `zetas`. This endpoint returns the zeta outputs directly. For an intrinsic resolution, replay can use a saved embedded companion. If the available charts do not determine the required strata, the zeta entry gives `status: "unavailable"` and a `reason`. [Local monodromy zeta function](../thematic/resolution-records.md#local-monodromy-zeta-function) · [Topological zeta function](../thematic/resolution-records.md#topological-zeta-function)
 
 ## Submit an algebra request
 
-Use `POST /api/algebra` for polynomial and ideal arithmetic. A request specifies the operation, an ordered ring and its operands. The result is returned directly. A Gröbner basis response can also include a reference for later normal forms or membership tests. [Worked algebra requests and complete operation tables](../examples/algebra-http.md)
+Use `POST /api/algebra` for polynomial and ideal arithmetic. A request specifies the operation, an ordered ring and its operands. The result is returned directly. A Gröbner basis response can also include a reference for later normal forms or membership tests. [Worked algebra requests and complete operation tables](algebra-requests.md)
 
 The standard algebra and resolution endpoints accept up to 32,768 bytes per request. A standard algebra request and a quick resolution have a 55-second worker deadline. For a larger algebra calculation, post to `/api/algebra/exhaustive`, which keeps the connection open until the worker finishes. For a larger resolution request, use `/api/searches` to obtain a job ID. To check that your client can reach the server, `GET /api/health` returns `{"status":"ok"}`.
 
@@ -93,4 +93,4 @@ Pass the policy as `--compute` from the shell or as `compute` in a JSON request.
 
 Look in `execution.stages` to see which backend actually ran. Resolution records include the reason for fallback on the affected chart or rank stage. Algebra records collect the reasons in `execution.fallback_reasons`.
 
-For OpenCL, install its headers, loader and device driver, then build with `make gpu`. Triton uses a compatible GPU-enabled PyTorch and Triton installation. Set `RESOLUTION_GPU_BACKEND` to `triton` or `opencl` and `RESOLUTION_GPU_INDEX` to the device ordinal when you need to choose a particular device. [Device calibration and Gröbner basis timings](../benchmarks/groebner-timings.md#profiling-katsura-6--7-and--8)
+For OpenCL, install its headers, loader and device driver, then build with `make gpu`. Triton uses a compatible GPU-enabled PyTorch and Triton installation. Set `RESOLUTION_GPU_BACKEND` to `triton` or `opencl` and `RESOLUTION_GPU_INDEX` to the device ordinal when you need to choose a particular device. [Device calibration and Gröbner basis timings](../../benchmarks/groebner-timings.md#profiling-katsura-6--7-and--8)

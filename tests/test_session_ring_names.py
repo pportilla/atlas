@@ -196,7 +196,7 @@ class RingNameTests(unittest.TestCase):
                                       'x = lookup(x)\nprint(lookup(x.parent))\nquit\n')
         self.assertEqual(status, 0)
         self.assertIn("lookup(ring)", out)
-        self.assertIn("docs/sessions.md#name-select-and-delete-rings", out)
+        self.assertIn("docs/tutorial/rings.md#name-select-and-delete-rings", out)
         self.assertIn("Pass a live ring", err)
         self.assertIn("atlas> R1\n", out)
 

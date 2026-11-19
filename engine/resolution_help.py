@@ -5,10 +5,10 @@ from .help_card import usage_card
 from .session_values import Branch, Chart, Divisor, DualComplex, Resolution
 
 
-_CHART_DOC = "docs/resolving-a-cusp.md#look-inside-a-chart"
-_CUSP_DOC = "docs/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor"
-_COMPLEX_DOC = "docs/resolution-records.md#chart-and-complex-conventions"
-_MODE_DOC = "docs/resolution-records.md#resolution-modes"
+_CHART_DOC = "docs/tutorial/resolving-a-cusp.md#look-inside-a-chart"
+_CUSP_DOC = "docs/tutorial/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor"
+_COMPLEX_DOC = "docs/thematic/resolution-records.md#chart-and-complex-conventions"
+_MODE_DOC = "docs/thematic/resolution-records.md#resolution-modes"
 
 # Examples use the requested binding. The saved record selects IDs and supplies
 # alternatives for empty lists and partial charts without computing equations.
@@ -22,7 +22,7 @@ _PAGES = {
                         "{n}.coordinates\n{n}.coordinates.parent", _CUSP_DOC),
         "mode": ("{n}.mode gives the chosen resolution mode.", "{n}.mode", _MODE_DOC),
         "status": ("{n}.status gives the recorded outcome of the resolution.", "{n}.status",
-                   "docs/resolution-pipeline.md#what-the-record-certifies"),
+                   "docs/thematic/resolution-pipeline.md#what-the-record-certifies"),
         "charts": ("{n}.charts lists the local charts of this resolution.",
                    "{n}.charts[0].strict_transform\n{n}.chart({chart_id}).coordinates", _CHART_DOC),
         "chart": ("{n}.chart(id) retrieves a chart by its recorded ID.",
@@ -231,7 +231,7 @@ def resolution_help(topic, variables):
         return None
     summary, example, reference = page
     if kind is Resolution and not field and value is not None and value._record.get("engine") == "weighted":
-        reference = "docs/weighted-resolution.md#resolve-with-method-weighted"
+        reference = "docs/thematic/weighted-resolution.md#resolve-with-method-weighted"
     context = dict(n=name, owner=owner, ring=resolution._source_space if resolution else "QQ[x, y]",
                    source=f"{owner}.polynomial" if owner else "1", local_chart=name + ".charts[0]",
                    chart_id='"B3.u"', divisor_id='"E3"')

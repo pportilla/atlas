@@ -6,7 +6,7 @@ The measurements use the in-process resolution routine on one machine.
 The numbered entries record changes to basis computation, substitutions and
 centre selection. The correction below identifies which observations at the
 ninth blowup must be discarded. For complete resolutions with comparable
-inputs and recorded trial conditions, see the benchmark reports. [Resolution and zeta timings](../benchmarks/resolution-timings.md) · [Resolution algorithms](../native/resolution-algorithms.md)
+inputs and recorded trial conditions, see the benchmark reports. [Resolution and zeta timings](../../benchmarks/resolution-timings.md) · [Resolution algorithms](../../native/resolution-algorithms.md)
 
 > **Correction (later the same day).** Item 4 had a bug, now fixed.
 >

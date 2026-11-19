@@ -13,14 +13,14 @@ from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing
 from .session_rings import RingDeletion
 
 
-POLYNOMIALS = "docs/sessions.md#choose-the-ring-of-a-polynomial"
-QUOTIENTS = "docs/sessions.md#name-a-quotient-and-its-coordinates"
-IDEALS = "docs/sessions.md#add-multiply-and-raise-ideals-to-powers"
-QUOTIENT_IDEALS = "docs/sessions.md#create-an-ideal-in-a-quotient-ring"
-MAPS = "docs/sessions.md#move-a-polynomial-between-rings"
-SAVED_VALUES = "docs/sessions.md#inspect-a-saved-value"
-RINGS = "docs/sessions.md#name-select-and-delete-rings"
-CHARTS = "docs/resolving-a-cusp.md#look-inside-a-chart"
+POLYNOMIALS = "docs/tutorial/rings.md#choose-the-ring-of-a-polynomial"
+QUOTIENTS = "docs/tutorial/rings.md#name-a-quotient-and-its-coordinates"
+IDEALS = "docs/tutorial/polynomials-and-ideals.md#add-multiply-and-raise-ideals-to-powers"
+QUOTIENT_IDEALS = "docs/tutorial/rings.md#create-an-ideal-in-a-quotient-ring"
+MAPS = "docs/tutorial/rings.md#move-a-polynomial-between-rings"
+SAVED_VALUES = "docs/tutorial/prompt-and-scripts.md#inspect-a-saved-value"
+RINGS = "docs/tutorial/rings.md#name-select-and-delete-rings"
+CHARTS = "docs/tutorial/resolving-a-cusp.md#look-inside-a-chart"
 
 
 class _FieldHelp(NamedTuple):

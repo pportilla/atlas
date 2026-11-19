@@ -33,7 +33,7 @@ print((1+v)*(1-v) == 1)                                # True
 
 These ideals are equal. The extra relation makes $1+v$ a unit with inverse $1-v$. Consequently $u=u(1+v)(1-v)$ lies in `JK`.
 
-Both constructors are useful. In `ideal(u)` the generator already has parent `K`. In `ideal(g, ring=K)` Atlas takes the class of the ambient polynomial `g`. To test equality for ideals with more generators, test every generator for membership in the other ideal, in both directions. The expression `IK == JK` compares saved ideal objects. [Ideals in a quotient ring](../docs/sessions.md#create-an-ideal-in-a-quotient-ring)
+Both constructors are useful. In `ideal(u)` the generator already has parent `K`. In `ideal(g, ring=K)` Atlas takes the class of the ambient polynomial `g`. To test equality for ideals with more generators, test every generator for membership in the other ideal, in both directions. The expression `IK == JK` compares saved ideal objects. [Ideals in a quotient ring](rings.md#create-an-ideal-in-a-quotient-ring)
 
 ## Compute with residue classes
 
@@ -70,7 +70,7 @@ phi = hom(D, B, images=(b^2,))
 print(phi(a) == b^2, phi(a^2) == 0)                     # True True
 ```
 
-The map checks the defining relation and can be applied to any element of `D`. The built-in projection `A.projection` is itself a ring map, from `A.ambient` to `A`. [Ring maps and substitutions](../docs/sessions.md#move-a-polynomial-between-rings) · [Methods on residue classes](../docs/value-methods.md#quotient-rings-and-residue-classes)
+The map checks the defining relation and can be applied to any element of `D`. The built-in projection `A.projection` is itself a ring map, from `A.ambient` to `A`. [Ring maps and substitutions](rings.md#move-a-polynomial-between-rings) · [Methods on residue classes](../reference/saved-values.md#quotient-rings-and-residue-classes)
 
 ## Localize at a prime
 
@@ -88,7 +88,7 @@ print(localize(P).fraction(y+1, y).unit)               # True
 
 The contraction is $(x)$. The fraction $x/y$ belongs to the extended ideal and is a nonunit in the local ring. The fraction $(y+1)/y$ is a unit since its numerator also lies outside $P$.
 
-Supply a proper prime for `P`. Each denominator must lie outside it. Localizing at the zero prime gives the rational function field. If you already have a fraction at the time of construction, pass `numerator=` and `denominator=` to `localize` and read the result in `L.element`. [Local fractions](../docs/value-methods.md#local-fractions) · [Localization algorithm](../native/ideal-algorithms.md#localization-at-a-prime-over-the-rationals)
+Supply a proper prime for `P`. Each denominator must lie outside it. Localizing at the zero prime gives the rational function field. If you already have a fraction at the time of construction, pass `numerator=` and `denominator=` to `localize` and read the result in `L.element`. [Local fractions](../reference/saved-values.md#local-fractions) · [Localization algorithm](../../native/ideal-algorithms.md#localization-at-a-prime-over-the-rationals)
 
 ## Normalize the cusp
 
@@ -105,7 +105,7 @@ print(C.fractions[0].numerator, C.fractions[0].denominator)  # y x
 
 Atlas calls the parameter `n1`. The empty tuple of relations means it satisfies no polynomial relation over $\mathbb Q$. The images of $x$ and $y$ are its square and its cube, and the last line recovers it as the fraction $y/x$.
 
-For a reducible input, read one entry of `N.components` per irreducible component. Each `C.prime` defines the source component, and `C.map` sends its residue classes to the algebra presented by `C.coordinates` and `C.relations`. Atlas normalizes the reduction, with `N.input_reduced` recording whether the input was already reduced. The algorithm notes describe the special treatment of monomial curves and the general method using the Grauert–Remmert criterion. [Atlas normalization](../native/ideal-algorithms.md#normalization-of-affine-algebras-over-the-rationals) · [Greuel, Laplagne and Seelisch, *Normalization of Rings*](https://arxiv.org/abs/0904.3561)
+For a reducible input, read one entry of `N.components` per irreducible component. Each `C.prime` defines the source component, and `C.map` sends its residue classes to the algebra presented by `C.coordinates` and `C.relations`. Atlas normalizes the reduction, with `N.input_reduced` recording whether the input was already reduced. The algorithm notes describe the special treatment of monomial curves and the general method using the Grauert–Remmert criterion. [Atlas normalization](../../native/ideal-algorithms.md#normalization-of-affine-algebras-over-the-rationals) · [Greuel, Laplagne and Seelisch, *Normalization of Rings*](https://arxiv.org/abs/0904.3561)
 
 ## Read the graded Hilbert series
 
@@ -120,4 +120,4 @@ print(H.dimension, H.multiplicity)                     # 0 6
 
 Atlas displays the numerator over $(1-t)^2$, one denominator factor for each ambient variable. Canceling the factors of $1-t$ gives our polynomial. The quotient has Krull dimension zero and length six. To use the coefficients in a script, read the degree and coefficient of each term in `H.numerator` and the exponent in `H.denominator_power`.
 
-The ideal must be homogeneous for the standard grading. Its particular generators may be inhomogeneous if they generate a homogeneous ideal, as in $(x+y^2,y^2)=(x,y^2)$. [Graded Hilbert series algorithm](../native/local-algorithms.md#hilbert-series-of-homogeneous-quotients)
+The ideal must be homogeneous for the standard grading. Its particular generators may be inhomogeneous if they generate a homogeneous ideal, as in $(x+y^2,y^2)=(x,y^2)$. [Graded Hilbert series algorithm](../../native/local-algorithms.md#hilbert-series-of-homogeneous-quotients)

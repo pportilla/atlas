@@ -1,6 +1,6 @@
 # The exact kernel
 
-Does $y^2-1$ belong to the ideal $(x^2-1,y-x)$ in $\mathbb Q[x,y]$? Here we can substitute $x=y$ to see that it does. For arbitrary generators, `membership` can answer the same question by polynomial division. A Gröbner basis makes the remainder unique for the chosen monomial order. A zero remainder proves membership, and a nonzero remainder represents the class of the polynomial in the quotient. [Try the calculation](../examples/polynomial-ideals.md#reduce-a-polynomial-modulo-an-ideal)
+Does $y^2-1$ belong to the ideal $(x^2-1,y-x)$ in $\mathbb Q[x,y]$? Here we can substitute $x=y$ to see that it does. For arbitrary generators, `membership` can answer the same question by polynomial division. A Gröbner basis makes the remainder unique for the chosen monomial order. A zero remainder proves membership, and a nonzero remainder represents the class of the polynomial in the quotient. [Try the calculation](../docs/tutorial/polynomials-and-ideals.md#reduce-a-polynomial-modulo-an-ideal)
 
 The proofs below explain how Atlas constructs the basis and how it checks a basis reconstructed from modular computations. For operations built on this kernel, follow the corresponding chapter.
 

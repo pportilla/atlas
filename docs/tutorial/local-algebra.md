@@ -18,7 +18,7 @@ print(local_quotient_basis(I, point=(1,0)).dimension)       # 1
 
 Globally $x^3=x^2$. At the origin $x-1$ is a unit, so the relation simplifies to $x^2=0$. At $(1,0)$ it is $x$ that becomes a unit, leaving $x=1$. The two local lengths add up to the global length $3$.
 
-`quotient_basis(I).dimension` counts basis monomials. `multiplicity(I).value` returns that count without listing the monomials. `dimension(I).value` gives the Krull dimension, which is zero in this example. For a quotient of infinite vector-space dimension the basis result has `finite=False` and both `basis` and `dimension` are `None`. A zero algebra has an empty basis. [Quotient bases and lengths](../native/local-algorithms.md#quotient-bases-and-lengths-at-the-origin)
+`quotient_basis(I).dimension` counts basis monomials. `multiplicity(I).value` returns that count without listing the monomials. `dimension(I).value` gives the Krull dimension, which is zero in this example. For a quotient of infinite vector-space dimension the basis result has `finite=False` and both `basis` and `dimension` are `None`. A zero algebra has an empty basis. [Quotient bases and lengths](../../native/local-algorithms.md#quotient-bases-and-lengths-at-the-origin)
 
 ## Compare the cusp and its parametrization
 
@@ -45,7 +45,7 @@ print(r.finite, r.value)                                   # True 1
 
 The extended left-right codimension is one. There is one independent infinitesimal deformation of the parametrization modulo changes of source and target coordinates. Mond discusses this quotient and works out the same example in Section 1.1. [Mond, *Some open problems in the theory of singularities of mappings*](https://www.journalofsingularities.com/volume12/mond.pdf)
 
-Pass components in target coordinate order, separately or as a list, including any zero components. All must vanish at the origin. Read `r.finite` alongside `r.value`. A value of `True` certifies a finite codimension and `False` certifies infinity. If `r.finite` is `None`, the calculation is inconclusive. The fields `r.lower_bound`, `r.jet_degree` and `r.reason` report what was established. For larger examples, the notes describe the weighted and filtered calculations, including the corank-two germ $\widehat B_7$ of codimension $837$ at $\alpha=-1$. [Map-germ algorithms](../native/map-germ-algorithms.md) · [Published examples and timings](../benchmarks/map-germ-timings.md#published-map-germs)
+Pass components in target coordinate order, separately or as a list, including any zero components. All must vanish at the origin. Read `r.finite` alongside `r.value`. A value of `True` certifies a finite codimension and `False` certifies infinity. If `r.finite` is `None`, the calculation is inconclusive. The fields `r.lower_bound`, `r.jet_degree` and `r.reason` report what was established. For larger examples, the notes describe the weighted and filtered calculations, including the corank-two germ $\widehat B_7$ of codimension $837$ at $\alpha=-1$. [Map-germ algorithms](../../native/map-germ-algorithms.md) · [Published examples and timings](../../benchmarks/map-germ-timings.md#published-map-germs)
 
 ## Evaluate one curve at three points
 
@@ -66,7 +66,7 @@ for p in [(1/2,0), (-1,0), (3/2,5/2)]:
 
 At the smooth point a partial derivative is a unit, so the local Jacobian algebra is zero. At each singularity a nontrivial quotient remains. The two numbers agree at all three points in this example, but they can differ. For $x^4+y^5+x^2y^3$ at the origin they are $12$ and $11$, respectively.
 
-Use a point on the hypersurface. The field `finite` on the corresponding local algebra distinguishes a finite-dimensional algebra from one with infinite dimension, such as the Jacobian algebra of $x^2$ in two variables. [Hypersurface invariants at rational points](../native/local-algorithms.md#quotients-and-hypersurface-invariants-at-rational-points)
+Use a point on the hypersurface. The field `finite` on the corresponding local algebra distinguishes a finite-dimensional algebra from one with infinite dimension, such as the Jacobian algebra of $x^2$ in two variables. [Hypersurface invariants at rational points](../../native/local-algorithms.md#quotients-and-hypersurface-invariants-at-rational-points)
 
 ## Reduce at a rational point
 
@@ -88,4 +88,4 @@ h = local_normal_form(x, ideal((1-y)*x-y^2))
 print(h.remainder, h.unit)                                 # y^2 -y+1
 ```
 
-The local relation is $(1-y)x=y^2$. Since $1-y$ is invertible at the origin, the pair describes $x$ by the fraction $y^2/(1-y)$. In general the fields `remainder` and `unit` give $r$ and $u$ with $uf-r$ in the localized ideal and $u(p)=1$. A zero remainder tests membership. With `reduction="weak"`, only the leading monomial of a nonzero remainder is guaranteed to be irreducible. For details on local division, see the algorithm notes and the introduction by Mora, Pfister and Traverso. [Atlas local normal forms](../native/local-algorithms.md#local-standard-bases-and-normal-forms-at-rational-points) · [*An Introduction to the Tangent Cone Algorithm*](https://www.numdam.org/item/PSMIR_1989___4_133_0/)
+The local relation is $(1-y)x=y^2$. Since $1-y$ is invertible at the origin, the pair describes $x$ by the fraction $y^2/(1-y)$. In general the fields `remainder` and `unit` give $r$ and $u$ with $uf-r$ in the localized ideal and $u(p)=1$. A zero remainder tests membership. With `reduction="weak"`, only the leading monomial of a nonzero remainder is guaranteed to be irreducible. For details on local division, see the algorithm notes and the introduction by Mora, Pfister and Traverso. [Atlas local normal forms](../../native/local-algorithms.md#local-standard-bases-and-normal-forms-at-rational-points) · [*An Introduction to the Tangent Cone Algorithm*](https://www.numdam.org/item/PSMIR_1989___4_133_0/)

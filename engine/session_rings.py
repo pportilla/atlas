@@ -340,7 +340,7 @@ def ring_bindings(rings):
         >>> f = polynomial("x^2 + y")
         >>> f.parent  # QQ[x, y]
 
-        Docs: docs/sessions.md#name-select-and-delete-rings
+        Docs: docs/tutorial/rings.md#name-select-and-delete-rings
         """
         return rings.use(ring)
 
@@ -351,7 +351,7 @@ def ring_bindings(rings):
         >>> use_ring(x.parent)  # QQ[x, y]
         >>> active_ring() == x.parent  # True
 
-        Docs: docs/sessions.md#name-select-and-delete-rings
+        Docs: docs/tutorial/rings.md#name-select-and-delete-rings
         """
         return rings.active
 
@@ -363,7 +363,7 @@ def ring_bindings(rings):
         >>> A = x.parent
         >>> ring_name(A)  # A
 
-        Docs: docs/sessions.md#name-select-and-delete-rings
+        Docs: docs/tutorial/rings.md#name-select-and-delete-rings
         """
         if ring is QQ:
             return "QQ"
@@ -378,7 +378,7 @@ def ring_bindings(rings):
         >>> f = y^2 - x^3
         >>> delete_ring(x.parent)  # Deleted QQ[x, y]: x, y, R1, f
 
-        Docs: docs/sessions.md#name-select-and-delete-rings
+        Docs: docs/tutorial/rings.md#name-select-and-delete-rings
         """
         return rings.delete(ring)
 
@@ -391,7 +391,7 @@ def ring_bindings(rings):
         >>> h = polynomial("x*y")
         >>> g + h  # x^2+x*y+y
 
-        Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
+        Docs: docs/tutorial/rings.md#choose-the-ring-of-a-polynomial
         """
         if ring is None and variables is None:
             ring = rings.default()

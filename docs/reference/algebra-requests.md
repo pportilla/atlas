@@ -29,7 +29,7 @@ The server returns HTTP 200 with `"status": "ok"`. The answer is in `result`.
 
 This is the expected class $1+y/2$. The ring accompanies the polynomial so that a client knows how to interpret its variables and its normal form. For a calculation you want to keep, save the full response. Its `replay.command` and `replay.script` reproduce the calculation from the shell and from an Atlas script. The `execution` fields describe the device and stages used on this particular run.
 
-You can also enter the original calculation directly from the shell. Use `./atlas algebra normal-form --help` to see its options. [Equivalent Atlas script](algebra-normal-form.atlas) · [Gröbner bases at the prompt](polynomial-ideals.md#reduce-a-polynomial-modulo-an-ideal)
+You can also enter the original calculation directly from the shell. Use `./atlas algebra normal-form --help` to see its options. [Equivalent Atlas script](../../examples/algebra-normal-form.atlas) · [Gröbner bases at the prompt](../tutorial/polynomials-and-ideals.md#reduce-a-polynomial-modulo-an-ideal)
 
 ```sh
 ./atlas algebra normal-form --vars x,y --order lex --compute cpu \
@@ -59,7 +59,7 @@ For example, is $x$ a multiple of $x(1+y)$ in $\mathbb Q[x,y]/(y^2)$? Sending th
 }
 ```
 
-The relation makes $1+y$ a unit with inverse $1-y$. The same quotient presentation works for `ideal`, `ideal-sum`, `ideal-product`, `ideal-power`, `groebner`, `normal-form` and a further `quotient-ring` declaration. On the command line give one `--relation` per equation, or use `--quotient-ring` for the quotient by the zero ideal. [The two ideals at the prompt](quotient-algebras.md#compare-ideals-before-and-after-quotienting)
+The relation makes $1+y$ a unit with inverse $1-y$. The same quotient presentation works for `ideal`, `ideal-sum`, `ideal-product`, `ideal-power`, `groebner`, `normal-form` and a further `quotient-ring` declaration. On the command line give one `--relation` per equation, or use `--quotient-ring` for the quotient by the zero ideal. [The two ideals at the prompt](../tutorial/quotient-rings.md#compare-ideals-before-and-after-quotienting)
 
 | Operation | Keys in `operands` | Read from `result` |
 | --- | --- | --- |
@@ -82,9 +82,9 @@ The relation makes $1+y$ a unit with inverse $1-y$. The same quotient presentati
 | `hilbert-series` | `ideal` | `numerator`, `denominator_power`, `dimension`, `multiplicity` |
 | `ae-codimension` | `components` (ordered array of source polynomials vanishing at the origin) | `finite`, `value`, `method` and proof details |
 
-For `quotient-ring` the default action is `declare`. Supply `polynomial` for `reduce`, `negate`, `unit` or `inverse`. Supply both `polynomial` and `other_polynomial` for `add`, `subtract`, `multiply`, `divide` or `equal`. For `power` give `polynomial` and a signed integer `exponent`. A decimal string preserves an exponent wider than a client’s native integer type. [Quotient actions and return values](../docs/value-methods.md#quotient-rings-and-residue-classes)
+For `quotient-ring` the default action is `declare`. Supply `polynomial` for `reduce`, `negate`, `unit` or `inverse`. Supply both `polynomial` and `other_polynomial` for `add`, `subtract`, `multiply`, `divide` or `equal`. For `power` give `polynomial` and a signed integer `exponent`. A decimal string preserves an exponent wider than a client’s native integer type. [Quotient actions and return values](saved-values.md#quotient-rings-and-residue-classes)
 
-For a parametrization, the variables are those of the source and the ordered components describe the target. The cusp $t\mapsto(t^2,t^3)$ gives `finite: true` and `value: 1`. [The cusp and its parametrization](local-algebra.md#compare-the-cusp-and-its-parametrization)
+For a parametrization, the variables are those of the source and the ordered components describe the target. The cusp $t\mapsto(t^2,t^3)$ gives `finite: true` and `value: 1`. [The cusp and its parametrization](../tutorial/local-algebra.md#compare-the-cusp-and-its-parametrization)
 
 ```json
 {"operation":"ae-codimension","ring":{"variables":["t"]},"operands":{"components":["t^2","t^3"]}}
@@ -102,7 +102,7 @@ For local calculations, `operands.point` is an optional array in declared coordi
 }
 ```
 
-The result gives `value: 2` and `point: ["1/2", "2"]`. When a client compares answers at several points, keep `scope` as well as `value`. A local standard basis or normal form always records its point. Other point operations distinguish an omitted origin from an explicitly supplied point through `scope`. [Local calculations at rational points](local-algebra.md#evaluate-one-curve-at-three-points)
+The result gives `value: 2` and `point: ["1/2", "2"]`. When a client compares answers at several points, keep `scope` as well as `value`. A local standard basis or normal form always records its point. Other point operations distinguish an omitted origin from an explicitly supplied point through `scope`. [Local calculations at rational points](../tutorial/local-algebra.md#evaluate-one-curve-at-three-points)
 
 | Operation | Other keys in `operands` | Read from `result` |
 | --- | --- | --- |
@@ -165,4 +165,4 @@ To reduce in a local ring, choose `local-normal-form` as the operation and suppl
 | 429 | Both computation slots are in use. Retry after one becomes free. |
 | 503 | The worker or kernel is unavailable. Check the server before retrying. |
 
-The exhaustive algebra endpoint also lifts the ordinary worker deadline. [Server limits and compute options](../docs/http-and-compute.md#submit-an-algebra-request)
+The exhaustive algebra endpoint also lifts the ordinary worker deadline. [Server limits and compute options](http-and-compute.md#submit-an-algebra-request)

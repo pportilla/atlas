@@ -84,20 +84,21 @@ _PURPOSES = {
 
 # Established functions share guide sections for related operations. New
 # functions can give their reference and example directly in their docstring.
-_SESSIONS = "docs/sessions.md#"
-_IDEALS = "examples/polynomial-ideals.md#"
-_QUOTIENTS = "examples/quotient-algebras.md#"
-_LOCAL = "examples/local-algebra.md#"
-_GEOMETRY = "examples/local-geometry.md#"
-_RECORDS = "docs/resolution-records.md#"
+_PROMPT = "docs/tutorial/prompt-and-scripts.md#"
+_RINGS = "docs/tutorial/rings.md#"
+_IDEALS = "docs/tutorial/polynomials-and-ideals.md#"
+_QUOTIENTS = "docs/tutorial/quotient-rings.md#"
+_LOCAL = "docs/tutorial/local-algebra.md#"
+_GEOMETRY = "docs/tutorial/local-geometry.md#"
+_RECORDS = "docs/thematic/resolution-records.md#"
 _GUIDES = {
-    _SESSIONS + "choose-the-ring-of-a-polynomial": ("coordinates", "polynomial"),
-    _SESSIONS + "create-an-ideal-in-a-quotient-ring": ("ideal",),
-    _SESSIONS + "name-a-quotient-and-its-coordinates": ("quotient_ring",),
-    _SESSIONS + "add-multiply-and-raise-ideals-to-powers": ("ideal_power",),
-    _SESSIONS + "move-a-polynomial-between-rings": ("hom",),
-    "docs/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor": ("resolve",),
-    _SESSIONS + "run-or-save-a-calculation": ("len", "print", "print_json"),
+    _RINGS + "choose-the-ring-of-a-polynomial": ("coordinates", "polynomial"),
+    _RINGS + "create-an-ideal-in-a-quotient-ring": ("ideal",),
+    _RINGS + "name-a-quotient-and-its-coordinates": ("quotient_ring",),
+    _IDEALS + "add-multiply-and-raise-ideals-to-powers": ("ideal_power",),
+    _RINGS + "move-a-polynomial-between-rings": ("hom",),
+    "docs/tutorial/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor": ("resolve",),
+    _PROMPT + "run-or-save-a-calculation": ("len", "print", "print_json"),
     _RECORDS + "chart-and-complex-conventions": ("dual_complex", "recompute_dual_complex"),
     _RECORDS + "topological-zeta-function": ("monodromy_check",),
     _IDEALS + "reduce-a-polynomial-modulo-an-ideal": ("groebner", "normal_form", "membership"),
@@ -118,7 +119,7 @@ _GUIDES = {
     _GEOMETRY + "compute-the-tangent-cone": ("tangent_cone", "tangent_cone_hilbert_series"),
     _GEOMETRY + "compute-the-tangent-space": ("zariski_tangent_space", "embedding_dimension"),
     _GEOMETRY + "compare-local-dimension-and-smoothness": ("local_dimension", "local_smoothness"),
-    "examples/algebra-http.md#specify-a-ring-and-its-operands": ("algebra_request",),
+    "docs/reference/algebra-requests.md#specify-a-ring-and-its-operands": ("algebra_request",),
 }
 _FUNCTION_DOCS = {name: guide for guide, names in _GUIDES.items() for name in names}
 

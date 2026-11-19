@@ -39,7 +39,7 @@ class FunctionHelpTests(unittest.TestCase):
             >>> label = echo("echo(")
             >>> print(label)
 
-            Docs: docs/sessions.md#run-or-save-a-calculation
+            Docs: docs/tutorial/prompt-and-scripts.md#run-or-save-a-calculation
             """
             return label
 
@@ -48,7 +48,7 @@ class FunctionHelpTests(unittest.TestCase):
         card = function_help("again", session.builtins)
         self.assertEqual(card.split("\n\n")[0], "again(label)\nReturn the supplied label.")
         self.assertIn('  label = again("echo(")', card)
-        self.assertTrue(card.endswith("/docs/sessions.md#run-or-save-a-calculation"))
+        self.assertTrue(card.endswith("/docs/tutorial/prompt-and-scripts.md#run-or-save-a-calculation"))
         list(session.run(card.split("Example\n  ")[1].splitlines()[0]))
         self.assertEqual(session.variables["label"], "echo(")
 
@@ -57,7 +57,7 @@ class FunctionHelpTests(unittest.TestCase):
             return x
 
         summary = "Return the input value.\n\n>>> new_function(1)"
-        for trailer in ("", "Docs: docs/sessions.md", "Docs: no such link", "Docs: docs/sessions.md#"):
+        for trailer in ("", "Docs: docs/tutorial/rings.md", "Docs: no such link", "Docs: docs/tutorial/rings.md#"):
             with self.subTest(trailer=trailer):
                 new_function.__doc__ = summary + "\n\n" + trailer
                 with self.assertRaisesRegex(ValueError, "new_function needs a final Docs:"):
@@ -66,5 +66,5 @@ class FunctionHelpTests(unittest.TestCase):
     def test_help_for_a_saved_result_uses_the_functions_own_docstring_reference(self):
         functions = new_session(None).builtins
         reference = function_documentation("ae_codimension")
-        self.assertEqual(reference, "examples/local-algebra.md#compare-the-cusp-and-its-parametrization")
+        self.assertEqual(reference, "docs/tutorial/local-algebra.md#compare-the-cusp-and-its-parametrization")
         self.assertTrue(function_help("ae_codimension", functions).endswith(reference))

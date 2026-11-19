@@ -1,6 +1,6 @@
 # Development roadmap
 
-Atlas can compute with ideals in rational polynomial rings and their quotients, study a germ at a rational point, and resolve a hypersurface germ at the origin. What would it take to compute a free resolution of a module, or to resolve a germ defined by several equations? The examples below are proposed extensions. Each gives a concrete calculation that a future implementation should handle. For computations available today, see the [algebra reference](../examples/algebra-api.md), [prompt and scripts](sessions.md) or [resolution records](resolution-records.md).
+Atlas can compute with ideals in rational polynomial rings and their quotients, study a germ at a rational point, and resolve a hypersurface germ at the origin. What would it take to compute a free resolution of a module, or to resolve a germ defined by several equations? The examples below are proposed extensions. Each gives a concrete calculation that a future implementation should handle. For computations available today, see the [tutorial](../tutorial/index.md), the [reference manual](../reference/index.md) or [reading a resolution record](../thematic/resolution-records.md).
 
 ## Rings and modules
 
@@ -10,9 +10,9 @@ A first example for polynomial matrices and modules is the residue field of $R=\
 
 ## Geometric resolution
 
-Proposed inputs include several equations defining one germ, a user-selected blowup centre and an affine variety with several singular points. For a first multi-equation example, resolving $(z,y^2-x^3)$ should recover the intrinsic cusp after projection onto the first two coordinates. For a global example, check the map and smoothness above every singular point. [Current chart and complex conventions](resolution-records.md#chart-and-complex-conventions)
+Proposed inputs include several equations defining one germ, a user-selected blowup centre and an affine variety with several singular points. For a first multi-equation example, resolving $(z,y^2-x^3)$ should recover the intrinsic cusp after projection onto the first two coordinates. For a global example, check the map and smoothness above every singular point. [Current chart and complex conventions](../thematic/resolution-records.md#chart-and-complex-conventions)
 
-Further questions include branch parametrizations and deformations, and monodromy invariants that distinguish Jordan block sizes. The existing resolution records provide geometric branch attachments and zeta functions. [Monodromy and topological zetas](resolution-records.md#local-monodromy-zeta-function)
+Further questions include branch parametrizations and deformations, and monodromy invariants that distinguish Jordan block sizes. The existing resolution records provide geometric branch attachments and zeta functions. [Monodromy and topological zetas](../thematic/resolution-records.md#local-monodromy-zeta-function)
 
 ## Other proposed calculations
 

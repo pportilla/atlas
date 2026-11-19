@@ -1,4 +1,4 @@
-"""Reading order and source pointers for the public session reference.
+"""Subject pages and source pointers for the session functions in the reference manual.
 
 The session supplies the signatures, descriptions and examples. Each link here
 points to a particular piece of the implementation or a test that demonstrates
@@ -73,10 +73,11 @@ complex_sources = (
 )
 builtin_registration = session("Python built-in registered in the session", "session", '"len": len, "print": print')
 
-# A topic owns each canonical name exactly once. Aliases keep their anchors but
-# share the canonical card, including its example, implementation and tests.
+# Each subject page of the reference manual owns its functions' canonical names,
+# in reading order. Aliases keep their anchors but share the canonical card,
+# including its example, implementation and tests.
 _GROUPS = {
-    "Coordinates, polynomials and ring maps": {
+    "docs/reference/rings.md": {
         "ring": Entry(
             (session("Declare a ring and its generators", "session_polynomial", "def ring(*names, coeffs=QQ, fresh=False):"),),
             (example("Use the coordinates of a declared ring", "session_ring_names",
@@ -129,7 +130,7 @@ _GROUPS = {
              example("Check that the images kill the source relations", "session_maps",
                      "foreign_bindings_and_source_relations"))),
     },
-    "Gröbner bases and ideal operations": {
+    "docs/reference/ideals.md": {
         "ideal": Entry(
             (session("Ideal declaration in an ambient ring", "session_algebra", "def ideal(*generators"),),
             (example("Declare ideals in polynomial and scalar rings", "ideal_session",
@@ -162,7 +163,7 @@ _GROUPS = {
         "symbolic_power": Entry(
             (native("Symbolic powers of radical ideals", "ideal_powers", "PowerResult symbolic("),), (power_example,)),
     },
-    "Components, localization and normalization": {
+    "docs/reference/components.md": {
         "radical": Entry(
             (native("Radical of a rational ideal", "primary_decomposition", "Basis radical(Basis rows"),),
             (example("Reuse the radical of a mixed-dimensional ideal", "session_radical",
@@ -180,7 +181,7 @@ _GROUPS = {
             (example("Recover the cusp parametrization and its inverse fraction", "normalization_interface",
                      "cusp_images_and_inverse_fractions_at_prompt_and_in_script"),)),
     },
-    "Global dimension, length and Hilbert series": {
+    "docs/reference/dimension.md": {
         "dimension": Entry(
             (native("Dimension from leading monomial supports", "affine",
                     "return report_dimension(ring.n - component_cover_height"),),
@@ -196,7 +197,7 @@ _GROUPS = {
             (example("Read the signed Hilbert numerator of (x², y³)", "session_hilbert_series",
                      "prompt_and_script_expose_signed_sparse_terms"),)),
     },
-    "Local algebra at a point": {
+    "docs/reference/local-algebra.md": {
         "local_standard_basis": Entry(
             (basis_at_origin,
              native("Standard basis at a rational point", "local_point_basis", "Basis standard_basis_at_point(")),
@@ -213,7 +214,7 @@ _GROUPS = {
             (native("Multiplicity from the monomial staircase", "monomial_quotient", "Series analyze("),),
             (hilbert_example,)),
     },
-    "Tangent geometry and smoothness": {
+    "docs/reference/tangent-geometry.md": {
         "tangent_cone": Entry(
             (cone_forms, basis_at_origin),
             (example("Recover the double tangent line of a translated cusp", "session_tangent_cone",
@@ -233,7 +234,7 @@ _GROUPS = {
             (example("Distinguish a junction from a smooth branch", "local_dimension_interface",
                      "junction_and_smooth_branch_above_translation_cap"),)),
     },
-    "Hypersurface and map germ invariants": {
+    "docs/reference/germ-invariants.md": {
         "local_jacobian_algebra": Entry(
             (quotient_at_point,),
             (example("Read the cusp's derivatives and its Jacobian algebra basis", "local_algebra_session",
@@ -256,7 +257,7 @@ _GROUPS = {
              example("Inspect the lower bound when the calculation is inconclusive",
                      "ae_codimension_interface", "inconclusive_record_preserves_last_proved_lower_bound"))),
     },
-    "Resolution, exceptional divisors and monodromy": {
+    "docs/reference/resolution.md": {
         "resolve": Entry(
             (native("Point blowups of plane curve germs", "plane", "void visit(Task&"),
              native("Weighted blowups along points and bad curves", "weighted_resolution",
@@ -272,7 +273,7 @@ _GROUPS = {
             (example("Compare pole orders and nearby witnesses", "session_monodromy",
                      "signed_orders_h0_and_nearby_witnesses_at_both_entry_points"),)),
     },
-    "Script output and replay": {
+    "docs/reference/output.md": {
         "print": Entry((builtin_registration,), (resolve_example,)),
         "len": Entry((builtin_registration,), (resolve_example,)),
         "print_json": Entry(
@@ -287,6 +288,6 @@ _GROUPS = {
     },
 }
 
-TOPICS = {title: tuple(entries) for title, entries in _GROUPS.items()}
+TOPICS = {page: tuple(entries) for page, entries in _GROUPS.items()}
 ENTRIES = {name: entry for entries in _GROUPS.values() for name, entry in entries.items()}
 ALIASES = {"saturate": "saturation", "localization": "localize"}

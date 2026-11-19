@@ -1,4 +1,4 @@
-# Resolve a plane cusp
+# Resolving a plane cusp
 
 Where does the cusp $y^2=x^3$ meet the exceptional divisor after resolution?
 We can read the answer from the resolution graph, then check it in local coordinates.
@@ -46,7 +46,7 @@ $u=v^2$ is already smooth, but at the origin it is tangent to the exceptional
 curve $u=0$. The default, embedded resolution continues until the whole divisor
 has normal crossings. To resolve the curve intrinsically, ask for
 `resolve(f, mode="intrinsic")`. Its exceptional locus on the smooth curve
-consists of one point. [Resolution modes](resolution-records.md#resolution-modes)
+consists of one point. [Resolution modes](../thematic/resolution-records.md#resolution-modes)
 
 ## Look inside a chart
 
@@ -100,9 +100,9 @@ The ring of the chart is `C.parent`. For example, use `C.pullback_map` to
 transport a polynomial from the original ring, or read an expression directly
 in the chart with `polynomial("v-1", variables=C.coordinates)`. In a chart
 with relations, `C.ambient_ideal` gives those relations in the ambient ring
-`C.ambient`. [Rings and ideals](sessions.md#choose-the-ring-of-a-polynomial)
+`C.ambient`. [Rings and ideals](rings.md#choose-the-ring-of-a-polynomial)
 
 To reconstruct the incidence from the charts, use `recompute_dual_complex(K)`.
 The cusp script also follows `E3` through both charts. The chart elimination
 example computes the ideal of the branch point and reduces $v^2+v+1$ there
-to $3$. [Reading a resolution record](resolution-records.md) · [Cusp script](../examples/cusp.atlas) · [Chart elimination script](../examples/chart-elimination.atlas)
+to $3$. [Reading a resolution record](../thematic/resolution-records.md) · [Cusp script](../../examples/cusp.atlas) · [Chart elimination script](../../examples/chart-elimination.atlas)
