@@ -1,7 +1,7 @@
 """Local Lefschetz zeta functions at the origin and on certified nearby strata."""
 from .kernel_json import kernel_json
-from .point_geometry import encode_terms
-from .polynomial import InputError, integer_from_decimal, integer_text, parse
+from .point_geometry import decode_terms, encode_terms
+from .polynomial import InputError, LimitError, format_poly, integer_from_decimal, integer_text, parse
 
 
 def _request(operation, **fields):
@@ -76,6 +76,45 @@ def _nearby_strata(polynomial, variables, data, strata, origin_factors):
             stratum["transverse_hessian_determinant"] = row["determinant"]
             stratum["parameter_values"] = [1] * len(stratum["parameters"])
         result.append(stratum)
+    return result + _transverse_compositions(polynomial, variables)
+
+
+def _transverse_names(count, variables):
+    for letter in "uvwabc":
+        names = [f"{letter}{i}" for i in range(1, count + 1)]
+        if not set(names) & set(variables):
+            return names
+    return [f"_u{i}" for i in range(1, count + 1)]
+
+
+def _origin_factors(polynomial, variables):
+    """The origin zeta of a germ in fewer variables, from its own certified resolution."""
+    from .resolve import resolve
+    try:
+        record = resolve({"polynomial": polynomial, "variables": variables, "mode": "embedded",
+                          "search": "quick", "zetas": ["monodromy"]})
+    except (InputError, LimitError, ArithmeticError, RuntimeError, OSError):
+        return None
+    zeta = record.get("monodromy_zeta") or {}
+    return zeta.get("factors") if zeta.get("status") == "computed" else None
+
+
+def _transverse_compositions(polynomial, variables):
+    # The native search certifies f = G(h) along a critical component. The
+    # local zeta at its generic points near 0 is the zeta of G at the origin.
+    rows = _request("transverse_compositions", width=len(variables), terms=encode_terms(polynomial))
+    result = []
+    for row in rows:
+        equations = [format_poly(decode_terms(terms), variables) for terms in row["equations"]]
+        names = _transverse_names(len(equations), variables)
+        germ = format_poly(decode_terms(row["germ"]), names)
+        # The native search returns the zeta of a Brieskorn-Pham germ directly.
+        factors = _decode_factors(row["factors"]) if "factors" in row else _origin_factors(germ, names)
+        if factors is None:
+            continue
+        result.append({"model": "transverse composition", "factors": factors, "expression": _quotient(factors),
+                       "coordinates": equations, "dimension": row["dimension"],
+                       "transverse_coordinates": names, "transverse_germ": germ})
     return result
 
 

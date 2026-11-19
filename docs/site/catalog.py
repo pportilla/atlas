@@ -269,9 +269,13 @@ _GROUPS = {
         "recompute_dual_complex": Entry(complex_sources, (complex_example,)),
         "dual_complex": Entry(complex_sources, (complex_example,)),
         "monodromy_check": Entry(
-            (native("Pole orders and monodromy witnesses", "monodromy", "Json::Value pole_data("),),
+            (native("Pole orders and monodromy witnesses", "monodromy", "Json::Value pole_data("),
+             native("Transverse compositions on critical components", "monodromy",
+                    "Json::Value transverse_compositions(")),
             (example("Compare pole orders and nearby witnesses", "session_monodromy",
-                     "signed_orders_h0_and_nearby_witnesses_at_both_entry_points"),)),
+                     "signed_orders_h0_and_nearby_witnesses_at_both_entry_points"),
+             example("Witness an eigenvalue on singular lines without rational points", "session_monodromy",
+                     "transverse_composition_witnesses_at_prompt_and_in_scripts"))),
     },
     "docs/reference/output.md": {
         "print": Entry((builtin_registration,), (resolve_example,)),

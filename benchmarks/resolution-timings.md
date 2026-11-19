@@ -35,29 +35,42 @@ The ordinary double point and the cubic cone use the sparse point-chart verifier
 
 ### Local monodromy on nearby strata
 
-The table gives median wall times in milliseconds on an AMD Ryzen 7 6800H
-with Python 3.14.4 and Singular 4.4.1. Run
+The table gives median wall times in milliseconds on a 13th Gen Intel Core
+i7-1355U with Python 3.14.7 and Singular 4.4.1. Run
 `taskset -c 5 python3 benchmarks/nearby_monodromy.py --trials 9` to repeat
 the comparison. Each case has one warm-up and nine measured pairs on one
 logical CPU, with alternating solver order. [Benchmark driver](nearby_monodromy.py)
 
 Both systems use the same rational polynomial. Atlas starts after the origin
 resolution and times the additional call that identifies the nearby loci and
-returns their factored zetas. Singular receives the indicated normal coordinates,
-sets the remaining coordinates to one, and runs `gmssing.lib`'s `monodromy` on
-the resulting isolated transverse germ. Its timing includes the request to a
-warm Singular process and delivery of the Jordan data. Outside the timed
-interval the driver converts that data to the unreduced Lefschetz convention
-and checks the multiplicity of every root against Atlas on the indicated locus.
+returns their factored zetas. This call includes the search for transverse
+compositions, which decomposes the critical locus. Singular receives the
+indicated normal coordinates, sets the remaining coordinates to one, and runs
+`gmssing.lib`'s `monodromy` on the resulting isolated transverse germ. Its
+timing includes the request to a warm Singular process and delivery of the
+Jordan data. Outside the timed interval the driver converts that data to the
+unreduced Lefschetz convention and checks the multiplicity of every root
+against Atlas on the indicated locus.
+
+The locus $x^2+y^2+z^2=x=0$ has no rational point except the origin, so no
+rational slice exists. For that row Singular receives Atlas's certified
+transverse germ $u_1^2+u_2^5$ in the ring `ds` and computes its monodromy.
+Atlas still finds the factorization $f=G(h)$ inside the timed call.
 
 | Polynomial | Normal coordinates | Atlas (ms) | Singular (ms) |
 |---|---|---:|---:|
-| $x^4y^3$ | $x$ | 0.124 | 2.831 |
-| $x^3+y^4z$ | $x,y$ | 0.155 | 3.593 |
-| $x^2+y^2z+y^3$ | $x,y$ | 0.162 | 2.634 |
-| $xy+z^5t$ | $x,y,z$ | 0.155 | 3.521 |
-| $x^2+y^2+tz^2+z^3$ | $x,y,z$ | 0.151 | 2.997 |
-| $x^2+y^3+y^4$ in $x,y,z$ | $x,y$ | 0.159 | 2.951 |
+| $x^4y^3$ | $x$ | 0.216 | 4.057 |
+| $x^3+y^4z$ | $x,y$ | 0.635 | 5.147 |
+| $x^2+y^2z+y^3$ | $x,y$ | 0.831 | 3.765 |
+| $xy+z^5t$ | $x,y,z$ | 0.769 | 4.985 |
+| $x^2+y^2+tz^2+z^3$ | $x,y,z$ | 1.043 | 4.216 |
+| $x^2+y^3+y^4$ in $x,y,z$ | $x,y$ | 0.594 | 4.125 |
+| $(x+yz)^2+x^3$ | $x,y$ | 1.587 | 4.196 |
+| $(x^2+y^2+z^2)^2+x^5$ | germ $u_1^2+u_2^5$ | 2.550 | 4.693 |
+
+The first six rows took 0.12–0.16 ms on the earlier AMD Ryzen 7 6800H
+measurement, before the composition search was added. Every median remains
+below Singular's on this machine.
 
 ### Topological zeta reduction from certified strata
 

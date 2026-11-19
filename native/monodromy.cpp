@@ -1,13 +1,19 @@
 // Exact arithmetic for A'Campo's formula and nearby monodromy witnesses.
 #include "rational_sparse_json.hpp"
+#include "primary_decomposition.hpp"
 #include <flint/fmpq.h>
 #include <flint/fmpq_mat.h>
 #include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <numeric>
+#include <optional>
 #include <set>
+#include <tuple>
 
 namespace {
 using namespace atlas::sparse_json;
+namespace primary = atlas::primary;
 
 Z integer(const Json::Value& v) { return Z(v.asString(), 10); }
 Q rational(const Json::Value& v) {
@@ -290,6 +296,373 @@ Json::Value nearby_strata(const Terms& terms, size_t width, const Json::Value& r
     }
     return result.rows;
 }
+void add_term(Terms& f, const Powers& e, const Q& c) {
+    if (c == 0) return;
+    auto [it, inserted] = f.emplace(e, c);
+    if (!inserted && (it->second += c) == 0) f.erase(it);
+}
+Terms derivative(const Terms& f, size_t axis) {
+    Terms result;
+    for (const auto& [e, c] : f) {
+        if (e[axis] == 0) continue;
+        Powers lowered = e;
+        lowered[axis] -= 1;
+        add_term(result, lowered, c * Q(e[axis]));
+    }
+    return result;
+}
+// Fully reduce f by a lex Gröbner basis. The map order is the lex order.
+Terms lex_remainder(Terms f, const primary::Basis& basis, size_t& steps) {
+    Terms remainder;
+    while (!f.empty()) {
+        if (steps == 0) throw std::runtime_error("Transverse composition division limit.");
+        --steps;
+        const auto top = std::prev(f.end());
+        const Powers head = top->first;
+        const Q coefficient = top->second;
+        const auto divisor = std::find_if(basis.begin(), basis.end(), [&](const auto& g) {
+            const auto& lead = g.rbegin()->first;
+            for (size_t i = 0; i < lead.size(); ++i) if (lead[i] > head[i]) return false;
+            return true;
+        });
+        if (divisor == basis.end()) {
+            remainder.emplace(head, coefficient);
+            f.erase(top);
+            continue;
+        }
+        const auto& [lead, lc] = *divisor->rbegin();
+        const Q scale = -coefficient / lc;
+        for (const auto& [e, c] : *divisor) {
+            Powers shifted = e;
+            for (size_t i = 0; i < e.size(); ++i) shifted[i] += head[i] - lead[i];
+            add_term(f, shifted, c * scale);
+        }
+    }
+    return remainder;
+}
+// With x before u in lex order, f lies in QQ[h] exactly when its remainder
+// modulo (h_i(x) - u_i) involves only u. The remainder G then has f = G(h).
+std::optional<Terms> composition_factor(const Terms& f, const primary::Basis& h, size_t n, size_t& steps) {
+    const size_t k = h.size(), width = n + k;
+    auto lift = [&](const Terms& p) {
+        Terms out;
+        for (const auto& [e, c] : p) {
+            Powers wide = e;
+            wide.resize(width);
+            out.emplace(std::move(wide), c);
+        }
+        return out;
+    };
+    primary::Basis graph;
+    for (size_t i = 0; i < k; ++i) {
+        Terms row = lift(h[i]);
+        Powers u(width);
+        u[n + i] = 1;
+        add_term(row, u, -1);
+        graph.push_back(std::move(row));
+    }
+    Terms germ;
+    for (const auto& [e, c] : lex_remainder(lift(f), primary::reduced(graph, width, true), steps)) {
+        if (std::any_of(e.begin(), e.begin() + n, [](const Z& a) { return a != 0; })) return std::nullopt;
+        germ.emplace(Powers(e.begin() + n, e.end()), c);
+    }
+    return germ;
+}
+Terms substitute_all(const Terms& germ, const primary::Basis& h, size_t n) {
+    std::vector<std::map<Z, Terms>> powers(h.size());
+    Terms result;
+    for (const auto& [a, c] : germ) {
+        Terms term{{Powers(n), c}};
+        for (size_t i = 0; i < h.size(); ++i) {
+            if (a[i] == 0) continue;
+            auto it = powers[i].find(a[i]);
+            if (it == powers[i].end()) it = powers[i].emplace(a[i], primary::power(h[i], a[i], n)).first;
+            term = primary::multiply(term, it->second);
+        }
+        for (const auto& [e, v] : term) add_term(result, e, v);
+    }
+    return result;
+}
+// All k x k minors of the Jacobian matrix of h, by Laplace expansion along
+// its rows with the remaining columns memoized as a bit mask.
+primary::Basis maximal_minors(const primary::Basis& h, size_t n) {
+    const size_t k = h.size();
+    std::vector<std::vector<Terms>> jacobian(k);
+    for (size_t i = 0; i < k; ++i) for (size_t j = 0; j < n; ++j) jacobian[i].push_back(derivative(h[i], j));
+    std::map<std::uint32_t, Terms> memo;
+    std::function<Terms(std::uint32_t)> minor = [&](std::uint32_t columns) -> Terms {
+        const size_t row = k - static_cast<size_t>(__builtin_popcount(columns));
+        if (row == k) return Terms{{Powers(n), Q(1)}};
+        if (const auto found = memo.find(columns); found != memo.end()) return found->second;
+        Terms total;
+        int sign = 1;
+        for (size_t j = 0; j < n; ++j) {
+            if (!(columns >> j & 1u)) continue;
+            if (!jacobian[row][j].empty()) {
+                const auto rest = minor(columns & ~(1u << j));
+                if (!rest.empty())
+                    for (const auto& [e, c] : primary::multiply(jacobian[row][j], rest)) add_term(total, e, sign * c);
+            }
+            sign = -sign;
+        }
+        return memo[columns] = total;
+    };
+    primary::Basis minors;
+    for (std::uint32_t columns = 0; columns < (1u << n); ++columns) {
+        if (static_cast<size_t>(__builtin_popcount(columns)) != k) continue;
+        auto value = minor(columns);
+        if (!value.empty()) minors.push_back(std::move(value));
+    }
+    return minors;
+}
+// Replace u_axis by image in a polynomial of the same width.
+Terms substitute_variable(const Terms& g, size_t axis, const Terms& image, size_t width) {
+    std::map<Z, Terms> powers;
+    Terms result;
+    for (const auto& [e, c] : g) {
+        auto it = powers.find(e[axis]);
+        if (it == powers.end()) it = powers.emplace(e[axis], primary::power(image, e[axis], width)).first;
+        for (const auto& [v, d] : it->second) {
+            Powers shifted = e;
+            shifted[axis] = 0;
+            for (size_t j = 0; j < width; ++j) shifted[j] += v[j];
+            add_term(result, shifted, c * d);
+        }
+    }
+    return result;
+}
+// If G = a u_i^m + b(u') u_i^(m-1) + ... with constant a and b(0) = 0, the
+// triangular automorphism u_i -> u_i - b/(m a) removes the u_i^(m-1) term.
+// The submersion changes by its inverse, h_i -> h_i + b(h)/(m a), which
+// keeps h(0) = 0, the zero set of h and the rank of dh.
+void tschirnhausen(Terms& germ, primary::Basis& h, size_t n) {
+    const size_t k = h.size();
+    for (size_t pass = 0; pass < k; ++pass) {
+        bool changed = false;
+        for (size_t i = 0; i < k; ++i) {
+            Z m = 0;
+            for (const auto& [e, c] : germ) m = std::max(m, e[i]);
+            if (m < 2) continue;
+            Powers pure(k);
+            pure[i] = m;
+            const auto lead = germ.find(pure);
+            if (lead == germ.end()) continue;
+            Terms shift;
+            bool monic = true;
+            for (const auto& [e, c] : germ) {
+                if (e[i] == m && e != pure) monic = false;
+                if (e[i] != m - 1) continue;
+                Powers rest = e;
+                rest[i] = 0;
+                add_term(shift, rest, c / (Q(m) * lead->second));
+            }
+            if (!monic || shift.empty() || shift.count(Powers(k))) continue;
+            Terms image = shift;
+            for (auto& [e, c] : image) c = -c;
+            Powers axis(k);
+            axis[i] = 1;
+            add_term(image, axis, 1);
+            germ = substitute_variable(germ, i, image, k);
+            for (const auto& [e, c] : substitute_all(shift, h, n)) add_term(h[i], e, c);
+            changed = true;
+        }
+        if (!changed) return;
+    }
+}
+// The Milnor fibre of a Brieskorn-Pham germ sum c_i u_i^a_i is the join of
+// the fibres of u_i^a_i. Writing L_a for the divisor of 1-T^a, the reduced
+// zeta of a join is (-1)^k times the product of the divisors L_a_i - L_1,
+// with L_a * L_b = gcd(a,b) L_lcm(a,b). Removing H^0 subtracts L_1.
+std::optional<Factors> brieskorn_pham_zeta(const Terms& germ, size_t k) {
+    if (germ.size() != k) return std::nullopt;
+    std::vector<Z> powers(k, 0);
+    for (const auto& [e, c] : germ) {
+        size_t axis = k;
+        for (size_t i = 0; i < k; ++i) if (e[i] != 0) {
+            if (axis != k) return std::nullopt;
+            axis = i;
+        }
+        if (axis == k || powers[axis] != 0) return std::nullopt;
+        powers[axis] = e[axis];
+    }
+    if (k > 16) return std::nullopt;
+    Factors factors;
+    for (std::uint32_t subset = 0; subset < (1u << k); ++subset) {
+        Z order = 1, product = 1;
+        for (size_t i = 0; i < k; ++i) if (subset >> i & 1u) {
+            order = lcm(order, powers[i]);
+            product *= powers[i];
+        }
+        const Z weight = product / order;
+        factors[order] += __builtin_popcount(subset) % 2 ? -weight : weight;
+    }
+    factors[1] -= 1;
+    return factors;
+}
+bool coordinate_function(const Terms& h) {
+    if (h.size() != 1) return false;
+    const auto& e = h.begin()->first;
+    return std::accumulate(e.begin(), e.end(), Z(0)) == 1;
+}
+// Every component of V(h) through 0 has dimension at least n-k. If the
+// locus where rank dh < k meets V(h) in dimension below n-k, the points of
+// V(h) where (h, t) is a local coordinate system accumulate at 0.
+bool submersion_accumulates(const primary::Basis& h, size_t n, int dim) {
+    if (std::any_of(h.begin(), h.end(), [&](const Terms& g) { return g.count(Powers(n)) != 0; })) return false;
+    auto certificate = h;
+    for (auto& m : maximal_minors(h, n)) certificate.push_back(std::move(m));
+    return primary::dimension_lex(primary::reduced(certificate, n, true), n) < dim;
+}
+// Scale h_i to a primitive integer polynomial with positive lex-leading
+// coefficient, and G by the inverse substitution u_i -> u_i / lambda.
+void primitive_coordinates(Terms& germ, primary::Basis& h) {
+    for (size_t i = 0; i < h.size(); ++i) {
+        Z numerators = 0, denominators = 1;
+        for (const auto& [e, c] : h[i]) {
+            numerators = gcd(numerators, Z(c.get_num()));
+            denominators = lcm(denominators, Z(c.get_den()));
+        }
+        Q lambda(denominators, numerators);
+        if (h[i].rbegin()->second < 0) lambda = -lambda;
+        lambda.canonicalize();
+        if (lambda == 1) continue;
+        for (auto& [e, c] : h[i]) c *= lambda;
+        for (auto& [a, c] : germ) {
+            Q scale = 1;
+            for (Z j = 0; j < a[i]; ++j) scale /= lambda;
+            c *= scale;
+        }
+    }
+}
+// Certify f = G(h) for k polynomials h on which the submersion condition
+// holds. There the germ of f is G times a smooth factor, and its local zeta
+// is that of G at the origin. The normalizations are triangular or diagonal
+// automorphisms of the target, and the returned pair is checked again.
+std::optional<std::pair<Terms, primary::Basis>> certified_composition(
+        const Terms& f, primary::Basis submersion, size_t n, int dim) {
+    try {
+        primary::CertificateBudget budget(1u << 18);
+        size_t steps = 1u << 16;
+        if (!submersion_accumulates(submersion, n, dim)) return std::nullopt;
+        auto germ = composition_factor(f, submersion, n, steps);
+        if (!germ || germ->empty()) return std::nullopt;
+        tschirnhausen(*germ, submersion, n);
+        primitive_coordinates(*germ, submersion);
+        if (substitute_all(*germ, submersion, n) != f || !submersion_accumulates(submersion, n, dim))
+            return std::nullopt;
+        return std::make_pair(std::move(*germ), std::move(submersion));
+    } catch (const std::runtime_error&) {
+        return std::nullopt;  // This candidate exceeded its work limit.
+    }
+}
+Terms lex_monic(Terms g) {
+    const Q lead = g.rbegin()->second;
+    for (auto& [e, c] : g) c /= lead;
+    return g;
+}
+std::pair<Z, size_t> complexity(const Terms& g) {
+    Z degree = 0;
+    for (const auto& [e, c] : g) degree = std::max(degree, std::accumulate(e.begin(), e.end(), Z(0)));
+    return {degree, g.size()};
+}
+// The k-subsets of the pool, simplest first. The generators of the prime
+// come first and keep their position when they number exactly k.
+std::vector<std::vector<size_t>> candidate_subsets(const primary::Basis& pool, size_t k, size_t generators) {
+    std::vector<std::vector<size_t>> subsets;
+    std::vector<size_t> chosen(k);
+    std::iota(chosen.begin(), chosen.end(), 0);
+    while (true) {
+        subsets.push_back(chosen);
+        size_t i = k;
+        while (i > 0 && chosen[i - 1] == pool.size() - k + i - 1) --i;
+        if (i == 0) break;
+        ++chosen[i - 1];
+        for (size_t j = i; j < k; ++j) chosen[j] = chosen[j - 1] + 1;
+    }
+    auto key = [&](const std::vector<size_t>& subset) {
+        Z degree = 0;
+        size_t terms = 0;
+        for (size_t i : subset) {
+            const auto [d, t] = complexity(pool[i]);
+            degree += d;
+            terms += t;
+        }
+        return std::make_tuple(!(generators == k && subset.back() < k), degree, terms, subset);
+    };
+    std::sort(subsets.begin(), subsets.end(), [&](const auto& a, const auto& b) { return key(a) < key(b); });
+    return subsets;
+}
+// Search the critical components through the origin for a factorization
+// f = G(h_1,...,h_k) through k polynomials vanishing on a component of
+// codimension k. Candidates are the reduced generators of its prime and the
+// irreducible factors of f and its partial derivatives on the component.
+Json::Value transverse_compositions(const Terms& f, size_t n) {
+    Json::Value rows(Json::arrayValue);
+    // Bound the search like the coordinate Morse search: at most eight
+    // variables, few terms and moderate degree, so wide exponents skip it.
+    // The decomposition of the critical ideal uses the ordinary exact basis,
+    // whose coefficients may grow beyond the certificate pass's limit.
+    if (n < 3 || n > 8 || f.size() < 2 || f.size() > 128) return rows;
+    for (const auto& [e, c] : f)
+        if (std::accumulate(e.begin(), e.end(), Z(0)) > 32) return rows;
+    std::set<std::pair<primary::Basis, Terms>> emitted;
+    try {
+        primary::Basis critical{f};
+        for (size_t i = 0; i < n; ++i)
+            if (auto d = derivative(f, i); !d.empty()) critical.push_back(std::move(d));
+        // Keep the minimal primes, which are the components of the critical locus.
+        std::vector<std::pair<primary::Basis, primary::Basis>> primes;
+        for (const auto& part : primary::decompose(critical, n, false))
+            if (std::none_of(primes.begin(), primes.end(), [&](const auto& p) { return p.first == part.prime; }))
+                primes.emplace_back(part.prime, primary::reduced(part.prime, n, true));
+        auto contains = [](const primary::Basis& lex_basis, const primary::Basis& generators) {
+            return std::all_of(generators.begin(), generators.end(),
+                               [&](const Terms& g) { return primary::member_lex(g, lex_basis); });
+        };
+        for (const auto& [h, lex_prime] : primes) {
+            if (std::any_of(primes.begin(), primes.end(), [&](const auto& other) {
+                    return other.first != h && contains(lex_prime, other.first); })) continue;
+            if (std::any_of(h.begin(), h.end(), [&](const Terms& g) { return g.count(Powers(n)) != 0; })) continue;
+            const int dim = primary::dimension_lex(lex_prime, n);
+            if (dim < 1 || static_cast<size_t>(dim) + 2 > n) continue;
+            const size_t k = n - static_cast<size_t>(dim);
+            primary::Basis pool, factors;
+            std::set<Terms> normalized;
+            for (const auto& g : h)
+                if (normalized.insert(lex_monic(g)).second) pool.push_back(g);
+            const size_t generators = pool.size();
+            for (const auto& g : critical)
+                for (const auto& [factor, power] : primary::factors(g, n))
+                    if (normalized.insert(lex_monic(factor)).second && primary::member_lex(factor, lex_prime))
+                        factors.push_back(factor);
+            std::stable_sort(factors.begin(), factors.end(),
+                             [](const Terms& a, const Terms& b) { return complexity(a) < complexity(b); });
+            for (auto& g : factors) if (pool.size() < 10) pool.push_back(std::move(g));
+            if (pool.size() < k) continue;
+            const auto subsets = candidate_subsets(pool, k, generators);
+            std::optional<std::pair<Terms, primary::Basis>> found;
+            for (size_t i = 0; i < subsets.size() && i < 64 && !found; ++i) {
+                primary::Basis submersion;
+                for (size_t j : subsets[i]) submersion.push_back(pool[j]);
+                // Coordinate functions alone give the translation-invariant model.
+                if (!std::all_of(submersion.begin(), submersion.end(), coordinate_function))
+                    found = certified_composition(f, std::move(submersion), n, dim);
+            }
+            if (!found || !emitted.insert({found->second, found->first}).second) continue;
+            const auto& [germ, submersion] = *found;
+            Json::Value row;
+            row["dimension"] = dim;
+            row["equations"] = Json::arrayValue;
+            for (const auto& g : submersion) row["equations"].append(term_list(g));
+            row["germ"] = term_list(germ);
+            if (const auto zeta = brieskorn_pham_zeta(germ, k)) row["factors"] = factor_list(*zeta);
+            rows.append(std::move(row));
+        }
+    } catch (const std::runtime_error&) {
+        // Rows already appended were certified before the work limit.
+    }
+    return rows;
+}
 Json::Value pole_data(const Json::Value& r) {
     std::map<Q, Json::Value> candidates;
     std::map<Q, Json::Value> pole_orders;
@@ -366,6 +739,7 @@ Json::Value compute(const Json::Value& r) {
     const size_t width = r["width"].asUInt64();
     const auto terms = read_terms(r["terms"], width);
     if (op == "nearby_strata") return nearby_strata(terms, width, r);
+    if (op == "transverse_compositions") return transverse_compositions(terms, width);
     if (op == "morse") {
         Axes axes(width);
         std::iota(axes.begin(), axes.end(), 0);
