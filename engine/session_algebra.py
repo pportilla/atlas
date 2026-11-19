@@ -346,13 +346,18 @@ class _PointResult(_AtPoint, _Result):
     _fields = _Result._fields | {"scope", "point"}
 
 
+def _generator_list(generators):
+    # Python's tuple text adds a trailing comma to one generator, as in (y^2,).
+    return ", ".join(map(str, generators)) or "0"
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class _LocalStandardBasis(_PointResult):
     generators: tuple[Polynomial, ...]
     _fields = _PointResult._fields | {"generators"}
 
     def __repr__(self):
-        return f"Local standard basis at [{', '.join(self.point)}]: {self.generators}"
+        return f"Local standard basis at [{', '.join(self.point)}]: ({_generator_list(self.generators)})"
 
 
 class _TangentResult(_PointResult):
@@ -377,7 +382,7 @@ class _TangentCone(_TangentResult):
         return self._record["result"]["multiplicity"]
 
     def __repr__(self):
-        return f"Tangent cone at [{', '.join(self.point)}] with generators {self.generators}"
+        return f"Tangent cone at [{', '.join(self.point)}] with generators ({_generator_list(self.generators)})"
 
 
 class _TangentDimensions:
