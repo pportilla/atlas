@@ -122,6 +122,11 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
     if integrals:
         from .strata import records
         rows, strata = records({"data": data, "strata": {frozenset(present): 1}})
+        # The certified projection identifies these coordinate columns in order.
+        # Print the checked component generators in the original ring.
+        original_equations = {labels[i]: format_poly(equations[i], names) for i in active}
+        for row in rows:
+            row["equation"] = original_equations[row["component"]]
         output.update(numerical_data=rows, strata=strata)
     if complex:
         convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else

@@ -18,6 +18,56 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MonodromyTests(unittest.TestCase):
+    def test_isolated_curve_has_only_the_origin_zeta(self):
+        record = resolve({"polynomial": "y^2-x^3", "variables": ["x", "y"], "search": "quick",
+                          "zetas": ["monodromy"]})
+        self.assertEqual(record["monodromy_zeta"]["nearby_strata"], [])
+        self.assertNotIn("topological_zeta", record)
+
+    def test_transverse_node_has_zeta_one_and_supplies_no_zeta_matches(self):
+        for polynomial, model in (("x^2-z*y^2", "X^a + Y^b"), ("x^2+z*y^2+y^3", "sum of squares")):
+            with self.subTest(polynomial=polynomial):
+                record = resolve({"polynomial": polynomial, "variables": list("xyz"), "search": "quick",
+                                  "zetas": ["monodromy", "topological"]})
+                nearby = record["monodromy_zeta"]["nearby_strata"]
+                index, row = next((i, row) for i, row in enumerate(nearby) if row["model"] == model)
+                self.assertEqual((set(row["coordinates"]), row["parameters"]), ({"x", "y"}, ["z"]))
+                self.assertEqual((row["expression"], row["factors"]), ("1", []))
+                if model == "sum of squares":
+                    self.assertEqual((row["transverse_hessian_determinant"], row["parameter_values"]), ("4", [1]))
+                for pole in record["monodromy_check"]["poles"]:
+                    self.assertNotIn(index, [match["stratum_index"] for match in pole["nearby_matches"]])
+
+    def test_cusp_cylinder_cli_replays_nearby_zetas_from_original_geometry(self):
+        record = resolve({"polynomial": "x^2+y^3+y^4", "variables": list("xyz"), "search": "quick",
+                          "zetas": ["monodromy"]})
+        zeta = record["monodromy_zeta"]
+        cylinder, = [row for row in zeta["nearby_strata"] if row["model"] == "constant transverse type"]
+        self.assertEqual((cylinder["coordinates"], cylinder["parameters"]), (["x", "y"], ["z"]))
+        self.assertEqual(cylinder["expression"], "(1-T^6)/((1-T^2)*(1-T^3))")
+        self.assertEqual(cylinder["factors"], zeta["factors"])
+        record["monodromy_zeta"] = {**zeta, "nearby_strata": [{"model": "stale", "expression": "1"}]}
+        output = subprocess.run([ROOT / "atlas", "monodromy", "-", "--json"], input=json.dumps(record),
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(output.stdout), zeta)
+
+    def test_repeated_branch_equations_follow_the_checked_chart_projection(self):
+        names = list("xyzw")
+        record = resolve({"polynomial": "(x+y^2)^6*(z+w^2)^4", "variables": names,
+                          "search": "quick", "zetas": ["monodromy"]})
+        nearby = record["monodromy_zeta"]["nearby_strata"]
+        branches = {s["component"]: (s["equation"], s["expression"]) for s in nearby if s["model"] == "smooth component"}
+        self.assertEqual(branches, {"S1": ("w^2+z", "1/(1-T^4)"), "S2": ("y^2+x", "1/(1-T^6)")})
+
+        # Reverse the chart coordinates, preserving the actual projection and divisor.
+        chart, = record["atlas"]
+        chart["coordinates"] = chart["fibre"] = names[::-1]
+        chart["map"] = dict(zip(names, names[::-1]))
+        for row in chart["components"]:
+            row["ideal"] = ["y+x^2" if row["id"] == "S1" else "w+z^2"]
+        record["certificate"]["components"][0]["equation"] = "stale"
+        self.assertEqual(monodromy_zeta(record)["nearby_strata"], nearby)
+
     def test_acampo_published_plane_curve(self):
         # A'Campo (1975), Example 1. Multiple exceptional curves are punctured
         # by different geometric branches. The fiber has Milnor number 34.
@@ -140,6 +190,13 @@ class MonodromyTests(unittest.TestCase):
             with self.assertRaises(InputError):
                 _archived_field(text)
         self.assertEqual(_field_coefficients({"exact_root": "sqrt(2) + sqrt(3)"}), (1, 0, -10, 0, 1))
+
+    def test_equal_multiplicity_coordinate_branches_each_appear_once(self):
+        record = resolve({"polynomial": "x^2*y^2", "variables": ["x", "y"], "search": "quick",
+                          "mode": "embedded", "zetas": ["monodromy"]})
+        nearby = record["monodromy_zeta"]["nearby_strata"]
+        self.assertCountEqual([(row["model"], row["component"], row["expression"]) for row in nearby],
+                              [("smooth component", label, "1/(1-T^2)") for label in ("S1", "S2")])
 
     def test_inconclusive_input_and_option_validation(self):
         self.assertEqual(monodromy_zeta({"status":"inconclusive"})["status"], "unavailable")

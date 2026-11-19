@@ -917,7 +917,7 @@ function showZeta(data) {
   panel.replaceChildren();
   const zeta = data.monodromy_zeta;
   if (!zeta || typeof zeta !== "object" || data.status !== "resolved") return;
-  panel.append(sectionHead("Monodromy zeta function"));
+  panel.append(sectionHead("Monodromy zeta function at the origin"));
   if (zeta.status !== "computed") {
     panel.append(el("p", "notice", zeta.reason || "Not computed for this resolution."));
     return;
@@ -955,6 +955,47 @@ function showZeta(data) {
   if (body.childElementCount) {
     panel.append(disclosure("Formula", body));
   }
+  const strata = zeta.nearby_strata;
+  if (Array.isArray(strata) && strata.length) {
+    panel.append(sectionHead("Monodromy zeta functions on certified nearby strata"));
+    panel.append(table(["Stratum", "Local zeta function"], strata, stratum => {
+      const locus = el("div");
+      locus.append(stratumLocus(stratum));
+      const model = el("div", "helper");
+      if (stratum.model === "X^a + Y^b") {
+        model.append("Transverse model ", typeset(`X^${stratum.powers[0]} + Y^${stratum.powers[1]}`));
+      } else if (stratum.model === "X*Y + Z^m") {
+        model.append("Transverse model ", typeset(`X*Y + Z^${stratum.powers[2]}`));
+      } else if (stratum.model === "sum of squares") model.append("Transverse Morse singularity");
+      else if (stratum.model === "constant transverse type") model.append("Constant transverse type");
+      if (model.hasChildNodes()) locus.append(model);
+      const formula = el("span", "m local-zeta");
+      formula.setAttribute("role", "math");
+      formula.setAttribute("aria-label", stratum.expression);
+      formula.append(zetaQuotient(stratum, variable));
+      return [locus, formula];
+    }));
+  }
+}
+
+function stratumLocus(stratum) {
+  const locus = el("span");
+  if (stratum.model === "smooth component") {
+    if (stratum.component === "strict") locus.append(stratum.multiplicity > 1
+      ? "Generic smooth points of the reduced hypersurface" : "Generic smooth points of the hypersurface");
+    else locus.append("Generic smooth points of branch ", idNode(stratum.component));
+    const equation = stratum.equation || stratum.coordinates?.[0];
+    if (equation) locus.append(" (", typeset(equation + " = 0"), ")");
+    return locus;
+  }
+  if (stratum.model === "sum of squares") locus.append("Generic points of ");
+  const equations = stratum.coordinates.join(" = ") + " = 0";
+  locus.append(typeset(equations));
+  if (stratum.model === "constant transverse type") locus.append(" away from the origin");
+  if (stratum.model === "X^a + Y^b" || stratum.model === "X*Y + Z^m") {
+    for (const name of stratum.parameters) locus.append(", ", typeset(name), " ≠ 0");
+  }
+  return locus;
 }
 
 /* The topological zeta function of Denef and Loeser, which the engine sums
@@ -1041,12 +1082,30 @@ function showMonodromyCheck(panel, data) {
     "nearby transverse Morse": "Nearby transverse Morse singularity",
   };
   if (check.poles?.length) {
-    panel.append(disclosure("Eigenvalue witnesses", () =>
-      table(["Pole", "Eigenvalue order", "Witness"], check.poles, pole => {
+    const strata = data.monodromy_zeta.nearby_strata || [];
+    const zetaRole = e => e > 0 ? " (zeta zero)" : e < 0 ? " (zeta pole)" : "";
+    const grid = table(["Pole", "Predicted eigenvalue", "Witness"], check.poles, pole => {
+      const eigenvalue = el("div", "pole-eigenvalue");
+      const phase = "exp(2πi · (" + minus(pole.value) + "))";
+      const value = el("span", "m", ({1: "1", 2: "−1"})[pole.eigenvalue_order] || phase);
+      value.title = phase;
+      eigenvalue.append(value, el("div", "helper", "Order " + pole.eigenvalue_order));
+      const locations = el("ul", "witness-loci");
+      const matches = (pole.nearby_matches || []).filter(match => strata[match.stratum_index]);
+      if (pole.witness === "origin zeta" || pole.witness === "origin H^0" || !matches.length) {
         const witness = witnesses[pole.witness] || pole.witness || "Undetermined";
-        const where = pole.witness_component ? " (" + pole.witness_component + ")" : "";
-        return [minus(pole.value), String(pole.eigenvalue_order), witness + where];
-      })));
+        const component = pole.witness_component ? " (" + pole.witness_component + ")" : "";
+        locations.append(el("li", "", witness + component + zetaRole(pole.cyclotomic_exponent)));
+      }
+      for (const match of matches) {
+        const location = el("li");
+        location.append(stratumLocus(strata[match.stratum_index]), zetaRole(match.cyclotomic_exponent));
+        locations.append(location);
+      }
+      return [minus(pole.value), eigenvalue, locations];
+    });
+    grid.classList.add("pole-witnesses");
+    panel.append(grid);
   }
 }
 
@@ -1440,20 +1499,23 @@ function showResult(run) {
 
 /* ---------- The input ---------- */
 
-const planeExamples = { cusp: "y^2-x^3", node: "y^2-x^2", tacnode: "y^2-x^4" };
+const examples = { cusp: "y^2-x^3", node: "y^2-x^2", tacnode: "y^2-x^4",
+  "singular-line": "x^2+y^2+t*z^2+z^3" };
 const exampleButtons = form.querySelectorAll("[data-example]");
 
 function updateExampleButtons(request) {
   const polynomial = request.polynomial.length <= 100 ? request.polynomial.replace(/\s+/g, "") : null;
-  const plane = request.variables.length === 2 && request.variables.includes("x") && request.variables.includes("y");
   for (const button of exampleButtons) {
-    button.setAttribute("aria-pressed", String(plane && planeExamples[button.dataset.example] === polynomial));
+    const example = examples[button.dataset.example];
+    const names = detectVariables(example);
+    button.setAttribute("aria-pressed", String(example === polynomial && request.variables.length === names.length
+      && names.every(name => request.variables.includes(name))));
   }
 }
 
 for (const button of exampleButtons) button.addEventListener("click", () => {
-  $("polynomial").value = planeExamples[button.dataset.example];
-  $("variables").value = "x, y";
+  $("polynomial").value = examples[button.dataset.example];
+  $("variables").value = detectVariables($("polynomial").value).join(", ");
   variablesFollow = true;
   fitInput();
   updateInput();
@@ -1710,8 +1772,11 @@ function refreshRun(run) {
   }
   if (run.result?.status === "resolved") {
     for (const {key, label} of zetaChoices) {
-      if (run.result[key + "_zeta"]?.status === "computed") continue;
-      const button = action("Compute " + label, () => computeZeta(run, key));
+      const zeta = run.result[key + "_zeta"];
+      const legacyMonodromy = key === "monodromy" && zeta?.status === "computed" && !Array.isArray(zeta.nearby_strata);
+      if (zeta?.status === "computed" && !legacyMonodromy) continue;
+      const button = action(legacyMonodromy ? "Compute nearby monodromy zeta functions" : "Compute " + label,
+        () => computeZeta(run, key));
       button.disabled = Boolean(run.pendingZeta);
       run.controls.append(button);
     }

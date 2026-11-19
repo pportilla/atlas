@@ -33,6 +33,32 @@ Median wall times in milliseconds from five runs per case and scope on 2026-11-1
 
 The ordinary double point and the cubic cone use the sparse point-chart verifier without importing SymPy. Their fresh baseline-to-candidate speedups were 7.93× and 7.69×. For the longer A₆ chain, fresh wall time improved 8.05× and warm wall time improved 5.07×. Across all three inputs the candidate was 2.55–5.07× faster than the warm baseline and 4.46–33.80× faster than fresh Singular. All 90 timed requests passed both exact invariant checks.
 
+### Local monodromy on nearby strata
+
+The table gives median wall times in milliseconds on an AMD Ryzen 7 6800H
+with Python 3.14.4 and Singular 4.4.1. Run
+`taskset -c 5 python3 benchmarks/nearby_monodromy.py --trials 9` to repeat
+the comparison. Each case has one warm-up and nine measured pairs on one
+logical CPU, with alternating solver order. [Benchmark driver](nearby_monodromy.py)
+
+Both systems use the same rational polynomial. Atlas starts after the origin
+resolution and times the additional call that identifies the nearby loci and
+returns their factored zetas. Singular receives the indicated normal coordinates,
+sets the remaining coordinates to one, and runs `gmssing.lib`'s `monodromy` on
+the resulting isolated transverse germ. Its timing includes the request to a
+warm Singular process and delivery of the Jordan data. Outside the timed
+interval the driver converts that data to the unreduced Lefschetz convention
+and checks the multiplicity of every root against Atlas on the indicated locus.
+
+| Polynomial | Normal coordinates | Atlas (ms) | Singular (ms) |
+|---|---|---:|---:|
+| $x^4y^3$ | $x$ | 0.124 | 2.831 |
+| $x^3+y^4z$ | $x,y$ | 0.155 | 3.593 |
+| $x^2+y^2z+y^3$ | $x,y$ | 0.162 | 2.634 |
+| $xy+z^5t$ | $x,y,z$ | 0.155 | 3.521 |
+| $x^2+y^2+tz^2+z^3$ | $x,y,z$ | 0.151 | 2.997 |
+| $x^2+y^3+y^4$ in $x,y,z$ | $x,y$ | 0.159 | 2.951 |
+
 ### Topological zeta reduction from certified strata
 
 The native reducer builds each stratum's denominator from the components that meet there. It adds the resulting rational functions in a balanced tree, cancelling common factors at each addition. The measurements below start with the same certified strata and include producing the factored expression, expanded numerator and ordered pole records. Each of the seven inputs reproduced its complete topological zeta record. [Raw samples and record hashes](topological-reduction-timings.json)

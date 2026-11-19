@@ -184,7 +184,7 @@ def _resolve(request, proofs):
             if found is not None:
                 result["embedded_companion"] = {"atlas": record["atlas"]}
         report("Computing the selected zeta functions", recorded_blowups(record))
-        result.update(zetas_from_strata(record, kinds, found, companion=companion))
+        result.update(zetas_from_strata(record, kinds, found, companion=companion, polynomial=p))
     result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
 

@@ -117,6 +117,26 @@ class SessionMonodromyTests(unittest.TestCase):
             self.assertEqual(p["transverse"]["coordinates"], ("x", "u"))
             self.assertEqual(p["transverse"]["powers"], (3, 4))
             self.assertEqual(p["transverse"]["cyclotomic_exponent"], 1)
+            strata = result["monodromy_zeta"]["nearby_strata"]
+            matches = {tuple(strata[m["stratum_index"]]["coordinates"]): m["cyclotomic_exponent"]
+                       for m in p["nearby_matches"]}
+            self.assertEqual(matches, {("x", "u"): 1, ("y", "u"): 2})
+
+    def test_wide_nearby_zeta_at_prompt_and_in_scripts(self):
+        source = dedent("""
+            x,y,z = coordinates("x","y","z", coeffs=QQ)
+            f = (123456789012345678901234567890123456789/7)*x^9007199254740993*y^4
+            C = monodromy_check(f, search="exhaustive")
+            p = C.poles[1]
+            m = p.nearby_matches[0]
+            a = C.monodromy_zeta.nearby_strata[m.stratum_index]
+            print(C.status, p.value, p.eigenvalue_order, m.cyclotomic_exponent, a.expression)
+        """).lstrip()
+        expected = "verified -1/9007199254740993 9007199254740993 -1 1/(1-T^9007199254740993)"
+        script = run_script(source)
+        self.assertEqual((script.returncode, script.stderr, script.stdout.strip()), (0, "", expected))
+        status, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((status, err, out.replace("atlas> ", "").strip()), (0, "", expected))
 
     def test_unavailable_records_keep_the_reason_and_invalid_input_still_fails(self):
         request = dict(polynomial="x^200", variables=["x"], mode="embedded", monodromy=True)

@@ -101,6 +101,11 @@ summary::marker { color: var(--brand); font-size: .83em; }
 .zeta-euler { width: fit-content; margin-top: 12px; }
 #panel-zeta > .section-head:not(:first-child) { margin-top: 24px; }
 .monodromy-verdict { margin-top: 9px; }
+.pole-witnesses { margin-top: 12px; }
+.witness-loci:has(li + li) { padding-inline-start: 1em; list-style: disc; }
+.witness-loci li + li { margin-top: 4px; }
+.local-zeta { white-space: nowrap; }
+#panel-zeta > .table-wrap th, #panel-zeta > .table-wrap td { vertical-align: middle; }
 .zeta-convention { overflow-x: auto; overflow-y: hidden; padding: 4px 0 6px; font-size: 19px; white-space: nowrap; }
 .stack > * + * { margin-top: 14px; }
 .zeta-convention sup sup, .zeta-convention sup sub { font-size: .8em; }
@@ -193,6 +198,9 @@ pre { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; backgrou
   .output-pane { padding: 24px 0; border-left: 0; border-top: 1px solid var(--ink); }
 }
 @media (max-width: 480px) {
+  #panel-zeta > .table-wrap th { white-space: normal; }
+  #panel-zeta > .table-wrap :is(th, td):not(:last-child) { padding-right: 10px; }
+  #panel-zeta > .pole-witnesses :is(th, td):first-child { white-space: nowrap; }
   .page { width: calc(100% - 32px); }
   .view-nav { gap: 17px; }
   .wordmark { gap: 6px; font-size: 27px; }

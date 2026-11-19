@@ -160,14 +160,24 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         for equation, variables, pole, order, witness in (
                 ("3/7*x^2+11/13*y^2+t*z^2+z^3", list("xyzt"), "-3/2", 2, "nearby transverse Morse"),
                 ("(123456789012345678901234567890123456789/7)*x^4294967299", ["x"],
-                 "-1/4294967299", 4294967299, "origin zeta")):
+                 "-1/4294967299", 4294967299, "origin zeta"),
+                ("(123456789012345678901234567890123456789/7)*x^9007199254740993*y^4", list("xyz"),
+                 "-1/9007199254740993", 9007199254740993, "nearby smooth component")):
             with self.subTest(equation=equation):
                 _, job = self.request("POST", "/api/searches", {"polynomial": equation, "variables": variables,
                                       "search": "exhaustive", "zetas": ["monodromy", "topological"]})
-                check = self.wait(job["id"])["result"]["monodromy_check"]
+                result = self.wait(job["id"])["result"]
+                check = result["monodromy_check"]
                 evidence = next(p for p in check["poles"] if p["value"] == pole)
                 self.assertEqual((check["status"], evidence["eigenvalue_order"], evidence["witness"]),
                                  ("verified", order, witness))
+                nearby = result["monodromy_zeta"]["nearby_strata"]
+                if witness.startswith("nearby"):
+                    match, = evidence["nearby_matches"]
+                    self.assertEqual(match["cyclotomic_exponent"], -1)
+                    self.assertEqual(nearby[match["stratum_index"]]["expression"], f"1/(1-T^{order})")
+                else:
+                    self.assertEqual((nearby, evidence["nearby_matches"]), ([], []))
                 if evidence["transverse"]:
                     self.assertEqual(evidence["transverse"]["transverse_hessian_determinant"], "264/91")
 

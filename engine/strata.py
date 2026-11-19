@@ -68,7 +68,10 @@ def resolution_strata(record, polynomial=None, *, computed=None):
                         # Archived resolutions from before chart ownership was serialized.
                         proof = record.get("certificate", {})
                         if proof.get("numerical_data") and proof.get("strata") and not record.get("input_divisor"):
-                            return proof["numerical_data"], proof["strata"], "Certified strata of the archived resolution"
+                            # Archived numerical certificates predate component equations.
+                            # Only an owned chart can identify a branch in the original variables.
+                            data = [{k: v for k, v in row.items() if k != "equation"} for row in proof["numerical_data"]]
+                            return data, proof["strata"], "Certified strata of the archived resolution"
                         return None
                     factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
                     found = atlas.outputs(charts, len(variables), complex=False, factor_fibre=factor_fibre)

@@ -16,7 +16,7 @@ def selected_zetas(request):
     return tuple(kind for kind in KINDS if kind in kinds)
 
 
-def zetas_from_strata(record, kinds, strata, *, companion=False):
+def zetas_from_strata(record, kinds, strata, *, companion=False, polynomial=None):
     if strata is None:
         reason = ("The resolution has not been certified." if record.get("status") != "resolved" else
                   "These charts do not certify the embedded strata over the origin. "
@@ -26,7 +26,7 @@ def zetas_from_strata(record, kinds, strata, *, companion=False):
         results = {}
         if "monodromy" in kinds:
             from .monodromy import monodromy_zeta
-            results["monodromy_zeta"] = monodromy_zeta(record, strata=strata)
+            results["monodromy_zeta"] = monodromy_zeta(record, strata=strata, polynomial=polynomial)
         if "topological" in kinds:
             from .topological import topological_zeta
             results["topological_zeta"] = topological_zeta(
@@ -37,7 +37,7 @@ def zetas_from_strata(record, kinds, strata, *, companion=False):
     if len(results) == len(KINDS) and all(zeta["status"] == "computed" for zeta in results.values()):
         from .exact_json import sorted_record
         from .session_monodromy import check_zetas
-        check = check_zetas(record, results["topological_zeta"], results["monodromy_zeta"])
+        check = check_zetas(results["topological_zeta"], results["monodromy_zeta"])
         results["monodromy_check"] = sorted_record(check)
     return results
 

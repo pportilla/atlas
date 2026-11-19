@@ -66,7 +66,6 @@ class WorkbenchBrowserTests(BrowserCase):
         formulas.first.locator("summary").click()
         expect(formulas.first.locator("table")).to_be_visible()
         self.assertNotRegex(formulas.first.inner_text(), r"(?i)resolution engine|source|method")
-        panel.get_by_text("Eigenvalue witnesses", exact=True).click()
         expect(panel.get_by_role("row").filter(has_text="−5/6")).to_contain_text("Monodromy zeta at the origin")
         updated = json.loads(self.download("#export"))
         self.assertEqual(updated["charts"], initial["charts"])
@@ -100,6 +99,53 @@ class WorkbenchBrowserTests(BrowserCase):
         page.locator('a[href="#output"]').press("Enter")
         expect(page.locator("#output")).to_be_focused()
         self.assertEqual(page.url, address)
+
+    def test_singular_line_shows_nearby_zeta_before_poles_are_requested(self):
+        page = self.page
+        page.goto(self.url)
+        page.get_by_role("button", name="Singular line").click()
+        expect(page.get_by_label("Variables", exact=True)).to_have_value("x, y, z, t")
+        page.get_by_label("Topological zeta function", exact=True).uncheck()
+        page.locator("#run").click()
+
+        panel = page.locator("#panel-zeta")
+        expect(panel.get_by_role("heading", name="Monodromy zeta function at the origin")).to_be_visible()
+        expect(panel.locator("p.zeta")).to_contain_text("= 1")
+        line = panel.get_by_role("row").filter(has_text="Transverse Morse singularity")
+        expect(line).to_contain_text("Generic points of x = y = z = 0")
+        expect(line.get_by_role("math", name="1/(1-T^2)", exact=True)).to_be_visible()
+        check = panel.get_by_role("heading", name="Topological monodromy conjecture")
+        expect(check).to_have_count(0)
+
+        page.get_by_role("button", name="Compute topological zeta function").click()
+        expect(check).to_be_visible()
+        expect(panel.locator(".monodromy-verdict")).to_contain_text("Verified for this germ.")
+        witness = panel.get_by_role("row").filter(has=page.get_by_role("cell", name="−3/2", exact=True))
+        expect(witness.get_by_text("−1", exact=True)).to_have_attribute("title", "exp(2πi · (−3/2))")
+        expect(witness).to_contain_text("Order 2")
+        expect(witness).to_contain_text("Generic points of x = y = z = 0")
+        expect(witness).not_to_contain_text("at the origin")
+        trivial = panel.get_by_role("row").filter(has=page.get_by_role("cell", name="−1", exact=True))
+        expect(trivial.locator("li")).to_have_text(["Degree-zero cohomology at the origin",
+            "Generic points of x = y = z = 0 (zeta pole)", "Generic smooth points of the hypersurface (zeta pole)"])
+        page.set_viewport_size({"width": 320, "height": 780})
+        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 320)
+
+    def test_older_result_can_replay_nearby_zetas_and_show_branch_equations(self):
+        from engine.resolve import resolve
+        request = {"polynomial": "(x+y^2)^6*(z+w^2)^4", "variables": list("xyzw"), "mode": "embedded",
+                   "search": "quick", "zetas": ["monodromy"]}
+        record = resolve(request)
+        del record["monodromy_zeta"]["nearby_strata"]
+        job = {"id": "archived", "state": "completed", "request": request, "result": record}
+        self.page.route("**/api/searches", lambda route: route.fulfill(json={"jobs": [job]}))
+        self.page.goto(self.url)
+        replay = self.page.get_by_role("button", name="Compute nearby monodromy zeta functions")
+        replay.click()
+        row = self.page.get_by_role("row").filter(has=self.page.get_by_role("math", name="1/(1-T^4)", exact=True))
+        expect(row).to_contain_text("S1")
+        expect(row).to_contain_text("w2 + z = 0")
+        expect(replay).to_have_count(0)
 
     def test_expand_a_running_job_while_another_is_queued(self):
         page = self.page
