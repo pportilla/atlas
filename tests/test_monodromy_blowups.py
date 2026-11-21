@@ -30,7 +30,8 @@ class BlowupMonodromy(unittest.TestCase):
         self.assertEqual((record["multiplicity"],record["euler_characteristic"]),(4,-2))
         self.assertEqual(record["strict_transform_intersection_points"],4)
         self.assertEqual(record["exceptional_intersection_points"],0)
-        self.assertEqual(pairs(blowup_contributions(atlas("x*y","xy"))),[(2,0)])
+        # The two tangent lines split over Q(i), but the quartic itself is irreducible.
+        self.assertEqual(pairs(blowup_contributions(atlas("y^2+x^2*(1+x^2)","xy"))),[(2,0)])
 
     def test_ordinary_complement_and_nonreduced_multiplicity(self):
         # A smooth plane quartic has genus 3. Its projective complement

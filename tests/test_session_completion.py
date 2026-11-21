@@ -33,9 +33,12 @@ class SessionCompletionTests(unittest.TestCase):
         })
         self.assertEqual(candidates("R.", self.session), [
             "R.branches", "R.chart(", "R.charts", "R.coordinates", "R.divisor(",
-            "R.divisors", "R.dual_complex", "R.mode", "R.polynomial", "R.record", "R.status", "R.variables",
+            "R.divisors", "R.dual_complex", "R.mode", "R.monodromy_check", "R.monodromy_zeta", "R.polynomial",
+            "R.record", "R.status", "R.topological_zeta", "R.variables",
         ])
         self.assertEqual(candidates("R.dual_complex.v", self.session), ["R.dual_complex.vertices"])
+        with patch.object(Resolution, "_zeta_pair", side_effect=AssertionError("Tab started a zeta calculation")):
+            self.assertEqual(candidates("R.topological_zeta.", self.session), [])
         list(self.session.run('C = R.chart("C")\nE = R.divisor("E1")'))
         self.assertEqual(candidates("E.e", self.session), ["E.equation_in("])
         getter = Mock(side_effect=AssertionError("Tab evaluated the strict transform"))

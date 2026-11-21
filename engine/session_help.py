@@ -4,7 +4,8 @@ from fractions import Fraction
 from typing import NamedTuple
 
 from .help_card import usage_card
-from .session_algebra import Ideal, _NormalizedComponent, _Result, _ScalarResult
+from .polynomial import integer_text
+from .session_algebra import Ideal, _AbsoluteFactorization, _LinearSolution, _NormalizedComponent, _Result, _ScalarResult
 from .session_function_help import function_documentation, function_help
 from .session_maps import RingHomomorphism
 from .session_panel import workspace
@@ -85,6 +86,9 @@ def algebra_help_values(session):
             values[name + ".multiplicity"] = method
         if isinstance(value, (Ideal, _Result)):
             values[name + ".ambient"] = value.ambient
+        if isinstance(value, _AbsoluteFactorization):
+            values[name + ".inclusion"] = value.inclusion
+            values[name + ".coeffs"] = value.coeffs
         if isinstance(value, Ideal):
             values[name + ".quotient_ring"] = _FURTHER_QUOTIENT if isinstance(value, QuotientIdeal) else _IDEAL_QUOTIENT
             values[name + ".generators"] = _QUOTIENT_GENERATORS if isinstance(value, QuotientIdeal) else _GENERATORS
@@ -140,6 +144,9 @@ def algebra_value_help(name, value, variables=None, active=None):
         return usage_card(value.description.format(**context), value.examples.format(**context), value.reference)
     if isinstance(value, _NumberField):
         return usage_card(f"{name} is the coefficient field {value}.", name, CHARTS)
+    if isinstance(value, _LinearSolution):
+        return usage_card(f"{name} records a rational linear system with status {value.status}.",
+                          f"{name}.status\n{name}.particular", "examples/algebra-api.md#exact-rational-linear-algebra")
     if isinstance(value, RingDeletion):
         removed = f"the names {', '.join(value.names)}" if value.names else "no saved names"
         return usage_card(f"{name} records that deleting {value.ring} removed {removed}.",
@@ -194,8 +201,32 @@ def algebra_value_help(name, value, variables=None, active=None):
     if isinstance(value, RingHomomorphism):
         return usage_card(f"{name} is a ring map from {ring_name(value.domain)} to {ring_name(value.codomain)}.",
                           f"{name}.images\n{name}(1)", MAPS)
+    if isinstance(value, _AbsoluteFactorization):
+        source, target = value.inclusion.domain, value.ambient
+        return usage_card(f"{name} holds the absolute factors from {ring_name(source)} in {ring_name(target)}.",
+                          f"{name}.factors\n{name}.inclusion\n{name}.ring", function_documentation("absolute_factor"))
+    if isinstance(value, _Result) and value.operation == "hensel-factors":
+        return usage_card(f"{name} holds a pair of lifted factors in {ring_name(value.ambient)}.",
+                          f"{name}.left\n{name}.right\n{name}.modulus", function_documentation("hensel_factors"))
+    if isinstance(value, _Result) and value.operation == "cancel-fraction":
+        return usage_card(f"{name} holds a reduced rational function over {ring_name(value.ambient)}.",
+                          f"{name}.numerator\n{name}.denominator", function_documentation("cancel_fraction"))
+    if isinstance(value, _Result) and value.operation in ("extended-gcd", "polynomial-division"):
+        op = value.operation.replace("-", "_")
+        fields = ("gcd", "left_coefficient", "right_coefficient") if op == "extended_gcd" else ("quotient", "remainder")
+        return usage_card(f"{name} holds the result of {op} in {ring_name(value.ambient)}.",
+                          "\n".join(f"{name}.{field}" for field in fields), function_documentation(op))
     if isinstance(value, _Result):
         operation = value.operation.replace("-", "_")
+        if operation == "modular_arithmetic":
+            examples = f"{name}.values\n{name}.modulus"
+            if value.field_polynomial is not None:
+                examples += f"\n{name}.field_polynomial"
+            return usage_card(f"{name} holds exact modular values for modulus {integer_text(value.modulus)}.",
+                              examples, "examples/polynomial-ideals.md#compute-with-residues-and-lift-roots")
+        if operation == "matrix_analysis":
+            return usage_card(f"{name} holds the analysis of a {value.shape[0]} by {value.shape[1]} matrix over QQ.",
+                              f"{name}.rank\n{name}.kernel\n{name}.solution", "examples/algebra-api.md#exact-rational-linear-algebra")
         fields = ("value", "finite", "point") if isinstance(value, _ScalarResult) else (
             "factors", "basis", "remainder", "components", "values", "numerator", "generators", "dimension", "point")
         examples = [f"{name}.{field}" for field in fields if field in value._fields][:2]

@@ -293,6 +293,7 @@ def from_record(record, polynomial, *, native=None):
 
 
 _INCOMPLETE_REPAIR = "The saved charts do not certify a complete cover of the deleted repair centres."
+_UNVERIFIED_MODIFICATION = "The charts do not certify a complete modification of the defining hypersurface."
 
 
 def _checked_repair_maps(charts):
@@ -300,6 +301,20 @@ def _checked_repair_maps(charts):
         return charts
     from .repair_replay import restore_repair_maps
     return restore_repair_maps(charts)
+
+
+def verified_modification_charts(record, polynomial):
+    """Recover the source and cover for an atlas without a dedicated verifier."""
+    from .monomial_atlas import verified_parent_pullbacks
+    charts = from_record(record, polynomial, native=True)
+    if not charts:
+        return None, _UNVERIFIED_MODIFICATION
+    checked = _checked_repair_maps(charts)
+    if checked is None:
+        return None, _INCOMPLETE_REPAIR
+    if not verified_parent_pullbacks(record, polynomial, checked):
+        return None, _UNVERIFIED_MODIFICATION
+    return checked, None
 
 
 def _restore_record_maps(charts):
@@ -413,13 +428,16 @@ def _field_relation(t, relation, degree):
     return len(factors) == 1 and factors[0][1] == 1
 
 
-def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False):
+def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False,
+            allow_partial_complex=False):
     """What the atlas determines, by the same computations for every engine.
 
     Returns numerical data, strata, and, if requested, the full dual complex
     in the specified mode. With integrals=False only certify the requested
     resolution and compute its boundary. An intrinsic resolution alone
     need not have embedded normal crossings.
+    Saved dual-complex queries can request a partial incidence report when
+    the repair charts fail to cover a deleted centre.
     Raises GiveUp when a chart owns a point over the
     origin where the total transform fails normal crossings (the atlas is
     then not that of an embedded resolution) or when a component has two
@@ -428,10 +446,13 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
     from dataclasses import replace
     from itertools import combinations
     from .local_blowups import _is_strict, _present
-    if integrals:
-        charts = _checked_repair_maps(charts)
-        if charts is None:
-            raise GiveUp(_INCOMPLETE_REPAIR)
+    if not charts:
+        raise GiveUp("The resolution needs charts covering the origin fibre.")
+    verified = _checked_repair_maps(charts)
+    if verified is not None:
+        charts = verified
+    elif integrals or not (complex and allow_partial_complex):
+        raise GiveUp(_INCOMPLETE_REPAIR)
     known = {}
     for item in charts:
         # Only points on the owned region enter the certificate. Put its

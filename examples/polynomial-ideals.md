@@ -1,6 +1,6 @@
 # Polynomials and ideals
 
-All the examples on this page use polynomials over $\mathbb Q$. Each section starts by declaring its coordinates so that you can try it in a fresh session.
+All the examples on this page start with polynomials over $\mathbb Q$. Each section declares its coordinates so that you can try it in a fresh session.
 
 ## Reduce a polynomial modulo an ideal
 
@@ -19,6 +19,53 @@ print(membership(y, B).value)                      # False
 The first basis element lets us replace $x$ by $y$. The second reduces every power of $y$ to either $1$ or $y$. In particular, every class has a unique expression $a+by$ with $a,b\in\mathbb Q$. Two polynomials represent the same class precisely when their normal forms agree.
 
 The option `order="lex"` selects lexicographic order, with the first declared variable highest. The default order is graded reverse lexicographic (`"grevlex"`). Changing the order can change the normal form. Save the basis if you have several polynomials to reduce in the same order. The parent ring is available as `I.parent`. To construct its zero or unit ideal, use `ideal(ring=I.parent)` or `ideal(1, ring=I.parent)`. [Choosing an active ring](../docs/sessions.md#name-select-and-delete-rings)
+
+## Lift two coprime polynomial factors
+
+`hensel_factors(f,g,h,p)` takes integer polynomials in one common variable. Modulo the prime $p$, the two monic polynomials must be coprime and their product must equal $f$. The target modulo $p^2$ must be monic of the same total degree. Atlas returns the unique monic lifts of the original degrees in the same order, with coefficient representatives from zero through $p^2-1$.
+
+```atlas
+x = coordinates("x")
+H = hensel_factors(x^2-2, x-3, x+3, 7, compute="gpu")
+print(H.left, H.right, H.modulus)  # x+39 x+10 49
+```
+
+Triton can compute the initial product by integer convolution. The native kernel solves the correction equation over the prime field and checks the final product coefficient by coefficient modulo the squared prime. Each output polynomial retains the input parent.
+
+## Cancel a rational function
+
+`cancel_fraction(f,g)` divides both inputs by their GCD and scales them to give the denominator leading coefficient one for the selected monomial order. The denominator must be nonzero. A zero numerator gives zero over one. Both returned polynomials have the input parent.
+
+```atlas
+x, y = coordinates("x", "y")
+C = cancel_fraction((x-y)*(x+1), 3*(x-y)*(y+1))
+print(C.numerator, C.denominator)  # 1/3*x+1/3 y+1
+```
+
+## Divide polynomials and find Bezout coefficients
+
+`polynomial_division(f, g)` returns the quotient and reduced remainder for a nonzero divisor in the chosen monomial order. For two polynomials in one common variable over $\mathbb Q$, `extended_gcd(f, g)` also computes coefficients $u,v$ satisfying $uf+vg=\gcd(f,g)$. Both coefficients are zero when both inputs vanish.
+
+```atlas
+x, y = coordinates("x", "y", coeffs=QQ)
+D = polynomial_division(x^3 + y, x - 1)
+print(D.quotient, D.remainder)                            # x^2+x+1 y+1
+E = extended_gcd(x^2 - 1, x^2 - x)
+print(E.gcd)                                             # x-1
+print(E.left_coefficient*(x^2-1) + E.right_coefficient*(x^2-x) == E.gcd)  # True
+```
+
+For explicit Triton requests, division by a binomial batches the independent monomial reductions. Rational factorization, absolute factorization and univariate GCDs can screen roots of coordinate sections modulo 8191 in parallel. Rational reconstruction proposes candidates, exact divisions establish multiplicities, and the native solver handles the remaining polynomial.
+
+## Group square-free factors
+
+`squarefree_factor(f)` returns the leading coefficient and factors in order of increasing multiplicity. Each reported polynomial is a product of the distinct monic irreducibles occurring to that multiplicity.
+
+```atlas
+x = coordinates("x")
+F = squarefree_factor(-3*(x-1)^2*(x+1)^2*(x^2+1)^3)
+print(F.unit, F.factors[0].polynomial, F.factors[0].multiplicity)  # -3 x^2-1 2
+```
 
 ## Factor and reconstruct a polynomial
 
@@ -44,6 +91,89 @@ print(product == f)                                        # True
 ```
 
 A nonzero constant contributes only its unit. The zero polynomial has no factorization into irreducibles.
+
+## Compute with residues and lift roots
+
+`modular_arithmetic(action, values, modulus)` returns the ordered `.values` and the output `.modulus`. Arithmetic accepts any integer modulus of at least two. A prime modulus gives prime-field arithmetic. Use `other=[...]` for corresponding operands of `add`, `subtract`, `multiply` or `divide`. A divisor or an input to `inverse` must be a unit. `reduce` returns the least nonnegative representatives. For `crt`, give the second residue vector and its coprime `other_modulus`.
+
+For extension fields, pass `field_polynomial` with the coefficients of a monic irreducible polynomial over a prime field. Elements are coefficient vectors, constant first. The empty vector represents zero. For example, in $\mathbb F_2[a]/(a^2+a+1)$ the vector `[0,1]` represents $a$, and squaring it gives `(1,1)`. The result records the defining polynomial. The Triton kernel accepts degrees through eight and characteristics through $2^{31}-1$. Inversion and division additionally require $p^d-2$ to fit in 62 bits. Larger instances use FLINT.
+
+For `hensel`, give integer polynomial coefficients constant first. Each input root modulo $m$ must have invertible derivative. The returned root reduces to the input and solves the equation modulo $m^2$. For `reconstruct`, Atlas returns the unique reduced fraction with numerator magnitude and positive denominator at most $\lfloor\sqrt{(m-1)/2}\rfloor$, or `None` when none exists. With `compute="gpu"`, eligible batches use Triton, including composite moduli. Moduli above $2^{31}-1$ use arbitrary-precision native CPU arithmetic.
+
+```atlas
+r = modular_arithmetic("hensel", [3, 4], 7, other=[-2, 0, 1], compute="gpu")
+print(r.values, r.modulus)  # (10, 39) 49
+c = modular_arithmetic("crt", [2, 1], 3, other=[3, 0], other_modulus=5)
+print(c.values, c.modulus)  # (8, 10) 15
+e = modular_arithmetic("multiply", [[0,1]], 2, other=[[0,1]], field_polynomial=[1,1,1])
+print(e.values, e.field_polynomial)  # ((1, 1),) (1, 1, 1)
+```
+
+## Choose a backend for polynomial arithmetic
+
+`polynomial_arithmetic` accepts `add`, `subtract`, `multiply`, `divide`, `power`, `differentiate` and `substitute` over rational coefficients or the exact marked number field of a saved factorization. Division takes a nonzero element of the coefficient field. Substitution replaces all the coordinates simultaneously, in declaration order. Use rational images to evaluate at a point. The result retains the input ring, including when it is constant. Its `.execution` records the stages that ran on each device.
+
+```atlas
+x, y = coordinates("x", "y", coeffs=QQ)
+p = polynomial_arithmetic("substitute", x^2+y, images=[y, x], compute="gpu")
+print(p == y^2+x)  # True
+d = polynomial_arithmetic("differentiate", x^3*y, variable=x, compute="cpu")
+print(d == 3*x^2*y)  # True
+```
+
+The following calculation takes place over the same marked field that Atlas chose for the factorization. You can also pass `F.ambient.coeffs` as the coefficient field of a new coordinate declaration. The scalar generator stays fixed under substitution and differentiation.
+
+```atlas
+t = coordinates("t")
+F = absolute_factor(t^2+1)
+g = F.factors[0].polynomial
+h = polynomial_arithmetic("multiply", g, g, compute="gpu")
+print(h == g^2)  # True
+print(h.parent == F.ambient)  # True
+```
+
+The CLI and HTTP accept a field description with a generator name and exact embedding. Atlas checks any supplied minimal polynomial, degree, and root index against the embedding.
+
+```sh
+./atlas algebra polynomial-arithmetic --vars x --field '{"generator":"a","embedding":"I"}' --action multiply --poly 'x+a' --other-poly 'x-a' --gpu
+```
+
+## Factor over the algebraic closure
+
+The polynomial $x^2+y^2$ has one irreducible factor over $\mathbb Q$ and two
+over $\overline{\mathbb Q}$, namely $x+iy$ and $x-iy$ with $i^2=-1$.
+Use `absolute_factor` to obtain the individual factors with exact algebraic
+coefficients. Raising the polynomial to a power preserves the two distinct
+factors and changes their multiplicities.
+
+```atlas
+x, y = coordinates("x", "y", coeffs=QQ)
+f = -3/2*(x^2+y^2)^3
+F = absolute_factor(f, order="lex")
+print(len(factor(f).factors), len(F.factors))               # 1 2
+print(F.unit, F.factors[0].multiplicity)                    # -3/2 3
+product = F.unit
+for entry in F.factors:
+    product = product * entry.polynomial^entry.multiplicity
+
+print(product == F.inclusion(f))                           # True
+```
+
+`F.ambient` is the polynomial ring containing all returned factors.
+`F.inclusion` sends the original coordinates to that ring in their original
+order. The factors are monic in the selected monomial order. A nonzero
+constant gives an empty factor list and its value as the unit. Zero has no
+factorization. For a coefficient extension, `F.ring["field"]` records a
+primitive element, its minimal polynomial, and a choice of complex root.
+These data specify the coefficients of every factor in a single number
+field. If every monic absolute factor already has rational coefficients,
+the result uses the original rational polynomial ring.
+
+Absolute factorization extends the **constants**. For example,
+$z^2-y^3+x^5$ remains irreducible in
+$\overline{\mathbb Q}[x,y,z]$. Writing its roots as
+$\pm\sqrt{y^3-x^5}$ adjoins a function of $x,y$ to the coefficient
+field of the univariate polynomial in $z$.
 
 ## Find a common factor
 

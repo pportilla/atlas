@@ -18,6 +18,7 @@
 // zeros, so that equal conditions are equal polynomials.
 #include "euler_lattice.hpp"
 #include "groebner.hpp"
+#include "polynomial_gcd.hpp"
 
 #include <flint/fmpz_mpoly.h>
 #include <flint/fmpz_mpoly_factor.h>
@@ -151,7 +152,7 @@ struct Euler::State {
     }
     MP gcd(const MP& a, const MP& b) const {
         MP g(ctx);
-        if (!fmpz_mpoly_gcd(g.p, a.p, b.p, ctx)) throw Limit("A greatest common divisor was not found.");
+        if (!fmpz_mpoly_gcd(g.p, a.p, b.p, ctx)) integer_gcd_by_intersection(g.p,a.p,b.p,ctx);
         return g;
     }
     MP quotient(const MP& a, const MP& b) const {
@@ -258,7 +259,7 @@ struct Euler::State {
     }
     // Homogeneous evaluation at v = -p0/c. Skip gaps between successive
     // exponents, including leading powers common to all terms.
-    MP substituted(const MP& q, int v, const MP& p0, const fmpz_t c) const {
+    std::optional<MP> substituted(const MP& q, int v, const MP& p0, const fmpz_t c) const {
         const Uni parts = split(q, v);
         if (!parts.len || fmpz_is_zero(&parts.degree().v)) return q;
         if (p0.zero()) return constant_term(parts);
@@ -266,22 +267,21 @@ struct Euler::State {
         fmpz_mpoly_neg(minus.p, p0.p, ctx);
         Z gap, distance, scalar;
         auto multiply_power = [&]() {
-            if (!fmpz_mpoly_pow_fmpz(factor.p, minus.p, &gap.v, ctx))
-                throw Limit("The Euler substitution could not expand a polynomial power.");
+            if (!fmpz_mpoly_pow_fmpz(factor.p, minus.p, &gap.v, ctx)) return false;
             fmpz_mpoly_mul(result.p, result.p, factor.p, ctx);
+            return true;
         };
         for (size_t k = parts.len - 1; k > 0; --k) {
             const auto& next = parts.at(k - 1);
             fmpz_sub(&gap.v, &parts.at(k).first.v, &next.first.v);
-            multiply_power();
+            if (!multiply_power()) return std::nullopt;
             fmpz_sub(&distance.v, &parts.degree().v, &next.first.v);
-            if (!fmpz_pow_fmpz(&scalar.v, c, &distance.v))
-                throw Limit("The Euler substitution could not materialize a coefficient.");
+            if (!fmpz_pow_fmpz(&scalar.v, c, &distance.v)) return std::nullopt;
             fmpz_mpoly_scalar_mul_fmpz(term.p, next.second.p, &scalar.v, ctx);
             fmpz_mpoly_add(result.p, result.p, term.p, ctx);
         }
         gap = parts.at(0).first;
-        if (!fmpz_is_zero(&gap.v)) multiply_power();
+        if (!fmpz_is_zero(&gap.v) && !multiply_power()) return std::nullopt;
         return result;
     }
 
@@ -531,10 +531,18 @@ struct Euler::State {
                     Z c;
                     fmpz_mpoly_get_fmpz(&c.v, parts.lead().p, ctx);
                     const MP p0 = constant_term(parts);
-                    Set remaining;
+                    std::vector<MP> replacements;
                     for (int other : equations) {
                         if (other == id) continue;
-                        const int next = condition(substituted(conditions[static_cast<size_t>(other)], v, p0, &c.v));
+                        auto value = substituted(conditions[static_cast<size_t>(other)],v,p0,&c.v);
+                        if (!value) break;
+                        replacements.push_back(std::move(*value));
+                    }
+                    // A refused expansion leaves the general projection available.
+                    if (replacements.size()+1 != equations.size()) continue;
+                    Set remaining;
+                    for (const MP& value:replacements) {
+                        const int next = condition(value);
                         if (next >= 0) remaining = with(remaining, next);
                     }
                     return closed(remaining);

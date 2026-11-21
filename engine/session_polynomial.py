@@ -304,8 +304,10 @@ class Polynomial:
 
 
 def _declare_ring(names, coeffs, make_parent):
-    if coeffs is not QQ:
-        raise ValueError("The supported coefficient field is QQ.")
+    if coeffs is not QQ and not isinstance(coeffs, _NumberField):
+        raise ValueError("Use QQ or a live marked coefficient field.")
+    if isinstance(coeffs, _NumberField) and coeffs.parameter.name in names:
+        raise ValueError("A coordinate name would shadow the coefficient-field generator.")
     if not names or any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,23}", n)
                         for n in names):
         raise ValueError("Use coordinate names of up to 24 letters, digits, or underscores, starting with a letter.")

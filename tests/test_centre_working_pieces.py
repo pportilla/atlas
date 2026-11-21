@@ -53,9 +53,14 @@ class CentreWorkingPieces(unittest.TestCase):
     def test_triple_tangent_cone_resolves_by_the_expected_canonical_centres(self):
         names = ["x", "y", "z"]
         polynomial = parse("x*y*z+x^4+y^4+z^4", names)
-        record = resolve_origin(polynomial, names, "intrinsic")
+        record = resolve_origin(polynomial, names, "embedded")
         self.assertIsNotNone(record)
         self.assertEqual((record["status"], record["engine"]), ("resolved", "canonical-blowups"))
         self.assertEqual([step["center"] for step in record["steps"]], ["points", "points", "curve"])
         self.assertEqual(record["steps"][0]["invariant"], ["3", "0", "1", "0", "1", "0", "oo"])
         self.assertEqual(len(record["charts"]), 20)
+        intrinsic = resolve_origin(polynomial, names, "intrinsic")
+        self.assertEqual(intrinsic["steps"], record["steps"][:1])
+        self.assertEqual(len(intrinsic["charts"]), 3)
+        dual = intrinsic["dual_complex"]
+        self.assertEqual((dual["status"], len(dual["vertices"]), len(dual["cells"])), ("complete", 3, 3))

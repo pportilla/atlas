@@ -6,10 +6,11 @@ from .monodromy import _request, factor_rows, numerical_rows, stratum_rows
 from .polynomial import integer_from_decimal, integer_text, kernel_fraction
 
 
-def unavailable_check(reason, resolution=None, topological=None, monodromy=None):
-    missing = {"status": "unavailable", "reason": reason}
-    return {"status": "unavailable", "reason": reason, "resolution": resolution,
-            "topological_zeta": topological or missing, "monodromy_zeta": monodromy or missing,
+def inconclusive_check(reason, resolution=None, topological=None, monodromy=None):
+    def outcome(value):
+        return value if value and value.get("status") == "computed" else {"status": "inconclusive", "reason": reason}
+    return {"status": "inconclusive", "reason": reason, "resolution": resolution,
+            "topological_zeta": outcome(topological), "monodromy_zeta": outcome(monodromy),
             "poles": [], "candidate_poles": None, "milnor_number": None}
 
 
@@ -33,10 +34,12 @@ def _nearby_witness(stratum, exponent):
 
 def check_zetas(topological, monodromy):
     """Find eigenvalue witnesses for the actual poles of a computed zeta pair."""
-    numbers = topological["numerical_data"]
+    from .contact_zetas import CONTACT_METHODS
+    numbers = [r for r in topological["numerical_data"] if not r.get("auxiliary")]
     nearby = monodromy.get("nearby_strata", [])
     evidence = _request("poles", data=numerical_rows(numbers), poles=topological["poles"],
                         factors=factor_rows(monodromy["factors"]), strata=stratum_rows(topological["strata"]),
+                        candidate_evidence=monodromy.get("resolution_engine") in CONTACT_METHODS,
                         nearby_factors=[factor_rows(stratum["factors"]) for stratum in nearby])
     poles = []
     for pole, row in zip(topological["poles"], evidence["poles"]):
@@ -51,6 +54,10 @@ def check_zetas(topological, monodromy):
             first = matches[0]
             item.update(_nearby_witness(nearby[first["stratum_index"]], first["cyclotomic_exponent"]))
         poles.append(item)
+    for candidate in evidence["candidates"]:
+        if "cyclotomic_exponent" in candidate:
+            for field in ("eigenvalue_order", "cyclotomic_exponent"):
+                candidate[field] = integer_from_decimal(candidate[field])
     result = {"status": "verified", "reason": "Every actual pole has a local monodromy eigenvalue witness.",
               "poles": poles, "candidate_poles": evidence["candidates"]}
     if any(pole["witness"] is None for pole in poles):
@@ -59,15 +66,15 @@ def check_zetas(topological, monodromy):
     return result
 
 
-def check_resolution(resolution, *, check_isolation, compute):
+def check_resolution(resolution, *, check_isolation, compute, search="exhaustive", zetas=None):
     record = resolution._record
-    topological, monodromy = deepcopy(resolution._local_zetas)
-    if record["status"] != "resolved":
-        reason = (record.get("diagnostic") or {}).get("description") or record["summary"]
-        return unavailable_check(reason, resolution, topological, monodromy)
+    topological, monodromy = deepcopy(zetas if zetas is not None else resolution._zeta_pair(search, compute))
     for zeta in (topological, monodromy):
-        if zeta["status"] != "computed":
-            return unavailable_check(zeta["reason"], resolution, topological, monodromy)
+        if zeta.get("status") != "computed":
+            reason = (record.get("diagnostic") or {}).get("description") or zeta.get("reason") or record["summary"]
+            if search == "quick":
+                return inconclusive_check(reason, resolution, topological, monodromy)
+            raise RuntimeError(f"The exhaustive zeta calculation ended without a certificate. {reason}")
 
     result = check_zetas(topological, monodromy)
     result.update(resolution=resolution, topological_zeta=topological, monodromy_zeta=monodromy, milnor_number=None)

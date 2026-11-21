@@ -1,0 +1,96 @@
+// Independent chart calculations for the cusp and the pinch point. The
+// driver supplies the original polynomial and ring to one of these procedures.
+proc orderOnAxis(poly f, poly axis)
+{
+  int n = 0;
+  if (f == 0) { ERROR("Zero polynomial in a divisorial valuation"); }
+  ideal basis = std(ideal(axis));
+  while (reduce(f, basis) == 0) { f = f div axis; n++; }
+  return(n);
+}
+
+proc cuspZetas(poly f)
+{
+  def R = basering;
+  map first = R,x,x*y;
+  map other = R,x*y,y;
+  map second = R,x*y,y;
+  map third = R,x,x*y;
+  poly total1 = first(f);
+  poly total2 = second(total1);
+  poly total3 = third(total2);
+  ideal coordinates = x,y;
+  poly jac1 = det(jacob(first(coordinates)));
+  poly jac2 = second(jac1)*det(jacob(second(coordinates)));
+  poly jac3 = third(jac2)*det(jacob(third(coordinates)));
+  int n1 = orderOnAxis(total1,x);
+  int n2 = orderOnAxis(total2,y);
+  int n3 = orderOnAxis(total3,x);
+  int v1 = 1+orderOnAxis(jac1,x);
+  int v2 = 1+orderOnAxis(jac2,y);
+  int v3 = 1+orderOnAxis(jac3,x);
+  // The complementary charts have no further unresolved points. At the
+  // last centre the two exceptional axes and strict line give three directions.
+  if (subst(other(f) div y^n1,y,0) != 1) { ERROR("Unexpected tangent at first centre"); }
+  poly strict1 = total1 div x^n1;
+  poly other2 = first(strict1);
+  if (subst(other2 div x^orderOnAxis(other2,x),x,0) != -1) { ERROR("Unexpected second tangent"); }
+  poly strict2 = total2 div (x^n1*y^n2);
+  if (deg(strict2) != 1 || subst(subst(strict2,x,0),y,0) != 0 ||
+      diff(strict2,x) == 0 || diff(strict2,y) == 0) { ERROR("Expected three distinct directions"); }
+  ring Qs=(0,s),Z,dp;
+  number d1 = v1+n1*s;
+  number d2 = v2+n2*s;
+  number d3 = v3+n3*s;
+  number top = 1/d1+1/d2-1/d3+(1/d1+1/d2+1/(1+s))/d3;
+  number mon = (1-s^n3)/((1-s^n1)*(1-s^n2));
+  return("ATLASBENCH "+string(top)+"|"+string(mon));
+}
+
+proc pinchZetas(poly f)
+{
+  def R = basering;
+  // Resolve the double line x=y=0. The origin fibre is a projective line.
+  map first = R,x,x*y,z;
+  map second = R,x*y,y,z;
+  ideal coordinates = x,y,z;
+  poly total = first(f);
+  int n = orderOnAxis(total,x);
+  int v = 1+orderOnAxis(det(jacob(first(coordinates))),x);
+  if (subst(subst(total div x^n,x,0),z,0) != 1) { ERROR("Unexpected strict point in first chart"); }
+  total = second(f);
+  if (orderOnAxis(total,y) != n) { ERROR("Inconsistent exceptional order"); }
+  poly strict = total div y^n;
+  // One geometric strict point on the fibre, cut transversely to the
+  // exceptional divisor. The factor (1+z) has remained in the pullback.
+  if (subst(subst(strict,y,0),z,0) != x^2 ||
+      subst(subst(subst(diff(strict,z),x,0),y,0),z,0) == 0) { ERROR("Unexpected strict intersection"); }
+  ring Qs=(0,s),Z,dp;
+  number d = v+n*s;
+  number top = 1/d+1/(d*(1+s));
+  number mon = 1/(1-s^n);
+  return("ATLASBENCH "+string(top)+"|"+string(mon));
+}
+
+proc brieskornZetas(poly f)
+{
+  // Pure powers with pairwise coprime exponents. The compact Newton
+  // facet and strict transform give the only candidate denominators.
+  poly X = subst(subst(f,y,0),z,0);
+  poly Y = subst(subst(f,x,0),z,0);
+  poly Zterm = subst(subst(f,x,0),y,0);
+  int a=deg(X);
+  int b=deg(Y);
+  int c=deg(Zterm);
+  if (f != X+Y+Zterm || size(X)!=1 || size(Y)!=1 || size(Zterm)!=1 ||
+      a<2 || b<2 || c<2 || gcd(a,b)*gcd(a,c)*gcd(b,c)!=1) { ERROR("Expected coprime diagonal powers"); }
+  int d=a*b*c;
+  int w=a*b+a*c+b*c;
+  if (d==w) { ERROR("Expected distinct simple candidate denominators"); }
+  ring Qs=(0,s),W,dp;
+  // Sebastiani-Thom on the three diagonal powers gives the full zeta;
+  // its signed A'Campo factors give lim s*Z_top(s) at infinity.
+  number mon = ((1-s^(a*b))*(1-s^(a*c))*(1-s^(b*c))) / ((1-s^a)*(1-s^b)*(1-s^c)*(1-s^d));
+  number top = ((w-a-b-c+1)*s+w)/((1+s)*(d*s+w));
+  return("ATLASBENCH "+string(top)+"|"+string(mon));
+}

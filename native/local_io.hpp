@@ -10,7 +10,9 @@ Polynomial parse_expression(const std::vector<std::string>& names, std::string s
 std::string format_polynomial(const Polynomial& f, const std::vector<std::string>& names);
 bool has_point_unit(const Basis& generators, const std::vector<mpq_class>& point);
 Basis project_monomials(const Basis& generators, const std::vector<mpq_class>& point);
-std::optional<Polynomial> polynomial_gcd(const Basis& generators, size_t width);
+// Optional probes release the caller to its other local geometry algorithms
+// when FLINT declines. Required eliminants use the exact intersection gcd.
+std::optional<Polynomial> polynomial_gcd(const Basis& generators, size_t width, bool required = false);
 bool polynomial_divides(const Polynomial& divisor, const Polynomial& f, size_t width);
 Basis divide_generators(const Basis& generators, const Polynomial& divisor, size_t width);
 Basis translate(const Basis& inputs, const std::vector<mpq_class>& shifts);

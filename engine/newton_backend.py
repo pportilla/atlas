@@ -106,14 +106,8 @@ def _label_roots(index, edge):
 
 def _boundary_centres(poly, variables, fan):
     """Certify the images of exceptional boundary rays by the native singular-locus test."""
-    from .native_library import affine_request
-    targets = tuple(dict.fromkeys(tuple(j for j, value in enumerate(fan["rays"][i]) if value)
-                                  for i in fan["boundary_rays"]))
-    singular = affine_request(["singular_subspaces", " ".join(variables), format_poly(poly, variables),
-                               *(" ".join(map(str, axes)) for axes in targets)])
-    if len(singular) != len(targets):
-        return None
-    return [[variables[i] for i in axes] for axes in targets]
+    from .fan_centres import singular_ray_images
+    return singular_ray_images(format_poly(poly, variables), variables, (fan["rays"][i] for i in fan["boundary_rays"]))
 
 
 def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False):

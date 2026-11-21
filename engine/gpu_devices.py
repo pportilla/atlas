@@ -14,6 +14,10 @@ def gpu_preference():
 def _triton_candidates():
     """CUDA/HIP ordinals retain their indices. XPU ordinals follow them."""
     try:
+        # On ROCm integrated GPUs the system driver must initialize its memory
+        # pools before PyTorch loads its packaged HIP kernels.
+        from .triton_buffers import initialize_hip
+        initialize_hip()
         import triton
         import torch
     except Exception:
@@ -40,10 +44,12 @@ def torch_device_context(device):
     return runtime.device(int(ordinal) if ordinal else runtime.current_device())
 
 
-def triton_device(index):
-    """Return the backend-local device after a successful integer kernel launch."""
+def triton_device(index=None):
+    """Probe the selected backend-local device, defaulting to RESOLUTION_GPU_INDEX."""
     if os.getenv("TRITON_INTERPRET") == "1":
         return None
+    if index is None:
+        index = int(os.getenv("RESOLUTION_GPU_INDEX", 0))
     candidates = _triton_candidates()
     if not 0 <= index < len(candidates):
         return None
@@ -56,6 +62,7 @@ def _probe_triton(index, device):
         import torch
         from triton.runtime import driver
         from .triton_ir import launch_kernel
+        from .triton_buffers import to_device, to_host
 
         kind, ordinal = device.split(":")
         with torch_device_context(device):
@@ -64,9 +71,9 @@ def _probe_triton(index, device):
             if target.backend not in runtimes:
                 return None
             name = getattr(torch, kind).get_device_name(int(ordinal))
-            probe = torch.full((1,), 2_000_000_001, dtype=torch.int64, device=device)
+            probe = to_device(torch.tensor([2_000_000_001], dtype=torch.int64), device)
             launch_kernel("trace_probe", (), (1,), probe)
-            if probe.item() != 169:
+            if to_host(probe).item() != 169:
                 return None
         arch = target.arch
         if isinstance(arch, dict):

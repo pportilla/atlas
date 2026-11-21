@@ -44,7 +44,7 @@ BASIS = ('A quotient-basis result. When `.finite` is true, `.basis` lists polyno
 DECLARATION = dict(
     names='One or more distinct coordinate names, passed as individual strings in generator order. '
           'Use letters, digits and underscores, beginning with a letter, up to 24 characters.',
-    coeffs='Coefficient field. Atlas accepts the rational field `QQ`.',
+    coeffs='The rational field `QQ` or the live marked field of an algebraic factor or chart.',
     fresh='With `False`, repeated ordinary declarations in the same session reuse the parent. '
           'With `True`, create an independent ring and allow its coordinates to rebind saved names.',
 )
@@ -112,9 +112,48 @@ FUNCTIONS = {
     'gcd': entry('The monic greatest common divisor as a polynomial in the common parent, or zero '
                  'when both inputs vanish.', left=POLYNOMIAL, right='Second polynomial in the same ring or a scalar.',
                  **POLYNOMIAL_OPTIONS),
+    'modular_arithmetic': entry('Exact residues or bounded rational reconstructions with their modulus.',
+                                action='reduce, add, subtract, multiply, divide, inverse, reconstruct, hensel or crt.',
+                                values='Ordered array of integers or exact decimal integer strings.',
+                                modulus='Integer modulus of at least two.', compute=COMPUTE,
+                                other='Second operand array, or the polynomial coefficients for a Hensel lift, constant first.',
+                                other_modulus='Second coprime modulus for CRT.',
+                                field_polynomial='Monic irreducible relation for a finite extension, constant coefficient first.'),
+    'matrix_analysis': entry('An exact rational matrix result with rank, determinant, pivot columns, RREF, image, '
+                             'kernel, and an optional affine solution.',
+                             rows='Ordered rectangular rows over QQ; rational strings are accepted.',
+                             rhs='Optional right-hand side with one rational value per row.',
+                             columns='Optional column count, including a matrix with no rows.',
+                             compute=COMPUTE),
+    'polynomial_arithmetic': entry('An exact polynomial in the common parent with an execution record.',
+                                  operation='One of add, subtract, multiply, divide, power, differentiate or substitute.',
+                                  polynomial='A polynomial over QQ or a marked number field, or a rational scalar.',
+                                  other='Second operand for binary operations. Division requires a nonzero element of the coefficient field.',
+                                  exponent='Nonnegative integer exponent for power.',
+                                  variable='Declared coordinate for differentiation.',
+                                  images='One simultaneous substitution image per coordinate, in declaration order.',
+                                  **POLYNOMIAL_OPTIONS),
+    'hensel_factors': entry('Two monic factors lifted to the squared prime modulus, preserving order and parent.',
+                            polynomial='Integer polynomial monic modulo the squared prime.',
+                            left='First monic factor modulo the prime.', right='Second monic factor, coprime to the first.',
+                            prime='Positive prime integer.', **POLYNOMIAL_OPTIONS),
+    'cancel_fraction': entry('The coprime numerator and monic denominator in the original polynomial ring.',
+                             numerator=POLYNOMIAL, denominator='Nonzero polynomial in the same ring.',
+                             **POLYNOMIAL_OPTIONS),
+    'polynomial_division': entry('The quotient and reduced remainder as polynomials in the original ring.',
+                                 dividend=POLYNOMIAL, divisor='Nonzero divisor in the same ring.',
+                                 **POLYNOMIAL_OPTIONS),
+    'extended_gcd': entry('The monic GCD and its two Bézout coefficients in the input ring.',
+                          left=POLYNOMIAL, right='Second polynomial in the same variable over QQ.', **POLYNOMIAL_OPTIONS),
+    'squarefree_factor': entry('The rational unit and one monic square-free factor per multiplicity.',
+                              polynomial=POLYNOMIAL, **POLYNOMIAL_OPTIONS),
     'factor': entry('A factorization with rational `.unit` and ordered `.factors`. Each factor has a monic '
                     '`.polynomial` and positive integer `.multiplicity`.',
                     polynomial='Nonzero polynomial over `QQ` or nonzero rational scalar.', **POLYNOMIAL_OPTIONS),
+    'absolute_factor': entry('An absolute factorization with rational `.unit`, ordered `.factors` and an '
+                             '`.inclusion` from the input ring into the factors’ common `.ambient` ring. '
+                             'Read `.ring["field"]` for the exact coefficient field.',
+                             polynomial='Nonzero polynomial over `QQ` or nonzero rational scalar.', **POLYNOMIAL_OPTIONS),
     'resultant': entry('The signed resultant as a polynomial in the surviving coordinates. Its `.inclusion` '
                        'maps the result back to the original ring.', left=POLYNOMIAL,
                        right='Second polynomial in the same ring or a scalar.',
@@ -219,8 +258,9 @@ FUNCTIONS = {
                      mode='Use `"embedded"` for normal crossings of the total transform, including multiplicities, '
                           'or `"intrinsic"` to resolve the strict transform of a reduced germ.',
                      method='Use `"auto"` for the standard resolution search. Choose `"weighted"` for embedded '
-                            'weighted blowups in 1–16 variables with `monodromy=False`. Inspect the returned '
-                            '`.steps`, `.divisors` and `.certificate`.',
+                            'weighted blowups in 1–16 variables. Atlas computes requested zetas using an '
+                            'embedded companion. If the weighted engine declines, exhaustive search continues '
+                            'with ordinary embedded resolution and records the reason in `.record["weighted_attempt"]`.',
                      monodromy='Set to `True` to request both the monodromy and local topological zeta functions.',
                      **RESOLUTION_INPUT),
     'recompute_dual_complex': entry('A dual complex with `.vertices` linked to divisors on the supplied '
@@ -231,7 +271,7 @@ FUNCTIONS = {
     'monodromy_check': entry('A record with `.status`, `.reason` and the witnesses for actual `.poles`. '
                              'A verified status means every pole has an eigenvalue witness.',
                              polynomial='Equation of a hypersurface germ at the origin, a formula string, or '
-                                        'a saved resolution. A saved resolution supplies its charts directly.',
+                                        'a saved Atlas resolution carrying the equation and ordered coordinates.',
                              check_isolation='With `True`, try the local Milnor number when an eigenvalue '
                                              'witness is unresolved, to check for an isolated candidate.',
                              **RESOLUTION_INPUT),

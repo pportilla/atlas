@@ -1,15 +1,19 @@
 """Mathematical operations and execution shared by the Atlas prompt and scripts."""
 import sys
 from fractions import Fraction
+from functools import wraps
 from math import isfinite
 from pathlib import Path
 
 from .exact_json import result_json
+from .matrix_algebra import matrix_analysis
+from .modular_batch import modular_arithmetic
 from .polynomial import rational_text
 from .session_algebra import _coordinate_space, algebra_bindings
+from .session_algebra import polynomial_arithmetic as calculate_polynomial
 from .session_expressions import Evaluator, SessionError
 from .session_maps import hom
-from .session_monodromy import check_resolution, unavailable_check
+from .session_monodromy import check_resolution, inconclusive_check
 from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as coordinates, session_declarations
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing, quotient_ring
 from .session_rings import ring_bindings
@@ -83,9 +87,14 @@ def new_session(calculate):
         return Resolution(record, parent, source_polynomial=polynomial if isinstance(polynomial, Polynomial) else None,
                           _from_solver=True)
 
-    def monodromy_check(polynomial, *, variables=None, ring=None, search="quick", compute=None, check_isolation=False):
+    def monodromy_check(polynomial, *, variables=None, ring=None, search="exhaustive", compute=None, check_isolation=False):
         if type(check_isolation) is not bool:
             raise ValueError("check_isolation must be true or false.")
+        if search not in ("quick", "exhaustive"):
+            raise ValueError("Search must be quick or exhaustive.")
+        if compute not in (None, "cpu", "auto", "gpu"):
+            raise ValueError("Compute must be cpu, auto, or gpu.")
+        zetas = None
         if isinstance(polynomial, Resolution):
             if variables is not None or ring is not None:
                 raise ValueError("A resolution already carries its coordinates.")
@@ -93,14 +102,20 @@ def new_session(calculate):
         else:
             expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
             status, record = calculate(expression, names, mode="embedded", search=search,
-                                       compute=compute, monodromy=True)
+                                       compute=compute, monodromy=True, zetas_only=True)
+            if status == 422 and record.get("code") == "computation_limit" and search == "quick":
+                return inconclusive_check(record["error"])
             if status == 400:
                 raise ValueError(record["error"])
             if status != 200:
-                return unavailable_check(record["error"])
+                raise RuntimeError(record["error"])
             resolution = Resolution(record, parent, source_polynomial=polynomial if isinstance(polynomial, Polynomial) else None,
                                     _from_solver=True)
-        return check_resolution(resolution, check_isolation=check_isolation, compute=compute)
+            # A bounded solve already attempted both zetas. Display its outcome
+            # without launching a second search after it reached its deadline.
+            if search == "quick":
+                zetas = record.get("topological_zeta", {}), record.get("monodromy_zeta", {})
+        return check_resolution(resolution, check_isolation=check_isolation, compute=compute, search=search, zetas=zetas)
 
     def dual_complex(resolution):
         # Older scripts use this function's raw replay dictionary.
@@ -112,11 +127,40 @@ def new_session(calculate):
     def recompute_dual_complex(resolution):
         return DualComplex(resolution, dual_complex(resolution))
 
+    def with_scalar_default(function, names):
+        @wraps(function)
+        def calculate(*args, **options):
+            if rings.active is not None and options.get("variables") is None:
+                inputs = (*args[:len(names)], *(options[key] for key in names if key in options))
+                if inputs and all(type(value) is int or isinstance(value, Fraction) for value in inputs):
+                    options["variables"] = rings.active.coordinates
+            return function(*args, **options)
+        return calculate
+
+    @wraps(calculate_polynomial)
+    def polynomial_arithmetic(operation, polynomial, other=None, *, exponent=None, variable=None, images=None,
+                              order=None, variables=None, compute="auto"):
+        inputs = [polynomial, other, variable]
+        if isinstance(images, (list, tuple)):
+            inputs.extend(images)
+        if variables is None and rings.active is not None and not any(
+                isinstance(item, Polynomial) and item.parent is not QQ for item in inputs):
+            variables = rings.active.coordinates
+        return calculate_polynomial(operation, polynomial, other, exponent=exponent, variable=variable,
+                                    images=images, order=order, variables=variables, compute=compute)
+
     # The ring functions replace polynomial and ideal with readers that use the active ring.
+    algebra = algebra_bindings()
+    for name, inputs in (("absolute_factor", ("polynomial",)), ("squarefree_factor", ("polynomial",)),
+                         ("polynomial_division", ("dividend", "divisor")), ("cancel_fraction", ("numerator", "denominator")),
+                         ("extended_gcd", ("left", "right")), ("hensel_factors", ("polynomial", "left", "right"))):
+        algebra[name] = with_scalar_default(algebra[name], inputs)
     session.builtins.update({"QQ": QQ, "coordinates": declare, "ring": ring, "resolve": resolve,
+                             "matrix_analysis": matrix_analysis, "modular_arithmetic": modular_arithmetic,
                              "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
                              "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
-                             "quotient_ring": quotient_ring, "hom": hom, **algebra_bindings(), **ring_bindings(rings)})
+                             "quotient_ring": quotient_ring, "hom": hom, **algebra, **ring_bindings(rings),
+                             "polynomial_arithmetic": polynomial_arithmetic})
     return session
 
 

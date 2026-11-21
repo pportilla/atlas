@@ -13,6 +13,32 @@ def candidate(center, coords, boundary):
 
 
 class GeneralResolutionTests(unittest.TestCase):
+    def test_candidate_transport_preserves_computed_large_integers(self):
+        import json
+        import sys
+        from unittest.mock import Mock, patch
+        from engine.general_resolution import _kernel_line, _run_attempt
+        from engine.exact_json import result_json
+        from engine.polynomial import integer_from_decimal, integer_text
+
+        host_limit = sys.get_int_max_str_digits()
+        wide = 10 ** max(5000, host_limit + 1)
+        packed = [[[wide, 0], [[hex(-wide - 1), hex(wide)]]]]
+        expected = f"-{integer_text(wide + 1)}/{integer_text(wide)} {integer_text(wide)} 0"
+        self.assertEqual(_kernel_line(packed), expected)
+
+        def echo_candidate(payload, seconds):
+            polynomial = json.loads(payload, parse_int=integer_from_decimal)["polynomial"]
+            self.assertEqual(polynomial, packed)
+            return result_json(["certified", {"exponent": polynomial[0][0][0]}, None])
+
+        worker = Mock(answered=0)
+        worker.ask.side_effect = echo_candidate
+        with patch("engine.general_resolution._workers") as workers:
+            workers.take.return_value = worker
+            self.assertEqual(_run_attempt({"polynomial": packed}, 10), ("certified", {"exponent": wide}))
+        self.assertEqual(sys.get_int_max_str_digits(), host_limit)
+
     def test_polynomial_graph_centre_uses_free_coordinates_in_any_order(self):
         from unittest.mock import patch
         from engine import general_resolution
@@ -197,6 +223,50 @@ class GeneralResolutionTests(unittest.TestCase):
         self.assertEqual(unit, -3*z**2/2 - 3*z - sp.Rational(3, 2))
         self.assertEqual(active, x**2-y**2*z)
 
+    def test_integral_goal_checks_the_original_divisor_and_each_chart(self):
+        from copy import deepcopy
+        from engine.general_resolution import integral_certificate
+        from engine.resolution_zetas import zetas_from_strata
+        from engine.strata import resolution_strata
+        names = list("xyz")
+        for power in (1, 3):
+            with self.subTest(power=power):
+                f = parse(f"(-13/7)*(1+z)^2*(x^2-y^2*z)^{power}", names)
+                verified = []
+                record = search(f, names, "embedded", exhaustive=True, integrals=True, verified=verified)
+                producer, (atlas, output) = verified[0]
+                self.assertIs(record, producer)
+                self.assertEqual(record["origin"], [0, 0, 0])
+                self.assertTrue(atlas)
+                strata = resolution_strata(record, f, computed=output)
+                zetas = zetas_from_strata(record, ("monodromy","topological"), strata, polynomial=f)
+                self.assertEqual(zetas["monodromy_zeta"]["expression"], f"1/(1-T^{2*power})")
+                s = sp.Symbol("s")
+                self.assertEqual(sp.cancel(zetas["topological_zeta"]["expression"]) -
+                                 sp.cancel((power*s+2)/(2*(power*s+1)**2)), 0)
+                self.assertIsNone(integral_certificate(record, f, (atlas, {})))
+                corrupt = deepcopy(output)
+                corrupt["strata"][0]["euler_characteristic"] += 1
+                with self.assertRaisesRegex(ValueError, r"Z\(0\) = 1"):
+                    integral_certificate(record, f, (atlas, corrupt))
+                if power == 1:
+                    record["certificate"]["unit_removed_at_origin"] = "z"
+                    with self.assertRaisesRegex(ValueError, "unit at the origin"):
+                        resolution_strata(record, f, strict=True)
+
+    def test_graph_integral_goal_preserves_wide_multiplicities(self):
+        from engine.resolution_zetas import zetas_from_strata
+        from engine.strata import resolution_strata
+        names = ["x", "y"]
+        power = 2**64+1
+        f = parse(f"(184467440737095516291234567890123/11)*x^{power}",names,bounded=False)
+        verified = []
+        record = search(f,names,"embedded",exhaustive=True,integrals=True,verified=verified)
+        strata = resolution_strata(record,f,computed=verified[0][1][1])
+        zetas = zetas_from_strata(record,("monodromy","topological"),strata,polynomial=f)
+        self.assertEqual(zetas["topological_zeta"]["poles"][0]["value"], f"-1/{power}")
+        self.assertEqual(zetas["monodromy_zeta"]["expression"],f"1/(1-T^{power})")
+
     def test_a_chart_cover_or_a_smooth_strict_transform_is_insufficient(self):
         x,y=sp.symbols("x y")
         u,v,w=sp.symbols("U V W")
@@ -216,6 +286,38 @@ class GeneralResolutionTests(unittest.TestCase):
         # A blowup of a smooth point on the original hypersurface is forbidden.
         self.assertIsNone(verify_candidate((x,y),x,c,"embedded"))
 
+
+    def test_geometry_fallback_retries_an_unreplayable_graph_before_acceptance(self):
+        from unittest.mock import patch
+        from engine.general_resolution import _run_attempt
+        from engine.local_blowups import GiveUp
+        from engine.resolve import resolve
+
+        for mode, power in (("intrinsic", 1), ("embedded", 3)):
+            with self.subTest(mode=mode):
+                failures = []
+                def attempt(info, seconds, **options):
+                    if info["source"] == "singular coordinate subspace" and not failures:
+                        # The centre and SNC proof are valid for the reduced
+                        # equation. The proposed graph cannot replay this
+                        # different original divisor on its affine opens.
+                        damaged = {**info, "output_input": {**info["output_input"], "polynomial": "x"}}
+                        failures.append(_run_attempt(damaged, seconds, **options))
+                        return failures[-1]
+                    return _run_attempt(info, seconds, **options)
+
+                request = dict(polynomial=f"(1+z)*(x^2-y^2*z)^{power}", variables=list("xyz"), mode=mode)
+                with patch("engine.resolve._resolve_polynomial", side_effect=GiveUp("declined")), \
+                     patch("engine.general_resolution._run_attempt", side_effect=attempt), \
+                     patch("engine.strata.rational_chart_outputs", side_effect=AssertionError("repeated graph replay")):
+                    record = resolve(request)
+                self.assertEqual(failures, [("undecided", None)])
+                self.assertEqual(record["status"], "resolved")
+                self.assertEqual(record["dual_complex"]["status"], "complete")
+                self.assertEqual(len(record["atlas"]), 2)
+                self.assertTrue(record["base_domain"]["invert"])
+                if power > 1:
+                    self.assertEqual(record["input_divisor"]["factors"][0]["multiplicity"], power)
 
 if __name__=="__main__":
     unittest.main()

@@ -131,6 +131,21 @@ class WorkbenchBrowserTests(BrowserCase):
         page.set_viewport_size({"width": 320, "height": 780})
         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), 320)
 
+    def test_contact_record_shows_its_computed_zetas_and_can_add_a_missing_one(self):
+        from engine.resolve import resolve
+        request = {"polynomial": "z*(z-x)*(z-y)", "variables": list("xyz"), "mode": "embedded",
+                   "search": "quick", "zetas_only": True, "zetas": ["monodromy"]}
+        record = resolve(request)
+        self.assertEqual(record["status"], "zetas_computed")
+        job = {"id": "contact", "state": "completed", "request": request, "result": record}
+        self.page.route("**/api/searches", lambda route: route.fulfill(json={"jobs": [job]}))
+        self.page.goto(self.url)
+        panel = self.page.locator("#panel-zeta")
+        expect(panel.get_by_role("heading", name="Monodromy zeta function at the origin")).to_be_visible()
+        self.page.get_by_role("button", name="Compute topological zeta function").click()
+        expect(panel.get_by_role("heading", name="Topological monodromy conjecture")).to_be_visible()
+        expect(panel.locator(".monodromy-verdict")).to_contain_text("Verified")
+
     def test_older_result_can_replay_nearby_zetas_and_show_branch_equations(self):
         from engine.resolve import resolve
         request = {"polynomial": "(x+y^2)^6*(z+w^2)^4", "variables": list("xyzw"), "mode": "embedded",

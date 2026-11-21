@@ -338,6 +338,11 @@ Json::Value pole_data(const Json::Value& r) {
         Json::Value row;
         row["value"] = slope.get_str();
         row["components"] = names;
+        if (r.get("candidate_evidence", false).asBool()) {
+            const Z q = slope.get_den();
+            row["eigenvalue_order"] = q.get_str();
+            row["cyclotomic_exponent"] = cyclotomic(r["factors"], q).get_str();
+        }
         auto order = pole_orders.find(slope);
         row["pole_order"] = order == pole_orders.end() ? Json::Value(0) : order->second;
         out["candidates"].append(row);

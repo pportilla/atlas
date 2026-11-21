@@ -1,4 +1,5 @@
 """Divisor witnesses for the terms of a polynomial modulo a monomial ideal."""
+from .triton_buffers import to_device, to_host
 import os
 import triton
 
@@ -10,8 +11,8 @@ def witnesses(terms, basis, device):
     from .gpu_devices import torch_device_context
 
     with torch_device_context(device):
-        powers = torch.tensor(terms, dtype=torch.int32, device=device)
-        divisors = torch.tensor(basis, dtype=torch.int32, device=device)
+        powers = to_device(torch.tensor(terms, dtype=torch.int32), device)
+        divisors = to_device(torch.tensor(basis, dtype=torch.int32), device)
         result = torch.empty(len(terms), dtype=torch.int32, device=device)
         block = 64
         grid = (triton.cdiv(len(terms), block),)
@@ -21,4 +22,4 @@ def witnesses(terms, basis, device):
             _divisors[grid](*args, len(basis[0]), block)
         else:
             launch_kernel("monomial_witness", (len(basis[0]), block), grid, *args)
-        return result.cpu().tolist()
+        return to_host(result).tolist()

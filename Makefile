@@ -25,7 +25,10 @@ test-gpu: gpu
 test-triton: all
 	$(PYTHON) -c 'import sys; from engine.gpu_replay import triton_available; sys.exit(0 if triton_available() else "No usable physical Triton device at the selected index")'
 	$(PYTHON) -m unittest tests.test_native_chart_batch tests.test_gpu_trace_rows tests.test_gpu_normal_form \
-		tests.test_gpu_rank tests.test_gpu_replay tests.test_gpu_resolution
+		tests.test_gpu_rank tests.test_gpu_replay tests.test_gpu_resolution \
+		tests.test_gpu_polynomial tests.test_gpu_marked_arithmetic tests.test_gpu_factor_division \
+		tests.test_gpu_crt tests.test_matrix_analysis tests.test_modular_arithmetic tests.test_hensel_factors \
+		tests.test_polynomial_arithmetic_modes tests.test_gpu_finite_fields tests.test_triton_native_ir
 check-native-boundary:
 	$(PYTHON) -m unittest tests.test_native_math_boundary.NativeMathBoundaryTests
 test: all

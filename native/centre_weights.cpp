@@ -145,8 +145,8 @@ Names names(const Json::Value& row) {
 }
 
 // A finite centre of nonconstant order splits according to the labels of
-// the divisors through each geometric piece. Keep the largest signature;
-// if all are equal, take only the first rational component on each chart.
+// the divisors through each geometric piece. Signatures agree on overlaps.
+// A local component index, in contrast, is meaningful only in its own chart.
 Json::Value point_signatures(const Json::Value& request) {
     using Signature = std::pair<size_t,Names>;
     std::vector<std::vector<Signature>> charts;
@@ -162,16 +162,20 @@ Json::Value point_signatures(const Json::Value& request) {
     }
     Json::Value kept(Json::arrayValue);
     bool all = true, multiple = false;
+    size_t nonempty = 0;
     for (const auto& parts : charts) {
         Json::Value indices(Json::arrayValue);
         for (Json::ArrayIndex i=0; i<parts.size(); ++i)
             if (parts[i]==best) indices.append(i);
         all &= indices.size()==parts.size();
         multiple |= indices.size()>1;
+        if (!indices.empty()) ++nonempty;
         kept.append(std::move(indices));
     }
     if (all || request["single"].asBool()) {
-        if (!multiple) return {};
+        // Choosing the first orbit separately in two opens can blow up two
+        // different points on their overlap (e.g. slopes t and 1/t).
+        if (!multiple || nonempty != 1) return {};
         for (auto& row : kept) if (row.size()>1) row.resize(1);
     }
     return kept;
@@ -331,6 +335,14 @@ Json::Value strict_surface(const Json::Value& request) {
 Json::Value level_weights(const Json::Value& request) {
     const auto op = request["operation"].asString();
     const auto weights = read_row(request["weights"]);
+    if (op == "smooth_strict") {
+        // The single strict divisor represents the entire reduced hypersurface,
+        // including intersections of branches. Other rank defects concern the boundary.
+        for (const auto& labels : request["failures"]) {
+            if (labels.size() == 1 && labels[0].asString() == "strict") return false;
+        }
+        return true;
+    }
     if (op == "ordered_parts") return ordered_parts(request);
     if (op == "few_generators") return few_generators(request);
     if (op == "linear_centre") return linear_centre(request);

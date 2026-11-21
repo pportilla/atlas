@@ -28,9 +28,13 @@ def rational_factors(poly, names):
     return ordered((sparse_row(row), integer_from_decimal(m)) for m, row in zip(rows[1::2], rows[2::2]))
 
 
-def _certify_divisor(f, parts, names):
+def reduced_at_origin(f, names):
+    return kernel_json("atlas_identity_divisor", "reduced_at_origin", width=len(names), terms=encode_terms(f))
+
+
+def _certify_divisor(f, parts, names, intrinsic):
     return kernel_json("atlas_identity_divisor", "certify", width=len(names), terms=encode_terms(f),
-                       parts=[[encode_terms(g), integer_text(m)] for g, m in parts])
+                       parts=[[encode_terms(g), integer_text(m)] for g, m in parts], intrinsic=intrinsic)
 
 
 def origin_indices(equations, width):
@@ -115,7 +119,7 @@ def identity_outputs(record, polynomial, *, complex=True, intrinsic=False, integ
     present = {labels[i] for i in active}
     parts = [(equations[i], data[labels[i]][0]) for i in active]
     if (not independent([g for g, _ in parts], len(coords)) or
-            not _certify_divisor(polynomial, parts, coords) or intrinsic and len(parts) != 1):
+            not _certify_divisor(polynomial, parts, coords, intrinsic)):
         raise InvalidChart("The listed equations do not give transverse branches of the input at the origin.")
 
     output = {"cells": [] if complex else None, "reason": None}

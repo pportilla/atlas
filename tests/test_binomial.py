@@ -4,6 +4,7 @@ from fractions import Fraction
 from itertools import combinations
 from math import gcd, prod
 import unittest
+from copy import deepcopy
 
 import sympy as sp
 
@@ -16,6 +17,62 @@ def subsets(items):
 
 
 class BinomialResolution(unittest.TestCase):
+    def test_two_exceptional_sections_survive_intrinsic_replay(self):
+        from engine.resolution_complex import dual_complex
+
+        cylinder = resolve(dict(polynomial="y^2-x^3", variables=list("xyz"), mode="intrinsic", zetas=[]))
+        # Reuse both standard affine opens of the blowup of the line x=y=0.
+        # The first node has one coordinate direction in each chart. The
+        # second has two distinct roots in the overlap of the same charts.
+        for source, equations in (
+                ("x*y+x^3+y^3", ("u2+u1+u1*u2^3", "u1+u1^3*u2+u2")),
+                ("(y-x)*(y-2*x)+x^3", ("(u2-1)*(u2-2)+u1", "(1-u1)*(1-2*u1)+u1^3*u2"))):
+            with self.subTest(source=source):
+                saved = {k: deepcopy(cylinder[k]) for k in ("status", "mode", "variables", "atlas")}
+                saved["polynomial"] = source
+                for chart, equation in zip(saved["atlas"], equations, strict=True):
+                    strict = next(c for c in chart["components"] if c["id"] == "strict")
+                    strict["ideal"] = [equation]
+                boundary = dual_complex(saved)
+                self.assertEqual(boundary["status"], "complete")
+                self.assertEqual([v["dimension"] for v in boundary["vertices"]], [1, 1])
+                self.assertEqual(boundary["cells"], [])
+
+    def test_intrinsic_cusp_cylinder_stops_at_the_smooth_graph(self):
+        from engine.polynomial import parse
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import rational_chart_outputs
+
+        for source, names, steps in (("y^2-x^3", list("xyz"), 1),
+                                     ("3*x^2-2*z^5", list("xyzt"), 2),
+                                     ("812345678901234567890123456789*x^36893488147419103232"
+                                      "-y^36893488147419103233", list("xyz"), 1)):
+            with self.subTest(source=source):
+                request = dict(polynomial=source, variables=names, compute="cpu", zetas=[])
+                record = resolve(dict(request, mode="intrinsic"))
+                self.assertEqual(record["status"], "resolved")
+                self.assertEqual(record["engine"], "binomial-coordinate-blowups")
+                self.assertEqual(len(record["steps"]), steps)
+                self.assertIn("linear exceptional coordinate",
+                              [c["criterion"] for c in record["fan"]["terminal_certificates"]])
+                saved = {k: record[k] for k in ("status", "mode", "polynomial", "variables", "atlas")}
+                for boundary in (record["dual_complex"], dual_complex(saved)):
+                    self.assertEqual(boundary["status"], "complete")
+                    self.assertEqual([v["dimension"] for v in boundary["vertices"]], [len(names)-2])
+                    self.assertEqual(boundary["cells"], [])
+        request = dict(polynomial="y^2-x^3", variables=list("xyz"), zetas=["topological"])
+        embedded = resolve(dict(request, mode="embedded"))
+        self.assertEqual(len(embedded["steps"]), 3)
+        record = resolve(dict(request, mode="intrinsic"))
+        self.assertEqual(len(record["steps"]), 1)
+        self.assertIn("embedded_companion", record)
+        _, checked = rational_chart_outputs(record, parse(request["polynomial"], request["variables"]),
+                                            intrinsic=True, integrals=False)
+        self.assertEqual(checked["dual_complex"], dual_complex(record))
+        self.assertEqual(replay_zetas(dict(record=record, zetas=["topological"]))
+                         ["topological_zeta"]["expression"], embedded["topological_zeta"]["expression"])
+
     def test_large_orders_preserve_the_trace_and_exact_budget_boundary(self):
         from engine.binomial_fan import build_binomial_fan
         from engine.binomial_kernel import pairings

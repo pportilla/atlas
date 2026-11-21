@@ -101,10 +101,42 @@ _GROUPS = {
             (session("Coordinate declarations and parent rings", "session_polynomial", "def coordinates(*names, coeffs=QQ, fresh=False):"),),
             (example("Redeclare coordinates and retain the same ring", "cli_session",
                      "coordinate_redeclaration_reuses_the_parent_at_prompt_and_in_script"),)),
+        "modular_arithmetic": Entry(
+            (native("Residue arithmetic and lifting", "modular_batch", "Json::Value calculate("),),
+            (example("Verify reconstructed residues and simple roots", "modular_arithmetic",
+                     "lifts_and_reconstruction"),)),
+        "matrix_analysis": Entry(
+            (native("Exact matrix analysis and system solving", "point_geometry", "Json::Value matrix_analysis("),),
+            (example("Check all three solution statuses", "matrix_analysis", "solution_status_and_subspaces"),)),
         "polynomial": Entry(
             (native("Polynomial expression parser", "affine", "class RecordParser {"),),
             (example("Read formulas in the original and projected rings", "session_algebra",
                      "quoted_polynomial_uses_original_or_projected_coordinates"),)),
+        "absolute_factor": Entry(
+            (native("Geometric factors from transverse sections", "absolute_factorization",
+                    "std::vector<GeometricPolynomial> absolute_factors("),),
+            (example("Factor a cubic and combine two quadratic extensions", "absolute_factorization",
+                     "univariate_cubic_and_two_independent_quadratic_extensions"),)),
+        "polynomial_arithmetic": Entry(
+            (session("Choose operands in their live ring", "session_algebra", "def polynomial_arithmetic("),),
+            (example("Compare native CPU and GPU requests", "polynomial_arithmetic_modes",
+                     "exact_actions_and_live_parent"),)),
+        "hensel_factors": Entry(
+            (native("Coprime Hensel correction and verification", "hensel_factors", 'Json::Value hensel('),),
+            (example("Verify the lifted factors and their live ring", "hensel_factors", "quadratic_and_ownership"),)),
+        "cancel_fraction": Entry(
+            (native("Normalize the coprime numerator and denominator", "triton_factor_division", 'if (op == "cancel-fraction")'),),
+            (example("Cancel rational functions and retain their live parent", "gpu_factor_division",
+                     "reduced_fraction_zero_wide_and_ownership"),)),
+        "polynomial_division": Entry(
+            (native("Exact binomial division", "triton_factor_division", "bool triton_binomial_division("),),
+            (example("Check quotient, remainder and ownership", "gpu_factor_division", "public_results_and_ring_ownership"),)),
+        "extended_gcd": Entry(
+            (native("Exact Euclidean and Bézout computation", "triton_factor_division", "void xgcd("),),
+            (example("Reconstruct the monic GCD", "gpu_factor_division", "public_results_and_ring_ownership"),)),
+        "squarefree_factor": Entry(
+            (native("Square-free factors grouped by multiplicity", "polynomial_factors", "const char* squarefree_factors("),),
+            (example("Check repeated rational and geometric factors", "gpu_factor_division", "squarefree_groups_multiplicities"),)),
         "factor": Entry(
             (native("Ordered factorization over the rationals", "polynomial_factors", "const char* ordered_factors("),),
             (example("Reconstruct the input from its unit and factors", "factor_session",

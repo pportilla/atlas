@@ -14,7 +14,7 @@ from .centres import GiveUp
 from .groebner import groebner
 
 
-def certify_fibre(chart, dimension):
+def fibre_has_crossings(chart, dimension):
     """Check Jacobian ranks on all owned strata with the native ideal kernel."""
     from .kernel import _lines
     from .local_blowups import _is_strict
@@ -47,7 +47,11 @@ def certify_fibre(chart, dimension):
         for generators in chart.removed:
             request.extend(ideal(generators))
         result, = affine_request(request)
-    if result != "yes":
+    return result == "yes"
+
+
+def certify_fibre(chart, dimension):
+    if not fibre_has_crossings(chart, dimension):
         raise GiveUp("The total transform fails normal crossings on the owned fibre.")
 
 

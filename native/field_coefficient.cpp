@@ -757,17 +757,52 @@ std::string express(std::istream& in) {
 }
 
 // Return the primitive integral minimal polynomial and the exact FLINT mark.
+slong marked_root_index(const Number& value) {
+    const auto polynomial = QQBAR_POLY(value.n);
+    const slong degree = fmpz_poly_degree(polynomial);
+    Roots roots(degree);
+    qqbar_roots_fmpz_poly(roots.r, polynomial, 0);
+    for (slong j=0; j<degree; ++j)
+        if (qqbar_equal(roots.r+j, value.n)) return j+1;
+    throw std::logic_error("No matching embedding of the minimal polynomial.");
+}
+
 std::string describe(std::istream& in) {
     const Number value = evaluate(in);
-    const auto p = QQBAR_POLY(value.n);
-    const slong n = fmpz_poly_degree(p);
-    Roots roots(n);
-    qqbar_roots_fmpz_poly(roots.r,p,0);
-    for (slong j = 0; j < n; ++j) {
-        if (qqbar_equal(roots.r+j,value.n))
-            return std::to_string(j+1)+" "+integral_coefficients(p)+"\n";
+    return std::to_string(marked_root_index(value)) + " " + integral_coefficients(QQBAR_POLY(value.n)) + "\n";
+}
+
+Json::Value arithmetic_field(const Json::Value& input) {
+    std::istringstream program(input["program"].asString());
+    const Number value=evaluate(program);
+    const auto minimal=QQBAR_POLY(value.n);
+    const slong degree=fmpz_poly_degree(minimal), index=marked_root_index(value);
+    if (degree<2) throw std::invalid_argument("Use QQ for a rational coefficient field.");
+    if ((input.isMember("degree") && mpz_class(input["degree"].asString())!=degree) ||
+        (input.isMember("root_index") && mpz_class(input["root_index"].asString())!=index))
+        throw std::invalid_argument("The marked degree or root index disagrees with the embedding.");
+    if (input.isMember("relation")) {
+        const auto terms = sparse_json::read_terms(input["relation"], 1);
+        if (terms.empty() || terms.rbegin()->first[0]!=degree)
+            throw std::invalid_argument("The supplied relation is not the minimal polynomial of the marked root.");
+        Integer coefficient;
+        mpz_class leading;
+        fmpz_get_mpz(leading.get_mpz_t(), fmpz_poly_lead(minimal));
+        const mpq_class scale = terms.rbegin()->second/leading;
+        for (slong j=0;j<=degree;++j) {
+            fmpz_poly_get_coeff_fmpz(coefficient.n, minimal, j);
+            mpz_class z;
+            fmpz_get_mpz(z.get_mpz_t(), coefficient.n);
+            const auto term=terms.find({j});
+            if ((term==terms.end() ? mpq_class(0) : term->second) != scale*z)
+                throw std::invalid_argument("The supplied relation is not the minimal polynomial of the marked root.");
+        }
     }
-    throw std::logic_error("No matching embedding of the minimal polynomial.");
+    Json::Value out;
+    out["degree"]=Json::Int64(degree);
+    out["root_index"]=Json::Int64(index);
+    out["coefficients"]=integral_coefficients(minimal);
+    return out;
 }
 void load_power_basis(Polynomial& p, const std::vector<mpq_class>& coeffs) {
     Fraction coefficient;
@@ -993,4 +1028,8 @@ extern "C" char* atlas_field_display_terms(const char* input, size_t length) noe
     } catch (const std::exception& error) { atlas::set_error(error.what()); }
     catch (...) { atlas::set_error("Unknown marked display normalization failure."); }
     return nullptr;
+}
+
+extern "C" const char* atlas_arithmetic_field(const char* input) noexcept {
+    return atlas::sparse_json::invoke(input, atlas::arithmetic_field);
 }

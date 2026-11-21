@@ -21,9 +21,16 @@ class NativeTritonIR(unittest.TestCase):
         if not targets:
             self.skipTest("Requires an offline NVIDIA or AMD compiler")
         modules = [("trace_probe", ()), ("trace_levels", (2147483629,)),
+                   ("rank_small", (1000000009, 32, 5, 1)), ("crt_pair", (256,)), ("determinant_small", (6,)),
                    ("rank_pivot", (1000000007, 64, 32, 0)), ("rank_eliminate", (1000000007, 8, 32, 1)),
                    ("strict_charts", (3, 256)), ("ray_pairs", (3, 256)), ("gather_charts", (3, 256)),
                    ("monomial_witness", (6, 64)), ("replay_axpy", (256, 2)), ("replay_axpy", (256, 3))]
+        modules.extend((name, (128,)) for name in ("poly_add_words", "poly_outer_product",
+                       "poly_point_product", "poly_outer_words", "poly_point_words", "poly_dense_convolution"))
+        modules.extend([("poly_root_screen", (128,)), ("poly_binomial_steps", (2,128))])
+        modules.extend(("residue_batch", (action, 128)) for action in range(9))
+        modules.extend(("finite_field_batch", (action,2,32)) for action in range(12))
+        modules.append(("replay_clear", (256,)))
         for operation in ("pivot", "axpy", "check", "inverse", "scale"):
             modules.append(("replay_" + operation, (256,)))
         with TemporaryDirectory() as tmp:

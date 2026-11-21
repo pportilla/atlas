@@ -11,7 +11,7 @@ from fractions import Fraction
 from functools import cached_property, lru_cache
 from itertools import count
 
-from .native_library import affine_request
+from .native_library import affine_request, current_replay_scope
 from .polynomial import format_poly, integer_text, kernel_fraction, rational_text, sparse_row
 
 
@@ -127,6 +127,11 @@ class Expr:
                 return Expr(keys, self._terms)
             return from_terms(mapping, dict(self._terms))
         target_keys, request, source_names = _substitution_request(self._coords, mapping)
+        if _gpu_arithmetic_selected():
+            from .gpu_polynomial import compute_row
+            targets = tuple(map(_symbol, target_keys))
+            rows = [row(variables, self), *(row(targets, f) for f in mapping)]
+            return _decode(target_keys, compute_row("substitute", len(variables), len(targets), rows))
         lines = affine_request((*request, self.text(source_names)))
         return _decode(target_keys, lines[0])
 
@@ -263,8 +268,31 @@ def _decode(keys, line):
     return coerce(next(iter(sparse_row(line).values()),0))
 
 
-@lru_cache(maxsize=16384)
+def _gpu_arithmetic_selected():
+    scope = current_replay_scope()
+    return scope is not None and scope.compute == "gpu" and scope.backend in ("auto", "triton")
+
+
 def _binary(op, left, right):
+    if not _gpu_arithmetic_selected() or (op == "/" and not right.is_number):
+        return _cpu_binary(op, left, right)
+    if op == "/" and not right:
+        raise ZeroDivisionError
+    from .gpu_polynomial import compute_row
+    operations = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide", "^": "power"}
+    keys = tuple(sorted(set(left._coords).union(right._coords)))
+    variables = tuple(map(_symbol, keys))
+    rows = [row(variables, left)]
+    parameter = None
+    if op == "^":
+        parameter = integer_text(int(right))
+    else:
+        rows.append(row(variables, right))
+    return _decode(keys, compute_row(operations[op], len(keys), len(keys), rows, parameter))
+
+
+@lru_cache(maxsize=16384)
+def _cpu_binary(op, left, right):
     if op == '/' and not right:
         raise ZeroDivisionError
     keys = tuple(sorted(set(left._coords).union(right._coords)))
@@ -299,6 +327,9 @@ def _combine(values, operation):
         return values[0]
     if len(values) == 2:
         return _binary(operation, *values)
+    if _gpu_arithmetic_selected():
+        from functools import reduce
+        return reduce(lambda a, b: _binary(operation, a, b), values)
     keys = tuple(sorted({key for value in values for key in value._coords}))
     header, names = _names(keys)
     expression = operation.join(f"({v.text(names)})" for v in values)
@@ -310,6 +341,17 @@ def product(values):
     return _combine(values, "*")
 
 def scalar_arithmetic(op, left, right):
+    if _gpu_arithmetic_selected():
+        if op == "^" and right.denominator == 1:
+            from .gpu_polynomial import compute_row
+            result = compute_row("scalar-power", 0, 0, [rational_text(left)], integer_text(right.numerator))
+            return _decode((), result).scalar
+        if op == "compare":
+            from .gpu_polynomial import compute_row
+            result = compute_row("compare", 0, 0, [rational_text(left), rational_text(right)])
+            return _decode((), result).scalar
+        if op in ("+", "-", "*", "/") and (op != "/" or right):
+            return _binary(op, coerce(left), coerce(right)).scalar
     row, = affine_request(["scalar_arithmetic", op, rational_text(left), rational_text(right)])
     return kernel_fraction(row)
 

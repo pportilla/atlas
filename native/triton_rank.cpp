@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <sstream>
+#include <vector>
 
 namespace atlas {
 namespace {
@@ -190,10 +192,100 @@ bool block_size(int block, int limit) {
     return block >= 1 && block <= limit && (block & (block-1)) == 0;
 }
 
+// A short matrix fits in one program.  Keep its columns in registers and
+// choose the first unused row with a nonzero entry.  Cross multiplication
+// suffices for a row-rank witness and avoids modular inverses altogether.
+std::string small_rank(int prime, int rows_block, int cols, bool row_basis) {
+    if (rows_block > 256 || cols < 1 || cols > 8)
+        throw std::invalid_argument("Unsupported single-program rank matrix.");
+    const auto width = std::to_string(rows_block);
+    const auto vec = [&](std::string type) { return "tensor<"+width+"x"+type+">"; };
+    const auto i32 = vec("i32"), i64 = vec("i64"), i1 = vec("i1");
+    std::ostringstream ir;
+    ir << "module {\n  tt.func public @rank_small(%matrix: !tt.ptr<i32>, %ids: !tt.ptr<i32>, %rows: i32) {\n";
+    int serial = 0;
+    auto emit = [&](const std::string& expression) {
+        const auto id = "%v"+std::to_string(++serial);
+        ir << "    " << id << " = " << expression << "\n";
+        return id;
+    };
+    auto reduce = [&](const std::string& value, const std::string& operation, const std::string& type) {
+        return emit("\"tt.reduce\"("+value+") <{axis = 0 : i32}> ({\n"
+            "    ^bb0(%a: "+type+", %b: "+type+"):\n      %v = arith."+operation+" %a, %b : "+type+
+            "\n      tt.reduce.return %v : "+type+"\n    }) : ("+vec(type)+") -> "+type);
+    };
+    const auto zero = emit("arith.constant 0 : i32");
+    const auto one64 = emit("arith.constant 1 : i64");
+    const auto zeros = emit("arith.constant dense<0> : "+i32);
+    const auto zeros64 = emit("arith.constant dense<0> : "+i64);
+    const auto mod = emit("arith.constant dense<"+std::to_string(prime)+"> : "+i64);
+    const auto square = emit("arith.constant dense<"+std::to_string(int64_t(prime)*prime)+"> : "+i64);
+    const auto lane = emit("tt.make_range {end = "+width+" : i32, start = 0 : i32} : "+i32);
+    const auto height = emit("tt.splat %rows : i32 -> "+i32);
+    auto eligible = emit("arith.cmpi slt, "+lane+", "+height+" : "+i32);
+    const auto stride = emit("arith.constant dense<"+std::to_string(cols)+"> : "+i32);
+    const auto offsets = emit("arith.muli "+lane+", "+stride+" : "+i32);
+    const auto pointers = vec("!tt.ptr<i32>");
+    const auto base = emit("tt.splat %matrix : !tt.ptr<i32> -> "+pointers);
+    std::vector<std::string> columns;
+    for (int col = 0; col < cols; ++col) {
+        const auto index = emit("arith.constant dense<"+std::to_string(col)+"> : "+i32);
+        const auto offset = emit("arith.addi "+offsets+", "+index+" : "+i32);
+        const auto addr = emit("tt.addptr "+base+", "+offset+" : "+pointers+", "+i32);
+        const auto values = emit("tt.load "+addr+", "+eligible+", "+zeros+" : "+pointers);
+        columns.push_back(emit("arith.extui "+values+" : "+i32+" to "+i64));
+    }
+    auto rank = zero;
+    for (int col = 0; col < cols; ++col) {
+        const auto nonzero = emit("arith.cmpi ne, "+columns[col]+", "+zeros64+" : "+i64);
+        const auto usable = emit("arith.andi "+nonzero+", "+eligible+" : "+i1);
+        const auto rows = emit("arith.select "+usable+", "+lane+", "+height+" : "+i1+", "+i32);
+        const auto row = reduce(rows,"minsi","i32");
+        const auto found = emit("arith.cmpi slt, "+row+", %rows : i32");
+        ir << "    scf.if " << found << " {\n      %out = tt.addptr %ids, " << rank << " : !tt.ptr<i32>, i32\n"
+           << "      tt.store %out, " << row << " : !tt.ptr<i32>\n    }\n";
+        const auto inc = emit("arith.extui "+found+" : i1 to i32");
+        rank = emit("arith.addi "+rank+", "+inc+" : i32");
+        if (col+1 == cols) break;
+        const auto selected = emit("tt.splat "+row+" : i32 -> "+i32);
+        const auto mask = emit("arith.cmpi eq, "+lane+", "+selected+" : "+i32);
+        const auto others = emit("arith.cmpi ne, "+lane+", "+selected+" : "+i32);
+        eligible = emit("arith.andi "+eligible+", "+others+" : "+i1);
+        auto pivot_value = [&](const std::string& column) {
+            const auto value = emit("arith.select "+mask+", "+column+", "+zeros64+" : "+i1+", "+i64);
+            return reduce(value,"maxui","i64");
+        };
+        const auto leading = pivot_value(columns[col]);
+        const auto scale = emit("arith.select "+found+", "+leading+", "+one64+" : i64");
+        const auto pivot = emit("tt.splat "+scale+" : i64 -> "+i64);
+        for (int j = col+1; j < cols; ++j) {
+            const auto entry = pivot_value(columns[j]);
+            const auto multiplier = emit("tt.splat "+entry+" : i64 -> "+i64);
+            const auto a = emit("arith.muli "+columns[j]+", "+pivot+" : "+i64);
+            const auto b = emit("arith.muli "+columns[col]+", "+multiplier+" : "+i64);
+            const auto positive = emit("arith.addi "+a+", "+square+" : "+i64);
+            const auto difference = emit("arith.subi "+positive+", "+b+" : "+i64);
+            columns[j] = emit("arith.remui "+difference+", "+mod+" : "+i64);
+        }
+    }
+    auto status = rank;
+    if (!row_basis) {
+        const auto target = emit("arith.constant "+std::to_string(cols)+" : i32");
+        const auto full = emit("arith.cmpi eq, "+rank+", "+target+" : i32");
+        const auto missing = emit("arith.constant -1 : i32");
+        status = emit("arith.select "+full+", "+rank+", "+missing+" : i32");
+    }
+    ir << "    %state = tt.addptr %ids, %rows : !tt.ptr<i32>, i32\n    tt.store %state, "
+       << status << " : !tt.ptr<i32>\n    tt.return\n  }\n}\n";
+    return ir.str();
+}
+
 } // namespace
 
 std::string triton_rank_ir(const std::string& name, int prime, int rows_block, int cols_block, bool row_basis) {
     if (prime != 1000000007 && prime != 1000000009) throw std::invalid_argument("Unsupported modular rank prime.");
+    if (name == "rank_small" && block_size(rows_block, 256))
+        return small_rank(prime, rows_block, cols_block, row_basis);
     if (!block_size(rows_block, 16384) || !block_size(cols_block, 512))
         throw std::invalid_argument("Unsupported modular rank block.");
     std::string body;

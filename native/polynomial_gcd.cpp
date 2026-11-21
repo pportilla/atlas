@@ -1,4 +1,5 @@
 #include "polynomial_gcd.hpp"
+#include "triton_factor_division.hpp"
 #include "flint_polynomial.hpp"
 #include <flint/mpoly.h>
 
@@ -49,6 +50,17 @@ bool try_squares(fmpq_mpoly_t out, const fmpq_mpoly_t a, const fmpq_mpoly_t b,
 void monic_polynomial_gcd(fmpq_mpoly_t out, const fmpq_mpoly_t a,
                           const fmpq_mpoly_t b, const fmpq_mpoly_ctx_t ctx) {
     const auto na = a->zpoly->length, nb = b->zpoly->length;
+    if (triton_roots_active() && std::min(na,nb)>=8) {
+        PolyValue left(ctx),right(ctx),common(ctx),residual(ctx);
+        fmpq_mpoly_set(left.p,a,ctx);
+        fmpq_mpoly_set(right.p,b,ctx);
+        if (triton_common_linear_factors(common.p,left.p,right.p,ctx)) {
+            if (!fmpq_mpoly_gcd(residual.p,left.p,right.p,ctx))
+                gcd_by_intersection(residual.p,left.p,right.p,ctx);
+            fmpq_mpoly_mul(out,residual.p,common.p,ctx);
+            return;
+        }
+    }
     if (na > 1 && nb > 1) {
         // Bound speculative divisions and square-root extraction. High-degree
         // sparse operands retain FLINT's general GCD algorithms.
@@ -64,6 +76,10 @@ void monic_polynomial_gcd(fmpq_mpoly_t out, const fmpq_mpoly_t a,
         if (try_gcd_image(out,a,b,ctx)) return;
     }
     // FLINT returns a monic rational GCD for every nonzero result.
-    if (!fmpq_mpoly_gcd(out,a,b,ctx)) throw Limit("FLINT could not compute the polynomial gcd.");
+    if (out==a || out==b) {
+        PolyValue result(ctx);
+        if (!fmpq_mpoly_gcd(result.p,a,b,ctx)) gcd_by_intersection(result.p,a,b,ctx);
+        fmpq_mpoly_swap(out,result.p,ctx);
+    } else if (!fmpq_mpoly_gcd(out,a,b,ctx)) gcd_by_intersection(out,a,b,ctx);
 }
 }

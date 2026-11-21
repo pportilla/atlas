@@ -37,7 +37,8 @@ def fan(rows, n, names):
         cone, orders = values[:n], values[n:]
         cones.append(cone)
         cert = {"criterion": "unit term"} if criterion < 0 else {
-            "criterion": "linear nonexceptional coordinate", "coordinate_index": criterion, "linear_ray_index": cone[criterion]}
+            "criterion": "linear nonexceptional coordinate" if cone[criterion] < n else "linear exceptional coordinate",
+            "coordinate_index": criterion, "linear_ray_index": cone[criterion]}
         certificates.append({**cert, "ray_indices": cone.copy(), "signed_orders": orders})
     for i in range(steps):
         k, *values = map(_integer, next(lines).split())

@@ -384,7 +384,8 @@ def _fan_orbit_strata(polynomial, base, linear, charts, cones, axes, saved):
     return None
 
 
-def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integrals, bounded=False):
+def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integrals, bounded=False,
+                   *, pullbacks_only=False):
     from .point_atlas import _field, _invertible, _same_ideal, monomial_matrix
     base = record["variables"]
     n = len(base)
@@ -414,6 +415,16 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     data, contributions = {}, []
     by_ray = {}
     f = format_poly(polynomial, base)
+    from .fan_centres import singular_ray_images
+    exceptional_rays = tuple(dict.fromkeys(ray for cone in cones for ray in cone if ray not in axes))
+    original_equation = f
+
+    def check_centres(matrix):
+        if singular_ray_images(original_equation, base, exceptional_rays, matrix, field) is None:
+            raise InvalidChart("The fan modifies the smooth locus of the reduced hypersurface.")
+
+    if not split:
+        check_centres(linear)
     weight, reduced = 1, None
     weighted = saved and (record.get("input_divisor") or any(
         c["id"] == "strict" and c["multiplicity"] != 1 for chart,_ in charts for c in chart["components"]))
@@ -463,6 +474,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             if linear is None:
                 if not _invertible(matrix, coords, field):
                     raise InvalidChart("The common linear coordinates of the fan are singular.")
+                check_centres(matrix)
                 linear = matrix
         else:
             projection = (fan_rows[4:4+n] if fan_rows is not None and len(fan_rows) > 4 else
@@ -592,11 +604,16 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         if named:
             components.extend(dict(id=label, multiplicity=w, nu=1, ideal=[g])
                               for label,(g,w) in branches.items())
-            if intrinsic:
-                # The general intrinsic gluer handles the several surfaces.
-                # Finish validating maps and branch identities on every chart.
-                defer_complex = True
-                continue
+        if pullbacks_only:
+            # The parent can be singular at a centre that certified children
+            # replace. Its projection, divisor orders and strict equation must
+            # still agree with the original polynomial before the repair.
+            continue
+        if named and intrinsic:
+            # The general intrinsic gluer handles the several surfaces.
+            # Finish validating maps and branch identities on every chart.
+            defer_complex = True
+            continue
         if complex and intrinsic:
             if field and any(e[-1] for e in strict):
                 defer_complex = True  # section_complex requires rational Laurent coefficients
@@ -665,6 +682,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                         any(ray in cone for ray,_ in sig)}
             if {c["id"] for c in chart["components"] if c["id"] in branch_equations} != expected:
                 raise InvalidChart("A fan chart has omitted a named strict branch.")
+    if pullbacks_only:
+        return True
     if defer_complex:
         return None
     found = {"reason": None, "cells": None}
@@ -704,3 +723,34 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
     except native_library.Unavailable:
         return None
     return result
+
+
+def verified_parent_pullbacks(record, polynomial, charts):
+    """Check the complete parent fan and its divisors before local chart verification."""
+    from .atlas import to_json
+    from .repair_parent_cover import _cone
+
+    n = len(record["variables"])
+    if not 2 <= n <= 8:
+        return False
+    parents = [c for c in charts if not c.repair_projection]
+    if not parents or any(c.removed for c in parents) and len(parents) == len(charts):
+        return False  # No replacement for the deleted points has been certified.
+    saved = to_json(parents)
+    for c in saved:
+        c["removed"] = []  # The repair verifier checked the children over these centres.
+    if not any(c.torus or c.split_cone for c in parents):
+        # Recover a common monomial frame from the actual coordinate maps.
+        # The split-fan verifier will also check that its linear change is
+        # invertible and identical on every open.
+        for chart, item in zip(parents, saved):
+            frame = _cone(chart, record["variables"])
+            if frame is None:
+                return False
+            item["split_cone"] = frame[1]
+    parent_record = dict(record, atlas=saved)
+    family = _charts(parent_record, n)
+    if family is None:
+        return False
+    return _verify_charts(parent_record, polynomial, *family, complex=False, intrinsic=False, integrals=False,
+                          pullbacks_only=True)

@@ -34,6 +34,7 @@ The NumPy and Triton interpreter implementations used for comparison live in tes
 
 `use(library, backend)` hands a backend to the kernel as its batch replay.
 """
+from .triton_buffers import to_device, to_host
 import ctypes
 from functools import lru_cache
 import os
@@ -126,12 +127,12 @@ def _launch_replay(code, pool_size, work_size, primes, pools, status, block, dev
     k = triton_kernels()
     items = len(primes)
     # Primes are below 2^31: every 32-bit value fits in int32.
-    prime = torch.as_tensor(np.asarray(primes, dtype=np.int32), device=device)
-    pool = torch.as_tensor(np.asarray(pools, dtype=np.int32).reshape(-1), device=device)
-    listing = torch.as_tensor(np.asarray(code, dtype=np.int32), device=device)
-    work = torch.zeros(items*work_size, dtype=torch.int64, device=device)
-    factor = torch.ones(items, dtype=torch.int32, device=device)
-    state = torch.ones(items, dtype=torch.int32, device=device)
+    prime = to_device(torch.as_tensor(np.asarray(primes, dtype=np.int32)), device)
+    pool = to_device(torch.as_tensor(np.asarray(pools, dtype=np.int32).reshape(-1)), device)
+    listing = to_device(torch.as_tensor(np.asarray(code, dtype=np.int32)), device)
+    work = to_device(torch.zeros(items*work_size, dtype=torch.int64), device)
+    factor = to_device(torch.ones(items, dtype=torch.int32), device)
+    state = to_device(torch.ones(items, dtype=torch.int32), device)
     by_primes = (k["cdiv"](items, block),)
 
     def by_terms(count):
@@ -141,7 +142,11 @@ def _launch_replay(code, pool_size, work_size, primes, pools, status, block, dev
         count = end - start
         index = listing[start:end]
         if op == 1:
-            work.view(items, work_size)[:, :scalars[0]] = 0
+            if os.environ.get("TRITON_INTERPRET") == "1":
+                work.view(items, work_size)[:, :scalars[0]] = 0
+            elif scalars[0]:
+                from .triton_ir import launch_kernel
+                launch_kernel("replay_clear", (block,), by_terms(scalars[0]), work, work_size, scalars[0])
         elif op in (2, 3):
             k["axpy"][by_terms(count)](work, pool, index, factor, prime, work_size, pool_size, scalars[0], count,
                                        BLOCK=block, opcode=op)
@@ -156,17 +161,16 @@ def _launch_replay(code, pool_size, work_size, primes, pools, status, block, dev
             k["scale"][by_terms(count)](work, pool, index, factor, prime, work_size, pool_size, scalars[0], count,
                                         BLOCK=block)
     # Both blocking transfers complete before any native inputs are modified.
-    output = pool.view(items, pool_size).cpu().numpy()
-    accepted = state.cpu().numpy()
+    output = to_host(pool.view(items, pool_size)).numpy()
+    accepted = to_host(state).numpy()
     pools[:] = output
     status[:] = accepted
     return 0
 
 
 def triton_available():
-    import os
     from .gpu_devices import triton_device
-    return triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0))) is not None
+    return triton_device() is not None
 
 
 def _arrays(args):
@@ -198,9 +202,8 @@ def use(library, backend="triton"):
     can run here) or "reference". Returns whether it was installed."""
     if backend == "triton":
         from functools import partial
-        import os
         from .gpu_devices import triton_device
-        device = triton_device(int(os.getenv("RESOLUTION_GPU_INDEX", 0)))
+        device = triton_device()
         if device is None:
             return False
         chosen = partial(replay_triton, device=device["torch_device"])

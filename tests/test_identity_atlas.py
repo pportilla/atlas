@@ -18,6 +18,43 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RationalCharts(unittest.TestCase):
+    def test_cancelled_jet_does_not_certify_reducedness(self):
+        from engine.kernel_json import kernel_json
+        # The native wire format permits separate contributions to one term.
+        terms = [["1", ["0"]], ["-1", ["0"]], ["2", ["1"]], ["-2", ["1"]], ["1", ["2"]]]
+        self.assertFalse(kernel_json("atlas_identity_divisor", "reduced_at_origin", width=1, terms=terms))
+
+    def test_intrinsic_identity_rejects_a_repeated_branch_and_embedded_companion(self):
+        from engine.polynomial import NonReducedError, parse
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+
+        names = ["x", "y", "z"]
+        for f in ("x^2", "812345678901234567890123456789*x^18446744073709551617"):
+            with self.subTest(f=f):
+                request = dict(polynomial=f, variables=names, zetas=[])
+                with self.assertRaises(NonReducedError):
+                    resolve(dict(request, mode="intrinsic"))
+                embedded = resolve(request)
+                self.assertEqual(dual_complex(embedded)["status"], "complete")
+                intrinsic = dict(embedded, mode="intrinsic")
+                with self.assertRaises(InvalidChart):
+                    rational_chart_outputs(intrinsic, parse(f, names, bounded=False),
+                                           intrinsic=True, integrals=False)
+                with self.assertRaises(InvalidChart):
+                    dual_complex(intrinsic)
+                for companion in ({}, {"embedded_companion": embedded},
+                                  {"embedded_companion": {"atlas": embedded["atlas"]}}):
+                    with self.assertRaises(InvalidChart):
+                        replay_zetas(dict(record=dict(intrinsic, **companion), zetas=["monodromy"]))
+
+        # A globally repeated factor that misses the origin is a local unit.
+        request = dict(polynomial="(1+y)^2*x", variables=names, mode="intrinsic")
+        smooth = resolve(request)
+        self.assertEqual(dual_complex(smooth)["status"], "complete")
+        self.assertEqual(replay_zetas(dict(record=smooth, zetas=["monodromy"]))
+                         ["monodromy_zeta"]["expression"], "1/(1-T)")
+
     def test_worker_certifies_single_component_with_4501_digit_multiplicity(self):
         digits = "1" + "0" * 4499 + "7"
         power = 10**4500 + 7
@@ -128,8 +165,10 @@ class RationalCharts(unittest.TestCase):
                     chart["fibre"] = ["x", "y"]
                 else:
                     branches[0]["nu"] = 2
-                self.assertEqual(monodromy_zeta(r)["status"], "unavailable")
-                self.assertEqual(topological_zeta(r)["status"], "unavailable")
+                with self.assertRaises(InvalidChart):
+                    monodromy_zeta(r)
+                with self.assertRaises(InvalidChart):
+                    topological_zeta(r)
 
 
     def test_serialized_monomial_charts_verify_geometry_independently(self):
@@ -152,7 +191,8 @@ class RationalCharts(unittest.TestCase):
                     charts[0]["components"][0]["multiplicity"] += 1
                 else:
                     charts[0]["components"].pop(0)
-                self.assertEqual(topological_zeta(r)["status"], "unavailable")
+                with self.assertRaises(InvalidChart):
+                    topological_zeta(r)
 
         # Different generators of the origin fibre and open-chart ownership
         # ideals can define the same underlying constructible sets.
@@ -176,9 +216,11 @@ class RationalCharts(unittest.TestCase):
                 for part in chart["components"]:
                     if part["id"] == "E1":
                         part["multiplicity"] += 1
-            self.assertEqual(topological_zeta(r)["status"], "unavailable")
+            with self.assertRaises(InvalidChart):
+                topological_zeta(r)
 
         changed = copy.deepcopy(record)
         part = next(p for c in changed["atlas"] for p in c["components"] if p["id"] == "E1")
         part.update(id="S7", multiplicity=part["multiplicity"]+1)
-        self.assertEqual(topological_zeta(changed)["status"], "unavailable")
+        with self.assertRaises(InvalidChart):
+            topological_zeta(changed)

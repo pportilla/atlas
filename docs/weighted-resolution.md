@@ -41,9 +41,12 @@ True
 
 The input to `resolve` is a rational hypersurface equation vanishing at the
 origin. `method="weighted"` takes up to 16 variables and requires
-`mode="embedded"`, the default. A smooth germ gets the identity chart. Choose
-`method="auto"` when the calculation calls for the intersections between
-divisors or either local zeta function. [Resolution modes](resolution-records.md#resolution-modes)
+`mode="embedded"`, the default. A smooth germ gets the identity chart.
+With `monodromy=True`, Atlas retains the weighted charts and computes both
+local zeta functions on an ordinary embedded companion for the same equation.
+Its evidence is saved in `R.record["embedded_companion"]`. The input above
+has topological zeta $(22s+31)/((s+1)(30s+31))$. Use `method="auto"` for the
+ordinary dual complex of intersections between divisors. [Resolution modes](resolution-records.md#resolution-modes)
 
 The same example from the repository directory is `./atlas resolve 'x^2+y^3+z^5' --vars x,y,z --method weighted`.
 Add `--json` to save the full record. For `/api/resolve` or an HTTP background
@@ -135,8 +138,15 @@ compares the removed points with the locus where normal crossings failed.
 
 ## Limits
 
-The engine reports a diagnostic if it encounters a positive-dimensional bad
-locus on a chart that already carries ambient equations. Resolution and its
-certificate run with a 40-second deadline. Examples comparing the weighted
-and default methods, including inputs and timing conditions, appear in the
-[weighted resolution benchmark](../benchmarks/weighted-resolution.md).
+Exhaustive weighted resolution runs without a wall-clock limit. The weighted
+worker represents orders by signed native words. It can also encounter a
+chart whose admissible centre or normal-crossings certificate it cannot
+construct. In these cases Atlas continues with ordinary embedded resolution
+of the original polynomial and computes the selected zetas. The record's
+`engine` identifies the algorithm that produced the certified geometry.
+`requested_method` and `weighted_attempt.reason` identify the original
+method and the reason for switching.
+
+An explicit quick search bounds the weighted construction and its
+certificate to 40 seconds each within the outer worker deadline. A bounded
+decline reports `inconclusive`. [Weighted resolution benchmark](../benchmarks/weighted-resolution.md)

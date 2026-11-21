@@ -2,6 +2,11 @@
 #include <flint/fexpr.h>
 #include <flint/qqbar.h>
 #include <flint/fmpq_mpoly.h>
+#include <flint/fmpq_mpoly_factor.h>
+#include "sparse_flint.hpp"
+#include "three_graph_zetas.hpp"
+#include "four_graph_zetas.hpp"
+#include "quadratic_translate_zetas.hpp"
 #include "algebraic_number.hpp"
 #include "common_field.hpp"
 #include <flint/fmpz_poly.h>
@@ -17,6 +22,8 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <optional>
+#include <string_view>
 #include <stdexcept>
 #include <vector>
 #include <sys/resource.h>
@@ -270,6 +277,10 @@ J ordered_root_labels(const J& rows) {
     return result;
 }
 
+struct NonReducedPlane : invalid_argument {
+    NonReducedPlane() : invalid_argument("The plane curve germ is nonreduced: a repeated factor vanishes at the origin.") {}
+};
+
 bool reduced_at_origin(const Poly& f) {
     fmpq_mpoly_ctx_t ctx; fmpq_mpoly_ctx_init(ctx,2,ORD_DEGLEX);
     fmpq_mpoly_t a,b,d,g; for(auto* p:{a,b,d,g}) fmpq_mpoly_init(p,ctx);
@@ -310,13 +321,13 @@ struct Resolver {
         }
         return id;
     }
-    string format(const Poly& f) {
+    string format(const Poly& f, array<string_view,2> vars={"u","v"}) {
         string out;
         for(auto& [k,c]:f){
             string a=scalar(c), word;
             bool neg=a[0]=='-'; if(neg) a.erase(0,1);
             if(a!="1" || k==Key{0,0}) word=a;
-            for(auto [k1,v]:{pair{k.first,"u"},pair{k.second,"v"}}){
+            for(auto [k1,v]:{pair{k.first,vars[0]},pair{k.second,vars[1]}}){
                 if(!k1) continue;
                 if(!word.empty()) word+="*";
                 word+=v;if(k1>1) word+="^"+to_string(k1);
@@ -454,7 +465,7 @@ struct Resolver {
     }
     J run(const Poly& f){
         report_blowups("Checking the plane curve", 0);
-        if(!reduced_at_origin(f)) throw invalid_argument("The plane curve germ is nonreduced: a repeated factor vanishes at the origin.");
+        if(!reduced_at_origin(f)) throw NonReducedPlane();
         if(order(f)==1) throw Fail("Expected a singular plane curve.");
         Pair identity={Poly{{{1,0},Num(1)}},Poly{{{0,1},Num(1)}}};
         vector<Task> todo;
@@ -487,6 +498,8 @@ struct Resolver {
         return r;
     }
 };
+#include "three_graph_contact.inc"
+
 // Address space already mapped by this process, in bytes. Library start-up
 // reservations (for example BLAS thread buffers) and, in a forked solver, the
 // parent's mappings count here but not against the calculation's budget.
@@ -513,7 +526,9 @@ static int program(){
             if (limit.rlim_cur==RLIM_INFINITY || limit.rlim_cur>budget) limit.rlim_cur=budget;
             if(setrlimit(RLIMIT_AS,&limit)!=0) throw Fail("Could not bound the exact-arithmetic worker.");
         }
-        if (req.isMember("ordered_roots")) {
+        if (req.isMember("contact_zetas") || req.isMember("three_graphs")) {
+            out=polynomial_graph_contact(req);
+        } else if (req.isMember("ordered_roots")) {
             out=ordered_root_labels(req["ordered_roots"]);
         } else if (req.isMember("field_roots")) {
             out=atlas::common_field(req);

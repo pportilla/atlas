@@ -317,6 +317,9 @@ def _calculate(record, polynomial, cover, saved, complex, intrinsic, integrals):
         verify_factors(polynomial, record["variables"], record["input_divisor"]["factors"])
     degree = field["degree"] if field else 1
     f = format_poly(polynomial, record["variables"])
+    from .fan_centres import singular_ray_images
+    if singular_ray_images(f, record["variables"], [(1, 1)]) is None:
+        raise InvalidChart("The first plane blowup modifies the smooth locus of the reduced curve.")
     charts, frames = [], []
     numbers, contributions = {}, []
     embedded = True

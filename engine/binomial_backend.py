@@ -15,7 +15,7 @@ def resolve_binomial(poly, variables, mode, compute=None):
         return None
     delta, degree, direction, coefficient = character(left, right, poly[left], poly[right])
 
-    fan = build_binomial_fan([left, right], variables=variables)
+    fan = build_binomial_fan([left, right], variables=variables, intrinsic=mode == "intrinsic")
     if fan is None:
         return None
     rays, cones = fan["rays"], fan["cones"]
@@ -35,12 +35,14 @@ def resolve_binomial(poly, variables, mode, compute=None):
         if degree>1:
             charts[-1]["strict_transform_components"] = binomial_branch_equations(
                 rays, cone, delta, coefficient, values=tuple(signs[r] for r in cone))
+    linear_axis = "a chart coordinate" if mode == "intrinsic" else "a coordinate outside the exceptional divisor"
     result = {"status":"resolved","engine":"binomial-coordinate-blowups",
             "summary":f"Resolved the binomial by {len(fan['steps'])} smooth blowups in {len(charts)} affine charts.",
             "charts":charts,"steps":fan["steps"],"fan":fan,"dual_complex":dual,
             "certificate":{"method":"coordinate blowups and exact binomial restrictions to exceptional strata",
                            "primitive_difference":list(direction),"character_degree":degree,"chart_batch":batch,
-                           "description":"The centers lie over the singular locus. Each strict equation either has a unit term, giving disjoint smooth torus sections, or is linear in a coordinate outside the exceptional divisor."}}
+                           "description":"The centers lie over the singular locus. Each strict equation either has a unit term, "
+                                         f"giving disjoint smooth torus sections, or is linear in {linear_axis}."}}
     if degree>1:
         result["root_families"] = dual["root_families"]
     return result

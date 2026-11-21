@@ -1,4 +1,5 @@
 """Exact Triton exponent transforms. The dispatcher imports this on eligible devices only."""
+from .triton_buffers import to_device, to_host
 import os
 import triton
 
@@ -12,7 +13,7 @@ def transform(inputs, output, terms, dimension, device):
     from .gpu_devices import torch_device_context
     with torch_device_context(device):
         exponents, rays, cones, orders = [
-            torch.frombuffer(buffer, dtype=torch.int32).to(device) for buffer in inputs
+            to_device(torch.frombuffer(buffer, dtype=torch.int32), device) for buffer in inputs
         ]
         size = len(output)
         result = torch.empty(size, dtype=torch.int32, device=device)
@@ -40,4 +41,4 @@ def transform(inputs, output, terms, dimension, device):
                 _strict_powers[grid](exponents, rays, cones, orders, result, terms, size, dimension, False, block)
             else:
                 launch_kernel("strict_charts", (dimension, block), grid, exponents, rays, cones, orders, result, terms, size)
-        torch.frombuffer(output, dtype=torch.int32).copy_(result)
+        torch.frombuffer(output, dtype=torch.int32).copy_(to_host(result))

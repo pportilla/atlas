@@ -1,0 +1,120 @@
+// Eight point blowups resolving the six differences of the four named roots.
+// Recompute their orders and the differential-form order from each chart map.
+ring R=0,(x,y,z),dp;
+poly A=y^2-x^3;
+poly B=x^4+y^3;
+ideal roots=0,A,A+B,y;
+poly G=z*(z-y^2+x^3)*(z-y^2+x^3-x^4-y^3)*(z-y);
+if(G!=(z-roots[1])*(z-roots[2])*(z-roots[3])*(z-roots[4])) { ERROR("root mismatch"); }
+list X=x,x,x,x,x^2*y,x^2*(1+x*y),x^2*(1+x^2*y),x^3*y^2;
+list Y=x*y,x^2*y,x^3*y,-x^3+x^4*y,x^3*y^2,x^3*(1+x*y)^2,x^3*(1+x^2*y)^2,x^4*y^3;
+proc valuation(poly f) {
+  int k=0;
+  if(f==0) { ERROR("zero pullback"); }
+  while(subst(f,x,0)==0) { f=f/x; k++; }
+  return(k);
+}
+intmat V[14][16]; // width four, flattened ordered pairs
+intvec nu;
+intvec chi=1,0,-1,-1,-1,0,-1,-1;
+int i,j,k;
+map pull;
+poly difference;
+for(i=1;i<=8;i++) {
+  pull=R,X[i],Y[i],z;
+  for(j=1;j<=4;j++) {
+    for(k=j+1;k<=4;k++) {
+      difference=roots[j]-roots[k]; V[i,4*(j-1)+k]=valuation(pull(difference));
+      V[i,4*(k-1)+j]=V[i,4*(j-1)+k];
+    }
+  }
+  nu[i]=1+valuation(diff(X[i],x)*diff(Y[i],y)-diff(X[i],y)*diff(Y[i],x));
+}
+// Strict contact branches, listed as pairs of roots (1..4).
+intvec left=1,2,3,1,1,2;
+intvec right=4,4,4,2,3,3;
+for(i=1;i<=6;i++) {
+  V[i+8,4*(left[i]-1)+right[i]]=1; V[i+8,4*(right[i]-1)+left[i]]=1;
+  nu[i+8]=1;
+}
+ring Qs=(0,s),Z,dp;
+proc level(int i,int j,int a,int b) {
+  int result=V[a,4*(i-1)+j];
+  if(b>0) { result=result+V[b,4*(i-1)+j]; }
+  return(result);
+}
+proc splitMultiplicity(int a,int i,int j) {
+  int k;
+  int h=level(i,j,a,0);
+  int n=h; // Add the contribution from i itself.
+  for(k=1;k<=4;k++) {
+    if(k!=i) { n=n+min(h,level(i,k,a,0)); }
+  }
+  return(n);
+}
+proc baseWeight(int a,int i,int j) {
+  return(number(1)/(nu[a]+level(i,j,a,0)+s*splitMultiplicity(a,i,j)));
+}
+// Sum the topological contribution once per distinct cluster splitting at
+// height h. The smallest root in the cluster represents it. The incoming
+// cluster has count roots and each child contains sizeChild of them.
+proc splits(int a,int b,int monodromy) {
+  number total=0;
+  if(monodromy) { total=1/(1-s^4); } // initial factor in the reciprocal convention
+  int i,j,k,l,h,seen,count,children,sizeChild,covered,active;
+  number factor,measure;
+  for(i=1;i<=4;i++) {
+    for(j=i+1;j<=4;j++) {
+      h=level(i,j,a,b);
+      seen=0;
+      for(k=1;k<i;k++) { if(level(i,k,a,b)>=h) { seen=1; } }
+      for(k=i+1;k<j;k++) { if(level(i,k,a,b)==h) { seen=1; } }
+      if(!seen) {
+        count=0; children=0; factor=0;
+        for(k=i;k<=4;k++) {
+          if(k==i || level(i,k,a,b)>=h) {
+            count++; covered=0;
+            for(l=i;l<k;l++) { if(level(k,l,a,b)>h) { covered=1; } }
+            if(!covered) {
+              children++; sizeChild=1;
+              for(l=k+1;l<=4;l++) { if(level(k,l,a,b)>h) { sizeChild++; } }
+              factor=factor+1/(1+s*sizeChild);
+            }
+          }
+        }
+        if(monodromy) {
+          // On a strict-contact branch its two roots coincide identically.
+          // The other splitting depths are their exceptional-coordinate orders.
+          active=1;
+          if(b>0) { active=(level(i,j,b,0)==0); }
+          if(active) {
+            total=total*(1-s^splitMultiplicity(a,i,j))^(children-1);
+          }
+        } else {
+          factor=factor+(1-children)-1/(1+count*s);
+          measure=baseWeight(a,i,j);
+          if(b>0) { measure=measure*baseWeight(b,i,j); }
+          total=total+factor*measure;
+        }
+      }
+    }
+  }
+  return(total);
+}
+number top=1/(1+4*s);
+// In the Atlas convention each of seven exceptional crossings contributes
+// 1/(1-s^4), while the eight lifted blowups require eight factors of 1-s^4.
+number mon=(1-s^4)^(8-7);
+for(i=1;i<=8;i++) {
+  if(chi[i]!=0) {
+    top=top+chi[i]*splits(i,0,0);
+    mon=mon*splits(i,0,1)^chi[i];
+  }
+}
+intvec src=1,2,2,3,5,5,6,3,4,4,7,7,8;
+intvec dst=8,3,5,4,6,8,7,9,10,11,12,13,14;
+for(i=1;i<=size(src);i++) {
+  top=top+splits(src[i],dst[i],0);
+  if(dst[i]>8) { mon=mon*splits(src[i],dst[i],1); }
+}
+print("ATLASBENCH "+string(top)+"|"+string(mon));

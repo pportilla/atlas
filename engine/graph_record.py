@@ -76,6 +76,8 @@ def graph_record_charts(record, polynomial):
 
     centre = [expression(g, constants) for g in generators]
     relation = field["minimal_polynomial"] if field else None
+    _graph_request("verify_centre", (*base, theta) if field else base,
+                   centre=centre, equation=f, relation=relation)
     for src in source:
         names = tuple(src["coordinates"])
         if (len(set(names)) != len(names) or not set(base).issubset(names)
@@ -105,6 +107,10 @@ def graph_record_charts(record, polynomial):
                     exceptional=[equations(d["ideal"]) for d in exceptional],
                     factors=[e["equation"] for e in factors],
                     strict=equations([strict] if isinstance(strict, str) else strict, aliases))
+        unit = record.get("certificate", {}).get("unit_removed_at_origin")
+        if unit is not None and not factors:
+            args["base_unit"] = expression(unit, constants)
+            args["resolved_equation"] = expression(record["certificate"]["resolved_equation"], constants)
         if "reduced_strict_transform" in src:
             reduced = src["reduced_strict_transform"]
             args["reduced_strict"] = equations([reduced] if isinstance(reduced, str) else reduced)

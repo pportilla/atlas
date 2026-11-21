@@ -916,7 +916,7 @@ function showZeta(data) {
   const panel = $("panel-zeta");
   panel.replaceChildren();
   const zeta = data.monodromy_zeta;
-  if (!zeta || typeof zeta !== "object" || data.status !== "resolved") return;
+  if (!zeta || typeof zeta !== "object") return;
   panel.append(sectionHead("Monodromy zeta function at the origin"));
   if (zeta.status !== "computed") {
     panel.append(el("p", "notice", zeta.reason || "Not computed for this resolution."));
@@ -967,6 +967,7 @@ function showZeta(data) {
       } else if (stratum.model === "X*Y + Z^m") {
         model.append("Transverse model ", typeset(`X*Y + Z^${stratum.powers[2]}`));
       } else if (stratum.model === "sum of squares") model.append("Transverse Morse singularity");
+      else if (stratum.model === "nearby transverse node") model.append("Transverse node");
       else if (stratum.model === "constant transverse type") model.append("Constant transverse type");
       if (model.hasChildNodes()) locus.append(model);
       const formula = el("span", "m local-zeta");
@@ -988,6 +989,13 @@ function stratumLocus(stratum) {
     if (equation) locus.append(" (", typeset(equation + " = 0"), ")");
     return locus;
   }
+  if (Array.isArray(stratum.equations)) {
+    stratum.equations.forEach((equation, index) => {
+      if (index) locus.append(", ");
+      locus.append(typeset(equation + " = 0"));
+    });
+    return locus;
+  }
   if (stratum.model === "sum of squares") locus.append("Generic points of ");
   const equations = stratum.coordinates.join(" = ") + " = 0";
   locus.append(typeset(equations));
@@ -1007,7 +1015,7 @@ function minus(text) {
 function showTopological(data) {
   const panel = $("panel-zeta");
   const zeta = data.topological_zeta;
-  if (!zeta || typeof zeta !== "object" || data.status !== "resolved") return;
+  if (!zeta || typeof zeta !== "object") return;
   panel.append(sectionHead("Topological zeta function"));
   if (zeta.status !== "computed") {
     panel.append(el("p", "notice", zeta.reason || "Not computed for this resolution."));
@@ -1686,7 +1694,8 @@ function action(label, callback) {
 function stateLabel(run) {
   if (run.pendingZeta) return "Computing zeta";
   if (run.result) return ({
-    resolved: "Resolved", inconclusive: "Inconclusive", partial: "Partial", unsupported: "Unsupported",
+    resolved: "Resolved", zetas_computed: "Zeta functions computed", inconclusive: "Inconclusive",
+    partial: "Partial", unsupported: "Unsupported",
   })[run.result.status] || "Finished";
   return ({
     submitting: "Starting", queued: "Queued", running: "Searching", cancelling: "Cancelling",
@@ -1770,7 +1779,7 @@ function refreshRun(run) {
     cancel.disabled = run.state === "cancelling";
     run.controls.append(cancel);
   }
-  if (run.result?.status === "resolved") {
+  if (["resolved", "inconclusive", "zetas_computed"].includes(run.result?.status)) {
     for (const {key, label} of zetaChoices) {
       const zeta = run.result[key + "_zeta"];
       const legacyMonodromy = key === "monodromy" && zeta?.status === "computed" && !Array.isArray(zeta.nearby_strata);
@@ -1780,7 +1789,8 @@ function refreshRun(run) {
       button.disabled = Boolean(run.pendingZeta);
       run.controls.append(button);
     }
-  } else if (run.result?.can_search && run.request.search !== "exhaustive") {
+  }
+  if (run.result?.can_search && run.request.search !== "exhaustive") {
     run.controls.append(action("Start exhaustive search", () => submitRun({...run.request, search: "exhaustive"})));
   } else if (["failed", "cancelled"].includes(run.state)) {
     run.controls.append(action("Retry resolution", () => submitRun(run.request)));

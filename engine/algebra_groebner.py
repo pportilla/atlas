@@ -33,6 +33,19 @@ class ReducedBasis:
         polynomial = _operand(polynomial, self.gens)
         if not self.gens:  # The only ideals in QQ are (0) and (1).
             return np.from_row((), scalar_ideal("remainder", self.exprs, polynomial))
+        if (self.order in ("lex", "grevlex") and len(self.exprs) == 1 and
+                len(self.exprs[0]._terms) == 2 and len(polynomial._terms) >= 8):
+            from .native_library import current_replay_scope
+            scope = current_replay_scope()
+            if scope is not None and scope.compute == "gpu" and scope.backend in ("auto", "triton"):
+                from .gpu_factor_division import factor_division_hooks
+                from .kernel_json import kernel_json
+                with factor_division_hooks():
+                    result = kernel_json("atlas_polynomial_division", "try-binomial-remainder", width=len(self.gens),
+                                         order=self.order, left=np.row(self.gens, polynomial),
+                                         right=np.row(self.gens, self.exprs[0]))
+                if result is not None:
+                    return np.from_row(self.gens, result["remainder"])
         return self._basis.remainder(polynomial)
 
     def reduce(self, polynomial):

@@ -6,10 +6,10 @@ import sympy as sp
 from engine.general_resolution import verify_candidate
 from engine.monodromy import monodromy_zeta
 from engine.newton_backend import resolve_newton
-from engine.polynomial import InputError, format_poly, parse
+from engine.polynomial import InputError, format_poly, integer_text, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
-from engine.strata import resolution_strata
+from engine.strata import InvalidChart, InvalidZetaCertificate, resolution_strata
 from tests.strata_oracle import _power_factors
 from engine.topological import _reduce, topological_zeta
 
@@ -30,6 +30,35 @@ def newton(polynomial, names):
 
 
 class TopologicalZeta(unittest.TestCase):
+    def test_arbitrary_precision_denominator_survives_python_decimal_limit(self):
+        exponent = 10**5000 + 7
+        digits = integer_text(exponent)
+        value, numerator, _, poles = _reduce({"S": (exponent, 1)},
+                                             [{"components": ["S"], "euler_characteristic": 1}])
+        self.assertEqual(value, f"1/({digits}*s + 1)")
+        self.assertEqual(numerator, "1")
+        self.assertEqual(poles, [{"value": "-1/" + digits, "order": 1, "components": ["S"]}])
+
+    def test_stored_factors_are_recomputed_and_conflicting_explicit_factors_are_rejected(self):
+        record = answer("y^2-x^3", "xy")
+        expected = record["topological_zeta"]
+        record["monodromy_zeta"] = dict(record["monodromy_zeta"], expression="1", factors=[])
+        self.assertEqual(topological_zeta(record), expected)
+        with self.assertRaisesRegex(InvalidZetaCertificate, "monodromy factors"):
+            topological_zeta(record, monodromy=record["monodromy_zeta"])
+        with self.assertRaisesRegex(InvalidChart, "polynomial"):
+            monodromy_zeta(record, polynomial=parse("x*y", list("xy")))
+
+    def test_legacy_numerical_table_needs_geometric_evidence(self):
+        # This table even satisfies Z(0)=1. Without charts it does not
+        # establish the claimed order 17 for the cusp.
+        record = {"status": "resolved", "mode": "embedded", "variables": ["x", "y"],
+                  "polynomial": "y^2-x^3", "certificate": {
+                      "numerical_data": [{"component": "S", "multiplicity": 17, "nu": 1}],
+                      "strata": [{"components": ["S"], "euler_characteristic": 1}]}}
+        self.assertEqual(monodromy_zeta(record)["expression"], "(1-T^6)/((1-T^2)*(1-T^3))")
+        self.assertEqual(topological_zeta(record)["expression"], "(4*s + 5)/((s + 1)*(6*s + 5))")
+
     def test_repeated_and_cancelled_poles(self):
         numbers = {"unused": (6, 3), "C": (3, 1), "B": (4, 2),
                    "D": (6, 2), "A": (2, 1), "S": (1, 1)}
@@ -61,7 +90,7 @@ class TopologicalZeta(unittest.TestCase):
     def test_every_engine(self):
         expected = {
             ("y^2-x^3", "xy"): ("C++ / FLINT plane point blowups", "(4*s + 5)/((s + 1)*(6*s + 5))"),
-            ("x*y", "xy"): ("C++ / FLINT plane point blowups", "(s + 1)^(-2)"),
+            ("x*y", "xy"): ("normal-crossings-at-origin", "(s + 1)^(-2)"),
             ("x^2+y^2+z^2", "xyz"): ("native-a-series", "(s + 3)/((s + 1)*(2*s + 3))"),
             ("x*y-z^3", "xyz"): ("native-a-series", "(s + 4)/((s + 1)*(3*s + 4))"),
             ("x*y-z^4", "xyz"): ("native-a-series", "(s + 5)/((s + 1)*(4*s + 5))"),
@@ -88,11 +117,75 @@ class TopologicalZeta(unittest.TestCase):
         self.assertEqual(zeta["source"], "companion embedded resolution")
 
     def test_the_blowup_and_the_identity_on_a_plane_crossing(self):
-        for mode in ("intrinsic", "embedded"):
+        for mode, steps in (("intrinsic", 1), ("embedded", 0)):
             with self.subTest(mode=mode):
                 result = answer("x*y", "xy", mode)
+                self.assertEqual(len(result["steps"]), steps)
                 self.assertEqual(result["topological_zeta"]["expression"], "(s + 1)^(-2)")
                 self.assertEqual(result["monodromy_zeta"]["expression"], "1")
+
+    def test_identity_replays_transverse_plane_factors_with_their_weights(self):
+        result = answer("(1+x)*(y+x^2)^2*(x+y)^3", "xy")
+        self.assertEqual(result["steps"], [])
+        self.assertEqual(result["dual_complex"]["vertices"], [])
+        chart, = result["atlas"]
+        self.assertEqual(sorted(part["multiplicity"] for part in chart["components"]), [2, 3])
+        self.assertEqual(topological_zeta(result)["expression"], "1/((2*s + 1)*(3*s + 1))")
+        self.assertEqual(monodromy_zeta(result)["expression"], "1")
+
+    def test_conjugate_plane_branches_have_a_verified_marked_identity_chart(self):
+        from engine.resolution_complex import dual_complex
+        from engine.session_values import Resolution
+        f = "(1+a)*((a-y^2)^2+2*(a-y^2)*y+2*y^2)^3"
+        result = answer(f, "ay")
+        self.assertEqual(result["steps"], [])
+        chart, = Resolution(result).charts
+        a, y = chart.coordinates
+        reduced = (a-y**2)**2+2*(a-y**2)*y+2*y**2
+        self.assertEqual(chart.strict_transform, (1+a)*reduced**3)
+        left, right = chart.session_attribute("strict_transform_components")
+        self.assertEqual((left["multiplicity"], right["multiplicity"]), (3, 3))
+        self.assertEqual(left["ideal"][0]*right["ideal"][0], reduced)
+        self.assertEqual(dual_complex(result)["vertices"], [])
+        self.assertEqual(topological_zeta(result)["expression"], "(3*s + 1)^(-2)")
+        self.assertEqual(monodromy_zeta(result)["expression"], "1")
+        owned, = result["atlas"]
+        self.assertEqual(owned["coefficient_field"]["degree"], 2)
+        owned["components"][0]["ideal"] = owned["components"][1]["ideal"]
+        with self.assertRaises(InvalidChart):
+            topological_zeta(result)
+
+    def test_conjugate_cylinders_preserve_free_axes_and_mark(self):
+        from engine.session_values import Resolution
+        for mode, steps in (("embedded", 0), ("intrinsic", 1)):
+            with self.subTest(mode=mode):
+                result = answer("x^2+y^2", "xzy", mode)
+                self.assertEqual(len(result["steps"]), steps)
+                self.assertEqual(topological_zeta(result)["expression"], "(s + 1)^(-2)")
+        for names in (["x", "a", "z", "b"], ["c", "b", "e", "q", "xx", "f", "gg", "a"]):
+            with self.subTest(names=names):
+                result = answer("(1+a)*((a-b^2)^2+b^2)^2", names)
+                self.assertEqual(result["steps"], [])
+                chart, = Resolution(result).charts
+                coordinates = dict(zip(names, chart.coordinates))
+                a, b = coordinates["a"], coordinates["b"]
+                reduced = (a-b**2)**2+b**2
+                self.assertEqual(chart.strict_transform, (1+a)*reduced**2)
+                left, right = chart.session_attribute("strict_transform_components")
+                self.assertEqual((left["multiplicity"], right["multiplicity"]), (2, 2))
+                self.assertEqual(left["ideal"][0]*right["ideal"][0], reduced)
+                owned, = result["atlas"]
+                generator = owned["coefficient_field"]["generator"]
+                self.assertNotIn(generator, names)
+                self.assertEqual(owned["coordinates"], [*names, generator])
+                self.assertEqual(owned["fibre"], names)
+                self.assertEqual(owned["map"], dict(zip(names, names)))
+                self.assertEqual(owned["split_cone"], [[int(i == j) for j in names] for i in names])
+                self.assertEqual(topological_zeta(result)["expression"], "(2*s + 1)^(-2)")
+                self.assertEqual(monodromy_zeta(result)["expression"], "1")
+                owned["fibre"].remove(names[0])  # even a free coordinate belongs to the origin fibre
+                with self.assertRaises(InvalidChart):
+                    topological_zeta(result)
 
     def test_independent_of_the_resolution(self):
         # The same germ through its own engine and through the Newton modification.
@@ -164,7 +257,8 @@ class TopologicalZeta(unittest.TestCase):
             for component in chart["components"]:
                 if component["id"] == "strict":
                     component["ideal"] = [f"({component['ideal'][0]})^2"]
-        self.assertEqual(topological_zeta(record)["status"], "unavailable")
+        with self.assertRaises(InvalidChart):
+            topological_zeta(record)
 
     def test_power_products(self):
         self.assertEqual(_power_factors("(1)*(1 - v)^3*(u - v^2)^2"), [("1", 1), ("1 - v", 3), ("u - v^2", 2)])

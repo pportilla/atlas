@@ -229,10 +229,12 @@ class ChartBatchTests(unittest.TestCase):
         exps = [(0, 0, 1), (1, 0, 0)]
         rays = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
         cone = [(0, 1, 2)]
-        with patch.dict(os.environ, RESOLUTION_GPU_INDEX="999"):
-            actual, stats = transform_batch(exps, rays, cone, [0,0,0], "gpu")
-        self.assertEqual(stats["backend"], "cpu_after_opencl")
-        self.assertEqual(actual, [exps])
+        for backend in ("triton", "opencl"):
+            with self.subTest(backend=backend), patch.dict(
+                    os.environ, RESOLUTION_GPU_BACKEND=backend, RESOLUTION_GPU_INDEX="999"):
+                actual, stats = transform_batch(exps, rays, cone, [0,0,0], "gpu")
+                self.assertEqual(stats["backend"], f"cpu_after_{backend}")
+                self.assertEqual(actual, [exps])
         with self.assertRaises(OverflowError):
             transform_batch([(2**31-1,0,0)], [(2,0,0)], [(0,0,0)], [0], "cpu")
         with self.assertRaises(ValueError):

@@ -2,7 +2,7 @@ import io
 import os
 import sys
 import unittest
-from contextlib import nullcontext, redirect_stderr, redirect_stdout
+from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -47,12 +47,14 @@ class TritonDiscovery(unittest.TestCase):
         self.torch.xpu.get_device_name.return_value = "Intel test GPU"
         self.torch.xpu.device.return_value = nullcontext()
         self.torch.cuda.device.return_value = nullcontext()
-        self.tensor = self.torch.full.return_value
+        self.tensor = MagicMock()
+        self.upload = MagicMock(return_value=self.tensor)
         self.tensor.item.return_value = 169
         self.kernel = MagicMock()
         self.target = SimpleNamespace(backend="xpu", arch={"arch": "pvc"})
         driver = SimpleNamespace(active=SimpleNamespace(get_current_target=lambda: self.target))
         modules = {"torch": self.torch, "triton": MagicMock(), "triton.runtime": SimpleNamespace(driver=driver),
+                   "engine.triton_buffers": SimpleNamespace(initialize_hip=lambda: None, to_device=self.upload, to_host=lambda t: t),
                    "engine.triton_ir": SimpleNamespace(launch_kernel=self.kernel)}
         for context in (patch.dict(sys.modules, modules), patch.dict(os.environ, TRITON_INTERPRET="0")):
             context.start()
@@ -64,18 +66,25 @@ class TritonDiscovery(unittest.TestCase):
     def test_xpu_probed_with_backend_local_ordinal(self):
         self.assertEqual(gpu_devices._triton_candidates(), ("cuda:0", "cuda:1", "xpu:0"))
         self.assertIsNone(gpu_devices.triton_device(0))  # XPU driver cannot launch on a CUDA tensor.
-        self.torch.full.assert_not_called()
+        self.upload.assert_not_called()
         self.assertEqual(gpu_devices.triton_device(2), {"index": 2, "name": "Intel test GPU", "backend": "triton",
                                                        "runtime": "xpu", "architecture": "pvc", "torch_device": "xpu:0"})
         self.torch.xpu.device.assert_called_once_with(0)
         self.torch.xpu.get_device_name.assert_called_once_with(0)
-        self.assertEqual(self.torch.full.call_args.kwargs["device"], "xpu:0")
+        self.assertEqual(self.upload.call_args.args[1], "xpu:0")
         self.kernel.assert_called_once_with("trace_probe", (), (1,), self.tensor)
 
     def test_xpu_bad_integer_result_is_unavailable(self):
         self.tensor.item.return_value = 0
         self.assertIsNone(gpu_devices.triton_device(2))
         self.kernel.assert_called_once_with("trace_probe", (), (1,), self.tensor)
+
+    def test_configured_ordinal_also_selects_xpu(self):
+        with patch.dict(os.environ, RESOLUTION_GPU_INDEX="2"):
+            result = gpu_devices.triton_device()
+            self.assertEqual((result["index"], result["torch_device"]), (2, "xpu:0"))
+        with patch.dict(os.environ, RESOLUTION_GPU_INDEX="99"):
+            self.assertIsNone(gpu_devices.triton_device())
 
     def test_cuda_and_hip_keep_indices_and_device_scope(self):
         self.torch.cuda.get_device_name.return_value = "test GPU"
@@ -86,6 +95,39 @@ class TritonDiscovery(unittest.TestCase):
                 self.assertEqual((result["index"], result["runtime"], result["torch_device"]),
                                  (index, backend, f"cuda:{index}"))
                 self.torch.cuda.device.assert_called_with(index)
+
+
+class HIPTransfers(unittest.TestCase):
+    def test_copy_uses_target_device_and_its_current_stream(self):
+        from engine import triton_buffers
+
+        selected = ["cuda:0"]
+        events = []
+
+        @contextmanager
+        def device_scope(target):
+            selected.append(target)
+            try:
+                yield
+            finally:
+                selected.pop()
+
+        def current_stream(device):
+            self.assertEqual(device, selected[-1])
+            return SimpleNamespace(cuda_stream=701, synchronize=lambda: events.append("sync"))
+
+        def copy(destination, source, size, direction, stream):
+            events.append((selected[-1], destination, source, size, direction, stream))
+            return 0
+
+        torch = SimpleNamespace(cuda=SimpleNamespace(device=device_scope, current_stream=current_stream))
+        runtime = SimpleNamespace(hipMemcpyAsync=copy)
+        source = SimpleNamespace(numel=lambda: 2, nbytes=8, data_ptr=lambda: 128)
+        destination = SimpleNamespace(data_ptr=lambda: 256)
+        with patch.dict(sys.modules, torch=torch), patch.object(triton_buffers, "_hip_runtime", return_value=runtime):
+            self.assertIs(triton_buffers._synchronous_copy(destination, source, 1, "cuda:1"), destination)
+        self.assertEqual(events, [("cuda:1", 256, 128, 8, 1, 701), "sync"])
+        self.assertEqual(selected, ["cuda:0"])
 
 
 @unittest.skipUnless(native_backend._LIBRARY.is_file(), "ordinary kernel is not built")

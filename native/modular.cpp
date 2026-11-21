@@ -26,6 +26,7 @@
 #include "modular_replay.hpp"
 
 #include <flint/fmpq.h>
+#include <flint/nmod.h>
 #include <flint/ulong_extras.h>
 
 #include <atomic>
@@ -356,6 +357,57 @@ ReplayBatch active_batch() {
     return has_scoped_batch ? scoped_batch : default_batch.load();
 }
 
+using CRTPairs = int (*)(const uint32_t*, const uint32_t*, uint32_t, uint32_t, uint64_t*);
+thread_local CRTPairs crt_pairs = nullptr;
+
+// Each device lane merges two prime images.  The host combines the resulting
+// double-width residues with the previous arbitrary-precision CRT modulus.
+// The last prime remains independent for rational reconstruction.
+void merge_paired_images(const std::vector<uint32_t>& primes, const std::vector<std::vector<uint32_t>>& images,
+                         size_t& used, Z& modulus, std::vector<Z>& lifted) {
+    if (!crt_pairs || !active_batch() || sizeof(ulong) < sizeof(uint64_t)) return;
+    const size_t pairs = (primes.size() - 1 - used) / 2;
+    const size_t width = lifted.size();
+    if (!pairs || !width || width > static_cast<size_t>(INT_MAX) / (2 * pairs)) return;
+    std::vector<uint32_t> packed, parameters;
+    std::vector<uint64_t> combined;
+    try {
+        packed.reserve(2 * pairs * width);
+        parameters.reserve(3 * pairs);
+        combined.resize(pairs * width);
+    } catch (const std::bad_alloc&) { return; }
+    for (size_t k = used; k < used + 2*pairs; k += 2) {
+        const auto p = primes[k], q = primes[k+1];
+        parameters.insert(parameters.end(), {p, q, static_cast<uint32_t>(n_invmod(p % q, q))});
+        for (auto image : {k, k+1}) packed.insert(packed.end(), images[image].begin(), images[image].end());
+    }
+    if (crt_pairs(packed.data(), parameters.data(), pairs, width, combined.data()) != 0) return;
+    for (size_t pair = 0; pair < pairs; ++pair) {
+        const auto p = primes[used], q = primes[used+1];
+        const uint64_t product = static_cast<uint64_t>(p) * q;
+        const auto* values = combined.data() + pair*width;
+        // Reject a damaged result before changing the accumulated residues.
+        // Earlier pairs already accepted here remain valid.
+        for (size_t i = 0; i < width; ++i)
+            if (values[i] >= product || values[i] % p != images[used][i] ||
+                values[i] % q != images[used+1][i]) return;
+        if (used == 0) {
+            for (size_t i = 0; i < width; ++i) fmpz_set_ui(&lifted[i].v, values[i]);
+        } else {
+            nmod_t ring;
+            nmod_init(&ring, product);
+            const ulong inverse = n_invmod(fmpz_fdiv_ui(&modulus.v, product), product);
+            for (size_t i = 0; i < width; ++i) {
+                const auto old = fmpz_fdiv_ui(&lifted[i].v, product);
+                const auto correction = nmod_mul(nmod_sub(values[i], old, ring), inverse, ring);
+                fmpz_addmul_ui(&lifted[i].v, &modulus.v, correction);
+            }
+        }
+        fmpz_mul_ui(&modulus.v, &modulus.v, product);
+        used += 2;
+    }
+}
+
 // Merge new prime images into the existing CRT residues and reconstruct
 // rational coefficients. The last image is held out as a witness.
 bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::vector<std::vector<uint32_t>>& images,
@@ -363,6 +415,7 @@ bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::ve
                               std::vector<LiftedRational>& rational) {
     const size_t coefficients = lifted.size();
     const uint32_t witness = primes.back();
+    merge_paired_images(primes, images, used, modulus, lifted);
     // The CRT inverse is shared by every coefficient of this image.
     // For r in [0,M), r + M ((image - r) / M mod p) is the unique
     // representative in [0,Mp). Save M and its inverse once per prime.
@@ -650,6 +703,8 @@ using namespace atlas;
 
 extern "C" {
 
+void atlas_groebner_swap_crt_pairs(CRTPairs* hook) noexcept { std::swap(crt_pairs, *hook); }
+
 // Optional per-thread benchmark observer. A completed layer reports degree,
 // prime, dimensions, CSR edge count, rank, device use and the wall times for
 // symbolic preparation, numeric reduction (including transfers), and echelon.
@@ -739,6 +794,7 @@ void atlas_groebner_swap_cpu_scope(ReplayBatch* batch, int* active, TraceScreen*
 // program. Give its only thread the state of a fresh process: no replay
 // hooks and no recorded activity.
 void atlas_groebner_reset_fork_child() noexcept {
+    crt_pairs = nullptr;
     default_batch.store(nullptr);
     scoped_batch = nullptr;
     has_scoped_batch = 0;

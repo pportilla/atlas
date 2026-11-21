@@ -173,8 +173,8 @@ class Handler(BaseHTTPRequestHandler):
             record = job.get("result")
         else:
             record = data.get("record")
-        if not isinstance(record, dict) or record.get("status") != "resolved":
-            return self.obj(400, {"error": "Supply a resolved Atlas record."})
+        if not isinstance(record, dict):
+            return self.obj(400, {"error": "Supply an Atlas resolution record."})
 
         companion = jobs.embedded_companion(record)
         source = {**record, "embedded_companion": companion} if companion else record
@@ -222,9 +222,9 @@ def make_parser():
     return parser
 
 
-def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto"):
+def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto", zetas_only=False):
     return _calculate_resolution(polynomial, variables, mode=mode, search=search, compute=compute, method=method,
-                                 monodromy=monodromy, job=run_job)
+                                 monodromy=monodromy, zetas_only=zetas_only, job=run_job)
 
 
 def run_command(parser, argv):
@@ -254,7 +254,7 @@ def run_command(parser, argv):
         print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0 if result['status']=='complete' else 3
     if args.command=='monodromy':
-        from .monodromy import monodromy_zeta
+        from .resolution_zetas import replay_zetas
         try:
             if hasattr(sys,"set_int_max_str_digits"):
                 sys.set_int_max_str_digits(0)
@@ -263,8 +263,8 @@ def run_command(parser, argv):
             else:
                 with open(args.record, encoding='utf-8') as stream:
                     record=json.load(stream)
-            zeta=monodromy_zeta(record)
-        except (OSError, ValueError, ArithmeticError) as error:
+            zeta=replay_zetas({"record": record, "zetas": ["monodromy"]})["monodromy_zeta"]
+        except (OSError, ValueError, ArithmeticError, RuntimeError) as error:
             print(f"Cannot compute monodromy: {error}",file=sys.stderr)
             return 2
         if args.json: print(json.dumps(zeta,indent=2,ensure_ascii=False))

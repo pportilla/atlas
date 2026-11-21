@@ -1,16 +1,40 @@
 """Numerical data and Euler characteristics on a certified resolution atlas."""
 import re
 
-from .polynomial import InputError, parse
+from .polynomial import InputError, format_poly, parse, saved_polynomial_input
 
 
-class InvalidChart(ValueError):
+class InvalidZetaCertificate(InputError):
+    """The proposed geometric or numerical certificate contradicts the source germ."""
+
+
+class InvalidChart(InvalidZetaCertificate):
     """The chart equations contradict the claimed resolution."""
 
 
-def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True):
+@saved_polynomial_input()
+def replay_record_zetas(record, kinds, polynomial=None):
+    """Replay or complete a source record through the common zeta entry point."""
+    from .resolution_zetas import replay_zetas
+    if polynomial is not None:
+        names = record.get("variables")
+        if not isinstance(names, list) or not names:
+            raise InputError("The resolution needs its ordered list of variables.")
+        if "polynomial" in record:
+            if parse(record["polynomial"], names, bounded=False) != polynomial:
+                raise InvalidChart("The supplied polynomial disagrees with the resolution record.")
+        else:
+            record = dict(record, polynomial=format_poly(polynomial, names))
+    return replay_zetas({"record": record, "zetas": list(kinds)})
+
+
+def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True,
+                           replay_canonical=False):
     from .identity_atlas import identity_outputs
     options = dict(complex=complex, intrinsic=intrinsic, integrals=integrals)
+    if replay_canonical and record.get("engine") == "canonical-blowups":
+        from .canonical_replay import canonical_outputs
+        return canonical_outputs(record, polynomial, **options)
     identity = identity_outputs(record, polynomial, **options)
     if identity is not None:
         return identity
@@ -32,7 +56,8 @@ def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False,
     return fan_outputs(record, polynomial, **options)
 
 
-def resolution_strata(record, polynomial=None, *, computed=None):
+def resolution_strata(record, polynomial=None, *, computed=None, strict=False):
+    """Read embedded strata; strict replay distinguishes invalid proof from missing evidence."""
     if not isinstance(record, dict) or record.get("status") != "resolved":
         return None
     variables = record.get("variables")
@@ -54,17 +79,47 @@ def resolution_strata(record, polynomial=None, *, computed=None):
         if computed is not None:
             found = computed
         else:
+            if strict:
+                saved = record.get("atlas") or []
+                if not isinstance(saved, list) or any(not isinstance(c, dict) for c in saved):
+                    raise InvalidChart("The saved atlas must be a list of charts.")
+                if any(c.get("repair_projection") or c.get("removed") and
+                       (c.get("torus") or record.get("fan")) for c in saved):
+                    # A deleted origin-fibre centre and its replacement are
+                    # a positive coverage claim. Check it before accepting
+                    # any stratum or falling back to the source polynomial.
+                    from .atlas import _INCOMPLETE_REPAIR, from_json
+                    from .repair_replay import restore_repair_maps
+                    if restore_repair_maps(from_json(saved, native=True)) is None:
+                        raise InvalidChart(_INCOMPLETE_REPAIR)
             try:
-                certified = rational_chart_outputs(record, polynomial, complex=False)
+                certified = rational_chart_outputs(record, polynomial, complex=False, replay_canonical=strict,
+                                                   intrinsic=strict and record.get("mode") == "intrinsic")
             except InvalidChart:
+                if strict:
+                    raise
                 return None
             if certified is not None:
                 _, found = certified
+                if "strata" not in found:
+                    return None  # A certified intrinsic resolution may still require an embedded companion.
             else:
                 from . import atlas
                 from .local_blowups import GiveUp
                 try:
-                    if (charts := atlas.from_record(record, polynomial, native=True)) is None:
+                    if strict:
+                        # Older sources may need a new calculation. A claimed
+                        # modification that contradicts its equation is invalid.
+                        if record.get("engine") == "canonical-blowups" or not record.get("atlas"):
+                            return None
+                        charts, reason = atlas.verified_modification_charts(record, polynomial)
+                        if charts is None:
+                            if reason == atlas._INCOMPLETE_REPAIR:
+                                raise InvalidChart(reason)
+                            return None
+                    else:
+                        charts = atlas.from_record(record, polynomial, native=True)
+                    if charts is None:
                         # Archived resolutions from before chart ownership was serialized.
                         proof = record.get("certificate", {})
                         if proof.get("numerical_data") and proof.get("strata") and not record.get("input_divisor"):
@@ -74,11 +129,12 @@ def resolution_strata(record, polynomial=None, *, computed=None):
                             return data, proof["strata"], "Certified strata of the archived resolution"
                         return None
                     factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
-                    found = atlas.outputs(charts, len(variables), complex=False, factor_fibre=factor_fibre)
+                    found = atlas.outputs(charts, len(variables), complex=False, factor_fibre=factor_fibre,
+                                          intrinsic=strict and record.get("mode") == "intrinsic")
                 except GiveUp:
                     return None
-    except (IndexError, KeyError, TypeError) as exc:
-        raise InputError("Incomplete chart or divisor data in the resolution record.") from exc
+    except (AttributeError, IndexError, KeyError, TypeError) as exc:
+        raise InvalidChart("Incomplete chart or divisor data in the resolution record.") from exc
     data, strata = found["numerical_data"], found["strata"]
     return data, strata, "Euler characteristics on the disjoint parts of the resolution atlas"
 

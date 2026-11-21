@@ -94,6 +94,39 @@ Choose one variable $t$ and take the remaining coordinates as coefficients. Atla
 
 For a linear input $at+b$ and $g=\sum_j c_j t^j$, the kernel computes $\sum_j c_j(-b)^j a^{n-j}$ over the occupied powers. For $ct^m$, multiplicativity gives $c^n g(0)^m$. These formulas retain polynomial leading coefficients and allow sparse exponents larger than a machine word. The general calculation uses FLINT's exact multivariate resultant over the rationals. [Kernel and Singular comparisons](../tests/test_polynomial_resultant.py)
 
+### Absolute factorization of a rational polynomial
+
+For a binomial, Atlas removes the common monomial and splits the remaining
+two terms using the primitive exponent difference and exact algebraic roots.
+For other inputs Atlas first factors $f$ over $\mathbb Q$. For a rational irreducible factor
+$h$, its monic absolute factors form one Galois orbit. In particular all
+have the same degree in any chosen coordinate $x_j$, and their number
+divides every positive coordinate degree of $h$. For a univariate factor,
+the linear factors follow directly from its exact algebraic roots.
+[Native absolute factorization](absolute_factorization.cpp)
+
+For the general case, choose a coordinate of positive degree and specialize
+the remaining coordinates to integers. Retain a specialization preserving
+that degree and having only simple roots. Such specializations exist in
+characteristic zero, since $h$ is primitive and separable over the rational
+function field in the remaining variables. Every absolute factor has
+positive degree in the chosen coordinate and retains its full degree on
+this line. Thus a root $\alpha$ of the specialized polynomial lies on exactly
+one absolute component. Every Galois automorphism fixing $\alpha$ fixes that
+component and its monic equation. Factoring $h$ over $\mathbb Q(\alpha)$
+therefore produces the absolute factor through that point. Substituting the
+conjugates of $\alpha$ and removing duplicates recovers the entire orbit.
+[Number-field factorization](field_factorization.cpp)
+
+The result uses one marked primitive element for the common field of all
+coefficients. All factors are made monic in the requested order, so the unit
+is the original leading coefficient. The multiplicity of each conjugate
+comes from its rational factor. Before returning the result, Atlas multiplies
+the factors and unit modulo the primitive element's minimal polynomial and
+checks equality with the original input. The number of individual factors and the
+degree of their common field can both grow with the input.
+[Coefficient field](common_field.cpp) · [Worked example](../examples/polynomial-ideals.md#factor-over-the-algebraic-closure)
+
 ### Monic polynomial GCD over the rationals
 
 For two polynomials $a,b$ in the same ordered ring, `gcd(a,b)` returns the greatest common divisor with leading coefficient one. The result is independent of order up to a nonzero rational scalar. For example, a common factor $2x+3y^2$ becomes $x+\tfrac32y^2$ in lex order with $x>y$, and $\tfrac23x+y^2$ in grevlex. Atlas takes $\gcd(0,0)=0$ and $\gcd(a,0)$ to be the monic associate of $a$ for $a\ne0$. [CLI, HTTP, prompt and browser examples](../examples/polynomial-ideals.md#find-a-common-factor)

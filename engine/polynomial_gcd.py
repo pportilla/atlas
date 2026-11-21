@@ -1,8 +1,10 @@
 """Monic polynomial gcd over QQ in the declared coordinate and monomial order."""
 
+from time import perf_counter_ns
+
 from . import native_polynomial as np
 from .affine_kernel import _request, _ring
-from .algebra_execution import cpu_stage, current_execution, record_fallback, stage_label
+from .algebra_execution import cpu_stage, current_execution, record_fallback, record_stage, stage_label
 from .algebra_groebner import reduced_basis
 from .groebner import _MAX_DEGREE, _MAX_VARIABLES
 from .ideal_operations import intersection
@@ -39,6 +41,18 @@ def monic_gcd(variables, left, right, *, order="grevlex"):
     # A constant decoded in this auxiliary ring has no active coordinates.
     coordinates = variables or (np.Symbol("x"),)
     ring = _ring(coordinates)
+    if (run is not None and run.replay.compute == "gpu" and run.replay.backend in ("auto", "triton")
+            and min(len(left._terms), len(right._terms)) >= 8):
+        from .gpu_factor_division import factor_division_hooks
+        from .kernel_json import kernel_json
+        started = perf_counter_ns()
+        with factor_division_hooks():
+            result = kernel_json("atlas_polynomial_division", "try-univariate-gcd", width=len(variables), order=order,
+                                 left=np.row(variables, left), right=np.row(variables, right))
+        if result is not None:
+            record_stage("polynomial_gcd", "cpu", algorithm="exact_gcd_with_root_screen", order=order,
+                         elapsed_ns=perf_counter_ns() - started)
+            return np.from_row(variables, result["gcd"])
     if (run is not None and run.replay.compute == "gpu" and
             len(left._terms) > 1 and len(right._terms) > 1 and
             not left.free_symbols.isdisjoint(right.free_symbols)):

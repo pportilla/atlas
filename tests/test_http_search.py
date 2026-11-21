@@ -139,6 +139,54 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         self.assertEqual(both["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
         self.assertEqual(both["monodromy_check"], check)
 
+    def test_replay_completes_a_bounded_record_from_its_original_polynomial(self):
+        self.server.search_jobs = SearchJobs()
+        request = {"variables": ["x"], "polynomial": "x^200", "search": "quick", "zetas": ["monodromy"]}
+        _, job = self.request("POST", "/api/searches", request)
+        record = self.wait(job["id"])["result"]
+        self.assertEqual(record["status"], "inconclusive")
+        for path, obj in (("/api/zetas", {"record": record}),
+                          ("/api/searches/" + job["id"] + "/zetas", {})):
+            with self.subTest(path=path):
+                code, replay = self.request("POST", path, dict(obj, zetas=["topological", "monodromy"]))
+                output = replay.get("result", replay)
+                self.assertEqual(code, 200)
+                self.assertEqual(output["monodromy_check"]["status"], "verified")
+                self.assertEqual(output["monodromy_zeta"]["expression"], "1/(1-T^200)")
+
+    def test_three_graph_zetas_only_and_saved_certificate(self):
+        from tests.test_three_graph_monodromy import POLYNOMIAL
+        request = {"variables": ["x", "y", "z"], "polynomial": POLYNOMIAL, "search": "quick",
+                   "zetas_only": True, "zetas": ["topological"]}
+        _, record = self.request("POST", "/api/resolve", request)
+        self.assertEqual(record["topological_zeta"]["status"], "computed")
+        self.assertNotIn("monodromy_zeta", record)
+        _, pair = self.request("POST", "/api/zetas", {"record": record, "zetas": ["monodromy"]})
+        self.assertEqual(pair["monodromy_check"]["status"], "verified")
+        self.assertEqual(pair["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
+        certificate = record["contact_certificate"]
+        certificate["divisors"][0]["nu"] += 1
+        with self.assertRaises(HTTPError) as failure:
+            self.request("POST", "/api/zetas", {"record": record, "zetas": ["monodromy"]})
+        with failure.exception as response:
+            self.assertEqual(response.code, 400)
+
+    def test_quadratic_translate_saved_http_certificate(self):
+        from tests.test_quadratic_translate_monodromy import POLYNOMIAL, REFERENCE
+        request = {"variables": ["x", "y", "z"], "polynomial": POLYNOMIAL, "search": "quick",
+                   "zetas_only": True, "zetas": ["monodromy"], "compute": "cpu"}
+        _, record = self.request("POST", "/api/resolve", request)
+        self.assertEqual(record["engine"], "quadratic-translate-contact")
+        self.assertEqual(record["monodromy_zeta"]["factors"], REFERENCE["monodromy_zeta"]["factors"])
+        self.assertNotIn("topological_zeta", record)
+        _, both = self.request("POST", "/api/zetas", {"record": record, "zetas": ["topological"]})
+        self.assertEqual(both["monodromy_check"]["status"], "verified")
+        record["contact_certificate"]["divisors"][0]["orders"][0] += 1
+        with self.assertRaises(HTTPError) as failure:
+            self.request("POST", "/api/zetas", {"record": record, "zetas": ["monodromy"]})
+        with failure.exception as response:
+            self.assertEqual(response.code, 400)
+
     def test_concurrent_zeta_requests_attach_the_same_check_as_the_initial_pair(self):
         self.server.search_jobs = SearchJobs()
         request = {"variables": ["x", "y"], "polynomial": "x*y", "mode": "embedded", "search": "quick"}

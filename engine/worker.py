@@ -2,12 +2,15 @@
 import json
 import sys
 from subprocess import TimeoutExpired
+from time import perf_counter
 from .resolve import resolve
 from .polynomial import InputError, LimitError
 
 
 def _response(read_request, *, replay=False):
     """Use the same resolution and exception mapping on the API and CLI."""
+    started = perf_counter()
+    request = None
     try:
         request = read_request()
         if isinstance(request,dict) and request.get("search","exhaustive")=="exhaustive" and hasattr(sys,"set_int_max_str_digits"):
@@ -22,7 +25,12 @@ def _response(read_request, *, replay=False):
     except InputError as exc:
         data, status = {'error':str(exc)}, 400
     except (LimitError,TimeoutExpired) as exc:
-        data, status = {'error':str(exc) or 'Computation budget exceeded.', 'code':'computation_limit'}, 422
+        reason = str(exc) or 'Computation budget exceeded.'
+        if not replay and isinstance(request, dict) and request.get("search") == "quick":
+            from .resolve import inconclusive
+            data, status = inconclusive(request, {"description": reason}, 1000*(perf_counter()-started)), 200
+        else:
+            data, status = {'error':reason, 'code':'computation_limit'}, 422
     except (MemoryError,RecursionError) as exc:
         data, status = {'error':str(exc) or 'Computation budget exceeded.'}, 422
     except RuntimeError as exc:

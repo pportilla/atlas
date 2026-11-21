@@ -22,6 +22,11 @@ class RepeatedProjectiveTangent(unittest.TestCase):
         self.assertEqual([c["dimension"] for c in centres], [0, 3, 3])
         data = {label: (n, nu) for chart in charts for label, n, nu, _ in chart.components}
         self.assertEqual(data, {"strict": (1, 1), "B1": (4, 5), "B2": (5, 6), "B3": (10, 11)})
+        _, _, smooth_charts, intrinsic = acampo_over(variables, [("strict", 1, 1, (quadric**2 + quintic,))],
+                                                     variables, rules=("tangent",), count_strata=False,
+                                                     intrinsic=True)
+        self.assertEqual(intrinsic, centres[:2])
+        self.assertTrue(smooth_charts)
 
     def test_singular_support_is_rejected_before_blowup(self):
         x, y, z, t = variables = coordinates("xyzt")

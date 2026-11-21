@@ -46,8 +46,10 @@ class CentreSelection(unittest.TestCase):
         self.assertEqual(level_weights("point_signatures", (), charts=mixed, single=False), [[1,2],[],[]])
         self.assertEqual(level_weights("point_signatures", (), charts=mixed, single=True), [[1],[],[]])
         self.assertIsNone(level_weights("point_signatures", (), charts=[[["E1"]], [], [["E1"]]], single=False))
-        self.assertEqual(level_weights("point_signatures", (), charts=[[["E1"],["E1"]], [["E1"]]], single=False),
-                         [[0], [0]])
+        for single in (True, False):
+            self.assertIsNone(level_weights("point_signatures", (), charts=[[["E1"],["E1"]], [["E1"]]], single=single))
+            # Slopes 1 and 2 can appear in reverse order in the reciprocal chart.
+            self.assertIsNone(level_weights("point_signatures", (), charts=[[["E1"]]*2, [["E1"]]*2], single=single))
         for parts in ([],[False],[False,True]):
             self.assertEqual(level_weights("direct_locus", (), parts=parts),any(parts))
             for outside in (True,False):

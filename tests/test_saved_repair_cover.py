@@ -1,10 +1,12 @@
 """Validate the geometric cover of declared Newton repairs on public replay."""
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 
 from engine.monodromy import monodromy_zeta
 from engine.resolution_complex import dual_complex
 from engine.resolve import resolve
+from engine.strata import InvalidChart
 from engine.topological import topological_zeta
 
 
@@ -53,6 +55,27 @@ class SavedRepairCoverTests(unittest.TestCase):
                         self.assertIn("complete cover", graph["reason"])
                         self.assertEqual(graph["cells"], [])
 
+    def test_geometry_only_solve_requires_the_whole_repair_cover(self):
+        for mode in ("embedded", "intrinsic"):
+            with self.subTest(mode=mode):
+                request = dict(polynomial=self.record["polynomial"], variables=self.record["variables"], mode=mode)
+                damaged = deepcopy(self.record)
+                damaged["mode"] = mode
+                damaged["atlas"] = [c for c in damaged["atlas"] if not c.get("repair_projection")]
+                with patch("engine.resolve._resolve_polynomial", return_value=damaged):
+                    quick = resolve(dict(request, search="quick"))
+                self.assertEqual(quick["status"], "inconclusive")
+                self.assertIn("complete cover", quick["diagnostic"]["description"])
+
+                replacement = resolve(dict(request, search="quick"))
+                self.assertEqual(replacement["status"], "resolved")
+                with patch("engine.resolve._resolve_polynomial", return_value=damaged), \
+                     patch("engine.general_resolution.search", return_value=replacement) as fallback:
+                    result = resolve(dict(request, search="exhaustive"))
+                fallback.assert_called_once()
+                self.assertEqual(result["status"], "resolved")
+                self.assertEqual(result["dual_complex"]["status"], "complete")
+
     def test_zeta_replay_requires_a_complete_repair_cover(self):
         record = resolve({"polynomial": "z^3+y^4+(1/432)*x^6+x*y^2*z+x^3*y*z+x*y*z^2",
                           "variables": list("xyz"), "mode": "embedded", "monodromy": True})
@@ -65,6 +88,9 @@ class SavedRepairCoverTests(unittest.TestCase):
                 self.assertEqual(actual["expression"], expected["expression"])
                 charts = saved["atlas"]
                 first = next(i for i, c in enumerate(charts) if c.get("repair_projection"))
+                changed = deepcopy(charts)
+                changed[first]["repair_projection"]["map"][0] += "+1"
                 for reduced in (charts[:first] + charts[first+1:],
-                                [c for c in charts if not c.get("repair_projection")]):
-                    self.assertEqual(compute({**saved, "atlas": reduced})["status"], "unavailable")
+                                [c for c in charts if not c.get("repair_projection")], changed):
+                    with self.assertRaisesRegex(InvalidChart, "complete cover"):
+                        compute({**saved, "atlas": reduced})

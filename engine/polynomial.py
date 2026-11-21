@@ -3,6 +3,8 @@ from decimal import Decimal
 from fractions import Fraction
 from numbers import Rational
 from collections import namedtuple
+from contextlib import contextmanager
+from contextvars import ContextVar
 import re
 import sys
 
@@ -10,6 +12,17 @@ MAX_DEGREE = 128
 MAX_TERMS = 4096
 MAX_BITS = 4096
 MAX_PRODUCTS = 250_000
+_SAVED_POLYNOMIALS = ContextVar("atlas_saved_polynomials", default=False)
+
+
+@contextmanager
+def saved_polynomial_input():
+    """Read exact decimal coefficients and powers emitted by a resolution record."""
+    token = _SAVED_POLYNOMIALS.set(True)
+    try:
+        yield
+    finally:
+        _SAVED_POLYNOMIALS.reset(token)
 
 
 class InputError(ValueError):
@@ -50,6 +63,8 @@ def _expression_tokens(source, variables, bounded):
 
 
 def _check_literal_digits(tokens, digit_limit=None):
+    if _SAVED_POLYNOMIALS.get():
+        return
     if digit_limit is None:
         digit_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else 0
     if digit_limit:

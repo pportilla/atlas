@@ -151,7 +151,7 @@ bool centre(const Fan& cones, const Fan& bad, const Rays& rays, const Vector& or
     }
     return false;
 }
-int terminal(const Face& c,const Vector& orders,size_t n) {
+int terminal(const Face& c,const Vector& orders,size_t n,bool intrinsic) {
     size_t plus=0,minus=0,p=0,m=0;
     for(size_t j=0;j<c.size();++j) {
         if(orders[c[j]]>0) {++plus; p=j;}
@@ -160,9 +160,15 @@ int terminal(const Face& c,const Vector& orders,size_t n) {
     if(!plus || !minus) return -1; // a unit term
     if(plus==1 && c[p]<n && orders[c[p]]==1) return static_cast<int>(p);
     if(minus==1 && c[m]<n && orders[c[m]]==-1) return static_cast<int>(m);
+    // On u_E = a*v^d the strict transform is a graph, and its reduced
+    // intersection with E is v=0. All other exceptional axes are free.
+    if(intrinsic && plus==1 && minus==1) {
+        if(c[p]>=n && c[m]<n && orders[c[p]]==1) return static_cast<int>(p);
+        if(c[m]>=n && c[p]<n && orders[c[m]]==-1) return static_cast<int>(m);
+    }
     return -2;
 }
-std::string fan(std::istream& in,size_t n) {
+std::string fan(std::istream& in,size_t n,bool intrinsic) {
     const Integer max_steps=read<Integer>(in), max_cones=read<Integer>(in);
     const auto a=row<Integer>(in,n), b=row<Integer>(in,n);
     Rays rays(n,Vector(n));
@@ -175,7 +181,7 @@ std::string fan(std::istream& in,size_t n) {
         Fan bad;
         std::vector<int> certificates;
         for(auto& c:cones) {
-            int cert=terminal(c,orders,n);
+            int cert=terminal(c,orders,n,intrinsic);
             certificates.push_back(cert);
             if(cert==-2) bad.push_back(sorted(c));
         }
@@ -657,7 +663,10 @@ std::string incidence(std::istream& in,size_t n) {
                 if(p||m){
                     const auto& live=p?neg:pos;
                     if(live.empty()) return;
-                    if(live.size()!=1 || abs(signs[live[0]])!=1)
+                    const auto& vanishing=p?pos:neg;
+                    const bool graph=vanishing.size()==1 && abs(signs[vanishing[0]])==1
+                                     && live.size()==1 && !selected.count(live[0]);
+                    if(live.size()!=1 || (abs(signs[live[0]])!=1 && !graph))
                         throw std::invalid_argument("Nonterminal chart: the surviving monomial is not a single linear coordinate.");
                     zeros.insert(std::lower_bound(zeros.begin(),zeros.end(),live[0]),live[0]);
                 }
@@ -753,7 +762,7 @@ extern "C" char* atlas_binomial(const char* data,size_t length) noexcept {
         if(n==3 && op=="diagonal_cells") return atlas::copy_text(diagonal_cells(in));
         if(n==3 && op=="diagonal") return atlas::copy_text(diagonal(in));
         if(n<2) throw std::invalid_argument("Invalid binomial dimension.");
-        if(op=="fan") return atlas::copy_text(fan(in,n));
+        if(op=="fan" || op=="intrinsic_fan") return atlas::copy_text(fan(in,n,op=="intrinsic_fan"));
         if(op=="incidence") return atlas::copy_text(incidence(in,n));
         if(op=="pairings") return atlas::copy_text(pairings(in,n));
         throw std::invalid_argument("Unknown binomial operation.");

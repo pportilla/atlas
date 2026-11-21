@@ -16,7 +16,8 @@ class CertificateWorkerSpare(TestCase):
             with self.subTest(early_spare=early_spare):
                 first, replacement = Mock(answered=0), Mock(answered=0)
                 first.ask.side_effect = [json.dumps(["rejected", None, None]), None]
-                replacement.ask.return_value = json.dumps(["certified", {"certificate": {}}, None])
+                bundle = {"record": {"certificate": {}}, "certified": [[], {}]}
+                replacement.ask.return_value = json.dumps(["certified", bundle, None])
                 workers = Mock()
                 spares = []
 

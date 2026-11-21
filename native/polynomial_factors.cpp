@@ -1,5 +1,7 @@
 #include "polynomial_factors.hpp"
+#include "polynomial_gcd.hpp"
 #include "flint_polynomial.hpp"
+#include "triton_factor_division.hpp"
 
 namespace atlas {
 namespace {
@@ -70,6 +72,8 @@ const char* ordered_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t f,
                             const fmpq_mpoly_ctx_t ctx) {
     if (fmpq_mpoly_is_zero(f, ctx))
         throw std::invalid_argument("The zero polynomial has no irreducible factorization.");
+    // A failed FLINT attempt may have populated part of the output.
+    out->num = 0;
     fmpq_mpoly_get_term_coeff_fmpq(out->constant, f, 0, ctx);
     if (fmpq_mpoly_is_fmpq(f, ctx)) return "rational_constant";
     if (has_linear_variable(f, ctx)) {
@@ -80,9 +84,38 @@ const char* ordered_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t f,
         return "linear_variable";
     }
     if (factor_primitive_binomial(out, f, ctx)) return "primitive_binomial";
-    if (!fmpq_mpoly_factor(out, f, ctx) || !fmpq_mpoly_factor_make_monic(out, ctx))
-        throw Limit("Rational factorization did not finish.");
-    return "flint";
+    if (triton_linear_factors(out, f, ctx)) return "modular_root_screen";
+    if (fmpq_mpoly_factor(out, f, ctx) && fmpq_mpoly_factor_make_monic(out, ctx))
+        return "flint";
+    exhaustive_rational_factors(out, f, ctx);
+    return "sparse_kronecker";
+}
+
+const char* squarefree_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t f, const fmpq_mpoly_ctx_t ctx) {
+    if (fmpq_mpoly_is_zero(f,ctx)) throw std::invalid_argument("The zero polynomial has no square-free factorization.");
+    if (fmpq_mpoly_is_fmpq(f,ctx)) return ordered_factors(out,f,ctx);
+    const char* route;
+    if (triton_linear_factors(out,f,ctx,true)) route = "modular_root_screen";
+    else if (fmpq_mpoly_degrees_fit_si(f,ctx) && fmpq_mpoly_factor_squarefree(out,f,ctx)
+             && fmpq_mpoly_factor_make_monic(out,ctx)) route = "flint_squarefree";
+    else route = ordered_factors(out,f,ctx);
+    // FLINT's monomial factors and the screened linear factors can contribute
+    // to the same multiplicity. Compact them without narrowing their GMP powers.
+    slong count=0;
+    for (slong i=0;i<out->num;++i) {
+        slong j=0;
+        while (j<count && !fmpz_equal(out->exp+j,out->exp+i)) ++j;
+        if (j<count) fmpq_mpoly_mul(out->poly+j,out->poly+j,out->poly+i,ctx);
+        else {
+            if (count!=i) {
+                fmpq_mpoly_swap(out->poly+count,out->poly+i,ctx);
+                fmpz_swap(out->exp+count,out->exp+i);
+            }
+            ++count;
+        }
+    }
+    out->num=count;
+    return route;
 }
 
 void rational_squarefree_part(fmpq_mpoly_t out, const fmpq_mpoly_t f, const fmpq_mpoly_ctx_t ctx) {
@@ -101,7 +134,7 @@ void rational_squarefree_part(fmpq_mpoly_t out, const fmpq_mpoly_t f, const fmpq
     fmpq_mpoly_set(common.p, f, ctx);
     for (slong j = 0; j < fmpq_mpoly_ctx_nvars(ctx) && !fmpq_mpoly_is_fmpq(common.p, ctx); ++j) {
         fmpq_mpoly_derivative(derivative.p, f, j, ctx);
-        if (!fmpq_mpoly_gcd(out, common.p, derivative.p, ctx)) throw Limit("A polynomial gcd failed.");
+        monic_polynomial_gcd(out, common.p, derivative.p, ctx);
         fmpq_mpoly_swap(out, common.p, ctx);
     }
     if (!fmpq_mpoly_divides(out, f, common.p, ctx)) throw Limit("Inexact squarefree quotient.");

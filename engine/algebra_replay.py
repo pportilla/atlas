@@ -25,8 +25,10 @@ def _arguments_too_long(polynomials):
 
 def _command(request):
     ring, operands = request["ring"], request["operands"]
+    field = ring["field"]
+    field_text = json.dumps(field, separators=(",", ":")) if isinstance(field, dict) else field
     args = ["./atlas", "algebra", request["operation"], "--vars", ",".join(ring["variables"]),
-            "--field", ring["field"], "--order", ring["order"], "--compute", request["compute"]]
+            "--field", field_text, "--order", ring["order"], "--compute", request["compute"]]
     if "relations" in ring and not ring["relations"]:
         args.append("--quotient-ring")
     for relation in ring.get("relations", ()):
@@ -34,9 +36,10 @@ def _command(request):
             args.append("--relation=" + relation)
         else:
             args.extend(["--relation", relation])
-    for key, flag in (("components", "--component"), ("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
+    for key, flag in (("components", "--component"), ("factors", "--factor"), ("ideal", "--gen"), ("other_ideal", "--other-gen"), ("prime", "--prime"),
                       ("numerator", "--numerator"), ("denominator", "--denominator"),
-                      ("polynomial", "--poly"), ("other_polynomial", "--other-poly")):
+                      ("polynomial", "--poly"), ("other_polynomial", "--other-poly"), ("images", "--image"),
+                      ("variable", "--variable")):
         if key not in operands:
             continue
         values = operands[key]
@@ -47,6 +50,15 @@ def _command(request):
                 args.append(flag + "=" + value)
             else:
                 args.extend([flag, value])
+    for key, flag in (("values", "--values"), ("other", "--other"), ("modulus", "--modulus"),
+                      ("other_modulus", "--other-modulus"), ("field_polynomial", "--field-polynomial")):
+        if key in operands:
+            value = operands[key]
+            if key in ("other","values") and "field_polynomial" in operands:
+                value = json.dumps(value, separators=(",", ":"))
+            elif isinstance(value, list):
+                value = ",".join(value)
+            args.append(flag + "=" + value)
     if "action" in operands:
         args.extend(["--action", operands["action"]])
     if "exponent" in operands:
@@ -57,6 +69,12 @@ def _command(request):
         args.extend(["--point", ",".join(operands["point"])])
     if "degrees" in operands:
         args.extend(["--degrees", ",".join(map(integer_text, operands["degrees"]))])
+    if "rows" in operands:
+        for row in operands["rows"]:
+            args.append("--row=" + ",".join(row))
+        args.extend(["--columns", str(operands["columns"])])
+        if "rhs" in operands:
+            args.append("--rhs=" + ",".join(operands["rhs"]))
     args.append("--json")
     return shlex.join(args)
 
@@ -70,7 +88,13 @@ def _reserved_names():
 
 
 def _script(request, prepared, generator_text):
-    if "relations" in request["ring"] or request["operation"] in ("ideal", "quotient-ring", "ae-codimension"):
+    if request["operation"] == "matrix-analysis":
+        args = [repr(prepared["rows"]), f"columns={prepared['columns']}", f"compute={request['compute']!r}"]
+        if "rhs" in prepared:
+            args.append(f"rhs={prepared['rhs']!r}")
+        return f"result = matrix_analysis({', '.join(args)})"
+    if "relations" in request["ring"] or request["operation"] in (
+            "ideal", "hensel-factors", "quotient-ring", "ae-codimension", "polynomial-arithmetic", "modular-arithmetic"):
         # Preserve the original operands for one-shot declarations, quotient
         # operations and ordered maps without expanding polynomials for presentation.
         return None

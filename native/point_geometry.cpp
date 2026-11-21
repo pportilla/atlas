@@ -7,6 +7,9 @@
 #include "local_quotient_jets.hpp"
 #include "primary_decomposition.hpp"
 #include "local_io.hpp"
+#include <flint/fmpq.h>
+#include <flint/fmpq_mat.h>
+#include <flint/nmod_mat.h>
 #include <algorithm>
 #include <climits>
 #include <map>
@@ -484,14 +487,13 @@ void insert(Pivots& pivots, Row row) {
         return;
     }
 }
-Json::Value row_space(const Matrix& rows, size_t width, const Json::Value& witness, bool rank_only) {
-    Pivots pivots;
+bool echelon_rows(Pivots& pivots, const Matrix& rows, size_t width, const Json::Value& witness) {
     if (!witness.isNull()) {
         for (const auto& i : witness) insert(pivots, rows.at(i.asUInt()));
-        if (pivots.size() != witness.size()) return {};
+        if (pivots.size() != witness.size()) return false;
         if (pivots.size() < width) for (auto row : rows) {
             reduce(row, pivots);
-            if (std::any_of(row.begin(), row.end(), [](const Q& c){ return c != 0; })) return {};
+            if (std::any_of(row.begin(), row.end(), [](const Q& c){ return c != 0; })) return false;
         }
     } else {
         for (const auto& row : rows) {
@@ -499,24 +501,106 @@ Json::Value row_space(const Matrix& rows, size_t width, const Json::Value& witne
             if (pivots.size() == width) break;
         }
     }
-    Json::Value out;
-    out["rank"] = Json::UInt64(pivots.size());
-    out["dimension"] = Json::UInt64(width - pivots.size());
-    out["rows"] = out["basis"] = Json::arrayValue;
-    if (rank_only) return out;
+    return true;
+}
+
+void back_substitute(Pivots& pivots, size_t width) {
     for (auto pivot = pivots.rbegin(); pivot != pivots.rend(); ++pivot) {
         for (auto prior = std::next(pivot); prior != pivots.rend(); ++prior) {
             const Q c = prior->second[pivot->first];
             if (c != 0) for (size_t j = pivot->first; j < width; ++j) prior->second[j] -= c * pivot->second[j];
         }
     }
-    for (const auto& [col, row] : pivots) out["rows"].append(strings(row));
+}
+
+Json::Value nullspace(const Pivots& pivots, size_t width) {
+    Json::Value basis(Json::arrayValue);
     for (size_t col = 0; col < width; ++col) {
         if (pivots.count(col)) continue;
         Row direction(width);
         direction[col] = 1;
         for (const auto& [j, row] : pivots) direction[j] = -row[col];
-        out["basis"].append(strings(direction));
+        basis.append(strings(direction));
+    }
+    return basis;
+}
+
+Json::Value row_space(const Matrix& rows, size_t width, const Json::Value& witness, bool rank_only) {
+    Pivots pivots;
+    if (!echelon_rows(pivots, rows, width, witness)) return {};
+    Json::Value out;
+    out["rank"] = Json::UInt64(pivots.size());
+    out["dimension"] = Json::UInt64(width - pivots.size());
+    out["rows"] = out["basis"] = Json::arrayValue;
+    if (!rank_only) {
+        back_substitute(pivots, width);
+        for (const auto& [col, row] : pivots) out["rows"].append(strings(row));
+        out["basis"] = nullspace(pivots, width);
+    }
+    return out;
+}
+
+Json::Value determinant_plan(const Matrix& rows, size_t width);
+Json::Value certified_determinant(const Json::Value& plan, const Json::Value& candidate, size_t n);
+
+Q square_determinant(const Matrix& rows) {
+    if (rows.empty()) return 1;
+    const auto n = rows.size();
+    fmpq_mat_t matrix;
+    fmpq_mat_init(matrix, n, n);
+    fmpq_t determinant;
+    fmpq_init(determinant);
+    for (size_t i = 0; i < n; ++i)
+        for (size_t j = 0; j < n; ++j) fmpq_set_mpq(fmpq_mat_entry(matrix,i,j), rows[i][j].get_mpq_t());
+    fmpq_mat_det(determinant, matrix);
+    Q value;
+    fmpq_get_mpq(value.get_mpq_t(), determinant);
+    fmpq_clear(determinant);
+    fmpq_mat_clear(matrix);
+    return value;
+}
+
+Json::Value matrix_analysis(Matrix augmented, size_t width, bool solve, const Json::Value& witness,
+                            const Json::Value& candidate) {
+    const auto height = augmented.size();
+    Pivots pivots;
+    if (!echelon_rows(pivots, augmented, width+solve, witness)) return {};
+    back_substitute(pivots, width+solve);
+    // The last column can be a pivot precisely when the system is inconsistent.
+    const bool inconsistent = solve && pivots.erase(width);
+    Json::Value out;
+    out["row_count"] = Json::UInt64(height);
+    out["column_count"] = Json::UInt64(width);
+    out["rank"] = Json::UInt64(pivots.size());
+    out["determinant"] = out["solution"] = Json::nullValue;
+    out["pivot_columns"] = out["image"] = out["rref"] = Json::arrayValue;
+    Row particular(width);
+    for (auto& [col,row] : pivots) {
+        out["pivot_columns"].append(Json::UInt64(col));
+        Row image;
+        image.reserve(height);
+        for (const Row& input : augmented) image.push_back(input[col]);
+        out["image"].append(strings(image));
+        if (solve) { particular[col] = row.back(); row.pop_back(); }
+        out["rref"].append(strings(row));
+    }
+    if (height > pivots.size()) {
+        const auto zero = strings(Row(width));
+        while (out["rref"].size() < height) out["rref"].append(zero);
+    }
+    out["kernel"] = nullspace(pivots, width);
+    if (height == width) {
+        Json::Value determinant;
+        if (!candidate.isNull())
+            determinant = certified_determinant(determinant_plan(augmented,width), candidate, width);
+        out["determinant_device_verified"] = !determinant.isNull();
+        out["determinant"] = pivots.size() != width ? Json::Value("0") :
+            determinant.isNull() ? Json::Value(square_determinant(augmented).get_str()) : determinant;
+    }
+    if (solve) {
+        auto& solution = out["solution"];
+        solution["status"] = inconsistent ? "inconsistent" : pivots.size() == width ? "unique" : "underdetermined";
+        solution["particular"] = inconsistent ? Json::Value() : strings(particular);
     }
     return out;
 }
@@ -530,6 +614,55 @@ Powers primitive(const Row& row) {
     }
     if (content > 1) for (auto& v : integers) v /= content;
     return integers;
+}
+
+// Remove all rational row content before testing the signed-word bound.
+// This also admits very large coefficients which share a row scale.
+Json::Value determinant_plan(const Matrix& rows, size_t width) {
+    if (!width || rows.size() != width || width > 6) return {};
+    Json::Value plan;
+    plan["entries"] = Json::arrayValue;
+    Z bound = 1;
+    Q scale = 1;
+    for (const auto& row : rows) {
+        const auto entries = primitive(row.size() == width ? row : Row(row.begin(),row.begin()+width));
+        Z norm = 0;
+        for (const auto& x : entries) norm += abs(x);
+        if (!norm) return {};
+        bound *= norm;
+        if (!bound.fits_slong_p() || mpz_sizeinbase(bound.get_mpz_t(), 2) > 63) return {};
+        const auto first = std::find_if(entries.begin(), entries.end(), [](const Z& x){ return x != 0; });
+        scale *= row[first-entries.begin()] / *first;
+        for (const auto& x : entries) plan["entries"].append(Json::Int64(x.get_si()));
+    }
+    plan["bound"] = bound.get_str();
+    plan["scale"] = scale.get_str();
+    return plan;
+}
+
+Json::Value certified_determinant(const Json::Value& plan, const Json::Value& candidate, size_t n) {
+    if (!plan.isObject() || !candidate.isString() || plan["entries"].size() != n*n) return {};
+    const Z value(candidate.asString()), bound(plan["bound"].asString());
+    if (abs(value) > bound) return {};
+    Z modulus = 1;
+    for (ulong p : {1000000007UL, 1000000009UL, 998244353UL}) {
+        nmod_mat_t image;
+        nmod_mat_init(image,n,n,p);
+        for (size_t i = 0; i < n; ++i) for (size_t j = 0; j < n; ++j) {
+            const auto entry = plan["entries"][Json::ArrayIndex(i*n+j)].asInt64();
+            const auto residue = entry % static_cast<int64_t>(p);
+            nmod_mat_entry(image,i,j) = residue < 0 ? residue+static_cast<int64_t>(p) : residue;
+        }
+        const ulong det = nmod_mat_det(image);
+        nmod_mat_clear(image);
+        if (det != mpz_fdiv_ui(value.get_mpz_t(),p)) return {};
+        modulus *= p;
+        if (modulus > 2*bound) {
+            Q exact = value * Q(plan["scale"].asString());
+            return exact.get_str();
+        }
+    }
+    return {};
 }
 
 bool full_cotangent_rank(const Point& p, const std::vector<Terms>& polynomials) {
@@ -707,13 +840,16 @@ size_t expression_size(const std::map<std::vector<mpz_class>, mpq_class>& terms)
 namespace {
 Json::Value compute(const Json::Value& r) {
     const std::string op = r["operation"].asString();
-    if (op == "row_space" || op == "residues") {
+    if (op == "row_space" || op == "residues" || op == "matrix_analysis" || op == "matrix_determinant_plan") {
         size_t width = r["width"].asUInt64();
+        const bool solve = op == "matrix_analysis" && r["augmented"].asBool();
         Matrix rows;
         for (const auto& v : r["rows"]) {
             rows.push_back(read_row(v));
-            if (rows.back().size() != width) throw std::invalid_argument("Invalid Jacobian row width.");
+            if (rows.back().size() != width+solve) throw std::invalid_argument("Invalid matrix row width.");
         }
+        if (op == "matrix_determinant_plan") return determinant_plan(rows,width);
+        if (op == "matrix_analysis") return matrix_analysis(std::move(rows), width, solve, r["witness"], r["det_candidate"]);
         if (op == "row_space") return row_space(rows, width, r["witness"], r["rank_only"].asBool());
         Json::Value out(Json::arrayValue);
         unsigned long prime = r["prime"].asUInt();

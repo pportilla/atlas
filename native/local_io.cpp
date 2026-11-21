@@ -1,6 +1,7 @@
 // Use the existing Atlas expression parser and FLINT pullback in the CLI process.
 #include "local_io.hpp"
 #include "local_monomial.hpp"
+#include "polynomial_gcd.hpp"
 #include "groebner.hpp"
 #include "sparse_flint.hpp"
 #include <algorithm>
@@ -297,14 +298,21 @@ Basis project_monomials(const Basis& generators, const std::vector<mpq_class>& p
     return result;
 }
 
-std::optional<Polynomial> polynomial_gcd(const Basis& generators, size_t width) {
+std::optional<Polynomial> polynomial_gcd(const Basis& generators, size_t width, bool required) {
     SparseLexRing ring(width);
     PolyValue common(ring.ctx), f(ring.ctx);
     for (const auto& g : generators) {
         if (g.empty()) continue;
         ring.write(f.p, g);
         if (fmpq_mpoly_is_zero(common.p, ring.ctx)) fmpq_mpoly_set(common.p, f.p, ring.ctx);
-        else if (!fmpq_mpoly_gcd(common.p, common.p, f.p, ring.ctx)) return std::nullopt;
+        else {
+            PolyValue next(ring.ctx);
+            if (!fmpq_mpoly_gcd(next.p, common.p, f.p, ring.ctx)) {
+                if (!required) return std::nullopt;
+                gcd_by_intersection(next.p, common.p, f.p, ring.ctx);
+            }
+            fmpq_mpoly_swap(common.p, next.p, ring.ctx);
+        }
         if (fmpq_mpoly_is_fmpq(common.p, ring.ctx)) break;
     }
     return ring.read(common.p);

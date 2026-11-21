@@ -488,11 +488,22 @@ def replay_scope(compute=None, backend=None, index=None):
                 trace_swap.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
                 trace_swap.restype = None
                 trace_swap(ctypes.byref(trace))
+            crt_swap = getattr(library, "atlas_groebner_swap_crt_pairs", None)
+            crt = ctypes.c_void_p()
+            if crt_swap:
+                from .gpu_crt import dispatch_crt
+                if scope.compute == "gpu" and scope.backend in ("auto", "triton"):
+                    crt = ctypes.cast(dispatch_crt, ctypes.c_void_p)
+                crt_swap.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+                crt_swap.restype = None
+                crt_swap(ctypes.byref(crt))
             library.atlas_groebner_swap_batch(ctypes.byref(pointer), ctypes.byref(active))
             try:
                 yield scope
             finally:
                 library.atlas_groebner_swap_batch(ctypes.byref(pointer), ctypes.byref(active))
+                if crt_swap:
+                    crt_swap(ctypes.byref(crt))
                 if trace_swap:
                     trace_swap(ctypes.byref(trace))
                 scope.collect_cpu()

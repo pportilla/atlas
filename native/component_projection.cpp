@@ -167,7 +167,7 @@ J projection_shape(const J& q) {
     Polynomial eliminant=relations.front();
     if (relations.size()>1) {
         if (ring.relation.empty()) {
-            auto common=local::polynomial_gcd(relations,ring.width);
+            auto common=local::polynomial_gcd(relations,ring.width,true);
             if (!common) throw std::runtime_error("Unable to compute the projection eliminant gcd.");
             eliminant=std::move(*common);
         } else {

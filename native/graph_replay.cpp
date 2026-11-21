@@ -2,8 +2,11 @@
 // A marked number field is presented by its defining equation in the last
 // coordinate. Free base coordinates may be suppressed when computing orders.
 #include "local_io.hpp"
+#include "local_point_quotient.hpp"
 #include "primary_decomposition.hpp"
+#include "polynomial_factors.hpp"
 #include "rational_sparse_json.hpp"
+#include "sparse_flint.hpp"
 #include <algorithm>
 #include <memory>
 #include <numeric>
@@ -304,7 +307,17 @@ J open(const J& r, bool omitted) {
     const auto factors = chart.rows(r["factors"]);
     Basis total;
     if (factors.empty()) {
-        total=strict(f);
+        Polynomial resolved=f;
+        if (r.isMember("base_unit")) {
+            const auto multiplier=chart.read(r["base_unit"]);
+            resolved=chart.read(r["resolved_equation"]);
+            for (const auto& term:multiplier)
+                require(std::all_of(term.first.begin()+base,term.first.end(),[](const auto& e){return e==0;}),
+                        "A removed unit must use the original base coordinates.");
+            require(multiplier.count(Powers(chart.n)) && primary::multiply(resolved,multiplier)==f,
+                    "The removed factor must be a unit at the origin and recover the original polynomial.");
+        }
+        total=strict(resolved);
         out["strict"].append(unit(total)?J():chart.texts(total,true));
     } else {
         Polynomial support=one(chart.n);
@@ -452,6 +465,23 @@ J execute(const J& r) {
     const auto op=r["operation"].asString();
     if (op=="open" || op=="omitted") return open(r,op=="omitted");
     ChartRing chart(r["coords"]);
+    if (op=="verify_centre") {
+        auto centre=chart.rows(r["centre"]);
+        if (!r["relation"].isNull()) centre.push_back(chart.read(r["relation"]));
+        const auto ideal=chart.reduced(centre);
+        if (unit(ideal)) return true;
+        SparseLexRing ring(chart.n);
+        PolyValue equation(ring.ctx), support(ring.ctx);
+        ring.write(equation.p, chart.read(r["equation"]));
+        rational_squarefree_part(support.p,equation.p,ring.ctx);
+        const auto reduced=ring.read(support.p);
+        auto singular=partial_derivatives(reduced,chart.n);
+        singular.push_back(reduced);
+        for (const auto& f:singular)
+            require(primary::member_lex(f,ideal) || chart.radical_member(f,ideal),
+                    "The graph centre meets the smooth locus or lies outside the reduced hypersurface.");
+        return true;
+    }
     if (op=="strata_tasks") return strata_tasks(chart,r);
     if (op=="stratum_faces") return stratum_faces(chart,r);
     if (op=="intersection") {

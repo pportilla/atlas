@@ -14,7 +14,9 @@ flowchart TD
     C --> V["Check smoothness and crossings over the origin"]
     V -->|more blowups needed| M
     V -->|certified| D["Identify exceptional components and their intersections"]
-    D -->|zetas requested| Z["Compute Euler characteristics of the strata"]
+    D -->|zetas requested| Z["Compute divisor orders and Euler characteristics on the origin fibre"]
+    Z -->|missing evidence| M
+    Z -->|certified| R["Evaluate the requested zeta formulas"]
 ```
 
 This chapter describes `method="auto"`, the default at the prompt, in scripts,
@@ -36,19 +38,26 @@ supply the charts and satisfy the checks for the requested mode.
 
 | Geometry of the input | Construction |
 | --- | --- |
-| Smooth germ, or an embedded divisor already having normal crossings | The identity suffices. For an embedded singular germ in three to eight coordinates, Atlas checks for coordinate powers or smooth factors through the origin with independent differentials. |
+| Smooth germ, or an embedded divisor already having simple normal crossings | The identity suffices. Atlas recognizes coordinate powers times a unit, and its bounded factorization test recognizes smooth rational branches with independent differentials. For eligible equations in two active coordinates it also verifies two transverse conjugate branches over a quadratic field, including cylinders in up to eight ambient coordinates. [Conjugate plane branches](../engine/plane_identity.py) |
 | Singular plane curve | Blow up points and follow the branches through the new charts until the requested crossings hold. [Plane blowups](../native/plane.cpp) |
 | A-series surface singularity | Try the chain of surface charts before the ordinary-point test. [Surface chains](../native/chain.cpp) |
 | Smooth projectivized tangent cone | Try the ordinary blowup of the origin. [Ordinary points](../native/ordinary.cpp) |
 | Diagonal surface or binomial | Try a fan adapted to the diagonal surface, or coordinate blowups for the binomial. [Diagonal surface fans](../native/toricfan.cpp) · [Binomial charts](../native/binomial_fan.cpp) |
 
-The ordinary engine accepts two to eight variables, at most 4,096 expanded
-terms and total degree at most 128. Outside that range a nonzero linear part
-can still certify a smooth germ. After reaching a plane worker limit in
+The fast ordinary-point engine accepts two to eight variables, at most 4,096
+expanded terms and total degree at most 128. Outside that range a nonzero
+linear part can still certify a smooth germ, and the general ideal search
+accepts arbitrary finite ambient dimension. After reaching a plane worker limit in
 exhaustive search the solver skips the binomial shortcut. For a repeated
 input factor, embedded mode can resolve the reduced support and recover the
 original multiplicities from its transforms. Intrinsic mode requires a
-reduced germ. [Dispatch and size checks](../engine/resolve.py) · [Recovering multiplicities](../engine/weighted_record.py)
+reduced germ. Atlas checks whether the quotient by the squarefree part is
+a unit at the origin, so repeated factors away from the germ are allowed.
+The stopping test depends on the mode. For the cusp cylinder
+$y^2-x^3=0$ in three-space, one ordinary blowup along the singular line
+makes the strict transform smooth. Embedded resolution takes three ordinary
+blowups to give the total divisor simple normal crossings.
+[Dispatch and size checks](../engine/resolve.py) · [Binomial charts](../native/binomial_fan.cpp) · [Recovering multiplicities](../engine/weighted_record.py)
 
 ### Bounded centre proofs
 
@@ -157,15 +166,31 @@ glue. [Smooth centres](../engine/local_blowups.py) · [Graph charts](../engine/g
 For canonical point and curve blowups, Atlas uses the invariant of Bierstone
 and Milman to choose a smooth centre while the strict transform is singular.
 On eligible affine hypersurface charts it computes the invariant and centre
-by successive restriction to hypersurfaces of maximal contact. When a surface
+by successive restriction to hypersurfaces of maximal contact. In embedded mode, when a surface
 in a threefold has become smooth, the curves cut out on it by the exceptional
 divisors determine the remaining blowups. [Bierstone and Milman, *Desingularization algorithms I. Role of exceptional divisors*, Theorem 1.14 (2003)](https://arxiv.org/abs/math/0207098) · [Centre calculation](../native/centre_affine_maximum.cpp) · [Surface step](../native/surface_centre_choice.cpp)
+
+Intrinsic mode can stop as soon as the strict transform is smooth on all
+charts over the origin. For example, take $A=x+y+z$ and $B=x-y$ in the
+sheared cusp cylinder $A^2-B^3=0$. Atlas finds the line $A=B=0$. Its
+blowup gives strict equations $v^2-B=0$ and $1-Au^3=0$, both smooth.
+The former is tangent to the exceptional divisor at $B=v=0$. This explains
+why the intrinsic record has one blowup and the embedded record has three.
+[Canonical construction](../engine/origin_backend.py) · [Incidence replay](../engine/canonical_replay.py)
+
+When a finite centre must be split, the exceptional divisors through a
+point can identify its class across charts. If several points have the
+same divisor labels, the routine can select a single local factor only
+when one chart contains all the candidates. An ordering of slopes on one
+chart need not agree with the ordering on an overlapping chart, where the
+coordinate may be the reciprocal slope. An ambiguous selection returns
+control to the other resolution rules. [Finite centre selection](../native/centre_weights.cpp)
 
 | Charts | What the native verifier checks |
 | --- | --- |
 | Canonical blowups | Each stage computes strict transforms, exceptional orders and charts. It checks which new charts meet the fibre and where crossings still fail. For intersections it uses the exceptional ideals, equations of the fibre, and exclusions on each chart. [Blowup stage](../native/canonical_blowup.cpp) · [Chart incidence](../native/owned_chart_incidence.cpp) |
 | Ideal blowups | The graph equations give the strict transform, projection and exceptional orders. Decomposition over the rationals or a marked number field, followed by comparison on overlaps, identifies the geometric components. [Graph verification](../native/graph_replay.cpp) · [Wide inputs](../native/graph_wide.cpp) · [Component projections](../native/component_projection.cpp) |
-| Newton charts | The fan verifier checks the substitutions, pullbacks, face domains and crossings. Torus sections give incidence and the faces of each cell. On a degenerate stratum the saturated Jacobian and a finite-locus test guide the repair. [Fan verification](../native/fan_verification.cpp) · [Torus sections](../native/torus_sections.cpp) · [Newton repair](../native/newton_repair.cpp) |
+| Newton charts | The fan verifier checks exceptional ray images against the singular locus of the reduced source, then verifies substitutions, pullbacks, face domains and crossings. Torus sections give incidence and the faces of each cell. On a degenerate stratum the saturated Jacobian and a finite-locus test guide the repair. [Ray images](../engine/fan_centres.py) · [Fan verification](../native/fan_verification.cpp) · [Torus sections](../native/torus_sections.cpp) · [Newton repair](../native/newton_repair.cpp) |
 | Saved charts | The verifier recovers the projection, chart domains and exceptional ideals from the saved equations, then glues components and computes the requested invariants. [Projection coefficients](../native/projection_coefficients.hpp) · [Gluing](../native/chart_gluing.cpp) |
 
 ## What the record certifies
@@ -176,6 +201,16 @@ line. To count that line once, one chart can take all finite slopes and the
 other the single missing point. The `atlas` field makes such assignments
 precise. Each piece specifies its projection, ambient equations, components,
 origin fibre and the region and exclusions it owns.
+
+For a projective ideal blowup, the generators and their full set of standard
+opens determine a proper map. Atlas tests that the centre lies in the
+singular locus of the reduced support. The map is an isomorphism away from
+the centre, hence birational on each component of the reduced hypersurface.
+Saturating the pullback on each open recovers its strict transform. Once the
+required smoothness or crossing checks hold over the whole origin fibre,
+properness gives a neighbourhood of the origin on which they still hold.
+Indeed, the image of the closed locus where a check fails is closed and
+misses the origin. [Graph verification](../native/graph_replay.cpp) · [Graph opens](../engine/graph_record.py)
 
 An identity, plane, ideal-blowup, point or fan chart can have a dedicated
 verifier. A monomial construction can also supply its verified atlas directly.
@@ -188,6 +223,100 @@ Embedded mode verifies normal crossings of the total transform on the owned fibr
 
 Both zetas use the same compactly supported Euler characteristics of disjoint strata. A’Campo’s formula uses the open strata on individual components and their multiplicities. The topological zeta function uses all strata, their multiplicities and the orders of the pulled-back volume form. [Native monodromy](../native/monodromy.cpp) · [Native topological zeta](../native/zeta.cpp) · [Formulas and cusp values](resolution-records.md#local-monodromy-zeta-function)
 
+### What the exhaustive search can certify
+
+The ordinary problem takes a nonzero polynomial over $\mathbb Q$ vanishing at
+the coordinate origin. Embedded resolution retains the multiplicities of the
+original divisor. A sequence of smooth blowups resolving its reduced support
+exists in characteristic zero. Over affine space a finite composition of
+blowups is itself the blowup of one finitely generated ideal. These facts
+explain why Atlas searches projective ideal blowups when a plane, Newton or
+canonical proposal is insufficient. [Bierstone and Milman](https://arxiv.org/abs/alg-geom/9508005) · [Stacks Project, Lemma 080B](https://stacks.math.columbia.edu/tag/080B)
+
+To see why finite descriptions suffice, choose such a resolution over
+$\mathbb Q$. Write generators of its blowup ideal as $g_0,\ldots,g_r$.
+Their graph embeds the blowup in $\mathbb A^n\times\mathbb P^r$, with one
+standard affine chart for each projective coordinate. The closures of its
+exceptional components have finitely generated ideals homogeneous in those
+coordinates. There are finitely many geometric components of their
+intersections. All coefficients needed to describe them over
+$\overline{\mathbb Q}$ lie in one finite number field. The search format admits
+rational centre generators, a minimal polynomial for a primitive field
+element, and homogeneous boundary generators over that field.
+[Certificate encoding](../engine/resolution_search.py) · [Chart predicates](../native/resolution-algorithms.md#charts-of-a-blowup-and-the-verification-of-a-centre)
+
+The search interleaves new finite ideal and boundary descriptions with
+revisits to earlier descriptions. It tries deeper algebraic tests and also
+repeats each fixed effort with increasing wall time. Coupling both limits
+would allow the test to grow more expensive on every retry before reaching
+the certificate. A timeout leaves a candidate eligible for another attempt.
+In both modes the general search checks the requested geometry and incidence
+inside the timed attempt before accepting an ideal. When an
+embedded solve requests zetas, the general verifier also checks the chart
+ownership, divisor orders, and strata over the original fibre. It also tests
+$Z_{\mathrm{top},0}(0)=1$ before accepting the integral data. A quick search
+stops at its requested budget. An exhaustive solve continues looking for
+the missing evidence. [Candidate schedule](../engine/resolution_search.py) · [Acceptance checks](../engine/general_resolution.py)
+
+For example, for $f=x_1\cdots x_9$ the identity resolves a simple
+normal-crossings divisor. Only the ninefold intersection meets the origin
+fibre, contributing $Z_{\mathrm{top},0}(s)=(s+1)^{-9}$. All the individual
+open strata miss that fibre, so the alternating monodromy zeta is $1$.
+The eigenvalue required by the pole at $-1$ occurs on $H^0$ of the Milnor
+fibre. Atlas also records it on each nearby smooth component.
+
+Some sparse inputs have exponents larger than a machine word. If the fast
+rational factorizer declines, the native kernel can certify a factor using
+Eisenstein's criterion or enumerate primitive integer divisors within a
+finite Kronecker coefficient bound and check exact division. For a gcd the
+intersection of the two principal ideals gives their least common multiple
+and hence their gcd. These fallbacks let an exact calculation continue even
+when a packed representation cannot hold an exponent. [Rational factor search](../native/rational_factor_fallback.cpp) · [GCD kernel](../native/polynomial_gcd.cpp)
+
+Given the certified strata, their Euler characteristics are computable by
+projection one coordinate at a time. On each constructible piece of the
+base, polynomial gcd calculations give the number of distinct roots in a
+finite fibre or identify an affine-line fibre. Additivity then reduces the
+calculation to fewer coordinates. A’Campo's product and the Denef–Loeser
+sum are exact finite arithmetic once these counts are known. [Euler kernel](../native/euler.cpp) · [Denef and Loeser](https://webusers.imj-prg.fr/~francois.loeser/jams92.pdf)
+
+With terminating exact tests for chart regularity, geometric components,
+their gluing and divisor orders, the theoretical algorithm eventually
+reaches a finite certificate, finishes its verification, and evaluates
+both functions. For the compiled kernels this argument is conditional on
+their ability to verify at least one such presentation for every accepted
+input. A universal proof of that condition remains open in this audit,
+particularly for number-field decompositions and chart gluing.
+Worker failures and exhaustion of physical memory remain possible. The
+dispatch order favours inexpensive proofs on recognized inputs. There is
+no established guarantee that it minimizes runtime or the number of blowups
+across all inputs.
+
+In Atlas's sign convention, the cyclotomic exponent for a reduced pole
+denominator $q$ at a point $a$ of the original divisor is given by
+
+$$
+C_q(a)=-\sum_{q\mid N_i}\chi_c(E_i^\circ\cap\pi^{-1}(a)).
+$$
+
+A nonzero value on a stratum whose closure contains the origin witnesses
+the required eigenvalue nearby. A zero at the origin leaves open the
+possibility of cancellation there or a witness on another stratum. Atlas
+checks the origin and selected nearby strata. A general test using this
+formula would have to determine its values as $a$ varies over the germ.
+When the implemented tests leave a pole without a witness, both zetas can
+have status `computed` while the conjecture check has status `unresolved`.
+[Nearby witnesses](resolution-records.md#monodromy-on-nearby-strata) · [Denef, Lemma 4.6](https://www.numdam.org/item/CM_1993__89_2_207_0.pdf#page=9)
+
 ## Replaying a saved resolution
 
-Replay starts from the saved equation and charts and skips the search for a modification. The `recompute-dual-complex` command recomputes incidence in the saved mode. Zeta replay checks embedded strata, using the saved companion when present. Some older records without reconstructible chart ownership can supply their archived certified numerical data and strata. A record that cannot establish the required embedded strata yields an unavailable zeta. [Replay a saved cusp](resolution-records.md#save-and-replay-the-cusp) · [Incidence replay](../engine/resolution_complex.py) · [Strata replay and archive fallback](../engine/strata.py) · [Session zeta replay](../engine/session_values.py)
+Zeta replay verifies the saved geometric evidence against the defining
+equation, including the ordinary embedded companion when present. If an
+older record lacks reconstructible ownership, Atlas computes the selected
+zetas again from the equation. A recorded contradiction is a certificate
+error. The `recompute-dual-complex` command recomputes incidence in the
+saved mode. For canonical records it replays the centres and chart family.
+For a repaired Newton record it checks the parent substitutions and strict
+equations against the input and verifies that the replacement opens cover the
+failed region. An older atlas whose map or cover cannot be reconstructed
+can yield partial incidence. [Replay a saved cusp](resolution-records.md#save-and-replay-the-cusp) · [Incidence replay](../engine/resolution_complex.py) · [Zeta replay](../engine/resolution_zetas.py)

@@ -12,10 +12,13 @@ endif
 # themselves instead of starting the program.
 HELPER_FLAGS := -DATLAS_HELPER_LIBRARY -fPIC -fvisibility=hidden $(HELPER_SHARED)
 PLANE_LIB := build/libplane.$(HELPER_SUFFIX)
+PLANE_INPUTS := plane.cpp common_field.cpp common_field.hpp algebraic_number.hpp binomial_root_family.hpp \
+                three_graph_contact.inc quadratic_translate_contact.inc quadratic_translate_zetas.hpp three_graph_zetas.hpp four_graph_zetas.hpp sparse_flint.hpp flint_polynomial.hpp \
+                groebner.hpp local_basis.hpp
 all: $(PLANE) $(PLANE_LIB)
-$(PLANE_LIB): plane.cpp common_field.cpp common_field.hpp algebraic_number.hpp binomial_root_family.hpp
+$(PLANE_LIB): $(PLANE_INPUTS)
 	mkdir -p build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(HELPER_FLAGS) plane.cpp common_field.cpp -o $@ $(LDFLAGS) $(shell pkg-config --libs jsoncpp flint)
-$(PLANE): plane.cpp common_field.cpp common_field.hpp algebraic_number.hpp binomial_root_family.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $(HELPER_FLAGS) plane.cpp common_field.cpp -o $@ $(LDFLAGS) $(shell pkg-config --libs jsoncpp flint) -lgmpxx -lgmp
+$(PLANE): $(PLANE_INPUTS)
 	mkdir -p build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) plane.cpp common_field.cpp -o $@ $(LDFLAGS) $(shell pkg-config --libs jsoncpp flint)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) plane.cpp common_field.cpp -o $@ $(LDFLAGS) $(shell pkg-config --libs jsoncpp flint) -lgmpxx -lgmp

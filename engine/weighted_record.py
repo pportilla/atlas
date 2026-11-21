@@ -12,6 +12,20 @@ def _product(parts):
     return "*".join(f"({g})^{integer_text(m)}" if m != 1 else f"({g})" for g,m in parts) or "1"
 
 
+def crossing_input_divisor(poly, names, crossing):
+    """Describe the original weights and local unit of a certified transverse divisor."""
+    weights = kernel_json("atlas_identity_divisor", "weight_profile", weights=[integer_text(m) for _, m in crossing])
+    if not weights["repeated"]:
+        return None
+    # The crossing solver already knows all branches passing through the
+    # origin. Exact division recovers the unit without factoring its support.
+    quotient = f"({format_poly(poly, names)})/({_product(crossing)})"
+    row, = native_library.affine_request(["function", " ".join(names), quotient])
+    support = parse_expression(_product([(f, 1) for f, _ in crossing]), names)
+    return dict(reduced_equation=format_poly(support, names), unit_at_origin=format_poly(sparse_row(row), names),
+                factors=[dict(equation=f, multiplicity=m) for f, m in crossing])
+
+
 @lru_cache(maxsize=256)
 def _factor(source, names):
     from .affine_kernel import archived_factor_order
@@ -154,6 +168,18 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
                     factors=[dict(equation=f,multiplicity=m) for f,m in factors])
     record["input_divisor"] = metadata
     if record["status"] != "resolved":
+        return record
+    if record["engine"] == "conjugate-plane-crossing":
+        # Both marked branches lie over the same irreducible rational factor.
+        # Keep their equations in the splitting field for original-divisor replay.
+        (_, power), = factors
+        chart, = record["charts"]
+        owned, = record["atlas"]
+        for component in (*chart["strict_transform_components"], *owned["components"]):
+            component["multiplicity"] = power
+        chart["reduced_strict_transform"] = chart["strict_transform"]
+        chart["strict_transform"] = format_poly(poly, names)
+        record["multiplicity"] = integer_from_decimal(point_operation("order", [0] * len(names), poly))
         return record
     raw = record["charts"]
     saved = record.get("atlas",[]) if record.get("engine") == "canonical-blowups" else []

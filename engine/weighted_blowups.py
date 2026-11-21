@@ -8,19 +8,19 @@ that the strict transform and the exceptional divisors cross normally over the
 origin. This module sends the parsed polynomial, runs the helper in a forked
 process with a deadline, and turns its answer into a resolution record.
 """
-from fractions import Fraction
+from itertools import chain, count
 import json
 import os
 import subprocess
 
-from .polynomial import InputError, LimitError, format_poly, rational_text
+from .polynomial import InputError, LimitError, encode_sparse_row, format_poly, integer_from_decimal, kernel_fraction
 
 SECONDS = 40
 METHOD = "weighted blowups (Abramovich-Temkin-Wlodarczyk, logarithmic)"
 
 
-def _rows(terms):
-    return ";".join(" ".join([rational_text(c), *map(str, e)]) for e, c in terms.items() if c)
+class WeightedDeclined(LimitError):
+    """The weighted construction could not certify this germ in its representation."""
 
 
 def _terms(row, width):
@@ -29,55 +29,58 @@ def _terms(row, width):
         words = term.split()
         if not words:
             continue
-        exponents = tuple(int(w) for w in words[1:])
+        exponents = tuple(map(integer_from_decimal, words[1:]))
         if len(exponents) != width:
             raise RuntimeError("The weighted engine returned a polynomial of another width.")
-        terms[exponents] = terms.get(exponents, 0) + Fraction(words[0])
+        terms[exponents] = terms.get(exponents, 0) + kernel_fraction(words[0])
     return {e: c for e, c in terms.items() if c}
 
 
 def native_resolution(terms, variables, *, seconds=SECONDS):
     """The native engine's answer for the polynomial ``terms`` (exponent tuple -> rational) at the origin."""
-    payload = {"operation": "resolve", "variables": len(variables), "polynomial": _rows(terms),
+    payload = {"operation": "resolve", "variables": len(variables), "polynomial": encode_sparse_row(terms),
                "logarithmic": True, "certify": True, "seconds": seconds}
     from . import native_process
     # The resolution and its certificate each have `seconds`; the margin covers
     # a native step that does not look at the clock.
-    timeout = 2 * seconds + 10
+    timeout = None if seconds is None else 2 * seconds + 10
     try:
         done = native_process.run("weighted", input=json.dumps(payload), timeout=timeout,
                                   env={**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1"})
     except FileNotFoundError:
         raise RuntimeError("The native weighted resolution is not built. Run make.") from None
     except subprocess.TimeoutExpired:
-        raise LimitError(f"The weighted resolution did not finish within {timeout} seconds.") from None
+        raise WeightedDeclined(f"The weighted resolution did not finish within {timeout} seconds.") from None
     if done.returncode:
-        raise LimitError(f"The native weighted resolution stopped with status {done.returncode}.")
+        raise RuntimeError(f"The native weighted resolution stopped with status {done.returncode}.")
     try:
         answer = json.loads(done.stdout)
     except ValueError:
         raise RuntimeError("The native weighted resolution did not return JSON.") from None
     if "error" in answer:
-        raise InputError(answer["error"])
+        raise RuntimeError(f"The weighted worker rejected the parsed input: {answer['error']}")
     native = answer["result"]
-    if native["status"] != "resolved":
+    if native["status"] == "declined":
         reason = native.get("reason", "")
+        if reason in ("The zero polynomial.", "The origin is not on the hypersurface."):
+            raise InputError(reason)
         if reason == "The time allowed is over.":
-            raise LimitError(f"The weighted resolution did not finish within {seconds} seconds.")
-        raise InputError(f"The weighted resolution does not cover this input yet: {reason}")
+            raise WeightedDeclined(f"The weighted resolution did not finish within {seconds} seconds.")
+        raise WeightedDeclined(reason)
+    if native["status"] != "resolved":
+        raise RuntimeError("The native weighted resolution returned an unknown status.")
     certificate = native.get("certificate", {})
     if not certificate.get("certified"):
         problem = certificate.get("problem") or json.dumps(certificate.get("failures", []))[:600]
-        raise LimitError(f"The weighted resolution could not certify normal crossings: {problem}")
+        raise WeightedDeclined(f"The weighted resolution could not certify normal crossings: {problem}")
     return native
 
 
-def _fresh(base, count, taken):
-    for letter in (base, "s", "u", "z", "q"):
-        names = [f"{letter}{i}" for i in range(1, count + 1)]
+def _fresh(base, width, taken):
+    for letter in chain((base, "s", "u", "z", "q"), (f"{base}{n}_" for n in count(1))):
+        names = [f"{letter}{i}" for i in range(1, width + 1)]
         if not taken.intersection(names):
             return names
-    raise RuntimeError("No free names for the chart coordinates.")
 
 
 def resolution_record(native, terms, variables):
@@ -107,11 +110,11 @@ def resolution_record(native, terms, variables):
         if chart.get("ambient"):
             record["ambient_ideal"] = [text(row) for row in chart["ambient"]]
         if field:
-            coefficients = {(j,): Fraction(c) for j, c in enumerate(field) if Fraction(c)}
+            coefficients = {(j,): c for j, c in enumerate(map(kernel_fraction, field)) if c}
             record["coefficient_field"] = {"generator": generator, "degree": len(field) - 1,
                                            "minimal_polynomial": format_poly(coefficients, [generator]),
                                            "embedding": "root 1 (FLINT order)"}
-        order = int(chart.get("orbifold_order", "1"))
+        order = integer_from_decimal(chart.get("orbifold_order", "1"))
         if order > 1:
             orbifold = True
             record["orbifold_order"] = order
@@ -131,8 +134,9 @@ def resolution_record(native, terms, variables):
                       "locus": blowup["locus"], "invariant": blowup["invariant"],
                       "monomial_part": blowup["monomial_part"], "field_degree": blowup["field_degree"],
                       "charts": blowup["charts"], "centre_from": blowup.get("centre_from", "")})
-    vertices = [{"id": labels[d["label"]], "blowup": d["label"].split(".")[0], "total_multiplicity": int(d["N"]),
-                 "nu": int(d["nu"]), "dimension": len(variables) - 1} for d in native["divisors"]]
+    vertices = [{"id": labels[d["label"]], "blowup": d["label"].split(".")[0],
+                 "total_multiplicity": integer_from_decimal(d["N"]), "nu": integer_from_decimal(d["nu"]),
+                 "dimension": len(variables) - 1} for d in native["divisors"]]
     blowups = len(steps)
     summary = (f"Weighted resolution with {blowups} weighted blowup{'s' if blowups != 1 else ''} and "
                f"{len(charts)} charts; normal crossings over the origin are certified." if blowups else

@@ -222,7 +222,8 @@ class DualComplex(_RecordView):
 
 
 class Resolution(_RecordView):
-    _members = ("polynomial", "coordinates", "divisors", "charts", "branches", "divisor", "chart", "dual_complex", "record")
+    _members = ("polynomial", "coordinates", "divisors", "charts", "branches", "divisor", "chart", "dual_complex",
+                "monodromy_zeta", "topological_zeta", "monodromy_check", "record")
 
     def __init__(self, record, source_space=None, *, source_polynomial=None, _from_solver=False):
         super().__init__(record)
@@ -238,26 +239,36 @@ class Resolution(_RecordView):
         self.dual_complex = DualComplex(self, record["dual_complex"])
         self._divisors = self.dual_complex._vertices
         self._branches = [Branch(self, b) for b in record.get("branches", ())]
-        if _from_solver and "topological_zeta" in record and "monodromy_zeta" in record:
-            # Freshly computed by our solver from a single certified atlas.
-            self._local_zetas = deepcopy((record["topological_zeta"], record["monodromy_zeta"]))
+        self._computed_zetas = None
+        if _from_solver and all(record.get(k, {}).get("status") == "computed"
+                                for k in ("topological_zeta", "monodromy_zeta")):
+            self._computed_zetas = deepcopy((record["topological_zeta"], record["monodromy_zeta"]))
 
-    @cached_property
-    def _local_zetas(self):
-        # Replay both invariants on the same certified strata. In particular,
-        # archived zeta values alone are not a certificate for an imported R.
-        from .monodromy import monodromy_zeta
-        from .strata import resolution_strata
-        from .topological import topological_zeta
-        record = self._record
-        strata = resolution_strata(record)
-        if strata is None:
-            reason = ("The resolution has not been certified." if record["status"] != "resolved" else
-                      "The resolution does not certify embedded strata over the origin.")
-            missing = {"status": "unavailable", "reason": reason}
-            return missing, dict(missing)
-        monodromy = monodromy_zeta(record, strata=strata)
-        return topological_zeta(record, strata=strata, monodromy=monodromy), monodromy
+    def _zeta_pair(self, search="exhaustive", compute=None):
+        # Replay a saved certificate before using any zetas imported with it.
+        # Only cache computed pairs so a quick limit leaves exhaustive work possible.
+        if self._computed_zetas is None:
+            from .resolution_zetas import replay_zetas
+            outputs = replay_zetas({"record": self._record, "zetas": ["topological", "monodromy"],
+                                    "search": search, "compute": compute})
+            pair = outputs["topological_zeta"], outputs["monodromy_zeta"]
+            if any(z.get("status") != "computed" for z in pair):
+                return pair
+            self._computed_zetas = pair
+        return self._computed_zetas
+
+    @property
+    def topological_zeta(self):
+        return deepcopy(self._zeta_pair()[0])
+
+    @property
+    def monodromy_zeta(self):
+        return deepcopy(self._zeta_pair()[1])
+
+    @property
+    def monodromy_check(self):
+        from .session_monodromy import check_zetas
+        return deepcopy(check_zetas(*self._zeta_pair()))
 
     def __repr__(self):
         record = self._record

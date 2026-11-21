@@ -98,9 +98,12 @@ class SessionMonodromyTests(unittest.TestCase):
         self.assertEqual(status, 200)
         record["topological_zeta"]["poles"].clear()
         record["monodromy_zeta"]["factors"].append({"multiplicity": 13, "exponent": 1})
+        record["monodromy_check"]["status"] = "unresolved"
         session = new_session(None)
         session.variables["R"] = Resolution(record)
-        list(session.run("C = monodromy_check(R)"))
+        list(session.run("C = monodromy_check(R)\nstatus = R.monodromy_check.status\nfactors = R.monodromy_zeta.factors"))
+        self.assertEqual(session.variables["status"], "verified")
+        self.assertEqual(session.variables["factors"], [])
         pole, = session.variables["C"]["poles"]
         self.assertEqual((pole["value"], pole["order"], pole["witness"]), ("-1", 2, "origin H^0"))
 
@@ -138,25 +141,39 @@ class SessionMonodromyTests(unittest.TestCase):
         status, out, err = run_prompt(source + "quit\n")
         self.assertEqual((status, err, out.replace("atlas> ", "").strip()), (0, "", expected))
 
-    def test_unavailable_records_keep_the_reason_and_invalid_input_still_fails(self):
+    def test_quick_limits_keep_the_reason_and_worker_failures_raise(self):
         request = dict(polynomial="x^200", variables=["x"], mode="embedded", monodromy=True)
         record = inconclusive(request, {"description": "quick worker timed out"}, 2)
-        calculate = Mock(side_effect=[(200, record), (422, {"error": "budget exhausted"}),
+        calculate = Mock(side_effect=[(200, record), (422, {"error": "budget exhausted", "code": "computation_limit"}),
+                                      (503, {"error": "Worker stopped"}),
                                       (400, {"error": "The germ must pass through the origin."})])
         session = new_session(calculate)
-        expr = 'C = monodromy_check("x^200", variables=["x"])'
+        expr = 'C = monodromy_check("x^200", variables=["x"], search="quick")'
         list(session.run(expr))
         result = session.variables["C"]
         self.assertEqual((result["status"], result["poles"], result["reason"]),
-                         ("unavailable", [], "quick worker timed out"))
-        self.assertEqual(result["topological_zeta"]["status"], "unavailable")
-        self.assertEqual(result["monodromy_zeta"]["status"], "unavailable")
+                         ("inconclusive", [], "quick worker timed out"))
+        self.assertEqual(result["topological_zeta"]["status"], "inconclusive")
+        self.assertEqual(result["monodromy_zeta"]["status"], "inconclusive")
         self.assertIsNone(result["candidate_poles"])
         list(session.run(expr))
         self.assertEqual((session.variables["C"]["reason"], session.variables["C"]["resolution"]),
                          ("budget exhausted", None))
+        with self.assertRaisesRegex(SessionError, "Worker stopped"):
+            list(session.run(expr))
         with self.assertRaisesRegex(SessionError, "origin"):
             list(session.run('monodromy_check("1+x", variables=["x"])'))
+
+    def test_default_search_and_saved_quick_record_finish_at_prompt_and_in_scripts(self):
+        # A degree beyond the quick parser's limit, with a known one-dimensional Milnor fibre.
+        source = ('x=coordinates("x")\nf=x^200\nQ=monodromy_check(f,search="quick")\n'
+                  'R=Q.resolution\nC=monodromy_check(R)\nD=monodromy_check(f)\n'
+                  'print(Q.status,C.status,D.status,C.poles[0].value,R.monodromy_zeta.expression)\n')
+        expected = "inconclusive verified verified -1/200 1/(1-T^200)"
+        completed = run_script(source)
+        self.assertEqual((completed.returncode, completed.stderr, completed.stdout.strip()), (0, "", expected))
+        status, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((status, err, out.replace("atlas> ", "").strip()), (0, "", expected))
 
     def test_candidate_requires_nontrivial_missing_order_and_finite_local_number(self):
         # Deliberately inconsistent test double. An actual counterexample is

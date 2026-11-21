@@ -1,5 +1,42 @@
 # Algebra examples
 
+## Exact rational linear algebra
+
+`matrix_analysis` treats the rows as a matrix with entries in `QQ`. The pivot indices
+are zero-based, `.image` lists the corresponding original columns, and `.kernel` lists
+a basis of column vectors annihilated by the matrix. The reduced row echelon matrix
+has the same shape as the input. A rectangular matrix has determinant `None`. The
+empty square matrix has determinant one. Use `columns=n` to specify a matrix with
+zero rows and `n` columns.
+
+```atlas
+M = matrix_analysis([[1, 2], [2, 4]], rhs=[3, 6])
+print(M.rank, M.determinant, M.pivot_columns)  # 1 0 (0,)
+print(M.solution.status)                       # underdetermined
+print(M.solution.particular[0])                # 3
+print(M.kernel[0][0])                          # -2
+```
+
+With `rhs`, the solution status is `unique`, `underdetermined`, or `inconsistent`.
+When consistent, all solutions are the particular vector plus linear combinations
+of the kernel vectors. For an inconsistent system the particular vector is `None`.
+Exact coefficients may be integers, rational strings, or session rational values.
+The scalar field is independent of the active polynomial ring.
+
+`compute="gpu"` dispatches eligible row selection over a prime field to an available
+accelerator. Atlas certifies that the selected rows span the matrix over `QQ`, including
+the right-hand side. This recovers rank lost at an unlucky prime. For square matrices
+through order six, Atlas removes the rational row contents and checks an integer
+bound before evaluating the determinant directly on the GPU. Independent prime images
+certify this result over the integers. Larger determinants and exact vector reconstruction
+use the CPU. The `.execution`
+record lists the stages and device. The command line accepts repeated `--row` arguments.
+[CPU, Triton and Singular timings](../benchmarks/matrix-triton.md)
+
+```sh
+./atlas algebra matrix-analysis --row 1,2 --row 2,4 --rhs 3,6 --compute gpu
+```
+
 ## Run a first example
 
 <a id="shell-prompt-and-scripts"></a>

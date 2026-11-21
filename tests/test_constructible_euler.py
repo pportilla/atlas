@@ -60,6 +60,13 @@ class ConstructibleEuler(unittest.TestCase):
         self.assertEqual(euler_characteristic((x,y),(x+y, x**(n+1) + y**(n+1) - 2)), 0)
         self.assertEqual(euler_characteristic((x,y),(x, x**n + y**n - 1)), n)
 
+    def test_squarefree_reduction_when_sparse_integer_gcd_declines(self):
+        # At this exponent FLINT's fmpz_mpoly_gcd declines the square and
+        # its x-derivative. The reduced zero set is a graph over the (y,z)-plane.
+        graph = x + y**(2**64 + 1) + y*z**2
+        self.assertEqual(euler_characteristic((x,y,z), (graph**2,)), 1)
+        self.assertEqual(euler_characteristic((x,y,z), (graph**2,), ((y,),)), 0)
+
     def test_ramification_and_a_whole_line_fiber(self):
         curve = y**2-x*(x-1)*(x-2)
         # Over the x-line the degree-two map has three simple branch points.

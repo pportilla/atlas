@@ -89,7 +89,7 @@ class MonodromyTests(unittest.TestCase):
     def test_intrinsic_cusp_needs_embedded_contact_data(self):
         req = {"polynomial":"y^2-x^3", "variables":["x","y"], "mode":"intrinsic"}
         intrinsic = resolve(req)
-        self.assertEqual(monodromy_zeta(intrinsic)["status"], "unavailable")
+        self.assertEqual(monodromy_zeta(intrinsic)["expression"], "(1-T^6)/((1-T^2)*(1-T^3))")
         r = resolve(dict(req, monodromy=True))
         self.assertEqual(len(r["steps"]), len(intrinsic["steps"]))
         self.assertEqual(r["monodromy_zeta"]["source"], "companion embedded resolution")
@@ -199,7 +199,8 @@ class MonodromyTests(unittest.TestCase):
                               [("smooth component", label, "1/(1-T^2)") for label in ("S1", "S2")])
 
     def test_inconclusive_input_and_option_validation(self):
-        self.assertEqual(monodromy_zeta({"status":"inconclusive"})["status"], "unavailable")
+        with self.assertRaises(InputError):
+            monodromy_zeta({"status": "inconclusive"})
         with self.assertRaises(InputError):
             resolve({"polynomial":"x", "variables":["x"], "monodromy":"false"})
 

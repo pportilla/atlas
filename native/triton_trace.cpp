@@ -127,7 +127,7 @@ std::string triton_trace_ir(const std::string& name, const std::vector<int>& par
         %10 = arith.trunci %9 : tensor<16xi64> to tensor<16xi32>
         tt.store %7, %10, %live_11 : tensor<16x!tt.ptr<i32>>
       }
-      ttg.barrier all
+      gpu.barrier
     }
     tt.return
   }

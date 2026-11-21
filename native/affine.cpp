@@ -584,20 +584,28 @@ class RecordParser {
         peek();
         const auto exponent = integer(true);
         if (power()) throw std::invalid_argument("Parenthesize chained powers explicitly.");
-        if (budget) {
-            // The product budget applies before each multiply, even when terms cancel.
-            Polynomial value(ring);
-            fmpq_mpoly_one(value.p, ring.ctx);
-            ulong n = fmpz_get_ui(&exponent.v);
-            while (n) {
-                if (n & 1) multiply(value, result);
-                n /= 2;
-                if (n) multiply(result, result);
-            }
+        Polynomial value(ring);
+        if (!budget && !field && fmpq_mpoly_pow_fmpz(value.p, result.p, &exponent.v, ring.ctx)) {
             fmpq_mpoly_swap(value.p, result.p, ring.ctx);
-        } else if (!fmpq_mpoly_pow_fmpz(result.p, result.p, &exponent.v, ring.ctx)) {
-            throw Limit("Chart exponent exceeds FLINT's limits.");
+            return;
         }
+        // Compute in the specified ring after every product. A coefficient
+        // field power can stay sparse even when its expansion over QQ is huge.
+        // In quick mode multiply also checks the intermediate expansion budget.
+        fmpq_mpoly_one(value.p, ring.ctx);
+        if (field) reduce_mod(result, field->modulus);
+        const auto bits = fmpz_bits(&exponent.v);
+        for (ulong i = 0; i < bits; ++i) {
+            if (fmpz_tstbit(&exponent.v, i)) {
+                multiply(value, result);
+                if (field) reduce_mod(value, field->modulus);
+            }
+            if (i + 1 < bits) {
+                multiply(result, result);
+                if (field) reduce_mod(result, field->modulus);
+            }
+        }
+        fmpq_mpoly_swap(value.p, result.p, ring.ctx);
     }
 
     struct Operator {
@@ -981,12 +989,15 @@ std::string factorization(const Polynomial& f, const std::string& operation) {
         ~Factors() { fmpq_mpoly_factor_clear(value, ctx); }
     } factors(ctx);
     std::string result;
-    if (operation == "ordered_factorization") {
-        result = ordered_factors(factors.value, f.p, ctx);
+    if (operation == "ordered_factorization" || operation == "squarefree_factorization") {
+        result = operation == "ordered_factorization" ? ordered_factors(factors.value, f.p, ctx)
+                                                      : squarefree_factors(factors.value, f.p, ctx);
         result += '\n';
-    } else if (!fmpq_mpoly_factor(factors.value, f.p, ctx) ||
-               !fmpq_mpoly_factor_make_integral(factors.value, ctx)) {
-        throw Limit("Rational factorization did not finish.");
+    } else {
+        if (!fmpq_mpoly_factor(factors.value, f.p, ctx))
+            ordered_factors(factors.value, f.p, ctx);
+        if (!fmpq_mpoly_factor_make_integral(factors.value, ctx))
+            throw Limit("The rational factors could not be made integral.");
     }
     Polynomial constant(f.ring);
     fmpq_t coefficient;
@@ -1455,7 +1466,7 @@ std::string ordered_polynomials(std::istream& in, const std::string& operation) 
         }
         return result;
     }
-    if (operation == "ordered_factorization") return factorization(read(in, ring), operation);
+    if (operation == "ordered_factorization" || operation == "squarefree_factorization") return factorization(read(in, ring), operation);
     std::string out;
     if (operation == "primitive_gcd_cofactors" || operation == "polynomial_gcd" || operation == "gcd_from_lcm") {
         const auto a = read(in, ring), b = read(in, ring);
@@ -1584,7 +1595,7 @@ std::string affine(std::istream& in) {
         return fan_charts(in, operation != "fan_charts", operation == "fan_charts_with_boundary");
     if (operation == "wide_owned_crossings" || operation == "wide_crossing_loci")
         return wide_owned_crossings(in, operation == "wide_crossing_loci");
-    if (operation == "ordered_factorization" || operation == "reduced_minors")
+    if (operation == "ordered_factorization" || operation == "squarefree_factorization" || operation == "reduced_minors")
         return ordered_polynomials(in, operation);
     if (operation == "primitive_gcd_cofactors" || operation == "polynomial_gcd" || operation == "gcd_from_lcm" ||
         operation == "wide_basis" || operation == "wide_division" ||

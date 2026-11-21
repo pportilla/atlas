@@ -162,7 +162,11 @@ class TorusChartCertification(unittest.TestCase):
             ["-zeta*alpha-3*alpha*mu+2*alpha", "alpha*mu-alpha", "alpha*mu"],
             ["-zeta*mu+2*alpha*mu-3*mu", "-alpha*mu+mu", "mu"],
         ]
-        polynomial = parse("z", variables)
+        # The centre must also be admissible for a resolution. A smooth
+        # projectivized quadric supplies a singular source for this map test.
+        polynomial = parse("x^2+y^2+z^2", variables)
+        with self.assertRaisesRegex(InvalidChart, "smooth locus"):
+            fan_outputs(record, parse("z", variables))
         charts, proved = fan_outputs(record, polynomial)
         for chart, images in zip(charts, expected):
             self.assertEqual(chart["map"], dict(zip(variables, images)))

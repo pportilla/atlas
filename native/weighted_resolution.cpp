@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <chrono>
 #include <map>
 #include <memory>
@@ -67,9 +68,16 @@ using Q = mpq_class;
 using Zi = mpz_class;
 using Clock = std::chrono::steady_clock;
 
-struct Declined {
+struct Declined : std::exception {
     std::string reason;
+    explicit Declined(std::string message) : reason(std::move(message)) {}
+    const char* what() const noexcept override { return reason.c_str(); }
 };
+
+long checked_order(const Zi& n) {
+    if (n < 0 || !n.fits_slong_p()) throw Declined{"A weighted order exceeds the signed native word range."};
+    return n.get_si();
+}
 
 thread_local Clock::time_point deadline_at = Clock::time_point::max();
 thread_local Clock::time_point started_at;
@@ -160,8 +168,16 @@ public:
     bool zero() const { return fmpq_mpoly_is_zero(p, x_->c); }
     slong length() const { return fmpq_mpoly_length(p, x_->c); }
     std::vector<ulong> exponent(slong k) const {
+        if (!fmpq_mpoly_term_exp_fits_si(p, k, x_->c))
+            throw Declined{"A weighted chart exponent exceeds the signed native word range."};
         std::vector<ulong> e(x_->nv);
         fmpq_mpoly_get_term_exp_ui(e.data(), p, k, x_->c);
+        // Orders, including orders on subsets of coordinates, are signed longs.
+        ulong remaining = std::numeric_limits<long>::max();
+        for (int i = 0; i < x_->n; ++i) {
+            if (e[i] > remaining) throw Declined{"A weighted total degree exceeds the signed native word range."};
+            remaining -= e[i];
+        }
         return e;
     }
     Q coefficient(slong k) const {
@@ -1562,7 +1578,7 @@ P from_local(const local::Polynomial& f, const std::vector<int>& all, const Ctx&
     std::vector<std::pair<std::vector<ulong>, Q>> terms;
     for (const auto& [p, c] : f) {
         std::vector<ulong> e(x.nv, 0);
-        for (size_t j = 0; j < all.size(); ++j) e[all[j]] = p[j].get_ui();
+        for (size_t j = 0; j < all.size(); ++j) e[all[j]] = checked_order(p[j]);
         terms.emplace_back(std::move(e), c);
     }
     return from_terms(x, terms);
@@ -2016,12 +2032,12 @@ struct Run {
     // centre is admissible for F and the ambient equations themselves.
     Found admissible_centre(const Task& task, int tries, Centre* last) {
         const auto boundary = boundary_of(task.divisor);
-        long cap = std::max<long>(8, 2 * order(task.state[0]) + 2), fixed_cap = cap;
+        long cap = std::max<long>(8, checked_order(2 * Zi(order(task.state[0])) + 2)), fixed_cap = cap;
         std::string attempts;
         auto ceiling = [](const Q& q) {
             Zi c;
             mpz_cdiv_q(c.get_mpz_t(), q.get_num_mpz_t(), q.get_den_mpz_t());
-            return c.get_si();
+            return checked_order(c);
         };
         for (int attempt = 0;; ++attempt) {
             if (attempt == tries) throw Declined{"No admissible centre within the jets tried: " + attempts};
@@ -2039,8 +2055,8 @@ struct Run {
             const bool small_free = Q(cap) < 2 * largest + 2, small_fixed = Q(fixed_cap) < 2 * largest_fixed + 2;
             if (small_free || small_fixed) {
                 attempts += " small]";
-                if (small_free) cap = std::max<long>(cap + 1, ceiling(2 * largest + 2));
-                if (small_fixed) fixed_cap = std::max<long>(fixed_cap + 1, ceiling(2 * largest_fixed + 2));
+                if (small_free) cap = ceiling(2 * largest + 2);
+                if (small_fixed) fixed_cap = ceiling(2 * largest_fixed + 2);
                 continue;
             }
             long outside_degree = -1;
@@ -2066,8 +2082,9 @@ struct Run {
             }
             attempts += "]";
             // A jet that holds the monomials the centre missed.
-            cap = std::max<long>(2 * cap, 2 * outside_degree + 2);
-            fixed_cap = std::max<long>(2 * fixed_cap, 2 * outside_degree + 2);
+            const Zi needed = 2 * Zi(outside_degree) + 2;
+            cap = checked_order(std::max<Zi>(2 * Zi(cap), needed));
+            fixed_cap = checked_order(std::max<Zi>(2 * Zi(fixed_cap), needed));
         }
     }
 
@@ -2402,7 +2419,7 @@ struct Run {
             const auto boundary_p = boundary_of(tp.divisor);
             Zi top;
             mpz_cdiv_q(top.get_mpz_t(), largest.get_num_mpz_t(), largest.get_den_mpz_t());
-            cap = std::max<long>(4, 2 * top.get_si() + 2);
+            cap = std::max<long>(4, checked_order(2 * top + 2));
             const Centre near = centre(tp.state[0], tp.ambient, boundary_p, logarithmic, cap, cap);
             const Centre far = centre(tp.state[0], tp.ambient, boundary_p, logarithmic, cap + 4, cap + 4);
             invariant.clear();
@@ -2671,7 +2688,10 @@ struct Run {
             for (int i = 0; i < n; ++i) images.push_back(gen(x, i));
             for (size_t j = 0; j < m; ++j) {
                 std::vector<ulong> e(x.nv, 0);
-                for (size_t i = 0; i < cone.size(); ++i) e[toric[slot[i]]] += fan.rays[cone[i]][j].get_ui();
+                for (size_t i = 0; i < cone.size(); ++i) {
+                    auto& exponent = e[toric[slot[i]]];
+                    exponent = checked_order(Zi(exponent) + fan.rays[cone[i]][j]);
+                }
                 images[toric[j]] = from_terms(x, {{e, Q(1)}});
             }
             // Strict transforms: divide by the order along each new ray.
@@ -2690,7 +2710,7 @@ struct Run {
                         continue;
                     }
                     const Zi o = ray_order(before, r);
-                    divide[s] = o.get_ui();
+                    divide[s] = checked_order(o);
                     if (!record_divisors) continue;
                     Divisor d;
                     d.label = label + "." + std::to_string(cone[i]);
@@ -2912,8 +2932,13 @@ std::vector<std::pair<std::vector<ulong>, Q>> read_terms(const std::string& text
         std::string c;
         if (!(t >> c)) continue;
         std::vector<ulong> e(n);
-        for (auto& v : e)
-            if (!(t >> v)) throw std::invalid_argument("Bad polynomial row.");
+        for (auto& v : e) {
+            Zi value;
+            if (!(t >> value) || value < 0) throw std::invalid_argument("Bad polynomial exponent.");
+            v = checked_order(value);
+        }
+        std::string extra;
+        if (t >> extra) throw std::invalid_argument("Bad polynomial row width.");
         Q q(c);
         q.canonicalize();
         terms.emplace_back(e, q);
@@ -2926,20 +2951,24 @@ Json::Value resolve(const Json::Value& request) {
     if (n < 1 || n > 16) throw std::invalid_argument("Expected between 1 and 16 variables.");
     const bool logarithmic = request.get("logarithmic", true).asBool();
     const bool regular = request.get("regular", false).asBool();
-    const double seconds = request.get("seconds", 40.0).asDouble();
+    const auto seconds = request.get("seconds", 40.0);
+    const auto deadline = [&seconds]() {
+        return seconds.isNull() ? Clock::time_point::max()
+                                : Clock::now() + std::chrono::milliseconds(static_cast<long>(seconds.asDouble() * 1000));
+    };
     Run run{};
     run.n = n;
     run.logarithmic = logarithmic;
     run.regular = regular;
-    run.deadline = Clock::now() + std::chrono::milliseconds(static_cast<long>(seconds * 1000));
+    run.deadline = deadline();
     context_registry = &run.contexts;
     CtxPtr base = make_field(n, nullptr);
-    const auto terms = read_terms(request["polynomial"].asString(), n);
     Json::Value out;
     const auto start = Clock::now();
     started_at = start;
     deadline_at = run.deadline;
     try {
+        const auto terms = read_terms(request["polynomial"].asString(), n);
         Task first;
         first.ctx = base;
         first.state.push_back(from_terms(*base, terms));
@@ -2969,12 +2998,15 @@ Json::Value resolve(const Json::Value& request) {
     out["blowups"] = run.blowups;
     if (request.get("certify", false).asBool() && out["status"].asString() == "resolved") {
         const auto t0 = Clock::now();
-        deadline_at = t0 + std::chrono::milliseconds(static_cast<long>(seconds * 1000));
+        deadline_at = deadline();
         try {
             out["certificate"] = certify(run);
         } catch (const Declined& d) {
             out["certificate"]["certified"] = false;
             out["certificate"]["problem"] = d.reason;
+        } catch (const Limit& e) {
+            out["certificate"]["certified"] = false;
+            out["certificate"]["problem"] = e.what();
         }
         out["certificate"]["seconds"] = std::chrono::duration<double>(Clock::now() - t0).count();
     }
@@ -3035,7 +3067,6 @@ Json::Value resolve(const Json::Value& request) {
         charts.append(v);
     }
     out["charts"] = charts;
-    context_registry = nullptr;
     return out;
 }
 
@@ -3068,7 +3099,22 @@ Json::Value centre_at_origin(const Json::Value& request) {
 
 Json::Value execute(const Json::Value& request) {
     const std::string op = request["operation"].asString();
-    if (op == "resolve") return resolve(request);
+    if (op == "resolve") {
+        struct RestoreContexts {
+            std::vector<CtxPtr>* saved;
+            ~RestoreContexts() { context_registry = saved; }
+        } restore{context_registry};
+        try {
+            return resolve(request);
+        } catch (const Declined& decline) {
+            // Converting chart exponents to the weighted record may exceed
+            // the word range even after the blowup calculations succeeded.
+            Json::Value result;
+            result["status"] = "declined";
+            result["reason"] = decline.reason;
+            return result;
+        }
+    }
     if (op == "centre") return centre_at_origin(request);
     throw std::invalid_argument("Unknown weighted resolution operation.");
 }

@@ -1,6 +1,7 @@
 """Shell commands for exact polynomial and ideal arithmetic."""
 
 import argparse
+import json
 import re
 import sys
 
@@ -10,10 +11,19 @@ from .series_display import format_hilbert_series
 
 
 OPERATION_DESCRIPTIONS = {
+    "modular-arithmetic": "compute exact modular arithmetic, reconstruction and Hensel lifts",
+    "matrix-analysis": "compute exact rational linear algebra and solve a system",
+    "polynomial-arithmetic": "compute an exact arithmetic operation on rational polynomials",
     "ae-codimension": "compute the extended left-right codimension of a map germ at the origin",
     "gcd": "compute the monic greatest common divisor of two polynomials",
+    "hensel-factors": "lift two monic coprime polynomial factors from a prime to its square",
+    "extended-gcd": "compute a univariate GCD and its Bézout coefficients",
+    "cancel-fraction": "reduce a polynomial fraction to coprime numerator and monic denominator",
+    "polynomial-division": "divide a polynomial by one nonzero divisor",
     "resultant": "compute the resultant of two polynomials in one variable over QQ",
     "factor": "factor a polynomial over QQ into monic irreducible factors",
+    "absolute-factor": "factor a rational polynomial over the algebraic closure of QQ",
+    "squarefree-factor": "group the square-free factors of a rational polynomial by multiplicity",
     "ideal": "declare an ideal from ordered generators",
     "groebner": "compute a reduced Gröbner basis",
     "normal-form": "reduce a polynomial modulo an ideal",
@@ -59,7 +69,7 @@ class _OperandParser(argparse.ArgumentParser):
         if args is not None:
             tokens = []
             for token in args:
-                if (tokens and tokens[-1] in ("--relation", "--component", "--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees")
+                if (tokens and tokens[-1] in ("--relation", "--component", "--gen", "--other-gen", "--prime", "--numerator", "--denominator", "--poly", "--other-poly", "--point", "--degrees", "--image", "--row", "--rhs")
                         and token.startswith("-") and token != "--"
                         and (token == "-h" or token.partition("=")[0] not in self._option_string_actions)):
                     tokens[-1] += "=" + token
@@ -69,12 +79,29 @@ class _OperandParser(argparse.ArgumentParser):
         return super().parse_known_args(args, namespace)
 
 
+def _coefficient_field(value):
+    if value.lstrip().startswith("{"):
+        try:
+            return json.loads(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("Use a JSON object for the marked coefficient field.") from exc
+    return value
+
+
 def _comma_list(value):
     return [name.strip() for name in value.split(",")] if value.strip() else []
 
 
+def _integer_entries(text):
+    if text.lstrip().startswith("["):
+        import json
+        return json.loads(text)
+    return _comma_list(text)
+
+
 def register_parser(subparsers):
-    from .algebra import OPERATION_OPERANDS, POINT_OPERATIONS, QUOTIENT_ACTION_OPERANDS, QUOTIENT_IDEAL_OPERATIONS
+    from .algebra import (OPERATION_OPERANDS, POINT_OPERATIONS, POLYNOMIAL_ACTION_OPERANDS,
+                          QUOTIENT_ACTION_OPERANDS, QUOTIENT_IDEAL_OPERATIONS)
 
     command = subparsers.add_parser("algebra", help="compute with polynomials and ideals over QQ")
     operations = command.add_subparsers(dest="operation", required=True, parser_class=_OperandParser)
@@ -92,9 +119,27 @@ def register_parser(subparsers):
                 "Example\n  ./atlas algebra ae-codimension --vars t --component 't^2' --component 't^3'"
             )
             parser.formatter_class = argparse.RawDescriptionHelpFormatter
-        parser.add_argument("--vars", type=_comma_list, required=True, metavar="x,y",
+        parser.add_argument("--vars", type=_comma_list, required=name not in ("matrix-analysis", "modular-arithmetic"), default=[], metavar="x,y",
                             help="ordered variables, highest priority first")
-        parser.add_argument("--field", metavar="QQ", help="coefficient field (default: QQ)")
+        if name == "hensel-factors":
+            parser.add_argument("--factor", dest="factors", action="append", required=True, metavar="POLY",
+                                help="one of two ordered monic factors modulo the prime (repeat twice)")
+            parser.add_argument("--modulus", required=True, help="positive prime modulus")
+        if name == "modular-arithmetic":
+            from .modular_batch import ACTIONS
+            parser.add_argument("--action", choices=ACTIONS, required=True)
+            parser.add_argument("--values", type=_integer_entries, required=True)
+            parser.add_argument("--modulus", required=True)
+            parser.add_argument("--other", type=_integer_entries, help="operand list or polynomial coefficients, constant first")
+            parser.add_argument("--other-modulus", help="second CRT modulus")
+            parser.add_argument("--field-polynomial", type=_comma_list, help="monic finite-field relation, constant first")
+        if name == "matrix-analysis":
+            parser.add_argument("--row", dest="rows", action="append", default=[], type=_comma_list,
+                                help="a comma-separated rational matrix row, repeat for each row")
+            parser.add_argument("--rhs", type=_comma_list, help="right-hand side in row order")
+            parser.add_argument("--columns", type=int, help="column count, including matrices with no rows")
+        parser.add_argument("--field", type=_coefficient_field, metavar="FIELD",
+                            help="coefficient field (default QQ); polynomial-arithmetic also accepts a marked field as JSON")
         order_help = ("tie-breaker among terms of lowest degree in translated coordinates (default: grevlex)"
                       if name in POINT_OPERATIONS else "monomial order (default: grevlex)")
         parser.add_argument("--order", metavar="{lex,grevlex}", help=order_help)
@@ -115,6 +160,13 @@ def register_parser(subparsers):
             parser.add_argument("--poly", dest="polynomial", metavar="POLY", help="first residue class representative")
             parser.add_argument("--other-poly", dest="other_polynomial", metavar="POLY", help="second residue class representative")
             parser.add_argument("--exponent", metavar="N", help="signed integer for the power action")
+        if name == "polynomial-arithmetic":
+            parser.add_argument("--action", choices=POLYNOMIAL_ACTION_OPERANDS, required=True)
+            parser.add_argument("--other-poly", dest="other_polynomial", metavar="POLY")
+            parser.add_argument("--exponent", metavar="N", help="nonnegative integer for a power")
+            parser.add_argument("--variable", metavar="VAR", help="coordinate for differentiation")
+            parser.add_argument("--image", dest="images", action="append", metavar="POLY",
+                                help="substitution image in coordinate order (repeat per coordinate)")
         if "exponent" in keys:
             parser.add_argument("--exponent", required=True, metavar="N", help="nonnegative integer exponent")
         if "polynomial" in keys:
@@ -188,15 +240,24 @@ def _show(record):
     result = record["result"]
     ring = result["ring"]
     names = ", ".join(ring["variables"])
-    ring_name = f"{ring['field']}[{names}]" if names else ring["field"]
+    field = ring["field"]
+    field_name = f"QQ[{field['generator']}]" if isinstance(field, dict) else field
+    ring_name = f"{field_name}[{names}]" if names else field_name
     if "relations" in ring:
         ring_name += "/(" + (", ".join(ring["relations"]) or "0") + ")"
     print(f"{ring_name}   {ring['order']}")
+    if isinstance(field, dict):
+        print(f"{field['minimal_polynomial']} = 0, {field['generator']} = {field['embedding']}")
     if "scope" in result:
         print("Scope:", result["scope"])
     if "point" in result:
         print("Point: (" + ", ".join(result["point"]) + ")")
-    if result["type"] in ("hilbert-series", "tangent-cone-hilbert-series", "tangent-cone"):
+    if result["type"] == "modular-values":
+        print("Modulo", result["modulus"], ", ".join(str(v) if v is not None else "None" for v in result["values"]))
+    elif result["type"] == "matrix-analysis":
+        for key in ("rank", "determinant", "pivot_columns", "rref", "image", "kernel", "solution"):
+            print(key, result[key])
+    elif result["type"] in ("hilbert-series", "tangent-cone-hilbert-series", "tangent-cone"):
         if result["type"] == "tangent-cone":
             _show_direction_equations(result, result["generators"], "Tangent cone generators:", "(zero ideal)")
         else:
@@ -236,16 +297,28 @@ def _show(record):
         for index, component in enumerate(result["components"], start=1):
             print(f"Primary component {index}: (" + (", ".join(component["primary"]) or "0") + ")")
             print("Associated prime: (" + (", ".join(component["prime"]) or "0") + ")")
+    elif result["type"] == "cancel-fraction":
+        print("Numerator:", result["numerator"])
+        print("Denominator:", result["denominator"])
+    elif result["type"] == "hensel-factors":
+        print("Lifted factors:", result["left"], result["right"])
+        print("Modulus:", result["modulus"])
+    elif result["type"] == "extended-gcd":
+        print("GCD:", result["gcd"])
+        print("Bézout coefficients:", result["left_coefficient"], result["right_coefficient"])
+    elif result["type"] == "polynomial-division":
+        print("Quotient:", result["quotient"])
+        print("Remainder:", result["remainder"])
     elif result["type"] == "local-normal-form":
         print("Reduction:", result["reduction"])
         print("Remainder:", result["remainder"])
         print("Unit:", result["unit"])
-    elif result["type"] == "factorization":
+    elif result["type"] in ("factorization", "absolute-factorization", "squarefree-factorization"):
         product = [result["unit"]]
         for factor in result["factors"]:
             term = "(" + factor["polynomial"] + ")"
             if factor["multiplicity"] != 1:
-                term += f"^{factor['multiplicity']}"
+                term += "^" + integer_text(factor["multiplicity"])
             product.append(term)
         print("Factorization:", " * ".join(product))
     elif result["type"] == "quotient-element":
@@ -307,6 +380,14 @@ def run(args):
         "operands": {key: getattr(args, key) for key in OPERATION_OPERANDS[args.operation]},
     }
     optional = ("point", "degrees", "numerator", "denominator")
+    if args.operation == "modular-arithmetic":
+        optional = ("other", "other_modulus", "field_polynomial")
+    if args.operation == "matrix-analysis":
+        optional = ("rhs", "columns")
+    if args.operation == "polynomial-arithmetic":
+        optional = ("other_polynomial", "exponent", "variable", "images")
+        if args.action == "substitute" and args.images is None:
+            args.images = []
     if args.operation == "quotient-ring":
         optional = ("action", "polynomial", "other_polynomial", "exponent")
     for key in optional:

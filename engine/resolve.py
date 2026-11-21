@@ -3,10 +3,10 @@ from pathlib import Path
 from time import perf_counter
 import subprocess
 import sys
-from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text
+from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text, saved_polynomial_input
 from .native_backend import resolve_native
 from .resolution_progress import recorded_blowups, report
-from .resolution_zetas import selected_zetas, zetas_from_strata
+from .resolution_zetas import attach_companion, selected_zetas, zetas_from_strata
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'native' / 'build'
@@ -33,8 +33,8 @@ METHODS = ("auto", "weighted")
 def requested_method(request):
     """The resolution method a request selects.
 
-    ``auto`` runs the existing dispatch. ``weighted`` resolves the germ by the
-    weighted blowups of the native weighted engine.
+    ``weighted`` tries the native weighted engine before the ordinary
+    embedded search when exhaustive completion is requested.
     """
     method = request.get("method", "auto")
     if method not in METHODS:
@@ -106,7 +106,6 @@ def _resolve(request, proofs):
     if policy not in ('quick','exhaustive'):
         raise InputError('Search must be quick or exhaustive.')
     kinds = selected_zetas(request)
-    wants_zetas = bool(kinds)
     exhaustive = policy=='exhaustive'
     start = perf_counter()
     report("Reading the polynomial", 0)
@@ -116,20 +115,60 @@ def _resolve(request, proofs):
         if exhaustive:
             raise
         return inconclusive(request,{'description':str(error)},(perf_counter()-start)*1000)
+    return _resolve_parsed(p, variables, mode, request, kinds, start, proofs)
+
+
+@saved_polynomial_input()
+def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
+    # The caller's literals have passed validation. Coefficients and exponents
+    # printed from this point on can be larger as a result of exact arithmetic.
+    exhaustive = request.get('search', 'exhaustive') == 'exhaustive'
+    wants_zetas = bool(kinds)
     if request.get('method') == 'weighted':
-        return _resolve_weighted(p, request, kinds, start)
-    try:
-        verified = []
-        result = _resolve_polynomial(p,request,start,verified=verified)
-    except NonReducedError:
-        if mode=='intrinsic':
-            raise
-        from .weighted_record import nonreduced_resolution
-        result=nonreduced_resolution(p,variables,mode,lambda support:_resolve_polynomial(support,request,start))
-        if result is None:
-            raise
-        result.update(polynomial=format_poly(p,variables),elapsed_ms=round((perf_counter()-start)*1000,3))
+        return _resolve_weighted(p, request, kinds, start, proofs)
+    if mode == "intrinsic":
+        from .identity_atlas import reduced_at_origin
+        if not reduced_at_origin(p, variables):
+            raise NonReducedError("The germ is nonreduced: an intrinsic resolution requires a reduced hypersurface.")
+    if request.get("zetas_only") and len(variables) == 3:
+        from .contact_zetas import contact_record
+        contact = contact_record(p, variables, kinds)
+        if contact is not None:
+            contact["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
+            return contact
+    from .local_blowups import GiveUp
     from .strata import annotate_complex, rational_chart_outputs, resolution_strata
+    verified = []
+
+    def general_certificate():
+        from .general_resolution import search
+        report("Searching projective blowups for a certificate of the requested outputs")
+        def find(poly):
+            return search(poly, variables, mode, exhaustive=True, integrals=wants_zetas,
+                          verified=verified)
+
+        result = resolve_with_multiplicities(find)
+        if result is None:
+            raise RuntimeError("The exhaustive certificate enumerator exited without a resolution.")
+        result.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
+                      mode=mode, base_field="Q", geometric_field="algebraic closure of Q", origin=[0]*len(variables))
+        return result
+
+    def resolve_with_multiplicities(find):
+        try:
+            return find(p)
+        except NonReducedError:
+            if mode == "intrinsic":
+                raise
+            from .weighted_record import nonreduced_resolution
+            result = nonreduced_resolution(p, variables, mode, find)
+            if result is None:
+                raise
+            # A verified bundle for the reduced support carries different
+            # multiplicities, even when the chart record was lifted in place.
+            verified[:] = [item for item in verified if item[0] is not result]
+            result.update(polynomial=format_poly(p, variables), elapsed_ms=round((perf_counter()-start)*1000, 3))
+            return result
 
     def attach(record):
         if record["status"] != "resolved":
@@ -138,16 +177,18 @@ def _resolve(request, proofs):
         intrinsic = record["mode"] == "intrinsic"
         certified = next((value for producer, value in verified if producer is record), None)
         if certified is None:
-            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_zetas)
+            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_zetas,
+                                               replay_canonical=True)
+            if certified is None and record.get("engine") == "canonical-blowups":
+                raise GiveUp("The proposal lacks the canonical centre rule needed to reconstruct its chart cover.")
         if certified is not None:
             record["atlas"], output = certified
             record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
         else:
             from . import atlas
-            from .local_blowups import GiveUp
-            charts = atlas.from_record(record, p, native=True)
+            charts, reason = atlas.verified_modification_charts(record, p)
             if charts is None:
-                raise RuntimeError("The resolution engine did not supply its chart ownership data.")
+                raise GiveUp(reason)
             factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
             try:
                 output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_zetas,
@@ -171,38 +212,82 @@ def _resolve(request, proofs):
                 record["certificate"].update(numerical_data=output["numerical_data"], strata=output["strata"])
             return resolution_strata(record, p, computed=output)
 
+    # A fast proposal can have a smooth strict transform while its owned
+    # charts still lack the numerical data needed for integration. Exhaustive
+    # search admits a projective certificate only after its requested outputs
+    # have passed verification inside the candidate's timed attempt.
+    def finish(result):
+        found = attach(result)
+        if exhaustive and (result["status"] != "resolved" or
+                           (wants_zetas and mode == "embedded" and found is None)):
+            raise GiveUp("The proposed charts did not certify all the requested outputs.")
+        if found is not None and wants_zetas:
+            report("Computing the selected zeta functions", recorded_blowups(result))
+            return zetas_from_strata(result, kinds, found, polynomial=p)
+        return None
+
+    try:
+        result = resolve_with_multiplicities(lambda poly: _resolve_polynomial(poly, request, start, verified=verified))
+        outputs = finish(result)
+    except NonReducedError:
+        raise  # Intrinsic resolution requires a reduced source.
+    except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as error:
+        # The input equation, mode and origin have been validated. These
+        # failures concern a solver-generated proposal, never a saved proof.
+        if exhaustive:
+            result = general_certificate()
+            outputs = finish(result)
+        else:
+            result = inconclusive(request, {"description": str(error)}, (perf_counter()-start)*1000,
+                                  format_poly(p, variables))
+            outputs = None
     proofs.append(('primary', result.get('certificate', {})))
-    found = attach(result)
     if wants_zetas:
-        record = result
-        companion = found is None and mode == "intrinsic" and result["status"] == "resolved"
-        if companion:
-            report("Resolving an embedded companion for the zeta calculation")
-            record = _resolve_polynomial(p, dict(request, mode="embedded"), start)
-            proofs.append(('companion', record.get('certificate', {})))
-            found = attach(record)
-            if found is not None:
-                result["embedded_companion"] = {"atlas": record["atlas"]}
-        report("Computing the selected zeta functions", recorded_blowups(record))
-        result.update(zetas_from_strata(record, kinds, found, companion=companion, polynomial=p))
+        if outputs is None and mode == "intrinsic" and result["status"] == "resolved":
+            _complete_companion(result, request, kinds, proofs)
+            result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
+            return result
+        if outputs is None and mode == "embedded" and not request.get("zetas_only"):
+            from .contact_zetas import contact_zetas
+            outputs = contact_zetas(p, variables, kinds)
+        if outputs is None:
+            outputs = zetas_from_strata(result, kinds, None)
+        result.update(outputs)
     result['elapsed_ms'] = round((perf_counter()-start)*1000, 3)
     return result
 
 
-def _resolve_weighted(p, request, kinds, start):
-    """Resolve by weighted blowups, after checking that the request allows it.
+def _complete_companion(record, request, kinds, proofs):
+    report("Resolving an ordinary embedded companion for the selected zeta functions")
+    companion_proofs = []
+    embedded = _resolve(dict(request, mode="embedded", method="auto", zetas_only=True), companion_proofs)
+    attach_companion(record, embedded, kinds)
+    proofs.extend(("companion", proof) for _, proof in companion_proofs)
 
-    The weighted engine gives an embedded resolution of the germ at the origin
-    with a certificate of normal crossings. It computes no zeta functions yet.
-    """
+
+def _resolve_weighted(p, request, kinds, start, proofs):
+    """Compute the weighted charts and use ordinary embedded data for any requested zetas."""
     if request.get('mode', 'embedded') != 'embedded':
         raise InputError("The weighted resolution is embedded: use the embedded mode with method weighted.")
-    if kinds:
-        raise InputError("The weighted resolution does not compute zeta functions yet: drop monodromy and zetas, "
-                         "or use method auto.")
-    from .weighted_blowups import weighted_resolution
+    from .weighted_blowups import SECONDS, WeightedDeclined, weighted_resolution
     report("Resolving by weighted blowups", 0)
-    record = weighted_resolution(p, request['variables'])
+    seconds = SECONDS if request.get("search") == "quick" else None
+    try:
+        record = weighted_resolution(p, request['variables'], seconds=seconds)
+    except WeightedDeclined as error:
+        reason = str(error)
+        if seconds is None:
+            report("Continuing with ordinary embedded resolution after a weighted method decline")
+            ordinary = dict(request, method="auto", zetas=list(kinds), zetas_only=False)
+            record = _resolve(ordinary, proofs)
+        else:
+            record = inconclusive(request, {"description": reason}, (perf_counter()-start)*1000)
+        record["requested_method"] = "weighted"
+        record["weighted_attempt"] = {"status": "declined", "reason": reason}
+        record["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
+        return record
+    if kinds:
+        _complete_companion(record, request, kinds, proofs)
     record['elapsed_ms'] = round((perf_counter() - start) * 1000, 3)
     return record
 
@@ -223,7 +308,7 @@ def _resolve_polynomial(p, request, start, *, verified=None):
                     and degree<=128)
     singular = order>1
     parallel_search = singular and exhaustive and 3 <= len(variables) <= 8
-    if singular and mode=='embedded' and 3<=len(variables)<=8:  # plane curves keep their own engine
+    if singular and mode=='embedded':
         # Smooth components through the origin with independent differentials
         # there (multiplicities allowed): the divisor has normal crossings at
         # the origin, and the identity is an embedded resolution near it.
@@ -239,6 +324,15 @@ def _resolve_polynomial(p, request, start, *, verified=None):
                               'components':[{'equation':str(name),'multiplicity':m} for name,m in crossing]},
                'dual_complex':{'status':'complete','convention':'Exceptional divisor of the identity.',
                                'vertices':[],'cells':[]}}
+            from .weighted_record import crossing_input_divisor
+            divisor = crossing_input_divisor(p, variables, crossing)
+            if divisor is not None:
+                r.update(input_divisor=divisor, multiplicity=order)
+        elif native_range:
+            from .plane_identity import conjugate_plane_identity
+            r = conjugate_plane_identity(p, variables, degree=degree,
+                                         integrals=bool(selected_zetas(request)), verified=verified)
+        if r is not None:
             r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
                      mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
                      origin=[0]*len(variables), elapsed_ms=round((perf_counter()-start)*1000,3))
@@ -313,16 +407,22 @@ def _resolve_polynomial(p, request, start, *, verified=None):
                               verified=verified)
     elif r is None and native_range and singular and len(variables) == 3:
         from .origin_backend import resolve_origin
-        r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True)
+        r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True,
+                           verified=verified, integrals=bool(selected_zetas(request)))
     elif r is None and native_range and singular and len(variables) >= 4:
         # The repeated tangent rule has five specified centres. Let a quick
         # request try those without entering the open-ended invariant search.
         from .origin_backend import resolve_origin
-        r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True)
+        r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
+                           verified=verified, integrals=bool(selected_zetas(request)))
     if r is None:
         from .general_resolution import search
         report("Searching for a blow-up centre")
-        r = search(p,variables,mode,exhaustive=exhaustive)
+        if exhaustive:
+            r = search(p, variables, mode, exhaustive=True, integrals=bool(selected_zetas(request)),
+                       verified=verified, resolve_reduced_first=True)
+        else:
+            r = search(p, variables, mode, exhaustive=exhaustive)
     if r is None:
         return inconclusive(request,diagnostic,(perf_counter()-start)*1000,format_poly(p,variables))
     r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),

@@ -20,6 +20,53 @@ from tests.cli_support import run_prompt
 
 
 class ResolutionComplexTests(unittest.TestCase):
+    def test_graph_cannot_remove_an_entire_smooth_component_as_its_centre(self):
+        # Blowing up the Cartier ideal (x) is the identity. Saturating the
+        # pullback of x by that pivot would incorrectly erase the whole curve.
+        names = list("xy")
+        chart = dict(coordinates=names, ambient_ideal=[], map=dict(x="x", y="y"),
+                     exceptional=[dict(id="E1", ideal=["x"])], strict_transform=["1"],
+                     pivot_generator="x", projective_coordinates=["1"])
+        for mode, equation in (("intrinsic", "x"), ("embedded", "x"), ("embedded", "x^3")):
+            record = dict(status="resolved", engine="verified-ideal-blowup", mode=mode, variables=names,
+                          polynomial=equation, steps=[dict(generators=["x"])], charts=[chart])
+            with self.subTest(mode=mode, equation=equation), self.assertRaisesRegex(InputError, "graph centre"):
+                dual_complex(record)
+
+    def test_large_computed_coefficient_survives_resolution_and_incidence_replay(self):
+        import sys
+        limit = sys.get_int_max_str_digits()
+        if not limit:
+            self.skipTest("This interpreter permits unrestricted decimal literals.")
+        source = f"(10^{limit // 2 + 1})^2*x+y"
+        for mode in ("embedded", "intrinsic"):
+            with self.subTest(mode=mode):
+                record = resolve(dict(polynomial=source, variables=["x","y"], mode=mode))
+                self.assertEqual(record["steps"], [])
+                self.assertEqual(dual_complex(record)["status"], "complete")
+                with self.assertRaisesRegex(InputError, "active limit"):
+                    resolve(dict(polynomial=record["polynomial"], variables=["x","y"], mode=mode))
+        self.assertEqual(sys.get_int_max_str_digits(), limit)
+
+    def test_smooth_chart_for_a_different_hypersurface_cannot_certify_incidence(self):
+        from engine.resolution_zetas import replay_zetas
+        chart = dict(coordinates=list("uvw"), ambient_ideal=[], fibre=list("uvw"), region=[], removed=[],
+                     map=dict(x="u+v", y="v", z="w"),
+                     components=[dict(id="strict", ideal=["w"], multiplicity=1, nu=1)])
+        for mode in ("embedded", "intrinsic"):
+            record = dict(status="resolved", mode=mode, variables=list("xyz"), atlas=[chart], steps=[])
+            with self.subTest(mode=mode):
+                self.assertEqual(dual_complex(dict(record, polynomial="z"))["status"], "complete")
+                with self.assertRaisesRegex(InputError, "strict transform differs"):
+                    dual_complex(dict(record, polynomial="x^2+y^3+z^7"))
+                bad = dict(record, polynomial="x^2+y^3+z^7")
+                with self.assertRaisesRegex(InputError, "strict transform differs"):
+                    replay_zetas(dict(record=bad, zetas=["topological"]))
+                with patch("engine.resolve._resolve_polynomial", return_value=bad):
+                    result = resolve(dict(mode=mode, polynomial=bad["polynomial"], variables=list("xyz"), search="quick"))
+                self.assertEqual(result["status"], "inconclusive")
+                self.assertIn("strict transform differs", result["diagnostic"]["description"])
+
     def test_saved_polynomial_graph_certifies_its_exceptional_bundle(self):
         from engine.graph_record import graph_outputs
         from engine.polynomial import parse

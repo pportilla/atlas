@@ -49,7 +49,7 @@ class ExhaustiveFallback(unittest.TestCase):
         self.assertGreater(origin.call_args.kwargs["seconds"], 0)
         exhaustive.assert_not_called()
         self.assertEqual(result["status"], "inconclusive")
-        self.assertEqual(result["monodromy_zeta"]["status"], "unavailable")
+        self.assertEqual(result["monodromy_zeta"]["status"], "inconclusive")
 
     def test_newton_limit_leaves_fallbacks_eligible(self):
         payload = dict(terms=[[[2, 0, 0], "1"]], variables=list("xyz"), mode="embedded",
@@ -161,13 +161,19 @@ print(json.dumps({'record':record, 'replay':{'winner':method}}))
     def test_newton_and_fallbacks_complete_independently(self):
         # Real workers use marker files to synchronize, so a slow CI machine
         # cannot change which method wins a given case.
+        import sys
         from subprocess import Popen
+        host_limit = sys.get_int_max_str_digits()
+        exponent = 10 ** max(5000, host_limit + 1)
         script = """
 import json, os, sys, time
 from pathlib import Path
+from engine.exact_json import result_json
+from engine.polynomial import integer_from_decimal
 method, winner, root = sys.argv[1:]
 root = Path(root)
-args = json.load(sys.stdin)
+args = json.load(sys.stdin, parse_int=integer_from_decimal)
+exponent, = [e[0] for e, coefficient in args['terms']]
 assert args['replay'] == {'compute': 'gpu', 'backend': 'opencl', 'index': 1}
 if method=='certificates':
     assert args['defer_spare']
@@ -184,7 +190,7 @@ elif method == winner:
 else:
     time.sleep(6)
     sys.exit(4)
-print(json.dumps({'record': {'engine': method, 'compute': args['compute']}, 'replay': {'winner': method}}))
+print(result_json({'record': {'engine': method, 'exponent': exponent}, 'replay': {'winner': method}}))
 """
         for winner in ("fast", "origin", "newton", "certificates"):
             with self.subTest(winner=winner), tempfile.TemporaryDirectory() as root:
@@ -201,9 +207,10 @@ print(json.dumps({'record': {'engine': method, 'compute': args['compute']}, 'rep
                      patch.object(exhaustive, "_forkable", return_value=False), \
                      patch.object(exhaustive, "NEWTON_GRACE_SECONDS", grace), \
                      patch.object(exhaustive, "current_replay_scope", return_value=scope):
-                    result = exhaustive.search({(2, 0, 0): 1}, list("xyz"), "embedded", compute="gpu")
+                    result = exhaustive.search({(exponent, 0, 0): 1}, list("xyz"), "embedded", compute="gpu")
                 expected = "newton" if winner == "fast" else winner
-                self.assertEqual(result, {"engine": expected, "compute": "gpu"})
+                self.assertEqual(result, {"engine": expected, "exponent": exponent})
+                self.assertEqual(sys.get_int_max_str_digits(), host_limit)
                 scope.merge.assert_called_once_with({"winner": expected})
                 self.assertEqual(set(workers), {"newton"} if winner == "fast" else {"newton", "origin", "certificates"})
                 self.assertTrue(all(child.poll() is not None for child in workers.values()))

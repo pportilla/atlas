@@ -1,5 +1,5 @@
-#include "common_field.hpp"
 #include <flint/fexpr.h>
+#include "common_field.hpp"
 #include "algebraic_number.hpp"
 #include "binomial_root_family.hpp"
 #include <flint/fmpq.h>
@@ -95,6 +95,63 @@ void extend_by_generators(const vector<Num>& values, Num& generator, vector<Powe
     }
 }
 } // namespace
+
+J coefficient_field(const vector<Num>& values, vector<vector<mpq_class>>& images) {
+    if (values.empty()) return J();
+    Num generator = values.front();
+    vector<PowerBasisElement> coordinates(values.size());
+    J roots(Json::arrayValue);
+    auto minimal = QQBAR_POLY(generator.n);
+    const auto n = fmpz_poly_degree(minimal);
+    if (n >= 3 && static_cast<size_t>(n) == values.size() &&
+        _fmpz_poly_hamming_weight(minimal->coeffs, minimal->length) == 2 &&
+        all_of(values.begin(), values.end(), [&](const Num& v) { return fmpz_poly_equal(minimal, QQBAR_POLY(v.n)); })) {
+        J coefficients(Json::arrayValue);
+        for (slong i = 0; i <= n; ++i)
+            coefficients.append(flint_string(fmpz_get_str(nullptr, 10, minimal->coeffs+i)));
+        qqbar_ptr conjugates = _qqbar_vec_init(n);
+        qqbar_conjugates(conjugates, generator.n);
+        for (const auto& v : values) {
+            slong j = 0;
+            while (j < n && !qqbar_equal(conjugates+j, v.n)) ++j;
+            J row;
+            row["coefficients"] = coefficients;
+            row["index"] = Json::Int64(j+1);
+            roots.append(std::move(row));
+        }
+        _qqbar_vec_clear(conjugates, n);
+    }
+    if (roots.empty() || !binomial_root_family(roots, values, generator, coordinates))
+        extend_by_generators(values, generator, coordinates);
+    J field;
+    auto equation = QQBAR_POLY(generator.n);
+    field["degree"] = Json::Int64(fmpz_poly_degree(equation));
+    for (slong j = 0; j < fmpz_poly_length(equation); ++j)
+        field["coefficients"].append(flint_string(fmpz_get_str(nullptr, 10, equation->coeffs+j)));
+    fexpr_t exact, index;
+    fexpr_init(exact);
+    qqbar_get_fexpr_root_indexed(exact, generator.n);
+    field["exact"] = flint_string(fexpr_get_str(exact));
+    fexpr_view_arg(index, exact, 1);
+    fmpz_t k;
+    fmpz_init(k);
+    const bool indexed = fexpr_get_fmpz(k, index);
+    field["index"] = Json::Int64(fmpz_get_si(k));
+    fmpz_clear(k);
+    fexpr_clear(exact);
+    if (!indexed) throw logic_error("The common field has no indexed algebraic generator.");
+    fmpq_t scalar;
+    fmpq_init(scalar);
+    for (const auto& element : coordinates) {
+        auto& row = images.emplace_back(fmpq_poly_length(element.poly));
+        for (size_t j = 0; j < row.size(); ++j) {
+            fmpq_poly_get_coeff_fmpq(scalar, element.poly, j);
+            fmpq_get_mpq(row[j].get_mpq_t(), scalar);
+        }
+    }
+    fmpq_clear(scalar);
+    return field;
+}
 
 // Present a finite set of exact chart coefficients in one number field.
 // Each input uses FLINT's own root order (as in PolynomialRootIndexed).

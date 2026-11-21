@@ -42,11 +42,26 @@ QUOTIENT_ACTION_OPERANDS = {
     **dict.fromkeys(("add", "subtract", "multiply", "equal", "divide"), ("polynomial", "other_polynomial")),
     "power": ("polynomial", "exponent"),
 }
+POLYNOMIAL_ACTION_OPERANDS = {
+    **dict.fromkeys(("add", "subtract", "multiply", "divide"), ("other_polynomial",)),
+    "power": ("exponent",),
+    "differentiate": ("variable",),
+    "substitute": ("images",),
+}
 OPERATION_OPERANDS = {
+    "matrix-analysis": ("rows",),
+    "modular-arithmetic": ("action", "values", "modulus"),
+    "polynomial-arithmetic": ("action", "polynomial"),
     "ae-codimension": ("components",),
     "gcd": ("polynomial", "other_polynomial"),
+    "hensel-factors": ("polynomial", "factors", "modulus"),
+    "extended-gcd": ("polynomial", "other_polynomial"),
+    "cancel-fraction": ("polynomial", "other_polynomial"),
+    "polynomial-division": ("polynomial", "other_polynomial"),
     "resultant": ("polynomial", "other_polynomial", "variables"),
     "factor": ("polynomial",),
+    "absolute-factor": ("polynomial",),
+    "squarefree-factor": ("polynomial",),
     "ideal": ("ideal",),
     "groebner": ("ideal",),
     "normal-form": ("ideal", "polynomial"),
@@ -135,7 +150,11 @@ def _request(data):
     names = _names(ring["variables"])
     if operation == "ae-codimension" and not names:
         raise InputError("A map germ requires at least one source coordinate.")
-    if ring.get("field", "QQ") != "QQ":
+    field = ring.get("field", "QQ")
+    if isinstance(field, dict) and operation == "polynomial-arithmetic":
+        from .marked_arithmetic import checked_field
+        field = checked_field(field, names)
+    elif field != "QQ":
         raise InputError("The supported coefficient field is QQ.")
     order = ring.get("order", "grevlex")
     if order not in ("lex", "grevlex"):
@@ -148,6 +167,19 @@ def _request(data):
     if operation == "localization":
         optional += ("numerator", "denominator")
     required = OPERATION_OPERANDS[operation]
+    if operation == "matrix-analysis":
+        optional += ("rhs", "columns")
+        if names:
+            raise InputError("A rational matrix has scalar entries. Use an empty variable list.")
+    if operation == "modular-arithmetic":
+        if names:
+            raise InputError("A modular batch takes scalar integers. Use an empty variable list.")
+        optional += ("other", "other_modulus", "field_polynomial")
+    if operation == "polynomial-arithmetic" and isinstance(operands, dict):
+        action = operands.get("action")
+        if not isinstance(action, str) or action not in POLYNOMIAL_ACTION_OPERANDS:
+            raise InputError("Choose a polynomial action from " + ", ".join(POLYNOMIAL_ACTION_OPERANDS) + ".")
+        required += POLYNOMIAL_ACTION_OPERANDS[action]
     if operation == "quotient-ring" and isinstance(operands, dict):
         action = operands.get("action", "declare")
         if not isinstance(action, str) or action not in QUOTIENT_ACTION_OPERANDS:
@@ -155,6 +187,23 @@ def _request(data):
         operands = dict(operands, action=action)
         required += ("action", *QUOTIENT_ACTION_OPERANDS[action])
     _fields(operands, "operands", required, optional)
+    if operation == "hensel-factors":
+        from .modular_batch import integer
+        if not isinstance(operands["factors"], list) or len(operands["factors"]) != 2:
+            raise InputError("Supply two ordered polynomial factors for Hensel lifting.")
+        operands = dict(operands, modulus=integer(operands["modulus"]))
+    if operation == "modular-arithmetic":
+        from .modular_batch import operands as modular_operands
+        operands = modular_operands(**operands)
+    if operation == "matrix-analysis":
+        from .matrix_algebra import matrix_operands
+        operands = matrix_operands(**operands)
+    if "variable" in operands and operands["variable"] not in names:
+        raise InputError("Choose a declared coordinate for differentiation.")
+    if "images" in operands and (not isinstance(operands["images"], list)
+                                or len(operands["images"]) != len(names)
+                                or not all(isinstance(f, str) for f in operands["images"])):
+        raise InputError("Supply one polynomial image per coordinate, in declaration order.")
     if "exponent" in operands:
         exponent = operands["exponent"]
         if type(exponent) is int:
@@ -173,7 +222,7 @@ def _request(data):
     elif operation in LOCAL_STANDARD_OPERANDS:
         # These two operations have always returned an explicit origin point.
         operands = dict(operands, point=["0"] * len(names))
-    for key in ("ideal", "other_ideal", "prime", "components"):
+    for key in ("ideal", "other_ideal", "prime", "components", "factors"):
         if key in operands and (not isinstance(operands[key], list)
                                 or not all(isinstance(f, str) for f in operands[key])):
             raise InputError(f"{key} must be an array of polynomial strings.")
@@ -190,7 +239,7 @@ def _request(data):
         elif not removed or any(v not in names for v in removed):
             raise InputError("Choose one or more declared variables to eliminate.")
 
-    parent = {"field": "QQ", "variables": names, "order": order}
+    parent = {"field": field, "variables": names, "order": order}
     if "relations" in ring:
         if operation not in QUOTIENT_IDEAL_OPERATIONS:
             raise InputError(f"{operation} is not yet available over a quotient ring.")
@@ -217,12 +266,17 @@ def dispatch(data, *, known_basis=False, try_bounded_quotient=False):
     request = _request(data)
     operation, ring = request["operation"], request["ring"]
     names = ring["variables"]
+    field = ring["field"]
+    modulus = None
+    if isinstance(field, dict):
+        names = [*names, field["generator"]]
+        modulus = field["minimal_polynomial"]
     variables = tuple(native.Symbol(name) for name in names)
     operands = request["operands"].copy()
 
     def parse(text):
         try:
-            terms = parse_expression(text, names)
+            terms = parse_expression(text, names, coefficient_modulus=modulus)
         except UnicodeEncodeError as exc:
             raise InputError("A polynomial string must contain valid Unicode.") from exc
         return native.from_terms(variables, terms)
@@ -252,7 +306,7 @@ def dispatch(data, *, known_basis=False, try_bounded_quotient=False):
                 "execution": observed, "replay": make_replay(request, operands)}
 
     with algebra_execution(request["compute"]) as execution:
-        for key in ("ideal", "other_ideal", "prime"):
+        for key in ("ideal", "other_ideal", "prime", "images", "factors"):
             if key in operands:
                 operands[key] = [parse(text) for text in operands[key]]
         for key in ("polynomial", "other_polynomial", "numerator", "denominator"):
@@ -265,7 +319,7 @@ def dispatch(data, *, known_basis=False, try_bounded_quotient=False):
             if known_basis:
                 basis = handler.basis_from_reduced(operands["ideal"], variables, order=ring["order"])
                 result_operands = dict(operands, ideal=basis)
-        elif operation in ("gcd", "factor", "resultant"):
+        elif operation in ("gcd", "hensel-factors", "cancel-fraction", "extended-gcd", "polynomial-division", "factor", "squarefree-factor", "absolute-factor", "resultant", "polynomial-arithmetic"):
             from . import algebra_polynomial as handler
         elif operation in ("ae-codimension", "quotient-basis", "multiplicity") or operation in LOCAL_QUOTIENT_OPERANDS:
             from . import local_algebra as handler
@@ -281,6 +335,10 @@ def dispatch(data, *, known_basis=False, try_bounded_quotient=False):
             from . import hilbert_series as handler
         elif operation in TANGENT_CONE_OPERANDS:
             from . import tangent_cone as handler
+        elif operation == "modular-arithmetic":
+            from . import modular_batch as handler
+        elif operation == "matrix-analysis":
+            from . import matrix_algebra as handler
         elif operation in TANGENT_SPACE_OPERANDS:
             from . import zariski_tangent as handler
         elif operation in LOCAL_DIMENSION_OPERANDS:
@@ -320,6 +378,11 @@ def calculate_algebra(request, *, known_basis=False, timeout=None, owner=None, _
         operands = request.get("operands") if isinstance(request, dict) else None
         if isinstance(operands, dict):
             wire_operands = operands.copy()
+            if request.get("operation") in ("matrix-analysis", "modular-arithmetic", "hensel-factors"):
+                try:
+                    wire_operands = _request(request)["operands"]
+                except InputError as error:
+                    return 400, error_record("invalid_request", str(error))
             if type(operands.get("exponent")) is int:
                 wire_operands["exponent"] = integer_text(operands["exponent"])
             for key in ("point", "degrees"):

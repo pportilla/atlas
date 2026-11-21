@@ -10,6 +10,7 @@ import threading
 import time
 
 from . import fork_server
+from .exact_json import result_json
 from .native_library import current_replay_scope
 from .polynomial import LimitError, NonReducedError, integer_from_decimal, rational_text
 from .resolution_progress import report
@@ -244,7 +245,7 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         "replay": scope.settings() if scope else {"compute": compute},
         "integrals": integrals,
     }
-    payload = json.dumps(request)
+    payload = result_json(request)
     replies = queue.SimpleQueue()
     # Every lane process with its coordinator pipe, the lanes that received
     # their request, and forked lanes still waiting for it.
@@ -295,7 +296,7 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
             return False
         message = payload
         if method == "certificates" and any(peer.poll() is None for peer in started):
-            message = json.dumps(dict(request, defer_spare=True))
+            message = result_json(dict(request, defer_spare=True))
         started.append(child)
         reader = threading.Thread(target=collect, args=(method, child, message), daemon=True)
         reader.start()
@@ -312,10 +313,14 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
             if "nonreduced" in reply:
                 raise NonReducedError(reply["nonreduced"])
             if reply.get("record") is not None:
+                bundle = reply.get("certified")
+                if integrals and mode == "embedded" and not (isinstance(bundle, list) and len(bundle) == 2
+                        and isinstance(bundle[1], dict) and "strata" in bundle[1] and "numerical_data" in bundle[1]):
+                    return None
                 if scope is not None:
                     scope.merge(reply.get("replay"))
-                if verified is not None and isinstance(reply.get("certified"), list) and len(reply["certified"]) == 2:
-                    verified.append((reply["record"], _restored(reply["certified"])))
+                if verified is not None and isinstance(bundle, list) and len(bundle) == 2:
+                    verified.append((reply["record"], _restored(bundle)))
                 return reply["record"]
             if "error" in reply:
                 errors.append(f"{method}: {reply['error']}")
@@ -381,12 +386,14 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
 
 
 def _run(method, payload):
-    from .polynomial import kernel_fraction
+    from .polynomial import format_poly, kernel_fraction
     from .native_library import replay_scope
     from .newton_faces import face_search
 
     terms = {tuple(e): kernel_fraction(c) for e, c in payload["terms"]}
+    need_strata = payload.get("integrals", False) and payload["mode"] == "embedded"
     with replay_scope(**payload["replay"]) as replay, face_search(True):
+        certified = None
         try:
             if method == "newton":
                 from .newton_backend import resolve_newton
@@ -400,21 +407,35 @@ def _run(method, payload):
                 except (LimitError, subprocess.TimeoutExpired):
                     record = None
                 certified = next((value for producer, value in verified if producer is record), None)
-                if record is not None and certified is not None:
-                    return {"record": record, "certified": list(certified), "replay": replay.report()}
             elif method == "origin":
-                from .origin_backend import _resolve
+                from .origin_backend import _resolve, certified_outputs
                 report("Searching for smooth blow-up centres over the origin")
                 record = _resolve(terms, payload["variables"], payload["mode"], None, defer_outputs=True)
+                if record is not None:
+                    certified = certified_outputs(record, payload["variables"], payload["mode"],
+                                                  payload.get("integrals", False))
             elif method == "certificates":
                 from .general_resolution import search as certificates
                 report("Searching for a certified blow-up centre")
+                verified = []
                 record = certificates(terms, payload["variables"], payload["mode"], exhaustive=True,
-                                      prewarm_spare=not payload.get("defer_spare", False))
+                                      prewarm_spare=not payload.get("defer_spare", False),
+                                      integrals=payload.get("integrals", False), verified=verified,
+                                      resolve_reduced_first=True)
+                certified = next((value for producer, value in verified if producer is record), None)
             else:
                 raise ValueError("Unknown resolution method.")
         except NonReducedError as error:
             return {"nonreduced": str(error)}
+        if need_strata and record is not None and method != "certificates":
+            from .general_resolution import integral_certificate
+            names = payload["variables"]
+            record.update(variables=names, mode="embedded", polynomial=format_poly(terms,names), origin=[0]*len(names))
+            certified = integral_certificate(record, terms, certified)
+            if certified is None:
+                record = None
+        if record is not None and certified is not None:
+            return {"record":record, "certified":list(certified), "replay":replay.report()}
         return {"record": record, "replay": replay.report()}
 
 

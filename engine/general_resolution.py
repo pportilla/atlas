@@ -1,8 +1,8 @@
 """Verify an embedded resolution presented as a single projective ideal blowup.
 
 A finite composition of blowups over affine space is itself the blowup of a
-finitely generated ideal (Stacks 080B). This permits a slower complete search
-in addition to the geometric algorithms. Every candidate is checked.
+finitely generated ideal (Stacks 080B). The search enumerates finite
+descriptions of these ideals and checks candidates for the requested outputs.
 """
 import atexit
 from functools import lru_cache
@@ -15,6 +15,7 @@ import threading
 from time import monotonic, sleep
 
 from . import native_polynomial as np
+from .exact_json import result_json
 from .candidate_field import NativeField
 from .chart_expressions import chart_expressions, runtime_expressions
 from .resolution_progress import report
@@ -26,7 +27,7 @@ from .blowup_ideal import (assemble_charts, blowup_charts, empty_locus, ideal_su
                            radical_subset, resolution_charts, verify_snc)
 from .native_library import current_replay_scope, replay_scope
 from .rational_point import coordinate_fraction
-from .polynomial import integer_text
+from .polynomial import integer_from_decimal, integer_text, rational_text
 from .reduced_centre import smooth_reduced_graph
 
 
@@ -254,7 +255,7 @@ def _verified_record(variables,candidate,mode,effort,charts,pieces,snc_checks,*,
         coefficients = domain.coefficients if isinstance(domain, NativeField) else domain.ext.minpoly.all_coeffs()
         out['coefficient_field']={'name':f'Q({generator})','generator':generator,
             'exact_root':str(primitive),'description':f'{generator} = {primitive}',
-            'minimal_polynomial_coefficients':[str(c) for c in coefficients]}
+            'minimal_polynomial_coefficients':[rational_text(c) for c in coefficients]}
     return "certified", out
 
 
@@ -351,7 +352,11 @@ def _read_candidate(info):
 
 def _kernel_line(terms):
     """A packed rational polynomial in the kernel's text form."""
-    return ";".join(f"{int(c[0][0],16)}/{int(c[0][1],16)} {' '.join(map(str,e))}" for e,c in terms)
+    rows = []
+    for exponents, (coefficient,) in terms:
+        numerator, denominator = (integer_text(int(part, 16)) for part in coefficient)
+        rows.append(f"{numerator}/{denominator} {' '.join(map(integer_text, exponents))}")
+    return ";".join(rows)
 
 
 def _decide(info):
@@ -377,10 +382,14 @@ def _decide(info):
     variables,f,candidate,mode,effort = _read_candidate(info)
     if proof:
         proof = assemble_charts(variables,candidate.center,proof)
-    return _verify(variables,f,candidate,mode,effort,proof)
+    state, record = _verify(variables,f,candidate,mode,effort,proof)
+    if state == "certified" and "output_input" in info:
+        return _certify_original(record, info["variables"], mode, info["output_input"])
+    return state, record
 
 
 def _serve():
+    from .centres import GiveUp
     # Private pipe protocol for *already generated* candidates: one JSON line
     # in, one out. Only sparse polynomial data crosses the boundary. No
     # pickling or expression evaluation.
@@ -408,10 +417,12 @@ def _serve():
                     outcome = _decide(info)
                 finally:
                     report = replay.report()
-        except Exception:
-            # A backend limitation is inconclusive. The scheduler can continue with
-            # other certificates and will revisit this one with more resources.
+        except (GiveUp, ArithmeticError, ValueError, MemoryError, RecursionError):
+            # A limitation of this candidate's verifier leaves other
+            # presentations eligible and the current one open for a retry.
             outcome = ("undecided", None)
+        except Exception as error:
+            outcome = ("worker_error", f"{type(error).__name__}: {error}")
         sys.stdout.write(json.dumps([*outcome, report],separators=(",",":"))+"\n")
         sys.stdout.flush()
 
@@ -517,14 +528,16 @@ _workers = _Workers()
 atexit.register(_workers.close)
 
 
-def _attempt(variables, f, candidate, mode, effort, seconds, *, spare=True):
+def _attempt(variables, f, candidate, mode, effort, seconds, *, spare=True, output_input=None):
     """An independently killable proof attempt. Does not depend on process signals
     in the calling thread. The worker shares the outer job's cancellation group.
     """
     start = monotonic()
     try:
         info = _wire_candidate(variables,f,candidate,mode,effort)
-    except Exception:
+        if output_input is not None:
+            info["output_input"] = output_input
+    except (ArithmeticError, ValueError, MemoryError, RecursionError):
         return "undecided", None
     return _run_attempt(info, seconds-(monotonic()-start), spare=spare)
 
@@ -553,30 +566,34 @@ def _run_attempt(info, seconds, *, spare=True):
     replay = current_replay_scope()
     if replay is not None:
         info["replay"] = replay.settings()
-    payload = json.dumps(info)
+    payload = result_json(info)
     try:
         worker = _workers.take() if spare else _workers.take(spare=False)
-    except OSError:
-        return "undecided", None
+    except OSError as error:
+        raise RuntimeError(f"Could not start the resolution certificate worker: {error}") from error
     output = None
     try:
         output = worker.ask(payload, seconds-(monotonic()-start))
     finally:
         if not output:
             worker.close()  # out of time, interrupted, or the process failed
-    if not output:
+    if output is None:
         return "undecided", None
+    if not output:
+        raise RuntimeError("The resolution certificate worker exited without a reply.")
     worker.answered += 1
     _workers.give(worker)
     try:
-        state, result, report = json.loads(output)
+        state, result, report = json.loads(output, parse_int=integer_from_decimal)
         if replay is not None and report:
             replay.merge(report)
-    except (TypeError,ValueError):
-        return "undecided", None
+    except (TypeError,ValueError) as error:
+        raise RuntimeError("Invalid reply from the resolution certificate worker.") from error
+    if state == "worker_error":
+        raise RuntimeError(f"The resolution certificate worker failed: {result}")
     if state in ("rejected","undecided","certified"):
         return state, result
-    return "undecided", None
+    raise RuntimeError(f"Unknown resolution certificate worker status: {state}")
 
 
 def _isolated_graph_prefix(variables, active, candidates, seconds):
@@ -609,9 +626,77 @@ def _isolated_graph_prefix(variables, active, candidates, seconds):
                             count,coordinate_line=True)
 
 
-def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,prewarm_spare=True):
+def _record_unit(record, unit, active, invert):
+    if unit is None:
+        return
+    record['certificate'].update(unit_removed_at_origin=unit, resolved_equation=active)
+    if invert:
+        base = {'open':f'D({unit})','invert':[unit],
+                'description':'The removed factor is a unit on this neighborhood of the origin.'}
+        record['base_domain']=base
+        for chart in record['charts']:
+            chart['base_domain']=dict(base)
+            chart['invert']=list(base['invert'])
+
+
+def integral_certificate(record, polynomial, certified=None):
+    """Check an embedded candidate's owned strata and the native normalization Z(0)=1."""
+    from .strata import rational_chart_outputs, resolution_strata
+    from .topological import topological_zeta
+    if certified is None:
+        # The graph candidate's geometric intersections were just certified
+        # at this attempt's projection effort. Reuse them when checking the
+        # original divisor and the Euler strata on the disjoint chart pieces.
+        graph = record.get("engine") == "verified-ideal-blowup"
+        certified = rational_chart_outputs(record, polynomial, complex=not graph, integrals=True)
+        if graph and certified is not None:
+            certified[1]["dual_complex"] = record["dual_complex"]
+        if certified is None:
+            from . import atlas
+            charts = atlas.from_record(record, polynomial, native=True)
+            if charts is None:
+                return None
+            output = atlas.outputs(charts, len(record["variables"]), integrals=True)
+            certified = atlas.to_json(charts), output
+    _, output = certified
+    if "numerical_data" not in output or "strata" not in output:
+        return None
+    strata = resolution_strata(record, polynomial, computed=output)
+    if topological_zeta(record, polynomial=polynomial, strata=strata)["status"] != "computed":
+        return None
+    return certified
+
+
+def _certify_original(record, names, mode, asked):
+    """Reconstruct this candidate's owned graph over the original germ within its timed attempt."""
+    from .graph_record import graph_outputs
+    from .polynomial import parse
+    polynomial = parse(asked["polynomial"], names, bounded=False)
+    record.update(schema_version=1, polynomial=asked["polynomial"], variables=names,
+                  mode=mode, origin=[0]*len(names), base_field="Q", geometric_field="algebraic closure of Q")
+    _record_unit(record, asked.get("unit"), asked.get("active"), asked.get("invert"))
+    if asked["repeated"]:
+        from .weighted_record import nonreduced_resolution
+        record = nonreduced_resolution(polynomial, names, "embedded", lambda support: record)
+        if record is None:
+            return "undecided", None
+    # The global projective candidate already proved the geometric intersections
+    # at this effort. Replay each pivot and the original strict transform once.
+    integrals = asked["integrals"]
+    certified = graph_outputs(record, polynomial, complex=False, intrinsic=mode == "intrinsic", integrals=integrals)
+    if certified is not None:
+        certified[1]["dual_complex"] = record["dual_complex"]
+        if integrals and (mode == "embedded" or "strata" in certified[1]):
+            certified = integral_certificate(record, polynomial, certified)
+    if certified is None:
+        return "undecided", None
+    return "certified", {"record":record, "certified":certified}
+
+
+def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,prewarm_spare=True,
+           integrals=False,verified=None,resolve_reduced_first=False):
     from .affine_kernel import _sparse_expression, _sparse_terms, frame_function, rational_factor_rows
-    from .resolution_search import priority_candidates, scheduled_candidates
+    from .resolution_search import priority_candidates, scheduled_attempts
     api = runtime_expressions()
     variables=tuple(api.Symbol(s) for s in names)
     f=expression(poly,variables)
@@ -619,26 +704,39 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,p
         _workers.warm()  # the interpreter starts while the candidates are prepared
     # Over the germ, repeated global factors that miss zero are units. Preserve
     # them in ordinary charts, or record the unit if this fallback removes it.
+    report("Factoring the original polynomial and identifying its reduced support at the origin")
     scalar, factors = rational_factor_rows(variables, f)
     active_factors, unit_factors = [], [api.Rational(scalar)]
+    check_outputs = integrals or (exhaustive and transverse_centre is None)
+    repeated = False
     from .identity_atlas import origin_indices
     active_indices = set(origin_indices((dict(_sparse_terms(row)) for row, _, _ in factors), len(variables)))
     for i, (row, power, _) in enumerate(factors):
         factor = _sparse_expression(variables, row)
         if i not in active_indices:
             unit_factors.append(factor**power)
-        elif power > 1:
-            from .polynomial import NonReducedError
-            raise NonReducedError('The germ has a repeated component through the origin. Resolution of the underlying reduced hypersurface requires its square-free equation.')
         else:
+            if power > 1:
+                if not check_outputs or mode != "embedded" or resolve_reduced_first:
+                    from .polynomial import NonReducedError
+                    raise NonReducedError('The germ has a repeated component through the origin. Resolution of the underlying reduced hypersurface requires its square-free equation.')
+                repeated = True
             active_factors.append(factor)
     active = api.Mul(*active_factors)
     # All removed factors are nonzero at the origin. The factorization
     # gives f/active directly, including the original scalar and powers.
     unit = frame_function(variables, api.Mul(*unit_factors))
+    output_input = None
+    if check_outputs:
+        from .polynomial import format_poly
+        if transverse_centre is not None:
+            raise ValueError("An owned graph certificate requires the full candidate verifier.")
+        output_input = {"polynomial":format_poly(poly,names), "repeated":repeated, "integrals":integrals}
+        if unit != 1:
+            output_input.update(unit=_text(unit,QQ), active=_text(active,QQ), invert=bool(unit.free_symbols))
     deadline=monotonic()+seconds
-    schedule=(scheduled_candidates(variables,active) if exhaustive else
-              ((c,1.25) for c in priority_candidates(variables,active)))
+    schedule=(scheduled_attempts(variables,active) if exhaustive else
+              ((c,1,1.25) for c in priority_candidates(variables,active)))
     attempts=0
     rejected_priority = set()
     prefix = []
@@ -646,7 +744,7 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,p
         expected = (((api.S.One,), "identity"), (variables, "origin"),
                     (tuple(variables[j] for j in transverse_centre), "singular coordinate subspace"))
 
-    for candidate,allowance in schedule:
+    for candidate,effort,allowance in schedule:
         seconds_left=allowance if exhaustive else min(allowance,deadline-monotonic())
         if seconds_left<=0:
             break
@@ -658,8 +756,9 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,p
         attempts+=1
         report(f"Checking blow-up candidate {attempts} at the proposed centre")
         if transverse_centre is None:
-            state,result = _attempt(variables,active,candidate,mode,max(1,int(allowance)),seconds_left,
-                                    spare=prewarm_spare)
+            options = {"output_input":output_input} if check_outputs else {}
+            state,result = _attempt(variables,active,candidate,mode,effort,seconds_left,
+                                    spare=prewarm_spare, **options)
             # A racing search already has its first verifier. A timeout or
             # undecided proof enables the replacement for subsequent attempts.
             if state == "undecided":
@@ -677,19 +776,14 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,p
         if state=="rejected" and priority_key is not None:
             rejected_priority.add(priority_key)
         if state=="certified" and result is not None:
+            if check_outputs:
+                certified = result["certified"]
+                result = result["record"]
+                if verified is not None:
+                    verified.append((result,certified))
             result['certificate']['candidates_examined']=attempts
-            if unit!=1:
-                result['certificate']['unit_removed_at_origin']=_text(unit,QQ)
-                result['certificate']['resolved_equation']=_text(active,QQ)
-                if unit.free_symbols:
-                    invert = _text(unit,QQ)
-                    base = {'open':f'D({invert})','invert':[invert],
-                            'description':'The removed factor is a unit on this neighborhood of the origin.'}
-                    result['base_domain']=base
-                    for chart in result['charts']:
-                        # In graph charts the projection keeps every original coordinate.
-                        chart['base_domain']=dict(base)
-                        chart['invert']=list(base['invert'])
+            if not check_outputs and unit!=1:
+                _record_unit(result, _text(unit,QQ), _text(active,QQ), bool(unit.free_symbols))
             return result
     return None
 

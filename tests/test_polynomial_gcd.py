@@ -30,6 +30,13 @@ def replay_workload():
 
 
 class PolynomialGCD(unittest.TestCase):
+    def test_elimination_recovers_common_factor_with_wide_degree(self):
+        h = "x^18446744073709551617+x*y^2+z^2"
+        request = gcd_request(f"({h})*(x+y)", f"({h})*(x+z)", order="lex")
+        expected = parse_expression(h, ["x", "y", "z"])
+        result = dispatch(request)["result"]
+        self.assertEqual(parse_expression(result["polynomial"], ["x", "y", "z"]), expected)
+
     def test_zero_units_and_repeated_factors(self):
         cases = [
             ("0", "0", "0"),

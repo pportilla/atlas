@@ -83,8 +83,11 @@ def monodromy_zeta(record, *, polynomial=None, strata=None):
     """Return the origin zeta and certified nearby zetas from an embedded resolution."""
     if not isinstance(record, dict) or "status" not in record:
         raise InputError("Expected an Atlas resolution record.")
+    if strata is None:
+        from .strata import replay_record_zetas
+        return replay_record_zetas(record, ("monodromy",), polynomial)["monodromy_zeta"]
     if record["status"] != "resolved":
-        return {"status":"unavailable", "reason":"The resolution has not been certified."}
+        raise InputError("Explicit resolution strata require a certified embedded resolution.")
     variables = record.get("variables")
     if not isinstance(variables, list) or not variables:
         raise InputError("The resolution needs its ordered list of variables.")
@@ -95,13 +98,9 @@ def monodromy_zeta(record, *, polynomial=None, strata=None):
     if record.get("mode") not in ("embedded", "intrinsic") or not (
             saved or (record.get("engine") and record.get("charts"))):
         raise InputError("The record needs its resolution mode and charts.")
-    from .strata import resolution_strata
     if polynomial is None:
         polynomial = parse(record.get("polynomial"), variables, bounded=False)
-    found = resolution_strata(record, polynomial) if strata is None else strata
-    if found is None:
-        return {"status": "unavailable", "reason": "The atlas does not certify the embedded strata at the origin."}
-    data, strata, method = found
+    data, strata, method = strata
     rows, factors, chi = acampo_strata(data, strata)
     return {"status":"computed", "variable":"T", "convention":"prod_q det(I - T*h^* | H^q(F_0; Q))^((-1)^(q+1))",
             "formula":"prod_i (1-T^N_i)^(-chi_c(E_i^open intersect pi^(-1)(0)))",

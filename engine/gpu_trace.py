@@ -1,4 +1,5 @@
 """Finite-field S-pair rows against the shared, triangular reducer table for one degree."""
+from .triton_buffers import to_device, to_host
 import os
 
 from .triton_ir import launch_kernel
@@ -37,12 +38,12 @@ def reduce_rows(args, device):
         if not count:
             return torch.empty(1, dtype=torch.int32, device=device)
         host = np.ctypeslib.as_array(pointer, shape=(count,)).view(np.int32)
-        return torch.from_numpy(host).to(device)
+        return to_device(torch.from_numpy(host), device)
 
     with torch_device_context(device):
         arrays, depth = _plan(width, offsets, targets, coefficients, tails)
         result = torch.empty(words, dtype=torch.int32, device=device)
-        table = [torch.from_numpy(a).to(device) for a in arrays]
+        table = [to_device(torch.from_numpy(a), device) for a in arrays]
         work = torch.empty_like(result)
         buffers = (upload(initial, words), upload(pivots, width), *table, work, result, width, depth)
         if torch.device(device).type == "cpu" and os.getenv("TRITON_INTERPRET") == "1":
@@ -50,4 +51,4 @@ def reduce_rows(args, device):
             _level_rows[(pairs,)](*buffers, p, 16, 4, num_warps=2)
         else:
             launch_kernel("trace_levels", (p,), (pairs,), *buffers, warps=2)
-        np.ctypeslib.as_array(output, shape=(words,))[:] = result.cpu().numpy()
+        np.ctypeslib.as_array(output, shape=(words,))[:] = to_host(result).numpy()

@@ -63,8 +63,17 @@ The relation makes $1+y$ a unit with inverse $1-y$. The same quotient presentati
 
 | Operation | Keys in `operands` | Read from `result` |
 | --- | --- | --- |
+| `polynomial-arithmetic` | `action`, `polynomial` and the action operand (`other_polynomial`, `variable`, `exponent` or `images`) | `polynomial` in the input ring |
+| `modular-arithmetic` | `action`, `values`, `modulus`, and where applicable `other`, `other_modulus` or `field_polynomial`. Use an empty variable list. | Ordered `values` and output `modulus`. [Operations and examples](polynomial-ideals.md#compute-with-residues-and-lift-roots) |
 | `factor` | `polynomial` | Rational `unit` and `factors` with `polynomial` and `multiplicity` |
+| `absolute-factor` | `polynomial` | Rational `unit`, individual absolute `factors` with multiplicities, and their common coefficient field in `result.ring.field`. [Example](polynomial-ideals.md#factor-over-the-algebraic-closure) |
 | `gcd` | `polynomial`, `other_polynomial` | `polynomial` |
+| `hensel-factors` | `polynomial`, two `factors`, prime `modulus` | Lifted `left` and `right` factors, squared `modulus` |
+| `cancel-fraction` | `polynomial`, `other_polynomial` | Coprime `numerator`, monic `denominator` |
+| `squarefree-factor` | `polynomial` | `unit`, `factors` grouped by multiplicity |
+| `extended-gcd` | `polynomial`, `other_polynomial` | `gcd`, `left_coefficient`, `right_coefficient` |
+| `polynomial-division` | `polynomial`, `other_polynomial` | `quotient`, `remainder` |
+| `matrix-analysis` | `rows`, optional `rhs`, `columns`. Use an empty variable list. | Rank, RREF, determinant, kernel, image and solution |
 | `resultant` | `polynomial`, `other_polynomial`, `variables` (one elimination name in an array) | `polynomial` in surviving variables |
 | `ideal`, `groebner`, `radical` | `ideal` | `generators` for the declaration, reduced basis or radical |
 | `normal-form`, `membership` | `ideal`, `polynomial` | `polynomial` or Boolean `value` |

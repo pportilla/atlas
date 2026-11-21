@@ -260,19 +260,23 @@ for mark in ("sqrt(2)", "CRootOf((t-1)*(t^2-2),2)", "2*cos(pi/4)"):
     assert monodromy_zeta(r)["expression"]==old["expression"]
     assert topological_zeta(r)["expression"]==topo
     r["atlas"][0]["components"][0]["multiplicity"]+=1
-    assert monodromy_zeta(r)["status"]=="unavailable"
+    with assertion.assertRaises(InvalidChart):
+        monodromy_zeta(r)
 r.pop("atlas")
 r["charts"].pop()
-assert monodromy_zeta(r)["status"]=="unavailable"
+with assertion.assertRaises(InvalidChart):
+    monodromy_zeta(r)
 """)
 
     def guard(self, source):
-        script = """import os, sys
+        script = """import os, sys, unittest
 os.environ['ATLAS_GROEBNER']='native'
 class Guard:
     def find_spec(self,name,*args):
         if name == 'sympy' or name.startswith('sympy.'): raise AssertionError(name)
 sys.meta_path.insert(0,Guard())
+from engine.strata import InvalidChart
+assertion = unittest.TestCase()
 """ + source
         subprocess.run([sys.executable, "-c", script], cwd=ROOT, check=True,
                        capture_output=True,text=True)
@@ -291,5 +295,6 @@ assert r['monodromy_zeta']['status']=='computed'
 assert monodromy_zeta(r)['expression'] == r['monodromy_zeta']['expression']
 assert topological_zeta(r)['expression'] == r['topological_zeta']['expression']
 r['atlas'][0]['components'][0]['multiplicity'] += 1
-assert monodromy_zeta(r)['status'] == 'unavailable'
+with assertion.assertRaises(InvalidChart):
+    monodromy_zeta(r)
 """)

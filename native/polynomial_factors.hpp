@@ -11,6 +11,11 @@ namespace atlas {
 std::vector<std::pair<local::Polynomial, mpz_class>> marked_factors(
     const local::Polynomial& f, const local::Polynomial& modulus, size_t width);
 
+// The rational input is squarefree and all its geometric factors depend on
+// the given axis. Trager's shifts can then use that coordinate alone.
+std::vector<std::pair<local::Polynomial, mpz_class>> marked_section_factors(
+    const local::Polynomial& f, const local::Polynomial& modulus, size_t width, size_t axis);
+
 // Monic gcd of several polynomials in the same marked coefficient field.
 local::Polynomial marked_gcd(const local::Basis& rows, const local::Polynomial& modulus, size_t width);
 
@@ -21,6 +26,14 @@ local::Basis marked_cofactors(const local::Polynomial& a,const local::Polynomial
 // Return monic factors in the order of ctx and the corresponding rational unit.
 const char* ordered_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t polynomial,
                             const fmpq_mpoly_ctx_t ctx);
+
+// Return monic square-free products grouped by multiplicity and their rational unit.
+const char* squarefree_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t polynomial,
+                               const fmpq_mpoly_ctx_t ctx);
+
+// Finite sparse Kronecker search for a nonconstant input when FLINT declines.
+void exhaustive_rational_factors(fmpq_mpoly_factor_t out, const fmpq_mpoly_t polynomial,
+                                 const fmpq_mpoly_ctx_t ctx);
 
 void rational_squarefree_part(fmpq_mpoly_t out, const fmpq_mpoly_t f, const fmpq_mpoly_ctx_t ctx);
 

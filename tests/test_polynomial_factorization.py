@@ -84,6 +84,18 @@ class RationalFactorization(unittest.TestCase):
         stage, = answer["execution"]["stages"]
         self.assertEqual(stage["algorithm"], "linear_variable")
 
+    def test_sparse_factor_search_after_flint_declines(self):
+        x,y,z = variables = np.symbols("x y z")
+        power = 2**64+1
+        scalar = Fraction(-2**199, 11)
+        for order in ("lex", "grevlex"):
+            with self.subTest(order=order), algebra_execution("cpu") as execution:
+                f = x**power+y**3+z**5
+                self.check_factors(variables,scalar*f,order,scalar,[(f,1)])
+                self.assertEqual(execution.report()["stages"][0]["algorithm"],"sparse_kronecker")
+                self.check_factors(variables,scalar*(x+1)**2*(y**power+z),order,scalar,
+                                   [(x+1,2),(y**power+z,1)])
+
     def test_linear_variable_certificate_requires_constant_coefficient_and_degree_one(self):
         x, y = variables = np.symbols("x y")
         for f, factors in (

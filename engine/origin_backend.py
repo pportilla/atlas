@@ -1,17 +1,16 @@
-"""Embedded resolution of a hypersurface germ by blowups with smooth centres,
+"""Resolution of a hypersurface germ by blowups with smooth centres,
 started at the origin itself.
 
 The centres are those of the complete rule of engine/local_blowups.py: the
 maximum locus of the invariant of Bierstone and Milman while the strict
 transform is singular at a point where the total transform fails normal
 crossings, and afterwards, in dimension three, the centres of the procedure
-of engine/surface.py. Every centre is checked to be smooth, and the run ends
-only when the total transform has normal crossings at every point over the
-origin, which is verified in every final chart by the Jacobian criterion.
-Failing normal crossings is a closed condition and the fibre over the origin
-is compact, so the total transform then has normal crossings over a
-neighbourhood of the origin: the composite of the blowups is an embedded
-resolution of the germ.
+of engine/surface.py. Every centre is checked to be smooth. The Jacobian
+criterion certifies smoothness of the strict transform for intrinsic
+resolution and normal crossings of the total transform for embedded
+resolution. The relevant failure locus is closed. By properness of the
+blowup map, its image misses a neighbourhood of the origin when all
+charts pass over the origin fibre.
 
 This engine needs no hypothesis on the Newton polyhedron. It is used when
 the engines that read a resolution off the polyhedron give no answer.
@@ -27,7 +26,18 @@ def _text(expr):
     return str(expr).replace("**", "^")
 
 
-def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, tangent_only=False):
+def certified_outputs(record, names, mode, integrals):
+    """Verify the owned outputs of the charts just constructed by the native blowups."""
+    from .general_atlas import native_general_outputs
+    charts = record["atlas"]
+    repeated = any(step.get("rule") == "repeated tangent" for step in record["steps"])
+    output = native_general_outputs({"variables": names}, charts, intrinsic=mode == "intrinsic",
+                                    integrals=integrals, factor_fibre=repeated)
+    return charts, output
+
+
+def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, tangent_only=False,
+                   verified=None, integrals=False):
     """The record of the resolution, or None when the rule gives no answer in
     the time allowed. `poly` maps exponents to rational coefficients of the
     reduced equation.
@@ -48,7 +58,10 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
         return None
     if done.returncode != 0 or not done.stdout.strip():
         return None
-    return json.loads(done.stdout)
+    record = json.loads(done.stdout)
+    if record is not None and verified is not None:
+        verified.append((record, certified_outputs(record, variables, mode, integrals)))
+    return record
 
 
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False):
@@ -73,18 +86,24 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     rules = ("complete", "direct")
     if len(symbols) >= 4:
         rules = ("tangent",) if tangent_only else ("tangent", *rules)
+    intrinsic = mode == "intrinsic"
     try:
         data, strata, charts, centres = acampo_over(symbols, [("strict", 1, 1, (equation,))], symbols,
                                                     dimension=len(symbols), rules=rules,
                                                     deadline=None if seconds is None else monotonic() + seconds,
                                                     budget=None if seconds is None else 400,
-                                                    count_strata=not defer_outputs)
+                                                    count_strata=not (defer_outputs or intrinsic), intrinsic=intrinsic)
     except GiveUp:
         return None
-    return _record(names, charts, centres, data, strata, defer_outputs=defer_outputs)
+    record = _record(names, charts, centres, data, strata, defer_outputs=defer_outputs or intrinsic,
+                     intrinsic=intrinsic)
+    if record is not None and intrinsic and not defer_outputs:
+        _, output = certified_outputs(record, names, mode, False)
+        record["dual_complex"] = output["dual_complex"]
+    return record
 
 
-def _record(names, charts, centres, data, strata, *, defer_outputs):
+def _record(names, charts, centres, data, strata, *, defer_outputs, intrinsic=False):
     """Serialize certified charts from any of the successive smooth-centre rules."""
     from .atlas import to_json
     from .local_blowups import GiveUp, cells, dual_cells
@@ -129,6 +148,7 @@ def _record(names, charts, centres, data, strata, *, defer_outputs):
     kinds = ", ".join(text for text in (f"{points} at points" if points else "", f"{curves} along curves" if curves else "",
                                         f"{len(centres) - points - curves} along larger centres"
                                         if len(centres) > points + curves else "") if text)
+    conclusion = ("the strict transform is smooth" if intrinsic else "the total transform has normal crossings")
     return {
         "status": "resolved", "engine": "canonical-blowups",
         "summary": f"{len(centres)} blowup{'s' if len(centres) != 1 else ''} with smooth centres ({kinds}); "
@@ -145,9 +165,9 @@ def _record(names, charts, centres, data, strata, *, defer_outputs):
         "certificate": {
             "method": "Blowups with smooth centres; certified by ideal calculations. Centre rule: " +
                       ", ".join(dict.fromkeys(step["rule"] for step in steps)),
-            "description": "Every centre is smooth and lies over the origin or meets its fibre. In every final chart the "
-                           "total transform has normal crossings at all points over the origin, by the Jacobian criterion; "
-                           "hence it has normal crossings over a neighbourhood of the origin.",
+            "description": f"Every centre is smooth. In every final chart {conclusion} on its part of the origin "
+                           "fibre by the Jacobian criterion. Properness gives the same conclusion over a "
+                           "neighbourhood of the origin.",
             **({} if defer_outputs else {"numerical_data": rows, "strata": listed}),
         },
     }

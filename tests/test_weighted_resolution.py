@@ -5,6 +5,7 @@ import subprocess
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import sympy
 
@@ -110,6 +111,47 @@ class WeightedResolutionTest(unittest.TestCase):
         self.assertTrue(record["certificate"]["certified"])
         self.assert_charts(record)
 
+    def test_weighted_exhaustive_continues_after_wide_native_declines(self):
+        from engine.resolve import resolve
+        # The first input overflows a doubled jet order, the second exceeds
+        # a signed word, and the last exceeds Python's decimal conversion guard.
+        a = "1" + "0"*2200
+        for equation, exponent in (("x^4611686018427387904", "4611686018427387904"),
+                                   ("x^9223372036854775808", "9223372036854775808"),
+                                   ("x^18446744073709551617", "18446744073709551617"),
+                                   (f"(x^{a})^{a}", "1" + "0"*4400)):
+            with self.subTest(decimal_length=len(exponent)):
+                record = resolve(dict(polynomial=equation, variables=["x"], method="weighted",
+                                      search="exhaustive", monodromy=True))
+                self.assertEqual(record["requested_method"], "weighted")
+                self.assertEqual(record["weighted_attempt"]["status"], "declined")
+                self.assertIn("range", record["weighted_attempt"]["reason"])
+                self.assertEqual(record["status"], "resolved")
+                self.assertNotEqual(record["engine"], "weighted")
+                self.assertEqual(record["monodromy_zeta"]["expression"], f"1/(1-T^{exponent})")
+                self.assertEqual(record["monodromy_check"]["poles"][0]["value"], "-1/" + exponent)
+
+    def test_weighted_decline_is_inconclusive_only_when_quick_and_worker_crashes_propagate(self):
+        from engine.weighted_blowups import WeightedDeclined
+        request = dict(polynomial="x^2+y^3", variables=["x","y"], search="quick", method="weighted", monodromy=True)
+        with patch("engine.weighted_blowups.weighted_resolution", side_effect=WeightedDeclined("test chart decline")):
+            status, record = evaluate(request)
+        self.assertEqual((status, record["status"], record["weighted_attempt"]["reason"]),
+                         (200, "inconclusive", "test chart decline"))
+        self.assertEqual(record["monodromy_zeta"]["status"], "inconclusive")
+        with patch("engine.native_process.run", return_value=subprocess.CompletedProcess([], -9, "", "")):
+            status, failed = evaluate(dict(request, search="exhaustive"))
+        self.assertEqual(status, 503)
+        self.assertIn("stopped with status -9", failed["error"])
+
+    def test_weighted_chart_names_can_avoid_every_default_prefix(self):
+        from engine.resolve import resolve
+        names = ["x", "t1", "s1", "u1", "z1", "q1"]
+        record = resolve(dict(polynomial="x", variables=names, method="weighted", search="exhaustive", monodromy=True))
+        self.assertEqual(record["engine"], "weighted")
+        self.assertTrue(set(record["charts"][0]["coordinates"]).isdisjoint(names))
+        self.assertEqual(record["monodromy_zeta"]["expression"], "1/(1-T)")
+
     def test_lines_and_a_number_field(self):
         R = self.resolution("x*y^2*z^3-t^6", "x, y, z, t")
         record = R.record
@@ -131,7 +173,6 @@ class WeightedResolutionTest(unittest.TestCase):
         self.run_lines('x, y, z = coordinates("x", "y", "z")')
         cases = {
             'resolve(x^2+y^3+z^5, method="weighted", mode="intrinsic")': "use the embedded mode",
-            'resolve(x^2+y^3+z^5, method="weighted", monodromy=True)': "does not compute zeta functions",
             'resolve(x^2+y^3+z^5+1, method="weighted")': "does not pass through the origin",
             'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto or weighted",
         }
@@ -139,6 +180,23 @@ class WeightedResolutionTest(unittest.TestCase):
             with self.subTest(source=source):
                 with self.assertRaisesRegex(ValueError, re.escape(message)):
                     self.run_lines(source)
+
+    def test_weighted_zetas_use_an_embedded_companion_and_check_its_source(self):
+        from engine.polynomial import InputError
+        from engine.resolution_zetas import replay_zetas
+        self.run_lines('x,y,z=coordinates("x","y","z")\nf=x^2+y^3+z^5\n'
+                       'R=resolve(f, method="weighted", monodromy=True)\nM=monodromy_check(R)')
+        record = self.session.variables["R"].record
+        self.assertEqual(self.session.variables["M"]["status"], "verified")
+        self.assertEqual(record["engine"], "weighted")
+        self.assertEqual(record["topological_zeta"]["expression"], "(22*s + 31)/((s + 1)*(30*s + 31))")
+        self.assertEqual(record["monodromy_zeta"]["source"], "companion embedded resolution")
+        expected = record.pop("monodromy_zeta")
+        options = {"record": record, "zetas": ["monodromy"]}
+        self.assertEqual(replay_zetas(options)["monodromy_zeta"], expected)
+        record["embedded_companion"]["polynomial"] = "x^2+y^3+z^7"
+        with self.assertRaisesRegex(InputError, "original polynomial"):
+            replay_zetas(options)
 
     def test_the_worker_and_a_saved_record(self):
         status, record = evaluate({"polynomial": DOUBLE_CONIC, "variables": ["x", "y", "z"], "method": "weighted"})

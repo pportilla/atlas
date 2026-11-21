@@ -13,7 +13,7 @@ from . import native_polynomial as native
 from .algebra import QUOTIENT_IDEAL_OPERATIONS
 from .exact_json import result_json
 from .native_library import affine_request, current_replay_scope
-from .polynomial import LimitError, format_poly, integer_text, parse_expression, rational_text, sparse_row
+from .polynomial import LimitError, format_poly, integer_from_decimal, integer_text, kernel_fraction, parse_expression, rational_text, sparse_row
 from .rational_point import coordinate_fraction, normalize_point
 from .series_display import format_hilbert_series
 from .session_polynomial import QQ, Polynomial, _Coordinates, _CoordinateSpace
@@ -141,6 +141,85 @@ class _Result(_RingValue):
     @property
     def status(self):
         return self._record["status"]
+
+
+@dataclass(frozen=True, eq=False)
+class _ModularValues(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    modulus: int
+    values: tuple
+    field_polynomial: tuple | None
+    _fields = _Result._fields | {"values", "modulus", "field_polynomial"}
+
+    def __repr__(self):
+        relation = ""
+        if self.field_polynomial is not None:
+            relation = f", field polynomial {result_json(self.field_polynomial)}"
+        return f"{self._record['result']['values']} modulo {integer_text(self.modulus)}{relation}"
+
+
+class _LinearSolution(NamedTuple):
+    status: str
+    particular: tuple | None
+
+    def session_attribute(self, name):
+        if name in self._fields:
+            return getattr(self, name)
+        raise ValueError(f"A linear solution has no Atlas field {name!r}.")
+
+
+@dataclass(frozen=True, eq=False)
+class _MatrixAnalysis(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    _fields = _Result._fields | {"shape", "rank", "determinant", "pivot_columns", "rref", "image", "kernel", "solution"}
+
+    @property
+    def shape(self):
+        data = self._record["result"]
+        return data["row_count"], data["column_count"]
+
+    @property
+    def rank(self):
+        return self._record["result"]["rank"]
+
+    @cached_property
+    def determinant(self):
+        det = self._record["result"]["determinant"]
+        return kernel_fraction(det) if det is not None else None
+
+    @cached_property
+    def pivot_columns(self):
+        return tuple(self._record["result"]["pivot_columns"])
+
+    def _vectors(self, name):
+        return tuple(tuple(map(kernel_fraction, row)) for row in self._record["result"][name])
+
+    @cached_property
+    def rref(self):
+        return self._vectors("rref")
+
+    @cached_property
+    def image(self):
+        return self._vectors("image")
+
+    @cached_property
+    def kernel(self):
+        return self._vectors("kernel")
+
+    @cached_property
+    def solution(self):
+        answer = self._record["result"]["solution"]
+        if answer is None:
+            return None
+        vector = answer["particular"]
+        return _LinearSolution(answer["status"], tuple(map(kernel_fraction,vector)) if vector is not None else None)
+
+    def __repr__(self):
+        return f"{self.shape[0]} by {self.shape[1]} rational matrix of rank {self.rank}"
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -401,6 +480,60 @@ class _ZariskiTangentSpace(_TangentDimensions, _TangentResult):
 
 
 @dataclass(frozen=True, eq=False, repr=False)
+class _HenselFactors(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    left: Polynomial
+    right: Polynomial
+    modulus: int
+    _fields = _Result._fields | {"left", "right", "modulus"}
+
+    def __repr__(self):
+        return f"({self.left})*({self.right}) modulo {integer_text(self.modulus)}"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _ReducedFraction(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    numerator: Polynomial
+    denominator: Polynomial
+    _fields = _Result._fields | {"numerator", "denominator"}
+
+    def __repr__(self):
+        return f"({self.numerator})/({self.denominator})"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _PolynomialDivision(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    quotient: Polynomial
+    remainder: Polynomial
+    _fields = _Result._fields | {"quotient", "remainder"}
+
+    def __repr__(self):
+        return f"Quotient {self.quotient}, remainder {self.remainder}"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _ExtendedGCD(_Result):
+    _space: _CoordinateSpace
+    order: str
+    _record: dict
+    gcd: Polynomial
+    left_coefficient: Polynomial
+    right_coefficient: Polynomial
+    _fields = _Result._fields | {"gcd", "left_coefficient", "right_coefficient"}
+
+    def __repr__(self):
+        return f"GCD {self.gcd}, Bézout coefficients ({self.left_coefficient}, {self.right_coefficient})"
+
+
+@dataclass(frozen=True, eq=False, repr=False)
 class _LocalNormalForm(_PointResult):
     remainder: Polynomial
     unit: Polynomial
@@ -507,6 +640,24 @@ class _Factorization(_Result):
             power = "" if multiplicity == 1 else "^" + integer_text(multiplicity)
             terms.append(f"({polynomial}){power}")
         return "*".join(terms)
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class _AbsoluteFactorization(_Factorization):
+    inclusion: "RingHomomorphism"
+    _fields = _Factorization._fields | {"inclusion"}
+
+    @property
+    def coeffs(self):
+        return self.ambient.coeffs
+
+    @property
+    def ring(self):
+        return deepcopy(self._record["result"]["ring"])
+
+    def __repr__(self):
+        product = super().__repr__()
+        return product if self.coeffs is QQ else f"{product} over {self.coeffs}"
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -750,6 +901,24 @@ def _unpack(values):
 # Keep repeated eliminations from the same declaration in the same surviving
 # space while users hold a result. Independent coordinate declarations stay distinct.
 _subspaces = WeakValueDictionary()
+_absolute_factor_spaces = WeakValueDictionary()
+
+
+def _number_field_space(names, field):
+    from .session_polynomial import _NumberField
+    parameter = native.Dummy(field["generator"])
+    row, = affine_request(["decode", parameter.name, field["minimal_polynomial"]])
+    coefficient_field = _NumberField(parameter, native.from_row((parameter,), row), field["embedding"])
+    return _CoordinateSpace.named(names, coeffs=coefficient_field)
+
+
+def _absolute_factor_space(source, field):
+    """Reuse the same scalar extension of a live input ring across compute policies."""
+    key = (source, field["generator"], field["minimal_polynomial"], field["embedding"])
+    target = _absolute_factor_spaces.get(key)
+    if target is None:
+        target = _absolute_factor_spaces.setdefault(key, _number_field_space(source.names, field))
+    return target
 
 
 def _result_space(space, names):
@@ -826,7 +995,7 @@ def polynomial(source, *, ring=None, variables=None):
     return Polynomial(space, native.from_kernel_row(generators, record["terms"]))
 
 
-def _polynomial_inputs(values, order, variables, default_space=None, *, ring=None):
+def _polynomial_inputs(values, order, variables, default_space=None, *, ring=None, marked=False):
     from .session_quotient import QuotientElement, QuotientRing
     if variables is None and ring is None:
         space = default_space
@@ -846,7 +1015,7 @@ def _polynomial_inputs(values, order, variables, default_space=None, *, ring=Non
         space = _declared_space(ring, variables)
     if isinstance(space, QuotientRing):
         raise TypeError("This operation requires a polynomial ring. Use K.ambient for the ambient ring of a quotient K.")
-    if space.coeffs is not QQ:
+    if space.coeffs is not QQ and not marked:
         raise ValueError("Algebra operations require polynomial coordinates over QQ.")
     if space.has_relations:
         raise ValueError("Algebra operations require polynomial coordinates with no quotient-ring relations.")
@@ -900,15 +1069,27 @@ ideal = ideal_constructor(declare_ideal, Polynomial, Ideal)
 
 def _decode_algebra_polynomial(text, space):
     # Native arithmetic output can exceed the session's input-literal limits.
-    if not space.generators:
+    if not space.polynomial_generators:
         return native.coerce(sparse_row(text).get((), 0))
-    row, = affine_request(["decode", " ".join(space.names), text])
-    return native.from_kernel_row(space.generators, row)
+    generators = space.polynomial_generators
+    row, = affine_request(["decode", " ".join(g.name for g in generators), text])
+    return native.from_kernel_row(generators, row)
 
 
 def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_generators=None):
     result = record["result"]
     kind = result["type"]
+    if kind == "modular-values":
+        relation = result.get("field_polynomial")
+        def convert(value):
+            if isinstance(value,list):
+                return tuple(map(integer_from_decimal,value))
+            return kernel_fraction(value) if "/" in value else integer_from_decimal(value)
+        return _ModularValues(QQ, result["ring"]["order"], record, integer_from_decimal(result["modulus"]),
+                              tuple(None if v is None else convert(v) for v in result["values"]),
+                              convert(relation) if relation is not None else None)
+    if kind == "matrix-analysis":
+        return _MatrixAnalysis(QQ, result["ring"]["order"], record)
     names = result["ring"]["variables"]
     original_space = space
     # Tangent equations live in fresh displacement coordinates, even at the origin.
@@ -991,6 +1172,16 @@ def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_g
         return _ZariskiTangentSpace(space, order, record, polynomials(result["equations"]), directions)
     if kind == "tangent-cone-hilbert-series":
         return _TangentConeHilbertSeries(space, order, record)
+    if kind == "hensel-factors":
+        return _HenselFactors(space, order, record, *polynomials((result["left"], result["right"])),
+                              integer_from_decimal(result["modulus"]))
+    if kind == "cancel-fraction":
+        return _ReducedFraction(space, order, record, *polynomials((result["numerator"], result["denominator"])))
+    if kind == "polynomial-division":
+        return _PolynomialDivision(space, order, record, *polynomials((result["quotient"], result["remainder"])))
+    if kind == "extended-gcd":
+        return _ExtendedGCD(space, order, record, *polynomials((result["gcd"], result["left_coefficient"],
+                                                                result["right_coefficient"])))
     if kind == "local-normal-form":
         remainder, unit = polynomials((result["remainder"], result["unit"]))
         return _LocalNormalForm(space, order, record, remainder, unit)
@@ -1008,12 +1199,19 @@ def _typed(record, space, *, quotient_parent=None, defining_ideal=None, replay_g
         return _Resultant(space, decode(result["polynomial"]), order, record, inclusion())
     if kind == "polynomial":
         return _PolynomialResult(space, decode(result["polynomial"]), order, record)
-    if kind == "factorization":
+    if kind in ("factorization", "absolute-factorization", "squarefree-factorization"):
+        field = result["ring"]["field"]
+        if isinstance(field, dict):
+            space = _absolute_factor_space(original_space, field)
         unit = sparse_row(result["unit"])[()]
         factors = tuple(
-            _Factor(_OrderedPolynomial(space, decode(entry["polynomial"]), order), entry["multiplicity"])
+            _Factor(_OrderedPolynomial(space, decode(entry["polynomial"], space), order), entry["multiplicity"])
             for entry in result["factors"]
         )
+        if kind == "absolute-factorization":
+            from .session_maps import hom
+            embedding = hom(original_space, space, images=space.coordinates)
+            return _AbsoluteFactorization(space, order, record, unit, factors, embedding)
         return _Factorization(space, order, record, unit, factors)
     if kind in ("boolean", "integer"):
         if record["operation"] == "ae-codimension":
@@ -1069,6 +1267,8 @@ def algebra_request(source):
     record = _evaluate(request)
     names = request["ring"]["variables"]
     space = _CoordinateSpace.named(names)
+    if record["operation"] == "polynomial-arithmetic" and isinstance(record["result"]["ring"]["field"], dict):
+        space = _number_field_space(names, record["result"]["ring"]["field"])
     if record["operation"] == "quotient-ring" and "relations" in request["ring"]:
         from .session_quotient import replay_further_quotient
         return replay_further_quotient(request, record, space)
@@ -1189,6 +1389,15 @@ def _calculate_polynomials(operation, order, variables, compute, *, point=None, 
         inputs["point"] = _local_point(point, len(space.names))
     request = {"operation": operation, "ring": {"field": "QQ", "variables": list(space.names), "order": order},
                "operands": inputs, "compute": compute}
+    if operation in {"absolute-factor", "squarefree-factor", "polynomial-division", "extended-gcd", "cancel-fraction", "gcd", "factor"}:
+        from .algebra import dispatch
+        from .polynomial import saved_polynomial_input
+        # These expanded strings came from live polynomials after ownership
+        # checks. Their coefficients can exceed the user's decimal literal limit.
+        with saved_polynomial_input():
+            if operation in ("gcd", "factor") and compute in ("cpu", "auto"):
+                return _typed(_evaluate(request), space)
+            return _typed(dispatch(request), space)
     return _typed(_evaluate(request), space)
 
 
@@ -1213,6 +1422,66 @@ def gcd(left, right, *, order=None, variables=None, compute="auto"):
     return _calculate_polynomials("gcd", order, variables, compute, polynomial=left, other_polynomial=right)
 
 
+def hensel_factors(polynomial, left, right, prime, *, order=None, variables=None, compute="auto"):
+    """Return the two monic factors lifted from a prime modulus to its square.
+
+    >>> x = coordinates("x")
+    >>> H = hensel_factors(x^2-2, x-3, x+3, 7, compute="gpu")
+    >>> H.left, H.right, H.modulus  # (x+39, x+10, 49)
+
+    Docs: examples/polynomial-ideals.md#lift-two-coprime-polynomial-factors
+    """
+    from .algebra import dispatch
+    from .modular_batch import integer
+    from .polynomial import saved_polynomial_input
+    space, inputs, order = _polynomial_inputs((polynomial, left, right), order, variables, QQ)
+    f, g, h = map(str, inputs)
+    request = {"operation": "hensel-factors", "compute": compute,
+               "ring": {"variables": list(space.names), "order": order},
+               "operands": {"polynomial": f, "factors": [g,h], "modulus": integer(prime)}}
+    with saved_polynomial_input():
+        return _typed(dispatch(request), space)
+
+
+def cancel_fraction(numerator, denominator, *, order=None, variables=None, compute="auto"):
+    """Return the coprime numerator and monic denominator of a rational function.
+
+    >>> x, y = coordinates("x", "y")
+    >>> C = cancel_fraction(x^2-y^2, 2*x+2*y)
+    >>> C.numerator, C.denominator  # (1/2*x-1/2*y, 1)
+
+    Docs: examples/polynomial-ideals.md#cancel-a-rational-function
+    """
+    return _calculate_polynomials("cancel-fraction", order, variables, compute,
+                                  polynomial=numerator, other_polynomial=denominator)
+
+
+def polynomial_division(dividend, divisor, *, order=None, variables=None, compute="auto"):
+    """Return the quotient and remainder of polynomial division by one nonzero divisor.
+
+    >>> x, y = coordinates("x", "y")
+    >>> D = polynomial_division(x^2 + y, x - 1)
+    >>> D.quotient, D.remainder  # (x+1, y+1)
+
+    Docs: examples/polynomial-ideals.md#divide-polynomials-and-find-bezout-coefficients
+    """
+    return _calculate_polynomials("polynomial-division", order, variables, compute,
+                                  polynomial=dividend, other_polynomial=divisor)
+
+
+def extended_gcd(left, right, *, order=None, variables=None, compute="auto"):
+    """Return the monic GCD and Bézout coefficients for two rational polynomials in one variable.
+
+    >>> x = coordinates("x")
+    >>> E = extended_gcd(x^2 - 1, x^2 - x)
+    >>> E.left_coefficient*(x^2-1) + E.right_coefficient*(x^2-x) == E.gcd  # True
+
+    Docs: examples/polynomial-ideals.md#divide-polynomials-and-find-bezout-coefficients
+    """
+    return _calculate_polynomials("extended-gcd", order, variables, compute,
+                                  polynomial=left, other_polynomial=right)
+
+
 def resultant(left, right, variable, *, order=None, variables=None, compute="auto"):
     """Resultant with respect to one coordinate, in the ring of the surviving coordinates."""
     return _calculate_polynomials("resultant", order, variables, compute, polynomial=left, other_polynomial=right,
@@ -1222,6 +1491,83 @@ def resultant(left, right, variable, *, order=None, variables=None, compute="aut
 def factor(polynomial, *, order=None, variables=None, compute="auto"):
     """Rational unit and monic irreducible factors in the polynomial's coordinate space."""
     return _calculate_polynomials("factor", order, variables, compute, polynomial=polynomial)
+
+
+def polynomial_arithmetic(operation, polynomial, other=None, *, exponent=None, variable=None, images=None,
+                          order=None, variables=None, compute="auto"):
+    """Return the exact polynomial result of an arithmetic operation in the input ring.
+
+    >>> x, y = coordinates("x", "y", coeffs=QQ)
+    >>> p = polynomial_arithmetic("substitute", x^2+y, images=[y, x], compute="gpu")
+    >>> p == y^2+x  # True
+
+    Docs: examples/polynomial-ideals.md#choose-a-backend-for-polynomial-arithmetic
+    """
+    from .algebra import POLYNOMIAL_ACTION_OPERANDS, dispatch
+    from .polynomial import saved_polynomial_input
+    if not isinstance(operation, str) or operation not in POLYNOMIAL_ACTION_OPERANDS:
+        raise ValueError("Choose a polynomial operation from " + ", ".join(POLYNOMIAL_ACTION_OPERANDS) + ".")
+    provided = {"other_polynomial": other, "exponent": exponent, "variable": variable, "images": images}
+    if {name for name, value in provided.items() if value is not None} != set(POLYNOMIAL_ACTION_OPERANDS[operation]):
+        raise ValueError(f"The {operation} operation requires " + ", ".join(
+            "other" if name == "other_polynomial" else name for name in POLYNOMIAL_ACTION_OPERANDS[operation]) + ".")
+    if images is not None and not isinstance(images, (list, tuple)):
+        raise TypeError("Supply the ordered substitution images as a list or tuple.")
+    arguments = [polynomial]
+    if other is not None:
+        arguments.append(other)
+    if images is not None:
+        arguments.extend(images)
+    default_space = variable.parent if isinstance(variable, Polynomial) else QQ
+    space, values, order = _polynomial_inputs(arguments, order, variables, default_space, marked=True)
+    operands = {"action": operation, "polynomial": str(values[0])}
+    if other is not None:
+        operands["other_polynomial"] = str(values[1])
+    if images is not None:
+        operands["images"] = [str(image) for image in values[1:]]
+    if exponent is not None:
+        operands["exponent"] = integer_text(exponent) if type(exponent) is int else exponent
+    if variable is not None:
+        if isinstance(variable, Polynomial):
+            coordinate = _polynomial(variable, space)._value
+            if not coordinate.is_Symbol:
+                raise ValueError("Choose a declared coordinate for differentiation.")
+            variable = coordinate.name
+        operands["variable"] = variable
+    field = "QQ"
+    if space.coeffs is not QQ:
+        field = {"generator": space.coeffs.parameter.name, "embedding": space.coeffs.embedding,
+                 "minimal_polynomial": str(space.coeffs.minimal_polynomial)}
+    request = {"operation": "polynomial-arithmetic", "compute": compute, "operands": operands,
+               "ring": {"field": field, "variables": list(space.names), "order": order}}
+    # All input rows came from live values in the checked parent. Warm sessions reuse compiled kernels.
+    with saved_polynomial_input():
+        return _typed(dispatch(request), space)
+
+
+def squarefree_factor(polynomial, *, order=None, variables=None, compute="auto"):
+    """Return the rational unit and monic square-free factors grouped by multiplicity.
+
+    >>> x = coordinates("x")
+    >>> F = squarefree_factor((x-1)^2*(x+1)^2)
+    >>> F.factors[0].polynomial, F.factors[0].multiplicity  # (x^2-1, 2)
+
+    Docs: examples/polynomial-ideals.md#group-square-free-factors
+    """
+    return _calculate_polynomials("squarefree-factor", order, variables, compute, polynomial=polynomial)
+
+
+def absolute_factor(polynomial, *, order=None, variables=None, compute="auto"):
+    """Return the unit and monic absolutely irreducible factors in a common exact coefficient field.
+
+    >>> x, y = coordinates("x", "y", coeffs=QQ)
+    >>> F = absolute_factor(x^2 + y^2)
+    >>> len(F.factors)  # 2
+    >>> F.factors[0].polynomial * F.factors[1].polynomial == F.inclusion(x^2 + y^2)  # True
+
+    Docs: examples/polynomial-ideals.md#factor-over-the-algebraic-closure
+    """
+    return _calculate_polynomials("absolute-factor", order, variables, compute, polynomial=polynomial)
 
 
 def local_jacobian_algebra(polynomial, *, point=None, order=None, variables=None, compute="auto"):
@@ -1444,6 +1790,7 @@ def local_smoothness(ideal, *, point=None, compute="auto"):
 
 def algebra_bindings():
     return {"polynomial": polynomial, "ideal": ideal, "groebner": groebner, "gcd": gcd, "factor": factor,
+            "hensel_factors": hensel_factors, "cancel_fraction": cancel_fraction, "squarefree_factor": squarefree_factor, "absolute_factor": absolute_factor, "polynomial_division": polynomial_division, "extended_gcd": extended_gcd,
             "resultant": resultant,
             "normal_form": normal_form, "membership": membership,
             "local_standard_basis": local_standard_basis, "local_normal_form": local_normal_form,

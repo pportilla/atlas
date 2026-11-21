@@ -39,7 +39,10 @@ def _saved_value(path, session):
         elif isinstance(value, _RecordView) and type(value).session_attribute is _RecordView.session_attribute:
             # Follow an already stored public view, or a plain record entry.
             # Reading the instance dictionary avoids evaluating any property.
-            value = vars(value).get(name) if name in value._members else value._record.get(name)
+            if name in value._members and name in vars(value):
+                value = vars(value)[name]
+            else:
+                value = value._record.get(name)
         else:
             # Linked fields and methods can invoke the solver. Complete a saved
             # result directly once the user has chosen to evaluate that field.

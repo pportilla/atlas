@@ -211,6 +211,9 @@ def _calculate(record, polynomial, charts, *, saved, intrinsic, integrals, compl
                                 fibre=mapping, region=region, removed=[], map=dict(zip(base, mapping)),
                                 **({"split_cone": split_cone(item, n)} if "split_cone" in item else {}),
                                 **({"coefficient_field": field} if field else {})))
+    from .fan_centres import singular_ray_images
+    if singular_ray_images(format_poly(polynomial, base), base, [(1,) * n]) is None:
+        raise InvalidChart("The point blowup modifies the smooth locus of the reduced hypersurface.")
     answer = {"cells": None, "reason": None}
     if complex:
         # The exceptional is P^(n-1), and the hyperplane-section argument in

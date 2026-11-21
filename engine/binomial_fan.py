@@ -1,5 +1,5 @@
 """Smooth toric blowups over the singular locus of a binomial."""
-def build_binomial_fan(exponents, *, variables=None, max_steps=256, max_cones=1024):
+def build_binomial_fan(exponents, *, variables=None, max_steps=256, max_cones=1024, intrinsic=False):
     """Return the completed fan and blowup sequence, or defer within the budget.
 
     Input consists of two distinct ordinary monomials with disjoint support.
@@ -24,5 +24,6 @@ def build_binomial_fan(exponents, *, variables=None, max_steps=256, max_cones=10
     if left == right:
         return None
     from . import binomial_kernel
-    rows = binomial_kernel.run(f"fan {dimension} {max_steps} {max_cones}", left, right)
+    operation = "intrinsic_fan" if intrinsic else "fan"
+    rows = binomial_kernel.run(f"{operation} {dimension} {max_steps} {max_cones}", left, right)
     return binomial_kernel.fan(rows, dimension, names)

@@ -24,6 +24,7 @@ public:
             throw std::invalid_argument("Expected a power-of-two Triton block.");
     }
 
+    void statement(const std::string& code) { body += code; }
     std::string result(const std::string& operation) {
         std::string name = "%v"+std::to_string(++next);
         body += "    " + name + " = " + operation + "\n";
@@ -71,10 +72,83 @@ public:
                const std::string& type="i32", const std::string& index_type="i32") {
         body += "    tt.store "+pointer(base,index,type,index_type)+", "+value+", "+mask+" : "+signature("!tt.ptr<"+type+">")+"\n";
     }
+    std::string begin_sum_loop(const std::string& start, const std::string& stop, const std::string& step,
+                               const std::string& initial, const std::string& type) {
+        const std::string name="%v"+std::to_string(++next);
+        body+="    "+name+" = scf.for %j = "+start+" to "+stop+" step "+step+" iter_args(%partial = "+
+              initial+") -> ("+signature(type)+") : i32 {\n";
+        return name;
+    }
+    void end_sum_loop(const std::string& value,const std::string& type) {
+        body+="      scf.yield "+value+" : "+signature(type)+"\n    }\n";
+    }
     std::string source(const std::string& name, const std::string& args) const {
         return "module {\n  tt.func public @"+name+"("+args+") {\n"+body+"    tt.return\n  }\n}\n";
     }
 };
+
+#include "triton_polynomial_ir.inc"
+#include "triton_modular_batch.inc"
+#include "triton_binary_field.inc"
+#include "triton_finite_field.inc"
+
+// One lane per residue of the Mersenne prime 8191. Reduced Horner products
+// fit in unsigned 26 bits, so a shift and mask replace integer division.
+std::string root_screen(int block) {
+    LaneKernel ir(block);
+    const auto x=ir.offsets(), prime=ir.constant(8191), zero=ir.constant(0);
+    const auto live=ir.less(x,prime);
+    const auto type="tensor<"+std::to_string(block)+"xi32>";
+    const auto mask="tensor<"+std::to_string(block)+"xi1>";
+    const auto begin=ir.result("arith.constant 0 : i32"), one=ir.result("arith.constant 1 : i32");
+    const auto shift=ir.constant(13);
+    const auto last=ir.result("arith.subi %length, "+one+" : i32");
+    auto loop="scf.for %j = "+begin+" to %length step "+one+" iter_args(%acc = "+zero+") -> ("+type+") : i32 {\n";
+    loop+="      %index = arith.subi "+last+", %j : i32\n";
+    loop+="      %ptr = tt.addptr %coeffs, %index : !tt.ptr<i32>, i32\n      %scalar = tt.load %ptr : !tt.ptr<i32>\n";
+    loop+="      %c = tt.splat %scalar : i32 -> "+type+"\n";
+    loop+="      %product = arith.muli %acc, "+x+" : "+type+"\n      %sum = arith.addi %product, %c : "+type+"\n";
+    loop+="      %low = arith.andi %sum, "+prime+" : "+type+"\n      %high = arith.shrui %sum, "+shift+" : "+type+"\n";
+    loop+="      %fold = arith.addi %low, %high : "+type+"\n      %large = arith.cmpi uge, %fold, "+prime+" : "+type+"\n";
+    loop+="      %diff = arith.subi %fold, "+prime+" : "+type+"\n      %reduced = arith.select %large, %diff, %fold : "+mask+", "+type+"\n";
+    loop+="      scf.yield %reduced : "+type+"\n    }";
+    auto root=ir.compare("eq",ir.result(loop),zero,"i32");
+    ir.store("%out",x,ir.cast(root,"extui","i1","i32"),live);
+    return ir.source("poly_root_screen","%coeffs: !tt.ptr<i32>, %out: !tt.ptr<i32>, %length: i32");
+}
+
+// In each coordinate with u_j > v_j, a rewrite consumes u_j-v_j.
+// Other coordinates only constrain the first step. The minimum is exact.
+std::string binomial_steps(int width, int block) {
+    if (width<1 || width>32) throw std::invalid_argument("Unsupported binomial divisibility width.");
+    LaneKernel ir(block);
+    const auto index=ir.offsets(), live=ir.less(index,ir.splat("%terms"));
+    const auto base=ir.binary("muli",ir.binary("addi",index,ir.constant(2)),ir.constant(width));
+    auto bound=ir.constant(2147483647), zero=ir.constant(0), one=ir.constant(1);
+    for (int j=0;j<width;++j) {
+        const auto axis=ir.constant(j);
+        auto u=ir.load("%powers",axis,live), v=ir.load("%powers",ir.constant(width+j),live);
+        auto e=ir.load("%powers",ir.binary("addi",base,axis),live);
+        auto dec=ir.binary("subi",u,v);
+        auto gap=ir.binary("subi",e,u);
+        auto div=ir.binary("divsi",gap,ir.binary("maxsi",dec,one));
+        auto limit=ir.binary("addi",div,one);
+        bound=ir.choose(ir.less(zero,dec),ir.binary("minsi",bound,limit),bound,"i32");
+        bound=ir.choose(ir.less(e,u),zero,bound,"i32");
+    }
+    ir.store("%out",index,bound,live);
+    return ir.source("poly_binomial_steps","%powers: !tt.ptr<i32>, %out: !tt.ptr<i32>, %terms: i32");
+}
+
+std::string replay_clear(int block) {
+    LaneKernel ir(block);
+    const auto column=ir.offsets("y"), row=ir.splat(ir.result("tt.get_program_id x : i32"));
+    const auto base=ir.binary("muli",ir.cast(row,"extsi","i32","i64"),
+                               ir.cast(ir.splat("%stride"),"extsi","i32","i64"),"i64");
+    const auto index=ir.binary("addi",base,ir.cast(column,"extsi","i32","i64"),"i64");
+    ir.store("%work",index,ir.constant(0,"i64"),ir.less(column,ir.splat("%width")),"i64","i64");
+    return ir.source("replay_clear","%work: !tt.ptr<i64>, %stride: i32, %width: i32");
+}
 
 std::string charts(const std::string& op, int dimension, int block) {
     if (dimension < 1 || dimension > 64) throw std::invalid_argument("Unsupported chart dimension.");
@@ -147,6 +221,77 @@ std::string divisors(int variables, int block) {
     ir.store("%out", row, ir.result(loop), live);
     return ir.source("monomial_witness", "%powers: !tt.ptr<i32>, %basis: !tt.ptr<i32>, %out: !tt.ptr<i32>, "
                                          "%terms: i32, %divisors: i32");
+}
+
+// One coefficient per lane and one pair of primes per grid row.  Input
+// primes are below 2^31, so all products and the combined residue fit i64.
+std::string crt_pair(int block) {
+    LaneKernel ir(block);
+    auto pair = ir.result("tt.get_program_id y : i32");
+    auto index = ir.offsets(), live = ir.less(index, ir.splat("%width"));
+    auto pair_base = ir.result("arith.muli "+pair+", %width : i32");
+    auto output = ir.binary("addi", ir.splat(pair_base), index);
+    auto image_base = ir.binary("addi", ir.splat(pair_base), output);
+    auto second_base = ir.binary("addi", image_base, ir.splat("%width"));
+    auto wide = [&](const std::string& v) { return ir.cast(v,"extui","i32","i64"); };
+    auto lhs = wide(ir.load("%images", image_base, live));
+    auto rhs = wide(ir.load("%images", second_base, live));
+    auto param = ir.binary("muli", ir.splat(pair), ir.constant(3));
+    auto p = wide(ir.load("%moduli", param, live, "i32", "i32", 1));
+    auto q = wide(ir.load("%moduli", ir.binary("addi", param, ir.constant(1)), live, "i32", "i32", 1));
+    auto inverse = wide(ir.load("%moduli", ir.binary("addi", param, ir.constant(2)), live));
+    // Reducing lhs first handles arbitrary ordering of the two primes.
+    auto lmod = ir.binary("remui", lhs, q, "i64");
+    auto delta = ir.binary("subi", ir.binary("addi", rhs, q, "i64"), lmod, "i64");
+    auto correction = ir.binary("remui", ir.binary("muli", delta, inverse, "i64"), q, "i64");
+    auto result = ir.binary("addi", lhs, ir.binary("muli", p, correction, "i64"), "i64");
+    ir.store("%result", output, result, live, "i64");
+    return ir.source("crt_pair", "%images: !tt.ptr<i32>, %moduli: !tt.ptr<i32>, %result: !tt.ptr<i64>, %width: i32");
+}
+
+// One lane computes one Leibniz product for a small exact determinant.
+// A native bound on the product of absolute row sums proves that the
+// products and every partial sum fit signed i64, including the reduction.
+std::string determinant_small(int size) {
+    if (size < 1 || size > 6) throw std::invalid_argument("Unsupported direct determinant dimension.");
+    int factorial = 1;
+    for (int i = 2; i <= size; ++i) factorial *= i;
+    int width = 1;
+    while (width < factorial) width *= 2;
+    LaneKernel ir(width);
+    const auto vec = "tensor<"+std::to_string(width)+"xi64>";
+    const auto lane = ir.result("tt.make_range {end = "+std::to_string(width)+
+                                " : i32, start = 0 : i32} : tensor<"+std::to_string(width)+"xi32>");
+    const auto live = ir.less(lane, ir.constant(factorial));
+    auto parity = ir.constant(0);
+    std::vector<std::string> positions(size);
+    // Lehmer codes enumerate permutations without a hardware-dependent table
+    // of lane constants.  Every digit counts precisely its inversions.
+    for (int i = 0; i < size; ++i) {
+        factorial /= size-i;
+        const auto quotient = ir.binary("divui", lane, ir.constant(factorial));
+        positions[i] = ir.binary("remui", quotient, ir.constant(size-i));
+        parity = ir.binary("xori", parity, positions[i]);
+    }
+    const auto odd = ir.compare("ne", ir.binary("andi", parity, ir.constant(1)), ir.constant(0),"i32");
+    auto value = ir.choose(odd, ir.constant(-1,"i64"), ir.constant(1,"i64"), "i64");
+    value = ir.choose(live, value, ir.constant(0,"i64"), "i64");
+    for (int i = size-1; i >= 0; --i) {
+        for (int j = i+1; j < size; ++j) {
+            const auto bigger = ir.compare("sge", positions[j], positions[i], "i32");
+            positions[j] = ir.binary("addi", positions[j], ir.cast(bigger,"extui","i1","i32"));
+        }
+    }
+    for (int i = 0; i < size; ++i) {
+        const auto index = ir.binary("addi", positions[i], ir.constant(i*size));
+        value = ir.binary("muli", value, ir.load("%matrix", index, live, "i64"), "i64");
+    }
+    auto sum = ir.result("\"tt.reduce\"("+value+") <{axis = 0 : i32}> ({\n"
+        "    ^bb0(%a: i64, %b: i64):\n      %v = arith.addi %a, %b : i64\n"
+        "      tt.reduce.return %v : i64\n    }) : ("+vec+") -> i64");
+    auto result = ir.splat(sum, "i64");
+    ir.store("%det",lane,result,ir.compare("eq",lane,ir.constant(0),"i32"),"i64");
+    return ir.source("determinant_small", "%matrix: !tt.ptr<i64>, %det: !tt.ptr<i64>");
 }
 
 std::string replay(const std::string& name, int block, int opcode = 4) {
@@ -236,9 +381,22 @@ extern "C" char* atlas_triton_ir(const char* input, size_t length) noexcept {
         int value;
         while (request >> value) parameters.push_back(value);
         if (!request.eof()) throw std::invalid_argument("Invalid GPU kernel parameter.");
+        if (name == "poly_root_screen" && parameters.size() == 1) return copy_text(root_screen(parameters[0]));
+        if (name == "poly_binomial_steps" && parameters.size() == 2) return copy_text(binomial_steps(parameters[0],parameters[1]));
+        if (name.rfind("poly_", 0)==0 && parameters.size()==1)
+            return copy_text(polynomial_ir(name, parameters[0]));
         if (name.rfind("trace_", 0) == 0) return copy_text(triton_trace_ir(name, parameters));
+        if (name == "finite_field_batch" && parameters.size()==3)
+            return copy_text(finite_field_ir(parameters[0],parameters[1],parameters[2]));
+        if (name == "residue_batch" && parameters.size()==2)
+            return copy_text(residue_batch(parameters[0],parameters[1]));
+        if (name == "crt_pair" && parameters.size() == 1)
+            return copy_text(crt_pair(parameters[0]));
+        if (name == "determinant_small" && parameters.size() == 1)
+            return copy_text(determinant_small(parameters[0]));
         if (name.rfind("rank_", 0) == 0 && parameters.size() == 4)
             return copy_text(triton_rank_ir(name, parameters[0], parameters[1], parameters[2], parameters[3] != 0));
+        if (name == "replay_clear" && parameters.size()==1) return copy_text(replay_clear(parameters[0]));
         if (name == "replay_axpy" && parameters.size() == 2 && parameters[1] >= 2 && parameters[1] <= 4)
             return copy_text(replay(name, parameters[0], parameters[1]));
         if (name.rfind("replay_", 0) == 0 && parameters.size() == 1)

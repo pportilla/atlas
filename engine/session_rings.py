@@ -9,7 +9,7 @@ from fractions import Fraction
 from types import MethodType
 from typing import NamedTuple
 
-from .session_algebra import (Ideal, _EliminatedIdeal, _Normalization, _NormalizedComponent, _Resultant,
+from .session_algebra import (Ideal, _AbsoluteFactorization, _EliminatedIdeal, _Normalization, _NormalizedComponent, _Resultant,
                               _RingValue, declare_ideal, polynomial as read_polynomial)
 from .session_ideal_native import ideal_constructor
 from .session_maps import RingHomomorphism
@@ -115,7 +115,7 @@ def referenced_rings(value, containers=None):
         items = (value.domain, value.codomain)
     elif isinstance(value, MethodType):
         return referenced_rings(value.__self__, containers)
-    elif isinstance(value, (_EliminatedIdeal, _Resultant)):
+    elif isinstance(value, (_AbsoluteFactorization, _EliminatedIdeal, _Resultant)):
         # The inclusion retains the original ring even when the result is a scalar.
         items = (value.inclusion,)
     elif isinstance(value, _Normalization):

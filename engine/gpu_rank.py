@@ -6,12 +6,20 @@ import triton
 from .triton_ir import launch_kernel
 
 
+def _single_program(rows, columns):
+    return rows <= 256 and columns <= 8 and os.environ.get("TRITON_INTERPRET") != "1"
+
+
 def _factorize(matrix, permutation, rows, columns, prime, *, row_basis=False):
     """Every pivot depends on the previous update. The trailing tiles are independent."""
     row_block = triton.next_power_of_2(rows)
     col_block = triton.next_power_of_2(columns)
     tile_rows, tile_cols = 8, 32
     interpreted = os.environ.get("TRITON_INTERPRET") == "1"
+    if _single_program(rows, columns):
+        launch_kernel("rank_small", (prime, row_block, columns, int(row_basis)), (1,),
+                      matrix, permutation, rows, warps=1)
+        return
     if interpreted:
         from tests.triton_rank_oracle import _eliminate, _pivot
     for col in range(columns):
@@ -38,12 +46,17 @@ def full_rank_rows(matrix_ptr, rows, cols, prime, device_dict):
         raise ValueError("Unsupported Jacobian matrix shape or prime.")
     device = device_dict["torch_device"]
     from .gpu_devices import torch_device_context
+    from .triton_buffers import to_device, to_host
     with torch_device_context(device):
         host = np.ctypeslib.as_array(matrix_ptr, shape=(rows * cols,)).view(np.int32)
-        matrix = torch.from_numpy(host).to(device)
-        permutation = torch.arange(rows + 1, dtype=torch.int32, device=device)
+        matrix = to_device(torch.from_numpy(host), device)
+        if _single_program(rows, cols):
+            # The fused kernel writes every returned index and the rank.
+            permutation = torch.empty(rows + 1, dtype=torch.int32, device=device)
+        else:
+            permutation = to_device(torch.arange(rows + 1, dtype=torch.int32), device)
         _factorize(matrix, permutation, rows, cols, prime)
-        witness = permutation.cpu().tolist()
+        witness = to_host(permutation).tolist()
     return None if witness[rows] < 0 else witness[:cols]
 
 
@@ -52,15 +65,20 @@ def independent_rows(matrix_ptr, rows, cols, prime, device_dict):
     import numpy as np
     import torch
     from .gpu_devices import torch_device_context
+    from .triton_buffers import to_device, to_host
 
     if not (1 <= rows <= 16384 and 1 <= cols <= 512 and prime in (1000000007, 1000000009)):
         raise ValueError("Unsupported Jacobian matrix shape or prime.")
     device = device_dict["torch_device"]
     with torch_device_context(device):
         host = np.ctypeslib.as_array(matrix_ptr, shape=(rows*cols,)).view(np.int32)
-        matrix = torch.from_numpy(host).to(device, copy=True)
-        permutation = torch.arange(rows + 2, dtype=torch.int32, device=device)
-        permutation[rows:] = 0
+        matrix = to_device(torch.from_numpy(host), device)
+        if _single_program(rows, cols):
+            permutation = torch.empty(rows + 2, dtype=torch.int32, device=device)
+        else:
+            ids = torch.arange(rows + 2, dtype=torch.int32)
+            ids[rows:] = 0
+            permutation = to_device(ids, device)
         _factorize(matrix, permutation, rows, cols, prime, row_basis=True)
-        ids = permutation.cpu().tolist()
+        ids = to_host(permutation).tolist()
     return ids[:ids[rows]]

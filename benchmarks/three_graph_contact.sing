@@ -1,0 +1,51 @@
+// The base plane resolution has six exceptional curves. Supply their charts
+// explicitly and let Singular compute the root differences and all orders.
+ring R=0,(x,y,z),dp;
+poly G=z*(z-y^2+x^3)*(z-y^2+x^3-x^4-y^3);
+list fac=factorize(G);
+ideal roots;
+int i,j;
+for(i=2;i<=size(fac[1]);i++) {
+  if(diff(fac[1][i],z)==0 || deg(diff(fac[1][i],z))!=0 || fac[2][i]!=1) { ERROR("expected three graphs"); }
+  roots[i-1]=-subst(fac[1][i],z,0)/diff(fac[1][i],z);
+}
+if(size(roots)>3 || size(fac[1])!=4) { ERROR("expected cubic"); }
+proc vE(poly f) {
+  int k=0;
+  if(f==0) { ERROR("identical roots or zero Jacobian"); }
+  while(subst(f,x,0)==0) { f=f/x; k++; }
+  return(k);
+}
+list X=x,x,x^2*y,x^2*(1+x*y),x^2*(1+x^2*y),x^3*y^2;
+list Y=x*y,x^2*y,x^3*y^2,x^3*(1+x*y)^2,x^3*(1+x^2*y)^2,x^4*y^3;
+intvec d,e,nu;
+intvec h=1,1,-1,0,-1,-1;
+map pull;
+intvec v;
+ideal delta=roots[1]-roots[2],roots[1]-roots[3],roots[2]-roots[3];
+ideal localDelta;
+for(i=1;i<=6;i++) {
+  pull=R,X[i],Y[i],z;
+  localDelta=pull(delta);
+  v=vE(localDelta[1]),vE(localDelta[2]),vE(localDelta[3]);
+  d[i]=min(v[1],min(v[2],v[3])); e[i]=max(v[1],max(v[2],v[3]));
+  nu[i]=1+vE(diff(X[i],x)*diff(Y[i],y)-diff(X[i],y)*diff(Y[i],x));
+}
+ring Qs=(0,s),Z,dp;
+proc baseIntegral(number a,number b) {
+  list L;
+  number ans=0;
+  int i;
+  for(i=1;i<=6;i++) {
+    L[i]=1/(nu[i]+a*d[i]+b*e[i]);
+    ans=ans+h[i]*L[i];
+  }
+  return(ans+L[1]*L[6]+L[6]*L[3]+L[3]*L[2]+L[3]*L[4]+L[4]*L[5]+(2*L[5]+L[6])/(1+b));
+}
+number A=1+3*s; number B=1+2*s; number H=1+s;
+number top=1/A+(-1-1/A+1/H+1/B)*baseIntegral(A,0)+(-1-1/B+2/H)*baseIntegral(s,B);
+// The three exceptional-strict crossings cap a closest pair at 3d.
+// The initial, crossing, and lifted-blowup corrections leave 1/(1-s^3).
+number mon=(1-s^(3*d[5]))^2*(1-s^(3*d[6]))/(1-s^3);
+for(i=1;i<=6;i++) { mon=mon*((1-s^(3*d[i]))*(1-s^(d[i]+2*e[i])))^h[i]; }
+print("ATLASBENCH "+string(top)+"|"+string(mon));

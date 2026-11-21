@@ -82,7 +82,7 @@ class SearchJobs:
     def start(self, data):
         if not isinstance(data, dict):
             raise ValueError("Send a polynomial, its variables, and a resolution mode.")
-        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "search", "method")
+        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "zetas_only", "search", "method")
         request = {key: data[key] for key in fields if key in data}
         request.setdefault("search", "exhaustive")
         if request["search"] not in ("auto", "quick", "exhaustive"):

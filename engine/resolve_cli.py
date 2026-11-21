@@ -17,12 +17,15 @@ def needs_exhaustive_search(request, status, result):
     from .resolution_zetas import selected_zetas
     if status == 422:
         return result.get("code") == "computation_limit"
-    return status == 200 and (result.get("status") == "inconclusive" or any(
-        result.get(kind + "_zeta", {}).get("status") == "unavailable" for kind in selected_zetas(request)))
+    if status != 200:
+        return False
+    if not request.get("zetas_only") and result.get("status") == "inconclusive":
+        return True
+    return any(result.get(kind + "_zeta", {}).get("status") != "computed" for kind in selected_zetas(request))
 
 
 def _stopped():
-    return 422, {'error':'Worker stopped before it produced a certified result.'}
+    return 503, {'error':'Worker stopped before it produced a certified result.', 'code':'worker_failure'}
 
 
 def run_job(data, timeout=MAX_SECONDS, *, owner=None):
@@ -37,17 +40,30 @@ def run_job(data, timeout=MAX_SECONDS, *, owner=None):
 
 def show_zeta(zeta):
     if zeta['status'] != 'computed':
-        print("Monodromy zeta unavailable:", zeta['reason'])
+        print(f"Monodromy zeta ({zeta['status']}):", zeta['reason'])
         return
     print("Local monodromy zeta(T) =", zeta['expression'])
     print("Euler characteristic of the complex Milnor fiber:", zeta['milnor_fiber_euler_characteristic'])
 
 
-def show(r):
+def show(r, *, zetas_only=False):
     print(f"{r['status'].upper()}  {r['summary']}\n{r['engine']} · {r['mode']} · {r['elapsed_ms']:g} ms")
     print(f"{r['polynomial']} = 0 at the origin in ({', '.join(r['variables'])})")
     if 'monodromy_zeta' in r:
         show_zeta(r['monodromy_zeta'])
+    if zetas_only:
+        top = r.get("topological_zeta", {})
+        if top.get("status") == "computed":
+            print("Local topological zeta(s) =", top["expression"])
+        else:
+            print(f"Topological zeta ({top.get('status', 'inconclusive')}):", top.get("reason", "Computation did not finish."))
+        check = r.get("monodromy_check")
+        if check:
+            print("Local monodromy conjecture:", check["status"])
+            for pole in check["poles"]:
+                print(f"  {pole['value']} (pole order {pole['order']}): eigenvalue order {pole['eigenvalue_order']}, "
+                      f"{pole['witness'] or 'witness undetermined'}")
+        return
     dual=r['dual_complex'];print(f"\nDual complex ({dual['status']}): {dual['convention']}")
     print("  Vertices:", ', '.join(v['id'] for v in dual['vertices']) or 'none')
     if r.get('coefficient_field',{}).get('description'): print('  Field:', r['coefficient_field']['description'])
@@ -74,8 +90,8 @@ def add_resolution_options(calc):
     calc.add_argument('--vars',required=True,metavar='x,y[,z,...]')
     calc.add_argument('--mode',choices=['embedded','intrinsic'],default='embedded')
     calc.add_argument('--method',choices=['auto','weighted'],default='auto',
-                      help="auto chooses among Atlas's resolution engines; weighted resolves by weighted blowups "
-                           "(embedded mode, no zeta functions)")
+                      help="weighted tries weighted blowups in embedded mode. An exhaustive search continues "
+                      "with ordinary resolution when the weighted method declines")
     policies=calc.add_mutually_exclusive_group()
     policies.add_argument('--quick',dest='search',action='store_const',const='quick',
                           help='use a bounded search and return exit code 3 if inconclusive')
@@ -84,6 +100,8 @@ def add_resolution_options(calc):
     calc.set_defaults(search='exhaustive')
     calc.add_argument('--json',action='store_true',help='print the full machine-readable atlas')
     calc.add_argument('--monodromy',action='store_true',help="compute the local monodromy zeta function of the complex Milnor fiber")
+    calc.add_argument('--zetas-only', action='store_true',
+                      help="compute both local zetas, allowing a plane contact certificate in place of a chart atlas")
     compute=calc.add_mutually_exclusive_group()
     compute.add_argument('--compute',choices=['cpu','auto','gpu'],help='select the CPU, automatic dispatch, or GPU acceleration')
     compute.add_argument('--gpu',dest='compute',action='store_const',const='gpu',
@@ -91,10 +109,12 @@ def add_resolution_options(calc):
 
 
 def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto",
-                         job=run_job):
+                         zetas_only=False, job=run_job):
     request = dict(polynomial=polynomial, variables=variables, mode=mode, search=search, compute=compute)
     if monodromy:
         request['monodromy'] = True
+    if zetas_only:
+        request['zetas_only'] = True
     if method != 'auto':
         request['method'] = method
     return job(request, timeout=MAX_SECONDS if search == 'quick' else None)
@@ -117,7 +137,7 @@ def session_decimals(unlimited):
 def resolution_arguments(argv):
     if '--' not in argv:
         # Protect a leading unary minus even when flags precede the polynomial.
-        options={'--vars','--mode','--method','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--help','-h'}
+        options={'--vars','--mode','--method','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--zetas-only','--help','-h'}
         for pos, token in enumerate(argv):
             if token.startswith('-') and token.partition('=')[0] not in options:
                 argv=[*argv[:pos],*argv[pos+1:],'--',token]
@@ -128,15 +148,19 @@ def resolution_arguments(argv):
 def run_resolution(args, calculate=calculate_resolution):
     try:
         options = {'method': args.method} if getattr(args, 'method', 'auto') != 'auto' else {}
+        if args.zetas_only:
+            options['zetas_only'] = True
         status, r = calculate(args.polynomial, [v.strip() for v in args.vars.split(',')],
                               mode=args.mode, search=args.search, compute=args.compute,
-                              monodromy=args.monodromy, **options)
+                              monodromy=args.monodromy or args.zetas_only, **options)
     except KeyboardInterrupt:
         print('Resolution interrupted.',file=sys.stderr)
         return 130
     if args.json: print(json.dumps(r,indent=2,ensure_ascii=False))
     elif status!=200: print(r['error'],file=sys.stderr)
-    else: show(r)
+    else: show(r, zetas_only=args.zetas_only)
+    if status == 200 and args.zetas_only:
+        return 0 if all(r.get(k + '_zeta', {}).get('status') == 'computed' for k in ('topological','monodromy')) else 3
     return 2 if status!=200 else 0 if (r['status']=='resolved' and
         (not args.monodromy or r.get('monodromy_zeta',{}).get('status')=='computed')) else 3
 

@@ -172,6 +172,31 @@ Json::Value verify(const Json::Value& request) {
         }
         return indices;
     }
+    if (op == "reduced_at_origin") {
+        const auto terms = read_terms(request["terms"], width);
+        Powers exponent(width);
+        auto nonzero = [&] {
+            const auto it = terms.find(exponent);
+            return it != terms.end() && it->second != 0;
+        };
+        if (nonzero()) return true;  // A unit in the local ring.
+        for (size_t i = 0; i < width; ++i) {
+            exponent[i] = 1;
+            if (nonzero()) return true;  // A nonzero differential proves smoothness.
+            exponent[i] = 0;
+        }
+        atlas::local::SparseLexRing ring(width);
+        atlas::PolyValue source(ring.ctx), support(ring.ctx), repeated(ring.ctx);
+        ring.write(source.p, terms);
+        atlas::rational_squarefree_part(support.p, source.p, ring.ctx);
+        // The ratio by the squarefree support is a unit in the local ring
+        // precisely when no repeated geometric component passes through zero.
+        if (!fmpq_mpoly_divides(repeated.p, source.p, support.p, ring.ctx))
+            throw std::logic_error("The squarefree support must divide the input.");
+        std::vector<ulong> origin(width, 0);
+        fmpq_mpoly_get_coeff_fmpq_ui(ring.coefficient, repeated.p, origin.data(), ring.ctx);
+        return !fmpq_is_zero(ring.coefficient);
+    }
     if (op == "transverse_germ_factors") {
         atlas::local::SparseLexRing ring(width);
         const auto active = active_factors(read_terms(request["terms"], width), ring);
@@ -199,6 +224,8 @@ Json::Value verify(const Json::Value& request) {
         parts.emplace_back(read_terms(item[0], width), n);
         expected_order += n;
     }
+    if (request.get("intrinsic", false).asBool() && (parts.size() != 1 || parts[0].second != 1))
+        return false;
     if (parts.size() == 1 && parts[0].second == 1 && parts[0].first == f) return true;
     bool reaches_order = false;
     for (const auto& [e, c] : f) {

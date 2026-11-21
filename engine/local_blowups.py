@@ -816,8 +816,8 @@ def _alike(current, chosen, single=False):
     """Of a finite centre, the points lying on the largest set of divisors
     (the sets are compared by size, then by their labels): this does not
     depend on the chart. The divisors, defined over Q, have the same orders
-    at conjugate points. When the same divisors pass through all the points,
-    or with `single`, one component over Q is taken in each chart."""
+    at conjugate points. An individual orbit can be selected by its local
+    index when only one chart contains any of the eligible points."""
     groups = [[] if centre is None else
               _point_components(chart.variables, ideal_basis(chart.variables, (*chart.ambient, *centre)))
               for chart, centre in zip(current, chosen)]
@@ -826,7 +826,7 @@ def _alike(current, chosen, single=False):
                    for part in group] for chart, group in zip(current, groups)]
     selected = level_weights("point_signatures", (), charts=signatures, single=single)
     if selected is None:
-        raise Uneven("A divisor has different orders along one component of a centre.")
+        raise Uneven("The divisor labels do not distinguish a compatible point centre across charts.")
     out = []
     for chart, group, indices in zip(current, groups, selected):
         parts = [group[i] for i in indices]
@@ -971,7 +971,20 @@ def _checked_stepwise(current, dimension, known, presence, crossings):
     return current, failures
 
 
-def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None, count_strata=True):
+def _smooth_strict(current, dimension, failures, owned):
+    """The origin solver carries the whole reduced strict hypersurface as one divisor."""
+    if failures and (owned or all(not c.removed for c in current)):
+        # Each singleton already has its native Jacobian rank-defect locus.
+        return level_weights("smooth_strict", (), failures=[labels for _, inside in failures for labels in inside])
+    from .repeated_tangent import fibre_has_crossings
+    return all(fibre_has_crossings(replace(c, components=tuple(row for row in c.components if row[0] == "strict")),
+                                   dimension) for c in current)
+
+
+def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None, count_strata=True,
+         max_blowups=None, intrinsic=False):
+    if intrinsic and (count_strata or len(components) != 1 or components[0][0] != "strict"):
+        raise ValueError("Intrinsic stopping requires one reduced strict equation and no embedded strata.")
     dimension = len(variables) if dimension is None else dimension
     current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
                      tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
@@ -987,6 +1000,11 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
         # The charts that still own points over the fibre, and where normal crossings fail there.
         current, failures = _checked_charts(current, dimension, known if retains else None, crossings=needs,
                                             seen=seen)
+        # An older intrinsic archive may continue past the first smooth stage.
+        # Replay all its recorded blowups and verify smoothness at its endpoint.
+        if intrinsic and (max_blowups is None or len(centres) == max_blowups):
+            if _smooth_strict(current, dimension, failures, retains):
+                return {}, {}, current, centres
         if final:
             from .repeated_tangent import certify_fibre
             for chart in current:
@@ -995,6 +1013,8 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
         if needs:
             if not any(inside for _, inside in failures):
                 return (*(_strata(current) if count_strata else ({}, {})), current, centres)
+        if max_blowups is not None and len(centres) >= max_blowups:
+            raise GiveUp("The recorded blowups end before the canonical charts reach normal crossings.")
         report(f"Searching for the next centre ({rule.name} method)", len(centres))
         chosen, detail = rule.choose(current, failures, dimension, deadline)
         if all(centre is None for centre in chosen):
@@ -1046,6 +1066,8 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             try:
                 following = blown(chosen)
             except Uneven:
+                if size:
+                    raise  # The remaining centre is a curve, outside the finite-point splitter.
                 chosen = _alike(current, chosen, single=True)
                 following = blown(chosen)
         rule.created(label, detail)
@@ -1067,7 +1089,7 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
 
 
 def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, budget=400, deadline=None,
-                rules=("complete", "direct"), count_strata=True):
+                rules=("complete", "direct"), count_strata=True, intrinsic=False):
     """Blow up over V(fibre) until the divisor has normal crossings there.
 
     `components` lists (label, N, nu, ideal) on affine space with the given
@@ -1082,7 +1104,9 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
 
     The complete rule is used; should it give up, the short one is tried
     from the start. Whatever the rule, the answer is the same kind of
-    object, with normal crossings verified in every final chart.
+    object, with normal crossings verified in every final chart. For a single
+    reduced source labelled "strict", intrinsic=True with count_strata=False
+    stops once the strict transform is smooth on the entire owned fibre.
     """
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
@@ -1093,7 +1117,8 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
         else:
             rule = _Direct() if name == "direct" else _Canonical(components)
         try:
-            return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata)
+            return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata,
+                        intrinsic=intrinsic)
         except GiveUp as error:
             reason = error
             if deadline is not None and monotonic() > deadline:

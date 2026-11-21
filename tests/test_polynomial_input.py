@@ -89,6 +89,24 @@ class PublicInputArithmetic(unittest.TestCase):
         with self.assertRaises(InputError):
             parse_expression("(" * depth + "x" + ")" * (depth-1), ["x"])
 
+    def test_wide_power_of_a_sparse_monomial_and_an_algebraic_coefficient(self):
+        n = 2**64 + 1
+        depth = 12_001
+        self.assertEqual(
+            parse_expression("-" * depth + "(" * depth + "-x*y" + ")" * depth + f"**{n}", ["x", "y"]),
+            {(n, n): 1},
+        )
+        # In QQ[t]/(1+t+t²), 1+t = -t², t³=1 and n=5 modulo 6.
+        for expression, expected in (
+            (f"(t+1)^{n}", {(0, 1): -1}),
+            (f"((t+1)*x)^{n}", {(n, 1): -1}),
+            (f"(t^2+t+1)^{n}", {}),
+            ("(t^2+t+1)^0", {(0, 0): 1}),
+        ):
+            with self.subTest(expression=expression):
+                self.assertEqual(parse_expression(expression, ["x", "t"], coefficient_modulus="t^2+t+1"),
+                                 expected)
+
     def test_stale_binary(self):
         with patch.object(native_library, "affine_request", side_effect=native_library.Unavailable("build kernel")):
             with self.assertRaisesRegex(native_library.Unavailable, "build kernel"):

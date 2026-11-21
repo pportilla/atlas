@@ -58,6 +58,24 @@ class AlgebraInterfaceTests(unittest.TestCase):
         with response:
             return response.status, json.load(response, parse_int=integer_from_decimal)
 
+    def test_public_gpu_arithmetic_batches_keep_exact_json_results(self):
+        from engine.algebra import dispatch
+        cases = [
+            ("polynomial-arithmetic", ["x","y"],
+             {"action":"substitute","polynomial":"x^2+y","images":["-y","x"]}),
+            ("modular-arithmetic", [], {"action":"hensel","values":["3","4"],"modulus":"7","other":["-2","0","1"]}),
+            ("modular-arithmetic", [], {"action":"multiply","values":[[0,1]],"other":[[0,1]],
+                                        "modulus":"2","field_polynomial":["1","1","1"]}),
+        ]
+        for operation, names, operands in cases:
+            request = {"operation":operation,"ring":{"variables":names},"operands":operands}
+            cpu = dispatch(dict(request,compute="cpu"))
+            status, gpu = self.post(dict(request,compute="gpu"))
+            self.assertEqual(status,200,gpu)
+            self.assertEqual(gpu["result"],cpu["result"])
+            self.assertEqual(gpu["execution"]["requested"],"gpu")
+
+
     def shell(self, *args):
         return subprocess.run([str(ROOT / "atlas"), *args],
                               capture_output=True, text=True, timeout=30)
@@ -180,6 +198,67 @@ class AlgebraInterfaceTests(unittest.TestCase):
         status, record = self.post(dict(operation="factor", ring=RING, operands={"polynomial": source}))
         self.assertEqual(status, 200, record.get("error"))
         self.assertEqual(record["result"]["factors"], [{"polynomial": "x", "multiplicity": 10**4501 - 1}])
+
+    def test_absolute_factorization_http_worker_cli_and_typed_replay(self):
+        operands = {"polynomial": "-3/5*(x^2+y^2)^2"}
+        status, record = self.post(dict(operation="absolute-factor", ring=RING, operands=operands))
+        self.assertEqual(status, 200, record)
+        result = record["result"]
+        self.assertEqual(result["type"], "absolute-factorization")
+        self.assertEqual((result["unit"], [f["multiplicity"] for f in result["factors"]]), ("-3/5", [2, 2]))
+        self.assertEqual(result["ring"]["field"]["degree"], 2)
+        command = shlex.split(record["replay"]["command"])[1:]
+        for run in (self.shell(*command), run_script(record["replay"]["script"])):
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)["result"], result)
+        code, out, err = run_prompt(record["replay"]["script"] + "\nquit\n")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(json.loads(out.replace("atlas> ", "").strip())["result"], result)
+        command.remove("--json")
+        display = self.shell(*command)
+        self.assertEqual(display.returncode, 0, display.stderr)
+        self.assertIn("-3/5", display.stdout)
+        self.assertIn(result["ring"]["field"]["minimal_polynomial"], display.stdout)
+
+    def test_hensel_factor_lift_through_http_worker_cli_prompt_and_script(self):
+        operands = {"polynomial": "y^2-2", "factors": ["y-3", "y+3"], "modulus": "7"}
+        status, record = self.post(dict(operation="hensel-factors", ring=RING, operands=operands, compute="cpu"))
+        expected = {"type": "hensel-factors", "ring": RING, "left": "y+39", "right": "y+10", "modulus": "49"}
+        self.assertEqual((status, record.get("result")), (200, expected), record)
+        for run in (self.shell(*shlex.split(record["replay"]["command"])[1:]),
+                    run_script(record["replay"]["script"])):
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)["result"], expected)
+        code, out, error = run_prompt(record["replay"]["script"] + "\nquit\n")
+        self.assertEqual((code, error), (0, ""))
+        self.assertEqual(json.loads(out.replace("atlas> ", "").strip())["result"], expected)
+        for malformed in ({**operands, "factors": ["y-3"]}, {**operands, "modulus": "7/2"}):
+            status, record = self.post(dict(operation="hensel-factors", ring=RING, operands=malformed))
+            self.assertEqual((status, record["error"]["code"]), (400, "invalid_request"))
+
+    def test_division_bezout_fraction_and_squarefree_replay(self):
+        requests = [
+            ("polynomial-division", "x^3+y", "x-1", {"quotient": "x^2+x+1", "remainder": "y+1"}),
+            ("extended-gcd", "x^2-1", "x^2-x", {"gcd": "x-1", "left_coefficient": "1", "right_coefficient": "-1"}),
+            ("cancel-fraction", "(x-y)*(x+1)", "-2*(x-y)*(y+1)",
+             {"numerator":"-1/2*x-1/2", "denominator":"y+1"}),
+            ("squarefree-factor", "-2*(x-y)^2*(x+y)^2", None, {"unit": "-2",
+             "factors": [{"polynomial":"x^2-y^2", "multiplicity":2}]}),
+        ]
+        for op, left, right, expected in requests:
+            with self.subTest(op=op):
+                operands = {"polynomial":left}
+                if right is not None:
+                    operands["other_polynomial"] = right
+                status, api = self.post(dict(operation=op, ring=RING, compute="cpu", operands=operands))
+                self.assertEqual(status, 200, api)
+                for key, value in expected.items():
+                    self.assertEqual(api["result"][key], value)
+                cli = self.shell(*shlex.split(api["replay"]["command"])[1:])
+                script = run_script(api["replay"]["script"])
+                for result in (cli, script):
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout)["result"], api["result"])
 
     def test_gcd_replays_both_polynomials_through_shell_prompt_and_script(self):
         operands = {"polynomial": "(2*x+y)*(x+1)", "other_polynomial": "-(2*x+y)*(y-1)"}

@@ -26,7 +26,7 @@ def _opencl_rows(buffer, rows, cols, prime, index):
     return identifiers[:rank]
 
 
-def _device_row_basis(rows, width, *, residues=None):
+def _device_row_basis(rows, width, *, residues=None, label="jacobian_row_selection"):
     run = current_execution()
     if not run or run.replay.compute == "cpu" or not rows:
         return None
@@ -61,7 +61,7 @@ def _device_row_basis(rows, width, *, residues=None):
         except Exception as exc:
             record_fallback(f"{backend} Jacobian rank: {exc}")
             continue
-        record_stage("jacobian_row_selection", backend, device=scope.record_device(backend, device),
+        record_stage(label, backend, device=scope.record_device(backend, device),
                      rows=len(rows), columns=width, candidate_rank=len(ids), prime=prime,
                      elapsed_ns=perf_counter_ns()-started)
         return ids

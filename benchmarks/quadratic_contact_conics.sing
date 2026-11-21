@@ -1,0 +1,30 @@
+// Each factor is a smooth homogeneous conic. Its pairwise intersections
+// are transverse and no point lies on three components. Check these
+// hypotheses before applying the single blowup at the origin.
+LIB "sing.lib";
+ring R=0,(x,y,z),dp;
+poly f=(z^2-x*y)*((z-x-2*y)^2-x*y)*((z-3*x-5*y)^2-x*y);
+list L=factorize(f);
+ideal qs;
+int i,j,k;
+for(i=2;i<=size(L[1]);i++) { qs[i-1]=L[1][i]; }
+if(size(qs)!=3 || !homog(qs)) {ERROR("Expected three homogeneous conics");}
+int intersections=0;
+matrix J[2][3];
+ideal pairIdeal, critical;
+for (i=1;i<=3;i++) {
+ if(deg(qs[i])!=2 || L[2][i+1]!=1 || dim(std(jacob(qs[i])))!=0) {ERROR("Singular or repeated conic");}
+ for (j=i+1;j<=3;j++) {
+   pairIdeal=qs[i],qs[j];
+   for (k=1;k<=3;k++){J[1,k]=diff(qs[i],var(k));J[2,k]=diff(qs[j],var(k));}
+   critical=pairIdeal+minor(J,2);
+   if(dim(std(critical))!=0){ERROR("Two conics are tangent");}
+   intersections=intersections+mult(std(pairIdeal));
+ }
+}
+if(dim(std(qs))!=0) {ERROR("Triple projective intersection");}
+int n=size(qs); int total=deg(f); int e=3-2*n+intersections;
+ring Qs=(0,s),Z,dp;
+number top=(e+(2*n-2*intersections)/(1+s)+intersections/(1+s)^2)/(3+total*s);
+number mon=(1-s^total)^(-e);
+print("ATLASBENCH "+string(top)+"|"+string(mon));

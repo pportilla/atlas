@@ -148,6 +148,25 @@ struct Chart {
     std::vector<unsigned> terms;
 };
 
+// A single coordinate section suffices if every other affine exceptional
+// section is empty. On E_i, a nonzero constant has no zeros and a pure
+// coordinate power cuts out one reduced affine space through the fixed
+// point. This includes a strict graph u_E = c*v^d tangent to E.
+Value single_coordinate_section(const std::vector<Chart>& charts, const Value& labels, unsigned n) {
+    Sections sections;
+    for (const auto& chart : charts) for (const auto& [axis,label] : chart.boundary) {
+        const unsigned exceptional = 1U << axis;
+        auto survives = [exceptional](unsigned term) { return !(term & exceptional); };
+        auto term = std::find_if(chart.terms.begin(), chart.terms.end(), survives);
+        if (term == chart.terms.end() || std::any_of(term+1, chart.terms.end(), survives)) return {};
+        if (!*term) continue;
+        if ((*term & (*term-1)) || !sections.empty()) return {};
+        sections.emplace(Face{label}, Section{1,0});
+    }
+    if (sections.empty()) return {};
+    return cells(sections, labels, n, true);
+}
+
 Value plan(const Value& request) {
     const auto n = request["dimension"].asUInt();
     if (n < 2 || n > 8) return {};
@@ -197,6 +216,11 @@ Value plan(const Value& request) {
         charts.push_back(std::move(chart));
     }
 
+    if (intrinsic && common && relative) {
+        Value result;
+        result["complex"] = single_coordinate_section(charts, labels, n);
+        if (!result["complex"].isNull()) return result;
+    }
     Sections ambient;
     std::set<Face> seen;
     Value checks = array(), orbits = array();

@@ -238,8 +238,16 @@ def candidates(variables, polynomial):
             yield candidate
 
 
-def scheduled_candidates(variables, polynomial, *, initial_seconds=1):
-    """Yield (candidate, finite attempt budget in seconds) with unbounded revisits.
+def _retry_efforts():
+    # Try deeper projections promptly on even passes. On odd passes each
+    # fixed effort recurs with arbitrarily much wall time (1; 1,2; 1,2,3; ...).
+    fixed = chain.from_iterable(range(1, depth+1) for depth in count(1))
+    for turn in count(2):
+        yield turn, turn if turn % 2 == 0 else next(fixed)
+
+
+def scheduled_attempts(variables, polynomial, *, initial_seconds=1):
+    """Yield a candidate, algebraic effort, and independent finite time allowance.
 
     Each pass revisits the finite range already discovered at its start,
     increasing the verification allowance. Each retry (including an invalid
@@ -252,16 +260,22 @@ def scheduled_candidates(variables, polynomial, *, initial_seconds=1):
     early = []
     for candidate in priority_candidates(variables, polynomial):
         early.append(candidate)
-        yield candidate, initial_seconds
+        yield candidate, 1, initial_seconds
     first = _first_code(variables)
     frontier = first
     discovery = _code_trials(variables, first)
-    for effort in count(2):
+    for turn, effort in _retry_efforts():
         # Capture the frontier before advancing the discovery iterator.
         revisited = _code_trials(variables, first, frontier)
         for retry in chain(early, (candidate for candidate, _ in revisited)):
             candidate, frontier = next(discovery)
             if candidate is not None:
-                yield candidate, initial_seconds
+                yield candidate, 1, initial_seconds
             if retry is not None:
-                yield retry, initial_seconds * effort
+                yield retry, effort, initial_seconds * turn
+
+
+def scheduled_candidates(variables, polynomial, *, initial_seconds=1):
+    """Yield the candidate and time allowance from each scheduled attempt."""
+    for candidate, _, seconds in scheduled_attempts(variables, polynomial, initial_seconds=initial_seconds):
+        yield candidate, seconds

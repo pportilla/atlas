@@ -94,7 +94,8 @@ struct FieldRing {
         throw std::logic_error("Missing coefficient-field least common multiple.");
     }
 
-    Polynomial translate(const Polynomial& f, const mpz_class& a, bool reverse) {
+    Polynomial translate(const Polynomial& f, const mpz_class& a, bool reverse,
+                         std::optional<size_t> axis = std::nullopt) {
         if (!a) return f;
         PolyValue original(ring.ctx), shifted(ring.ctx), term(ring.ctx), q(ring.ctx), rem(ring.ctx);
         ring.write(original.p,f);
@@ -105,7 +106,7 @@ struct FieldRing {
         for (size_t i = 0; i < width; ++i) {
             auto& image = coordinates.emplace_back(ring.ctx);
             fmpq_mpoly_gen(image.p,i,ring.ctx);
-            if (i+1 == width) continue;
+            if (i+1 == width || (axis && i != *axis)) continue;
             power *= a;
             fmpz_set_mpz(&scale.v, power.get_mpz_t());
             if (reverse) fmpz_neg(&scale.v,&scale.v);
@@ -120,7 +121,7 @@ struct FieldRing {
         return ring.read(rem.p);
     }
 
-    Factors factor(Polynomial f) {
+    Factors factor(Polynomial f, std::optional<size_t> section_axis = std::nullopt) {
         Factors factors;
         if (f.empty() || degree(f) == 0) return factors;
         // Remove coordinate factors before translation, including enormous
@@ -149,7 +150,7 @@ struct FieldRing {
 
         PolyValue original(ring.ctx), derivative(ring.ctx);
         ring.write(original.p,f);
-        Polynomial common = f;
+        Polynomial common = section_axis ? one : f;
         for (size_t i = 0; i+1 < width && common != one; ++i) {
             fmpq_mpoly_derivative(derivative.p,original.p,i,ring.ctx);
             if (!fmpq_mpoly_is_zero(derivative.p,ring.ctx))
@@ -158,7 +159,7 @@ struct FieldRing {
         const auto squarefree = quotient(f,common);
         PolyValue shifted(ring.ctx), norm(ring.ctx);
         for (mpz_class a = 0;; ++a) {
-            ring.write(shifted.p,translate(squarefree,a,false));
+            ring.write(shifted.p,translate(squarefree,a,false,section_axis));
             if (!fmpq_mpoly_resultant(norm.p,relation.p,shifted.p,width-1,ring.ctx))
                 throw std::runtime_error("Unable to compute the number-field norm.");
             auto rational = primary::factors(ring.read(norm.p),width);
@@ -166,8 +167,12 @@ struct FieldRing {
             // it is squarefree precisely when the conjugates are disjoint.
             if (std::any_of(rational.begin(),rational.end(),[](const auto& p){ return p.second != 1; })) continue;
             for (const auto& [image,m] : rational) {
-                auto prime = gcd(squarefree,monic(translate(image,a,true)));
+                auto prime = gcd(squarefree,monic(translate(image,a,true,section_axis)));
                 if (prime == one || prime.empty()) throw std::logic_error("A norm factor has no marked-field branch.");
+                if (section_axis) {
+                    factors.emplace_back(std::move(prime),1);
+                    continue;
+                }
                 PolyValue divisor(ring.ctx);
                 ring.write(divisor.p,prime);
                 const auto exponent = factor_multiplicity(original.p,divisor.p,width-1,
@@ -212,6 +217,11 @@ std::vector<size_t> field_order(const Factors& factors, size_t width) {
 std::vector<std::pair<local::Polynomial, mpz_class>> marked_factors(
         const local::Polynomial& f, const local::Polynomial& modulus, size_t width) {
     return FieldRing(width,modulus).factor(f);
+}
+
+std::vector<std::pair<local::Polynomial, mpz_class>> marked_section_factors(
+        const local::Polynomial& f, const local::Polynomial& modulus, size_t width, size_t axis) {
+    return FieldRing(width,modulus).factor(f,axis);
 }
 
 local::Polynomial marked_gcd(const local::Basis& rows, const local::Polynomial& modulus, size_t width) {

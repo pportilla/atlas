@@ -130,7 +130,7 @@ def _primitive_complex(rays, cones, delta, coefficient, mode, *, exceptional_ray
 
     Within a chart for C, the local piece on an exceptional subset S has a
     unique generic set Z of zero coordinates. Either Z=S, or a surviving
-    linear monomial forces one additional coordinate to vanish. This also
+    pure power forces one additional coordinate to vanish. This also
     decides overlap gluing: a chart overlap inverts precisely the rays outside
     the common face. Every chart carrying the same (S,Z) contains that face
     and contains the same dense subvariety of its orbit. Pieces with different
