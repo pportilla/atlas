@@ -49,7 +49,7 @@ print(L.fraction(y).unit)                               # True
 
 Indeed $x/y=(xy)/y^2$, so `q.member` is true. The numerator belongs to $P$, so `q.unit` is false. With one argument the denominator defaults to $1$.
 
-Supply polynomials from the original ring or rational scalars. The denominator must lie outside `L.prime`. The result retains `.numerator` and `.denominator`. The optional `compute` policy defaults to that of `L` and accepts `"auto"`, `"cpu"` or `"gpu"`. [Localization at a prime](../examples/quotient-algebras.md#localize-at-a-prime)
+Supply polynomials from the original ring or rational scalars. The denominator must lie outside `L.prime`. The result retains `.numerator` and `.denominator`. The optional `compute` policy defaults to that of `L` and accepts `"auto"`, `"cpu"` or `"gpu"`. [Localization at a prime](../tutorial/quotient-rings.md#localize-at-a-prime)
 
 ## Ring homomorphisms
 
@@ -63,7 +63,7 @@ print(phi(x+y))                                         # t^3+t^2
 print(phi(y^2-x^3))                                     # 0
 ```
 
-The second output verifies that the image lies on the cusp. `phi(value)` takes one argument, an element of `phi.domain` or a rational scalar, and returns its image in `phi.codomain`. Use the same syntax for a quotient projection, an inclusion from elimination, a normalization map or a chart pullback map. [Defining and applying a ring map](sessions.md#move-a-polynomial-between-rings)
+The second output verifies that the image lies on the cusp. `phi(value)` takes one argument, an element of `phi.domain` or a rational scalar, and returns its image in `phi.codomain`. Use the same syntax for a quotient projection, an inclusion from elimination, a normalization map or a chart pullback map. [Defining and applying a ring map](../tutorial/rings.md#move-a-polynomial-between-rings)
 
 ## Resolution charts, divisors and polynomial multiplicity
 
@@ -82,7 +82,7 @@ print(total)                                            # u^6*v^4-u^6*v^3
 print(total.multiplicity(g))                            # 6
 ```
 
-In this chart the divisor is $u=0$. The pullback factors as $u^6v^3(v-1)$, so the divisor occurs six times. For the other charts and the strict transform of the curve, follow the full resolution example. [Resolve a plane cusp](resolving-a-cusp.md#look-inside-a-chart)
+In this chart the divisor is $u=0$. The pullback factors as $u^6v^3(v-1)$, so the divisor occurs six times. For the other charts and the strict transform of the curve, follow the full resolution example. [Resolve a plane cusp](../tutorial/resolving-a-cusp.md#look-inside-a-chart)
 
 | Method | Inputs and result |
 | --- | --- |

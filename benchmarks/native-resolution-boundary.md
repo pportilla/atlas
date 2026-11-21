@@ -1,6 +1,6 @@
 # Native resolution and saved-chart replay
 
-The regressions exercise four paths through `./atlas resolve` on a Ryzen 7 6800H. Each command starts a fresh process, resolves over the rational input field and writes its complete JSON result. The fifth case checks a 191-chart regular fan. [Resolution algorithm map](../docs/resolution-pipeline.md)
+The regressions exercise four paths through `./atlas resolve` on a Ryzen 7 6800H. Each command starts a fresh process, resolves over the rational input field and writes its complete JSON result. The fifth case checks a 191-chart regular fan. [Resolution algorithm map](../docs/thematic/resolution-pipeline.md)
 
 ## Comparison
 

@@ -969,6 +969,11 @@ function showZeta(data) {
       } else if (stratum.model === "sum of squares") model.append("Transverse Morse singularity");
       else if (stratum.model === "nearby transverse node") model.append("Transverse node");
       else if (stratum.model === "constant transverse type") model.append("Constant transverse type");
+      else if (stratum.model === "transverse composition") {
+        const names = stratum.transverse_coordinates;
+        model.append("Transverse germ ", typeset(stratum.transverse_germ), " at the origin, with ",
+          typeset(names.map((name, i) => `${name} = ${stratum.coordinates[i]}`).join(", ")));
+      }
       if (model.hasChildNodes()) locus.append(model);
       const formula = el("span", "m local-zeta");
       formula.setAttribute("role", "math");
@@ -996,7 +1001,7 @@ function stratumLocus(stratum) {
     });
     return locus;
   }
-  if (stratum.model === "sum of squares") locus.append("Generic points of ");
+  if (stratum.model === "sum of squares" || stratum.model === "transverse composition") locus.append("Generic points of ");
   const equations = stratum.coordinates.join(" = ") + " = 0";
   locus.append(typeset(equations));
   if (stratum.model === "constant transverse type") locus.append(" away from the origin");
@@ -1088,6 +1093,7 @@ function showMonodromyCheck(panel, data) {
     "nearby smooth component": "Nearby smooth component",
     "nearby transverse binomial": "Nearby transverse binomial singularity",
     "nearby transverse Morse": "Nearby transverse Morse singularity",
+    "nearby transverse composition": "Nearby transverse germ",
   };
   if (check.poles?.length) {
     const strata = data.monodromy_zeta.nearby_strata || [];

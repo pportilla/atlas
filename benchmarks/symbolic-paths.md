@@ -6,7 +6,7 @@ This audit used the same candidate as the resolution benchmark on 2026-11-14, fi
 
 The table records the earlier build. The public resolver now sends sparse native values through general blowups, intrinsic gluing and projective workers. The saved-chart reader also defaults to native values when its caller has already imported SymPy. A caller that needs symbolic chart objects can request `native=False`. Missing kernel operations and unsupported number-field expressions produce errors in native mode. The number-field adapter accepts a marked exact root or coefficients in the generator's power basis.
 
-Run the audit driver with the case name for the current native route. Add `--symbolic-inputs` to reproduce a direct caller supplying SymPy objects. The regression suite blocks imports in fresh interpreters and workers, including old marked-field records, weighted charts and a 35-coordinate projective blowup. [Current resolution pipeline](../docs/resolution-pipeline.md)
+Run the audit driver with the case name for the current native route. Add `--symbolic-inputs` to reproduce a direct caller supplying SymPy objects. The regression suite blocks imports in fresh interpreters and workers, including old marked-field records, weighted charts and a 35-coordinate projective blowup. [Current resolution pipeline](../docs/thematic/resolution-pipeline.md)
 
 ## Findings in the measured build
 

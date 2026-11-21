@@ -33,6 +33,24 @@ class TangentConeSessionTests(unittest.TestCase):
         self.assertEqual((code, error), (0, ""))
         self.assertEqual(output.replace("atlas> ", "").strip().splitlines(), expected)
 
+    def test_displays_list_generators_without_tuple_punctuation(self):
+        source = dedent("""
+            x, y = coordinates("x", "y")
+            print(tangent_cone(ideal(y^2-x^3)))
+            print(tangent_cone(ideal(x^2, y^3)))
+            print(local_standard_basis(ideal(y^2-x^3)))
+            print(tangent_cone(ideal(y^2-x^3)).generators)
+        """).lstrip()
+        expected = ["Tangent cone at [0, 0] with generators (y^2)",
+                    "Tangent cone at [0, 0] with generators (x^2, y^3)",
+                    "Local standard basis at [0, 0]: (-x^3+y^2)", "(y^2,)"]
+        script = run_script(source)
+        self.assertEqual(script.returncode, 0, script.stderr)
+        self.assertEqual(script.stdout.splitlines(), expected)
+        code, output, error = run_prompt(source.replace("print(", "(") + "quit\n")
+        self.assertEqual((code, error), (0, ""))
+        self.assertEqual(output.replace("atlas> ", "").strip().splitlines(), expected)
+
     def test_saved_local_basis_point_replay_and_cone_coordinate_ownership(self):
         session = new_session(None)
         list(session.run(dedent("""

@@ -90,7 +90,7 @@ class ModularArithmetic(unittest.TestCase):
         with patch("engine.modular_batch.handle",side_effect=AssertionError("help performed a calculation")):
             card=algebra_value_help("v",before["v"],session.variables)
             self.assertEqual(before,session.variables)
-            self.assertIn("examples/polynomial-ideals.md#compute-with-residues-and-lift-roots",card)
+            self.assertIn("docs/tutorial/polynomials-and-ideals.md#compute-with-residues-and-lift-roots",card)
             for line in card.splitlines():
                 if line.strip().startswith("v."):
                     list(session.run(line.strip()))

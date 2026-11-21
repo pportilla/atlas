@@ -141,6 +141,24 @@ class SessionMonodromyTests(unittest.TestCase):
         status, out, err = run_prompt(source + "quit\n")
         self.assertEqual((status, err, out.replace("atlas> ", "").strip()), (0, "", expected))
 
+    def test_transverse_composition_witnesses_at_prompt_and_in_scripts(self):
+        # The order-6 eigenvalue lives on the lines x = y^2+z^2 = 0, where f = u1^2+u2^3.
+        source = dedent("""
+            x, y, z = coordinates("x", "y", "z")
+            C = monodromy_check((x^2+y^2+z^2)^2+x^3)
+            p = C.poles[1]
+            t = p.transverse
+            print(C.status, p.value, p.eigenvalue_order, p.witness)
+            print(t.coordinates, t.transverse_coordinates, t.transverse_germ, t.cyclotomic_exponent)
+            print(C.monodromy_zeta.nearby_strata[p.nearby_matches[0].stratum_index].expression)
+        """).lstrip()
+        expected = ["verified -5/6 6 nearby transverse composition",
+                    "('x^2+y^2+z^2', 'x') ('u1', 'u2') u2^3+u1^2 1", "(1-T^6)/((1-T^2)*(1-T^3))"]
+        script = run_script(source)
+        self.assertEqual((script.returncode, script.stderr, script.stdout.splitlines()), (0, "", expected))
+        status, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((status, err, out.replace("atlas> ", "").strip().splitlines()), (0, "", expected))
+
     def test_quick_limits_keep_the_reason_and_worker_failures_raise(self):
         request = dict(polynomial="x^200", variables=["x"], mode="embedded", monodromy=True)
         record = inconclusive(request, {"description": "quick worker timed out"}, 2)

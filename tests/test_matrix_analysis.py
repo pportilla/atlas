@@ -71,7 +71,7 @@ class MatrixAnalysisTests(unittest.TestCase):
             state = dict(session.variables["M"].__dict__)
             card = algebra_value_help("M",session.variables["M"],session.variables)
             self.assertIn("1 by 2 matrix over QQ",card)
-            self.assertIn("examples/algebra-api.md#exact-rational-linear-algebra",card)
+            self.assertIn("docs/tutorial/polynomials-and-ideals.md#exact-rational-linear-algebra",card)
             self.assertEqual(state,session.variables["M"].__dict__)
             for expr in ("M.rank","M.kernel","M.solution"):
                 self.assertIn(expr,card)

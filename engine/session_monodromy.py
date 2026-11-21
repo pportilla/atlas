@@ -28,6 +28,10 @@ def _nearby_witness(stratum, exponent):
     if model == "constant transverse type":
         transverse["parameters"] = tuple(stratum["parameters"])
         return {"witness": "nearby constant transverse type", "transverse": transverse}
+    if model == "transverse composition":
+        transverse.update(transverse_coordinates=tuple(stratum["transverse_coordinates"]),
+                          transverse_germ=stratum["transverse_germ"])
+        return {"witness": "nearby transverse composition", "transverse": transverse}
     transverse["powers"] = tuple(stratum["powers"])
     return {"witness": "nearby transverse binomial", "transverse": transverse}
 

@@ -1,6 +1,6 @@
 # Canonical centres and exceptional intersections
 
-Atlas uses a single native call per eligible chart to descend through coefficient presentations, choose a curve on a smooth surface, or count exceptional intersections. These operations use the chart equations, divisor history and ownership conditions. A failed certificate returns control to the general procedure. [Resolution algorithm map](../docs/resolution-pipeline.md)
+Atlas uses a single native call per eligible chart to descend through coefficient presentations, choose a curve on a smooth surface, or count exceptional intersections. These operations use the chart equations, divisor history and ownership conditions. A failed certificate returns control to the general procedure. [Resolution algorithm map](../docs/thematic/resolution-pipeline.md)
 
 ## Full CLI timings
 

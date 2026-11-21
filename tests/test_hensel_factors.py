@@ -43,7 +43,7 @@ class HenselFactorsTests(unittest.TestCase):
         for attr in ("left", "right", "modulus"):
             self.assertIn(f"H.{attr}", card)
             list(session.run(f"entry=H.{attr}"))
-        self.assertIn("examples/polynomial-ideals.md#lift-two-coprime-polynomial-factors", card)
+        self.assertIn("docs/tutorial/polynomials-and-ideals.md#lift-two-coprime-polynomial-factors", card)
 
     def test_wide_sparse_degree_prime_and_units(self):
         n = 2**64 + 3

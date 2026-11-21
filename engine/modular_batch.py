@@ -139,7 +139,7 @@ def modular_arithmetic(action, values, modulus, *, other=None, other_modulus=Non
     >>> r.values  # (10, 39)
     >>> r.modulus  # 49
 
-    Docs: examples/polynomial-ideals.md#compute-with-residues-and-lift-roots
+    Docs: docs/tutorial/polynomials-and-ideals.md#compute-with-residues-and-lift-roots
     """
     from .algebra import dispatch
     from .session_algebra import _typed

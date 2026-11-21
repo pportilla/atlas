@@ -360,7 +360,7 @@ def session_declarations():
         >>> f.parent == R  # True
         >>> R.coordinates  # (x, y)
 
-        Docs: docs/sessions.md#choose-the-ring-of-a-polynomial
+        Docs: docs/tutorial/rings.md#choose-the-ring-of-a-polynomial
         """
         return _declare_ring(names, coeffs, parent_maker(fresh))
 

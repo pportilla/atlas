@@ -18,7 +18,7 @@ the way its conjugate charts enter a count matters as well.
 For worked examples, follow an ordinary point blowup through the plane cusp
 or a weighted blowup through the surface $x^2+y^3+z^5=0$. The choice among
 ordinary, Newton and ideal blowups is described separately. References to Eisenbud [E] use the edition in the exact kernel bibliography.
-[Plane cusp](../docs/resolving-a-cusp.md) · [Weighted blowups](../docs/weighted-resolution.md) · [Resolution pipeline](../docs/resolution-pipeline.md) · [Kernel bibliography](KERNEL.md#references)
+[Plane cusp](../docs/tutorial/resolving-a-cusp.md) · [Weighted blowups](../docs/thematic/weighted-resolution.md) · [Resolution pipeline](../docs/thematic/resolution-pipeline.md) · [Kernel bibliography](KERNEL.md#references)
 
 <a id="4-the-smooth-locus"></a>
 
@@ -104,7 +104,7 @@ The number of strata reported is the number of strata visited, which depends onl
 
 - Integer arithmetic is FLINT's.
 - The kernel computes the factorization, elimination and ideal membership tests for geometric decomposition over rational and marked number fields. Python chooses projections, enumerates candidate intersections and connects chart components after the native overlap tests. Comparison runs can independently compute geometric decomposition over a symbolic fraction field. See [chart arithmetic](#9-operations-for-the-blowups) and [component assembly](../engine/geometric_components.py).
-- The [resolution pipeline](../docs/resolution-pipeline.md#what-the-record-certifies) explains how the verifier assembles these conditions into a resolution certificate.
+- The [resolution pipeline](../docs/thematic/resolution-pipeline.md#what-the-record-certifies) explains how the verifier assembles these conditions into a resolution certificate.
 
 <a id="9-operations-for-the-blowups"></a>
 
@@ -340,7 +340,7 @@ On a smooth chart with exceptional Cartier divisors of ideals $P_i$, let $J$ be 
 
 ## Strata, incidence and invariants
 
-The dual complex counts geometric irreducible components of intersections. The zeta functions use compactly supported Euler characteristics of the disjoint strata lying on exactly specified divisors. Replay must recover the relevant quantities from the saved charts. [The two computations for a cusp](../docs/resolution-records.md#local-monodromy-zeta-function)
+The dual complex counts geometric irreducible components of intersections. The zeta functions use compactly supported Euler characteristics of the disjoint strata lying on exactly specified divisors. Replay must recover the relevant quantities from the saved charts. [The two computations for a cusp](../docs/thematic/resolution-records.md#local-monodromy-zeta-function)
 
 ### Local topological zeta reduction
 

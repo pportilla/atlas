@@ -425,13 +425,18 @@ class _PointResult(_AtPoint, _Result):
     _fields = _Result._fields | {"scope", "point"}
 
 
+def _generator_list(generators):
+    # Python's tuple text adds a trailing comma to one generator, as in (y^2,).
+    return ", ".join(map(str, generators)) or "0"
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class _LocalStandardBasis(_PointResult):
     generators: tuple[Polynomial, ...]
     _fields = _PointResult._fields | {"generators"}
 
     def __repr__(self):
-        return f"Local standard basis at [{', '.join(self.point)}]: {self.generators}"
+        return f"Local standard basis at [{', '.join(self.point)}]: ({_generator_list(self.generators)})"
 
 
 class _TangentResult(_PointResult):
@@ -456,7 +461,7 @@ class _TangentCone(_TangentResult):
         return self._record["result"]["multiplicity"]
 
     def __repr__(self):
-        return f"Tangent cone at [{', '.join(self.point)}] with generators {self.generators}"
+        return f"Tangent cone at [{', '.join(self.point)}] with generators ({_generator_list(self.generators)})"
 
 
 class _TangentDimensions:
@@ -1429,7 +1434,7 @@ def hensel_factors(polynomial, left, right, prime, *, order=None, variables=None
     >>> H = hensel_factors(x^2-2, x-3, x+3, 7, compute="gpu")
     >>> H.left, H.right, H.modulus  # (x+39, x+10, 49)
 
-    Docs: examples/polynomial-ideals.md#lift-two-coprime-polynomial-factors
+    Docs: docs/tutorial/polynomials-and-ideals.md#lift-two-coprime-polynomial-factors
     """
     from .algebra import dispatch
     from .modular_batch import integer
@@ -1450,7 +1455,7 @@ def cancel_fraction(numerator, denominator, *, order=None, variables=None, compu
     >>> C = cancel_fraction(x^2-y^2, 2*x+2*y)
     >>> C.numerator, C.denominator  # (1/2*x-1/2*y, 1)
 
-    Docs: examples/polynomial-ideals.md#cancel-a-rational-function
+    Docs: docs/tutorial/polynomials-and-ideals.md#cancel-a-rational-function
     """
     return _calculate_polynomials("cancel-fraction", order, variables, compute,
                                   polynomial=numerator, other_polynomial=denominator)
@@ -1463,7 +1468,7 @@ def polynomial_division(dividend, divisor, *, order=None, variables=None, comput
     >>> D = polynomial_division(x^2 + y, x - 1)
     >>> D.quotient, D.remainder  # (x+1, y+1)
 
-    Docs: examples/polynomial-ideals.md#divide-polynomials-and-find-bezout-coefficients
+    Docs: docs/tutorial/polynomials-and-ideals.md#divide-polynomials-and-find-bezout-coefficients
     """
     return _calculate_polynomials("polynomial-division", order, variables, compute,
                                   polynomial=dividend, other_polynomial=divisor)
@@ -1476,7 +1481,7 @@ def extended_gcd(left, right, *, order=None, variables=None, compute="auto"):
     >>> E = extended_gcd(x^2 - 1, x^2 - x)
     >>> E.left_coefficient*(x^2-1) + E.right_coefficient*(x^2-x) == E.gcd  # True
 
-    Docs: examples/polynomial-ideals.md#divide-polynomials-and-find-bezout-coefficients
+    Docs: docs/tutorial/polynomials-and-ideals.md#divide-polynomials-and-find-bezout-coefficients
     """
     return _calculate_polynomials("extended-gcd", order, variables, compute,
                                   polynomial=left, other_polynomial=right)
@@ -1501,7 +1506,7 @@ def polynomial_arithmetic(operation, polynomial, other=None, *, exponent=None, v
     >>> p = polynomial_arithmetic("substitute", x^2+y, images=[y, x], compute="gpu")
     >>> p == y^2+x  # True
 
-    Docs: examples/polynomial-ideals.md#choose-a-backend-for-polynomial-arithmetic
+    Docs: docs/tutorial/polynomials-and-ideals.md#choose-a-backend-for-polynomial-arithmetic
     """
     from .algebra import POLYNOMIAL_ACTION_OPERANDS, dispatch
     from .polynomial import saved_polynomial_input
@@ -1552,7 +1557,7 @@ def squarefree_factor(polynomial, *, order=None, variables=None, compute="auto")
     >>> F = squarefree_factor((x-1)^2*(x+1)^2)
     >>> F.factors[0].polynomial, F.factors[0].multiplicity  # (x^2-1, 2)
 
-    Docs: examples/polynomial-ideals.md#group-square-free-factors
+    Docs: docs/tutorial/polynomials-and-ideals.md#group-square-free-factors
     """
     return _calculate_polynomials("squarefree-factor", order, variables, compute, polynomial=polynomial)
 
@@ -1565,7 +1570,7 @@ def absolute_factor(polynomial, *, order=None, variables=None, compute="auto"):
     >>> len(F.factors)  # 2
     >>> F.factors[0].polynomial * F.factors[1].polynomial == F.inclusion(x^2 + y^2)  # True
 
-    Docs: examples/polynomial-ideals.md#factor-over-the-algebraic-closure
+    Docs: docs/tutorial/polynomials-and-ideals.md#factor-over-the-algebraic-closure
     """
     return _calculate_polynomials("absolute-factor", order, variables, compute, polynomial=polynomial)
 
@@ -1595,7 +1600,7 @@ def ae_codimension(*components, order=None, variables=None, compute="auto"):
     >>> r = ae_codimension(t^2, t^3)
     >>> print(r.finite, r.value)  # True 1
 
-    Docs: examples/local-algebra.md#compare-the-cusp-and-its-parametrization
+    Docs: docs/tutorial/local-algebra.md#compare-the-cusp-and-its-parametrization
     """
     space, values, order = _polynomial_inputs(_unpack(components), order, variables, QQ)
     request = {"operation": "ae-codimension", "ring": {"field": "QQ", "variables": list(space.names), "order": order},
@@ -1647,7 +1652,7 @@ def ideal_sum(left, right, *, compute="auto"):
     >>> S = ideal_sum(I, J)
     >>> membership(x, S).value  # True
 
-    Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
+    Docs: docs/tutorial/polynomials-and-ideals.md#add-multiply-and-raise-ideals-to-powers
     """
     return _binary_ideals("ideal-sum", left, right, compute)
 
@@ -1660,7 +1665,7 @@ def ideal_product(left, right, *, compute="auto"):
     >>> P = ideal_product(I, J)
     >>> membership(x*y, P).value  # True
 
-    Docs: docs/sessions.md#add-multiply-and-raise-ideals-to-powers
+    Docs: docs/tutorial/polynomials-and-ideals.md#add-multiply-and-raise-ideals-to-powers
     """
     return _binary_ideals("ideal-product", left, right, compute)
 

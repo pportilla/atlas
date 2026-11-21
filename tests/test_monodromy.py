@@ -8,8 +8,8 @@ from unittest.mock import patch
 import sympy as sp
 
 from engine.general_resolution import verify_candidate
-from engine.monodromy import monodromy_zeta
-from engine.polynomial import InputError
+from engine.monodromy import _transverse_compositions, monodromy_zeta
+from engine.polynomial import InputError, parse
 from engine.resolution_search import ResolutionCandidate
 from engine.resolve import resolve
 
@@ -197,6 +197,56 @@ class MonodromyTests(unittest.TestCase):
         nearby = record["monodromy_zeta"]["nearby_strata"]
         self.assertCountEqual([(row["model"], row["component"], row["expression"]) for row in nearby],
                               [("smooth component", label, "1/(1-T^2)") for label in ("S1", "S2")])
+
+    def test_quadric_composition_witnesses_the_missing_order_ten_eigenvalue(self):
+        # The singular lines x = y^2+z^2 = 0 have no rational point except the origin.
+        record = resolve({"polynomial": "(x^2+y^2+z^2)^2+x^5", "variables": list("xyz"), "search": "quick",
+                          "zetas": ["monodromy", "topological"]})
+        zeta = record["monodromy_zeta"]
+        self.assertEqual(zeta["expression"], "1/(1-T^4)")
+        (index, row), = [(i, r) for i, r in enumerate(zeta["nearby_strata"]) if r["model"] == "transverse composition"]
+        self.assertEqual((row["coordinates"], row["transverse_coordinates"], row["transverse_germ"], row["dimension"]),
+                         (["x^2+y^2+z^2", "x"], ["u1", "u2"], "u2^5+u1^2", 1))
+        self.assertEqual(row["expression"], "(1-T^10)/((1-T^2)*(1-T^5))")
+        check = record["monodromy_check"]
+        self.assertEqual(check["status"], "verified")
+        pole, = [p for p in check["poles"] if p["value"] == "-7/10"]
+        self.assertEqual((pole["eigenvalue_order"], pole["cyclotomic_exponent"], pole["witness"]),
+                         (10, 0, "nearby transverse composition"))
+        self.assertEqual(pole["nearby_matches"], [{"stratum_index": index, "cyclotomic_exponent": 1}])
+        self.assertEqual(pole["transverse"]["transverse_germ"], "u2^5+u1^2")
+        # Replaying the saved record recomputes the strata from the original polynomial.
+        output = subprocess.run([ROOT / "atlas", "monodromy", "-", "--json"], input=json.dumps(record),
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(output.stdout), zeta)
+
+    def test_transverse_compositions_certify_factorizations_through_submersions(self):
+        names = list("xyz")
+        cases = {
+            "(x^2+y^2+z^2)^3+(x+y)^4": (["x+y", "x^2+y^2+z^2"], "u1^4+u2^3", "(1-T^12)/((1-T^3)*(1-T^4))"),
+            "(x+y*z)^2+x^3": (["x", "y*z+x"], "u1^3+u2^2", "(1-T^6)/((1-T^2)*(1-T^3))"),
+            "(x^2+y^2+z^2)^2+123456789012345678901234567890*x^3":
+                (["x^2+y^2+z^2", "x"], "123456789012345678901234567890*u2^3+u1^2", "(1-T^6)/((1-T^2)*(1-T^3))"),
+            # This G is not of Brieskorn-Pham type, so Atlas resolves it at the origin.
+            "(x^2-y^3)^2+z^7*(x^2-y^3)+z^20":
+                (["z^7-2*y^3+2*x^2", "z"], "u2^20-1/4*u2^14+1/4*u1^2", "(1-T^14)/(1-T^2)"),
+        }
+        for polynomial, expected in cases.items():
+            with self.subTest(polynomial=polynomial):
+                row, = _transverse_compositions(parse(polynomial, names), names)
+                self.assertEqual((row["coordinates"], row["transverse_germ"], row["expression"]), expected)
+        # Names for G avoid the input coordinates.
+        renamed = ["u1", "u2", "v"]
+        row, = _transverse_compositions(parse("(u1^2+u2^2+v^2)^2+u1^5", renamed), renamed)
+        self.assertEqual((row["coordinates"], row["transverse_coordinates"], row["transverse_germ"]),
+                         (["u1^2+u2^2+v^2", "u1"], ["v1", "v2"], "v2^5+v1^2"))
+        # Isolated singularities, coordinate models, inputs without a factorization
+        # through a submersion, and inputs beyond the search bounds give no row.
+        for polynomial in ("x^5+y^7+z^9+x^2*y^2*z^2", "x^2+y^3+y^4", "(x*y-z^2)^2+x^5",
+                           "(x^2+y^2+z^2)^2+x^33", "x^9007199254740993*y^4+z^2*y^4"):
+            with self.subTest(polynomial=polynomial):
+                terms = parse(polynomial, names, bounded=False)
+                self.assertEqual(_transverse_compositions(terms, names), [])
 
     def test_inconclusive_input_and_option_validation(self):
         with self.assertRaises(InputError):

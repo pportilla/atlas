@@ -77,8 +77,8 @@ class TritonFactorDivision(unittest.TestCase):
             for field in fields:
                 self.assertIn(f"{key}.{field}", card)
                 list(session.run(f"shown={key}.{field}"))
-            self.assertIn("examples/polynomial-ideals.md#divide-polynomials-and-find-bezout-coefficients", card)
-        guide = Path("examples/polynomial-ideals.md").read_text()
+            self.assertIn("docs/tutorial/polynomials-and-ideals.md#divide-polynomials-and-find-bezout-coefficients", card)
+        guide = Path("docs/tutorial/polynomials-and-ideals.md").read_text()
         self.assertIn("## Divide polynomials and find Bezout coefficients", guide)
 
     def test_reduced_fraction_zero_wide_and_ownership(self):
@@ -105,7 +105,7 @@ class TritonFactorDivision(unittest.TestCase):
         self.assertIs(session.variables["C"].denominator.parent, session.variables["P"])
         card = algebra_value_help("C",session.variables["C"],session.variables)
         self.assertIn("C.denominator",card)
-        self.assertIn("examples/polynomial-ideals.md#cancel-a-rational-function",card)
+        self.assertIn("docs/tutorial/polynomials-and-ideals.md#cancel-a-rational-function",card)
         list(session.run('y1=C.numerator\ny2=C.denominator'))
 
     def test_live_coefficients_beyond_public_decimal_limit(self):

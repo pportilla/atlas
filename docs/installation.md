@@ -1,4 +1,4 @@
-# Installation
+# Installation guide
 
 Choose [Build Atlas](#build-atlas) to run the examples on Linux, or [Build the manual](#build-the-manual) for a browsable copy of the documentation.
 
@@ -23,7 +23,7 @@ cd atlas
 make -j4
 ```
 
-In this directory, `./atlas` opens the mathematical prompt and `./atlas --help` lists the command-line interfaces. Try the [first calculation](../README.md#start-here) or [run an Atlas script](sessions.md#run-or-save-a-calculation).
+In this directory, `./atlas` opens the mathematical prompt and `./atlas --help` lists the command-line interfaces. Take the [tour](tour.md) or [run an Atlas script](tutorial/prompt-and-scripts.md#run-or-save-a-calculation).
 
 ## Build the manual
 

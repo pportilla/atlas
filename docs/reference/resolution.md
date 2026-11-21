@@ -1,0 +1,3 @@
+# Resolution, exceptional divisors and monodromy
+
+These functions resolve a hypersurface germ at the origin, rebuild the dual complex of the exceptional divisor from the saved charts, and check the poles of the local topological zeta function for monodromy eigenvalues. The fields of a saved resolution, its charts and its divisors are described with the [methods on saved values](saved-values.md#resolution-charts-divisors-and-polynomial-multiplicity). [Resolving a plane cusp](../tutorial/resolving-a-cusp.md) · [Reading a resolution record](../thematic/resolution-records.md) · [Resolution and chart algorithms](../../native/resolution-algorithms.md)

@@ -99,7 +99,7 @@ def matrix_analysis(rows, *, rhs=None, columns=None, compute="auto"):
     >>> M = matrix_analysis([[1, 2], [2, 4]], rhs=[3, 6])
     >>> print(M.rank, M.solution.status)  # 1 underdetermined
 
-    Docs: examples/algebra-api.md#exact-rational-linear-algebra
+    Docs: docs/tutorial/polynomials-and-ideals.md#exact-rational-linear-algebra
     """
     from .algebra import dispatch
     from .session_algebra import _typed

@@ -50,7 +50,7 @@ ordinary dual complex of intersections between divisors. [Resolution modes](reso
 
 The same example from the repository directory is `./atlas resolve 'x^2+y^3+z^5' --vars x,y,z --method weighted`.
 Add `--json` to save the full record. For `/api/resolve` or an HTTP background
-search, include `"method": "weighted"` in the request object. [HTTP requests](http-and-compute.md)
+search, include `"method": "weighted"` in the request object. [HTTP requests](../reference/http-and-compute.md)
 
 ## How a centre is chosen
 
@@ -134,7 +134,7 @@ fields explain the extent of a chart and its role in the certificate.
 
 When a later blowup replaces part of an earlier chart, the certificate
 compares the removed points with the locus where normal crossings failed.
-[Weighted chart construction and verification](../native/weighted_resolution.cpp)
+[Weighted chart construction and verification](../../native/weighted_resolution.cpp)
 
 ## Limits
 
@@ -149,4 +149,4 @@ method and the reason for switching.
 
 An explicit quick search bounds the weighted construction and its
 certificate to 40 seconds each within the outer worker deadline. A bounded
-decline reports `inconclusive`. [Weighted resolution benchmark](../benchmarks/weighted-resolution.md)
+decline reports `inconclusive`. [Weighted resolution benchmark](../../benchmarks/weighted-resolution.md)

@@ -1,6 +1,6 @@
 # Certificates for the extended tangent quotient
 
-For a parametrized cusp $f(t)=(t^2,t^3)$, which infinitesimal changes of the map survive changes of coordinates in source and target? The function `ae_codimension` counts the independent directions that survive. It returns a certified finite dimension, a proof of infinite dimension, or a lower bound when the finite-jet calculation reaches its work limit. [Compare the cusp equation and its parametrization](../examples/local-algebra.md#compare-the-cusp-and-its-parametrization)
+For a parametrized cusp $f(t)=(t^2,t^3)$, which infinitesimal changes of the map survive changes of coordinates in source and target? The function `ae_codimension` counts the independent directions that survive. It returns a certified finite dimension, a proof of infinite dimension, or a lower bound when the finite-jet calculation reaches its work limit. [Compare the cusp equation and its parametrization](../docs/tutorial/local-algebra.md#compare-the-cusp-and-its-parametrization)
 
 For a single map germ $f:(\mathbb Q^n,0)\to(\mathbb Q^p,0)$ let
 $R=\mathbb Q[[x]]$, $B=\mathbb Q[[y]]$ and regard $R$ as a $B$-module by

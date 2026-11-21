@@ -160,8 +160,8 @@ class AbsoluteFactorizationTests(unittest.TestCase):
         self.assertEqual(before, session.variables)
         self.assertIn("F", card)
         self.assertIn("K", card)
-        self.assertIn("examples/polynomial-ideals.md#factor-over-the-algebraic-closure", card)
-        self.assertIn("## Factor over the algebraic closure", (ROOT/"examples/polynomial-ideals.md").read_text())
+        self.assertIn("docs/tutorial/polynomials-and-ideals.md#factor-over-the-algebraic-closure", card)
+        self.assertIn("## Factor over the algebraic closure", (ROOT/"docs/tutorial/polynomials-and-ideals.md").read_text())
         self.assertIn("F.factors", card)
         for line in card.splitlines():
             if line.strip().startswith("F."):

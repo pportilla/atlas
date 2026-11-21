@@ -11,43 +11,44 @@ from .session_help import algebra_help_values, algebra_value_help, function_help
 from .session_hints import closest_name
 
 
-_SESSION_GUIDE = "docs/sessions.md#"
+_PROMPT_GUIDE = "docs/tutorial/prompt-and-scripts.md#"
+_RINGS_GUIDE = "docs/tutorial/rings.md#"
 
 _TOPICS = {
     "variables": (
         "Declare coordinates with coordinates(), then assign an expression to a name.",
         'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
-        _SESSION_GUIDE + "reuse-and-rebind-coordinate-names",
+        _RINGS_GUIDE + "reuse-and-rebind-coordinate-names",
     ),
     ":workspace": (
         "Show saved values grouped by their parent ring, and mark the active ring.",
         'x, y = coordinates("x", "y")\nf = y^2 - x^3\n:workspace',
-        _SESSION_GUIDE + "choose-the-ring-of-a-polynomial",
+        _RINGS_GUIDE + "choose-the-ring-of-a-polynomial",
     ),
     "rings": (
         "Name a ring when you create it with ring(), or Atlas names it R1, R2, … until you name it.",
         'R = ring("x", "y")\nf = y^2 + x^5\nuse_ring(R)\nx2, z = coordinates("x", "z")\nR1\ndelete_ring(R1)',
-        _SESSION_GUIDE + "name-select-and-delete-rings",
+        _RINGS_GUIDE + "name-select-and-delete-rings",
     ),
     "QQ": (
         "QQ is the field of rational numbers.",
         'q = polynomial("1/2", ring=QQ)\nq.parent == QQ',
-        _SESSION_GUIDE + "move-a-polynomial-between-rings",
+        _RINGS_GUIDE + "move-a-polynomial-between-rings",
     ),
     ":save": (
         "Write the successful statements from this session to an Atlas script.",
         'x = coordinates("x")\nprint(x^2 + 1)\n:save square.atlas',
-        _SESSION_GUIDE + "run-or-save-a-calculation",
+        _PROMPT_GUIDE + "run-or-save-a-calculation",
     ),
     "script": (
         "Save these lines in square.atlas and run ./atlas run square.atlas from the shell.",
         'x = coordinates("x")\nf = x^2 + 1\nprint(f)',
-        _SESSION_GUIDE + "run-or-save-a-calculation",
+        _PROMPT_GUIDE + "run-or-save-a-calculation",
     ),
     "quit": (
         "Leave the Atlas prompt.",
         "quit",
-        _SESSION_GUIDE + "run-or-save-a-calculation",
+        _PROMPT_GUIDE + "run-or-save-a-calculation",
     ),
 }
 _ALIASES = {"save": ":save", "workspace": ":workspace", "exit": "quit"}
@@ -81,7 +82,7 @@ def _functions(session, color=False):
     listing = paint_value(textwrap.fill(", ".join(names), width=76), functions=names, color=color)
     print(paint("Session functions", "label", color) + "\n" + listing)
     card = usage_card("Use help NAME to see a function’s signature and examples.",
-                      "help coordinates", _SESSION_GUIDE + "inspect-a-saved-value")
+                      "help coordinates", _PROMPT_GUIDE + "inspect-a-saved-value")
     print("\n" + paint_card(card, commands={"help"}, functions=names, color=color))
 
 
