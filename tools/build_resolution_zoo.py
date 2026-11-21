@@ -1,6 +1,7 @@
 """Compute the Resolution Zoo catalogue with the public Atlas solver."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 import subprocess
@@ -117,21 +118,35 @@ def seeds(source):
             yield seed, group["dimension"], group["variables"]
 
 
-def generate(source, destination):
+def compute(item):
+    seed, dimension, variables = item
+    try:
+        return build_record(seed, dimension, variables)
+    except (ValueError, RuntimeError, KeyError) as error:
+        raise RuntimeError(f"Could not generate {seed['id']}: {error}") from error
+
+
+def generate(source, destination, jobs=1):
+    if jobs < 1:
+        raise ValueError("Use at least one job.")
+    work = list(seeds(source))
     destination.mkdir(parents=True, exist_ok=True)
     entries = []
     # Publish the index after all its records exist. A failed native computation
     # cannot expose a half-built record or overwrite the last complete catalogue.
-    with tempfile.TemporaryDirectory(prefix=".zoo-", dir=destination) as staged:
+    # Each record runs its own solver processes, so threads only wait on them;
+    # results are consumed in seed order.
+    with tempfile.TemporaryDirectory(prefix=".zoo-", dir=destination) as staged, \
+            ThreadPoolExecutor(max_workers=jobs) as pool:
         staging = Path(staged)
-        for seed, dimension, variables in seeds(source):
-            print(seed["id"], flush=True)
-            try:
-                entry, detail = build_record(seed, dimension, variables)
-            except (ValueError, RuntimeError, KeyError) as error:
-                raise RuntimeError(f"Could not generate {seed['id']}: {error}") from error
-            entries.append(entry)
-            (staging / (entry["id"] + ".json")).write_text(json_text(detail), encoding="utf-8")
+        try:
+            for entry, detail in pool.map(compute, work):
+                print(entry["id"], flush=True)
+                entries.append(entry)
+                (staging / (entry["id"] + ".json")).write_text(json_text(detail), encoding="utf-8")
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
         records = destination / "records"
         records.mkdir(exist_ok=True)
         index = {"schema_version": 1, "entries": entries}
@@ -147,5 +162,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", type=Path, default=DEFAULT_SEEDS)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--jobs", type=int, default=1, help="number of records to compute at once")
     args = parser.parse_args()
-    generate(args.seeds, args.out)
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
+    generate(args.seeds, args.out, args.jobs)

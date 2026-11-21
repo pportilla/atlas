@@ -1,16 +1,19 @@
 """Cross-check the checked-in Resolution Zoo against its native sources."""
 from collections import Counter
+import contextlib
 from fractions import Fraction
+import io
 import json
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 from jsonschema import Draft202012Validator
 
 from engine.polynomial import parse_expression
-from tools.build_resolution_zoo import DEFAULT_SEEDS, build_record, seeds
+from tools.build_resolution_zoo import DEFAULT_SEEDS, build_record, generate, seeds
 
 DATA = Path(__file__).resolve().parents[1] / "web" / "zoo-data"
 
@@ -124,6 +127,23 @@ class ResolutionZooTests(unittest.TestCase):
                 actual = list(map(int, done.stdout.splitlines()))
                 expected = [record["invariants"][key] for key in ("milnor_number", "tjurina_number")]
                 self.assertEqual(actual, [n["value"] if n["finite"] else -1 for n in expected])
+
+    def test_parallel_generation_keeps_seed_order(self):
+        chosen = ("a2", "plane-cusp", "whitney-umbrella")
+        groups = [{**group, "entries": [s for s in group["entries"] if s["id"] in chosen][::-1]}
+                  for group in read_json(DEFAULT_SEEDS)]
+        groups = [group for group in groups if group["entries"]]
+        with tempfile.TemporaryDirectory() as scratch:
+            source, target = Path(scratch) / "seeds.json", Path(scratch) / "zoo"
+            source.write_text(json.dumps(groups), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                generate(source, target, jobs=3)
+            index = read_json(target / "index.json")
+            self.assertEqual([e["id"] for e in index["entries"]], ["whitney-umbrella", "a2", "plane-cusp"])
+            for ident in chosen:
+                self.assertEqual(read_json(target / "records" / (ident + ".json")), self.records[ident])
+            with self.assertRaises(ValueError):
+                generate(source, target, jobs=0)
 
     def test_native_recomputation_across_families(self):
         fixtures = {"plane-cusp", "a3", "whitney-umbrella", "cusp-4-4-4", "mixed-quartic", "fivefold-cubic"}
