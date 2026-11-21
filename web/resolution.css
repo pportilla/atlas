@@ -31,7 +31,7 @@
 .info-popover > summary::-webkit-details-marker { display: none; }
 .info-popover > summary span { display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; width: 16px; height: 16px; font: 600 12px/1 var(--font-math); }
 .info-popover[open] > summary { color: var(--brand); }
-.info-popover p { position: absolute; bottom: calc(100% + 6px); inset-inline: 0; z-index: 2; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 12px 14px; box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 12%, transparent); font-size: 14px; }
+.info-popover p { position: absolute; bottom: calc(100% + 6px); inset-inline: 0; z-index: 2; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 12px 14px; box-shadow: 0 6px 18px color-mix(in srgb, var(--shadow-ink) 12%, transparent); font-size: 14px; }
 .resolution #run { width: 100%; min-height: 42px; background: var(--brand); color: var(--paper); border-radius: 4px; font-size: 16px; letter-spacing: .01em; }
 .resolution #run:hover:enabled { background: var(--brand-deep); }
 .resolution .button { border-radius: 4px; }

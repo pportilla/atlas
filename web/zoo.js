@@ -477,6 +477,37 @@
     filter(id);
   }
 
+  function bindSearchHelp() {
+    const help = get("zoo-help");
+    const trigger = help.querySelector("summary");
+    let pinned = false;
+    function close() {
+      pinned = false;
+      help.open = false;
+    }
+    help.addEventListener("pointerenter", event => {
+      if (event.pointerType !== "touch") help.open = true;
+    });
+    help.addEventListener("pointerleave", event => {
+      if (event.pointerType !== "touch" && !pinned && !trigger.matches(":focus-visible")) close();
+    });
+    trigger.addEventListener("focus", () => {
+      if (trigger.matches(":focus-visible")) help.open = true;
+    });
+    trigger.addEventListener("blur", close);
+    trigger.addEventListener("click", event => {
+      event.preventDefault();
+      pinned = !pinned;
+      help.open = pinned;
+    });
+    document.addEventListener("pointerdown", event => {
+      if (help.open && !help.contains(event.target)) close();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && help.open) close();
+    });
+  }
+
   async function init() {
     get("zoo-loading").hidden = false;
     get("zoo-feedback").replaceChildren();
@@ -511,5 +542,6 @@
     }
   }
 
+  bindSearchHelp();
   init();
 })();

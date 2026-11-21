@@ -17,7 +17,7 @@ a:hover { color: var(--brand-deep); text-decoration-thickness: 2px; }
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 16px;
   height: 64px; padding: 0 clamp(16px, 2.4vw, 28px);
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  background: light-dark(color-mix(in srgb, var(--paper) 90%, transparent), var(--paper));
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--rule);
 }
@@ -52,7 +52,7 @@ a:hover { color: var(--brand-deep); text-decoration-thickness: 2px; }
   width: min(480px, calc(100vw - 32px)); max-height: 72vh; overflow-y: auto;
   margin: 0; padding: 6px; list-style: none;
   background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 8px;
-  box-shadow: 0 14px 36px color-mix(in srgb, var(--ink) 18%, transparent);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--shadow-ink) 18%, transparent);
 }
 #search-results a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
 #search-results a:hover, #search-results a[aria-selected="true"] { background: var(--brand-wash); }
@@ -159,6 +159,13 @@ pre.code:hover[data-lang]::before { opacity: 0; }
 .copy-button:hover { color: var(--ink); border-color: var(--brand); }
 
 .prose pre.mermaid { padding: 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); text-align: center; }
+/* Mermaid's neutral theme embeds ID-scoped rules in the SVG. Keep its light
+   colours and let diagrams follow the manual when the reader changes theme. */
+.mermaid .node rect { fill: light-dark(#eee, var(--wash)) !important; stroke: light-dark(#999, var(--rule-strong)) !important; }
+.mermaid .nodeLabel, .mermaid span.edgeLabel { color: light-dark(#000, var(--ink)) !important; }
+.mermaid span.edgeLabel { background: light-dark(#fff, var(--surface)) !important; }
+.mermaid .flowchart-link, .mermaid marker path { stroke: light-dark(#666, var(--ink-soft)) !important; }
+.mermaid marker path { fill: light-dark(#666, var(--ink-soft)) !important; }
 .math-display { display: block; margin: 6px 0 16px; overflow-x: auto; overflow-y: hidden; text-align: center; }
 .katex { font-size: 1.08em; }
 
@@ -222,7 +229,7 @@ pre.code:hover[data-lang]::before { opacity: 0; }
 .palette td { vertical-align: middle; }
 .swatch { display: inline-block; width: 18px; height: 18px; margin-right: 8px; border: 1px solid var(--rule); border-radius: 4px; vertical-align: -4px; }
 .prose td.term { padding: 6px 14px; font: 600 14px var(--font-mono); }
-.term.dark { background: #1c1c1c; color: #d0d0d0; }
+.term.dark { color-scheme: dark; background: var(--paper); color: var(--ink); }
 .term.light { background: #fafafa; color: #1c1c1c; border-left: 1px solid var(--rule); }
 
 /* Index */
@@ -252,7 +259,7 @@ pre.code:hover[data-lang]::before { opacity: 0; }
   .sidebar {
     position: fixed; top: 64px; bottom: 0; left: 0; z-index: 15;
     width: min(320px, 86vw); height: auto;
-    background: var(--paper); box-shadow: 8px 0 30px color-mix(in srgb, var(--ink) 14%, transparent);
+    background: var(--paper); box-shadow: 8px 0 30px color-mix(in srgb, var(--shadow-ink) 14%, transparent);
     transform: translateX(-104%); transition: transform .2s ease;
   }
   body.nav-open .sidebar { transform: none; }

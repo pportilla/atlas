@@ -1,4 +1,4 @@
-/* The fox links the resolution workspace and its catalogue. */
+/* The Zoo link appears in both the resolution workspace and the catalogue. */
 .zoo-nav, .zoo-nav-link {
   display: inline-flex;
   align-items: center;
@@ -24,11 +24,14 @@
 .zoo-workspace:focus, #zoo-detail:focus { outline: none; }
 .zoo-title { padding-block: clamp(1.5rem, 3vw, 2.8rem) 1.5rem; }
 .zoo-title h1 { font: 650 clamp(2rem, 4.5vw, 3.5rem)/1.15 var(--font-mono); letter-spacing: -.065em; }
-.zoo-title p { margin-top: .45rem; font-size: 1.1rem; color: var(--ink-soft); }
 
 .zoo-fields { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(12rem, 1fr); gap: 1rem; }
 .zoo-fields label { display: block; margin-bottom: .35rem; font-size: .95rem; font-weight: 650; }
 .zoo-fields .zoo-label { margin: 0; }
+.zoo-search-heading { position: relative; display: flex; align-items: center; gap: .2rem; margin-bottom: .35rem; }
+.zoo-search-heading label { margin: 0; }
+.zoo-search-heading summary { width: 1.5rem; height: 1.5rem; }
+.zoo-search-heading .info-popover p { bottom: 100%; inset-inline-end: auto; width: min(100%, 26rem); color: var(--ink-soft); }
 .zoo-search-box { position: relative; }
 .zoo-fields :is(input, select) {
   min-height: 44px;
@@ -45,7 +48,6 @@
 .zoo-label { position: relative; }
 .zoo-label::after { pointer-events: none; content: ""; width: .45rem; height: .45rem; border: solid var(--ink-faint); border-width: 0 1.5px 1.5px 0; position: absolute; bottom: 20px; right: 16px; rotate: 45deg; }
 .zoo-label select { display: block; margin-top: .35rem; padding: .5rem 2.1rem .5rem .8rem; font: 400 1rem/1.3 var(--font-text); appearance: none; }
-.zoo-search-help { margin-top: .5rem; font-size: .9rem; color: var(--ink-soft); }
 .zoo-dimensions {
   display: flex;
   align-items: stretch;
@@ -147,7 +149,6 @@
 }
 @media (max-width: 660px) {
   .zoo-fields { grid-template-columns: 1fr; gap: .6rem; }
-  .zoo-search-help { font-size: .87rem; }
   .zoo-title { padding-bottom: 1.15rem; }
   .zoo-dimensions { gap: .1rem .75rem; }
   .zoo-dimensions button { padding-block: .45rem; min-height: 40px; }
@@ -167,7 +168,7 @@
   .zoo-data-list dd + dt { margin-top: .3rem; }
 }
 @media print {
-  .zoo-title p, .zoo-filters, .zoo-catalogue, .zoo-record-head a { display: none; }
+  .zoo-filters, .zoo-catalogue, .zoo-record-head a { display: none; }
   .zoo-browser { display: block; }
   #zoo-detail { border: none; padding: 0; }
 }

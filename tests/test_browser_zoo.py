@@ -5,6 +5,52 @@ from tests.browser_support import BrowserCase, expect
 
 
 class ZooBrowserTests(BrowserCase):
+    def test_monomial_help_on_hover_click_and_keyboard(self):
+        page = self.page
+        page.goto(self.url + "/zoo/")
+        trigger = page.get_by_label("Monomial search help")
+        help_text = page.locator("#zoo-search-help")
+        query = page.get_by_role("searchbox", name="Search by monomials")
+        expect(help_text).to_be_hidden()
+        bounds = query.bounding_box()
+        trigger.hover()
+        expect(help_text).to_be_visible()
+        help_text.hover()
+        expect(help_text).to_be_visible()
+        query.hover()
+        expect(help_text).to_be_hidden()
+        trigger.click()
+        query.hover()
+        expect(help_text).to_be_visible()
+        self.assertEqual(query.bounding_box(), bounds)
+        query.click()
+        expect(help_text).to_be_hidden()
+        query.press("Shift+Tab")
+        expect(trigger).to_be_focused()
+        expect(help_text).to_be_visible()
+        trigger.press("Escape")
+        expect(help_text).to_be_hidden()
+        trigger.press("Enter")
+        expect(help_text).to_be_visible()
+        trigger.press("Tab")
+        expect(query).to_be_focused()
+        expect(help_text).to_be_hidden()
+
+    def test_monomial_help_on_touchscreen(self):
+        context = self.browser.new_context(has_touch=True, is_mobile=True, viewport={"width": 320, "height": 700})
+        self.addCleanup(context.close)
+        page = context.new_page()
+        page.goto(self.url + "/zoo/")
+        trigger = page.get_by_label("Monomial search help")
+        help_text = page.locator("#zoo-search-help")
+        trigger.tap()
+        expect(help_text).to_be_visible()
+        bounds = help_text.bounding_box()
+        self.assertGreaterEqual(bounds["x"], 0)
+        self.assertLessEqual(bounds["x"] + bounds["width"], 320)
+        trigger.tap()
+        expect(help_text).to_be_hidden()
+
     def test_search_browse_and_read_record(self):
         page = self.page
         page.goto(self.url)

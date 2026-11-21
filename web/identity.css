@@ -55,36 +55,36 @@
   --font-text: "Source Sans 3", "Source Sans Pro", "Segoe UI", system-ui, sans-serif;
   --font-math: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
 
-  /* Paper and ink. Light is survey paper, dark is the terminal. */
-  --paper:       light-dark(#f6f7f3, #121816);
-  --surface:     light-dark(#fdfdfb, #182020);
-  --wash:        light-dark(#ebeee8, #1e2826);
-  --ink:         light-dark(#1b2321, #e1e7e4);
-  --ink-soft:    light-dark(#4b5753, #a9b4b0);
-  --ink-faint:   light-dark(#626e6a, #8a9591);
-  --rule:        light-dark(#d3d9d4, #2b3532);
-  --rule-strong: light-dark(#a3aea9, #4a5652);
+  /* Paper and ink. The dark theme layers charcoal surfaces. */
+  --paper:       light-dark(#f6f7f3, #151618);
+  --surface:     light-dark(#fdfdfb, #1d1f22);
+  --wash:        light-dark(#ebeee8, #272a2e);
+  --ink:         light-dark(#1b2321, #d9dadd);
+  --ink-soft:    light-dark(#4b5753, #b1b4b9);
+  --ink-faint:   light-dark(#626e6a, #969ba2);
+  --rule:        light-dark(#d3d9d4, #393c41);
+  --rule-strong: light-dark(#a3aea9, #686d74);
+  --shadow-ink:  light-dark(#1b2321, #000000);
 
-  /* Terminal roles. Each one keeps its terminal hue and gains the contrast
-     that reading text on paper needs. */
-  --brand:       light-dark(#00767a, #45c3c1);   /* brand: wordmark, prompt, links */
-  --brand-deep:  light-dark(#00575b, #82dbd8);
-  --brand-wash:  light-dark(#dcefec, #15302f);
-  --name:        light-dark(#965500, #e6a443);   /* name: saved names and commands */
-  --name-wash:   light-dark(#f6ead5, #30271a);
-  --map:         light-dark(#3c7a39, #7cc275);   /* paper: the unfolding map */
-  --map-wash:    light-dark(#e3efdf, #1b2d1d);
-  --error:       light-dark(#b03a2b, #ec7d70);   /* error */
-  --error-wash:  light-dark(#fbebe7, #34201d);
+  /* Terminal roles. Blue marks the prompt and links on charcoal. */
+  --brand:       light-dark(#00767a, #91adc9);   /* brand: wordmark, prompt, links */
+  --brand-deep:  light-dark(#00575b, #acc3db);
+  --brand-wash:  light-dark(#dcefec, #263240);
+  --name:        light-dark(#965500, #c2a685);   /* name: saved names and commands */
+  --name-wash:   light-dark(#f6ead5, #342e27);
+  --map:         light-dark(#3c7a39, #9eaf99);   /* paper: the unfolding map */
+  --map-wash:    light-dark(#e3efdf, #29312b);
+  --error:       light-dark(#b03a2b, #cc9892);   /* error */
+  --error-wash:  light-dark(#fbebe7, #392b2c);
 
-  /* Tones for highlighted code. Dark values are the terminal's 256 colours. */
-  --tone-function: light-dark(#1f7575, #5fafaf);  /* function: registered functions */
-  --tone-field:    light-dark(#4a7676, #87afaf);  /* field, option */
-  --tone-keyword:  light-dark(#365f5f, #7fa7a7);  /* keyword */
-  --tone-number:   light-dark(#87602c, #af875f);  /* number */
-  --tone-string:   light-dark(#4d7a1e, #87af5f);  /* string */
-  --tone-ok:       light-dark(#2a7a58, #5faf87);  /* ok: True and settled verdicts */
-  --tone-false:    light-dark(#a8512b, #d7875f);  /* false: False and open verdicts */
+  /* Tones for highlighted code. */
+  --tone-function: light-dark(#1f7575, #91adc9);  /* function: registered functions */
+  --tone-field:    light-dark(#4a7676, #aaaac3);  /* field, option */
+  --tone-keyword:  light-dark(#365f5f, #a0acba);  /* keyword */
+  --tone-number:   light-dark(#87602c, #baa180);  /* number */
+  --tone-string:   light-dark(#4d7a1e, #a6b59d);  /* string */
+  --tone-ok:       light-dark(#2a7a58, #95b1a0);  /* ok: True and settled verdicts */
+  --tone-false:    light-dark(#a8512b, #c49c8c);  /* false: False and open verdicts */
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
