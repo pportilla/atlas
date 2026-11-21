@@ -58,7 +58,8 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
     sheets = raw is not None and any("rational_exceptional" in c for c in raw)
     from .general_atlas import native_general_outputs
     output = native_general_outputs(record, expected, complex=complex or sheets, intrinsic=intrinsic,
-                                    integrals=integrals, factor_fibre=rules == {"repeated tangent"})
+                                    integrals=integrals, factor_fibre=rules == {"repeated tangent"},
+                                    global_boundary_labels=True)
     if raw is not None:
         actual = rebuilt["charts"]
         if sheets:

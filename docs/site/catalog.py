@@ -290,6 +290,10 @@ _GROUPS = {
                      "ae_codimension_interface", "inconclusive_record_preserves_last_proved_lower_bound"))),
     },
     "docs/reference/resolution.md": {
+        "zoo_search": Entry(
+            (native("Match monomials under a shared coordinate injection", "zoo_search", "bool assign_axes("),),
+            (example("Find the same catalogue records at the prompt and in a script", "zoo_search",
+                     "prompt_and_script"),)),
         "resolve": Entry(
             (native("Point blowups of plane curve germs", "plane", "void visit(Task&"),
              native("Weighted blowups along points and bad curves", "weighted_resolution",

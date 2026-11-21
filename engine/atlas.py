@@ -429,7 +429,7 @@ def _field_relation(t, relation, degree):
 
 
 def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False,
-            allow_partial_complex=False):
+            allow_partial_complex=False, global_boundary_labels=False):
     """What the atlas determines, by the same computations for every engine.
 
     Returns numerical data, strata, and, if requested, the full dual complex
@@ -478,7 +478,7 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
         answer.update(numerical_data=rows, strata=listed)
     found, reason = None, None
     if complex:
-        boundary = boundary_complex(charts, dimension, intrinsic)
+        boundary = boundary_complex(charts, dimension, intrinsic, global_boundary_labels=global_boundary_labels)
         answer["dual_complex"] = boundary
         found, reason = boundary["cells"], boundary.get("reason")
         if reason:
@@ -566,7 +566,7 @@ def _intrinsic_product(charts, dimension):
     return {**boundary, "vertices": [{**v, "dimension": d} for v,d in zip(boundary["vertices"], dimensions)]}
 
 
-def boundary_complex(charts, dimension, intrinsic=False):
+def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labels=False):
     """The exceptional intersections meeting the origin. Restriction to each
     smooth strict component computes its boundary in intrinsic mode."""
     from dataclasses import replace
@@ -614,7 +614,7 @@ def boundary_complex(charts, dimension, intrinsic=False):
     elif reason:
         from .atlas_gluing import glued_complex
         glued = glued_complex(ambient_charts, ambient_dimension, intrinsic,
-                              counts=None if intrinsic else counts)
+                              counts=None if intrinsic else counts, global_boundary_labels=global_boundary_labels)
         if glued is not None:
             return glued
     return {"status": "partial" if reason else "complete", "convention": convention, "vertices": vertices,

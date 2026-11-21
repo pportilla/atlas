@@ -41,6 +41,13 @@ class ComplexBrowserTests(BrowserCase):
             if "faces" in cell:
                 expect(row).to_contain_text(", ".join(cell["faces"]))
 
+        edges = panel.locator(".complex-data > details").filter(
+            has=self.page.get_by_role("heading", name="1-dimensional cells", exact=True))
+        edges.locator("summary").first.press("Enter")
+        expect(edges.locator("table")).to_be_hidden()
+        expect(panel.locator("tr[data-id=A] button")).to_be_visible()
+        edges.locator("summary").first.press("Enter")
+        expect(edges.locator("table")).to_be_visible()
         panel.get_by_role("button", name="Picture").click()
         expect(graph_vertex).to_have_attribute("aria-pressed", "true")
         expect(panel.locator(".complex-data")).to_be_hidden()

@@ -2,6 +2,8 @@
 
 Atlas computes exactly with polynomial rings over the rationals, studies a variety at a rational point, and resolves hypersurface singularities. You can use it at an interactive prompt, in scripts, from the command line and over HTTP. Its documentation is organized as a set of documents, each written for a different purpose.
 
+Run `./atlas serve` and open the **Resolution Zoo** in the resolution workspace to browse computed examples. Search by monomials, compare intrinsic and embedded resolutions, and inspect the strata contributing to each zeta function. [Catalogue format and regeneration](docs/thematic/resolution-records.md#resolution-zoo-catalogue)
+
 ## Tutorials
 
 - **[A tour of Atlas](docs/tour.md).** A one-page introduction: reduce a polynomial modulo an ideal, compute an invariant of a cusp and resolve it.

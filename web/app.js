@@ -16,37 +16,14 @@ function selectComponent(id) {
   for (const update of selectionViews) update(selected);
 }
 
-/* ---------- Small DOM helpers ---------- */
-
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-function svgElement(tag, attrs, text) {
-  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, value);
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
 function recordJSON(value, space) {
   return JSON.stringify(value, (_key, field) => typeof field === "bigint" ? JSON.rawJSON(String(field)) : field, space);
-}
-function isNumeric(value) {
-  return typeof value === "number" || typeof value === "bigint";
 }
 function stringify(value) {
   return typeof value === "string" ? value : recordJSON(value, 2);
 }
 function code(value) {
   return el("code", "", typeof value === "string" ? value : recordJSON(value));
-}
-function plural(count, single, multiple) {
-  return count + " " + (count === 1 ? single : multiple);
-}
-function signed(number) {
-  return String(number).replace(/^-/, "−");
 }
 function joined(nodes, separator) {
   const fragment = document.createDocumentFragment();
@@ -64,153 +41,6 @@ function duration(ms) {
   return Math.floor(seconds / 60) + " min " + Math.round(seconds % 60) + " s";
 }
 
-/* ---------- Typesetting ----------
-   The engine and the user write polynomials as plain text: u^2*(v^2-u).
-   typeset() only changes how that text looks. It never rearranges or
-   simplifies, so what is shown is what was computed. */
-
-const GREEK = { alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", zeta: "ζ", eta: "η",
-  theta: "θ", iota: "ι", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", rho: "ρ", sigma: "σ",
-  tau: "τ", phi: "φ", chi: "χ", psi: "ψ", omega: "ω" };
-
-function tokensOf(text) {
-  return String(text).match(/\*\*|[A-Za-z][A-Za-z0-9_]*|\d+(?:\.\d+)?|\S/g) || [];
-}
-function splitName(name) {
-  const [, base, rest] = /^([A-Za-z]+)(.*)$/.exec(name);
-  return { base, index: rest.replace(/^_/, "").replace(/_/g, ",") };
-}
-function isWord(name) {
-  const { base } = splitName(name);
-  return base.length > 1 && !GREEK[base];
-}
-// x → italic x, u1 → u with index 1, alpha12_1 → α with index 12,1.
-function nameNode(name) {
-  const { base, index } = splitName(name);
-  const node = document.createDocumentFragment();
-  if (GREEK[base]) node.append(el("i", "", GREEK[base]));
-  else if (base.length === 1) node.append(el("i", "", base));
-  else node.append(el("span", "word", base));
-  if (index) node.append(el("sub", "", index));
-  return node;
-}
-function fraction(numerator, denominator) {
-  const node = el("span", "frac");
-  node.append(el("span", "", numerator), el("span", "", denominator));
-  return node;
-}
-function closing(tokens, open, end) {
-  let depth = 0;
-  for (let i = open; i < end; i++) {
-    if (tokens[i] === "(") depth++;
-    else if (tokens[i] === ")" && --depth === 0) return i;
-  }
-  return -1;
-}
-function renderTokens(tokens, start, end, out) {
-  const at = (i) => (i < end ? tokens[i] : undefined);
-  const integer = (t) => typeof t === "string" && /^\d+$/.test(t);
-  const power = (t) => t === "^" || t === "**";
-  let before = "start"; // start, open, op, sep, or operand
-  let beforeWord = false;
-  for (let i = start; i < end; i++) {
-    const t = tokens[i];
-    if (/^\d/.test(t)) {
-      if (before !== "operand" && integer(t) && at(i + 1) === "/" && integer(at(i + 2)) && !power(at(i + 3))) {
-        out.append(fraction(t, tokens[i + 2]));
-        i += 2;
-      } else out.append(t);
-      before = "operand";
-      beforeWord = false;
-    } else if (/^[A-Za-z]/.test(t)) {
-      out.append(nameNode(t));
-      before = "operand";
-      beforeWord = isWord(t);
-    } else if (t === "+" || t === "-") {
-      const sign = t === "-" ? "−" : "+";
-      out.append(before === "operand" ? " " + sign + " " : sign);
-      before = "op";
-    } else if (t === "*") {
-      const next = at(i + 1) || "";
-      if (before !== "operand" || /^\d/.test(next)) out.append(" · ");
-      else if (beforeWord || (/^[A-Za-z]/.test(next) && isWord(next))) out.append(" ");
-      before = "op";
-    } else if (power(t)) {
-      const i0 = i;
-      const next = at(i + 1);
-      const sup = el("sup");
-      if (integer(next)) {
-        sup.textContent = next;
-        i += 1;
-      } else if (next === "-" && integer(at(i + 2))) {
-        sup.textContent = "−" + tokens[i + 2];
-        i += 2;
-      } else if (next === "(" && closing(tokens, i + 1, end) > 0) {
-        const close = closing(tokens, i + 1, end);
-        renderTokens(tokens, i + 2, close, sup);
-        i = close;
-      } else {
-        out.append("^");
-        before = "op";
-        continue;
-      }
-      // An index and an exponent on the same letter are stacked, as in print.
-      const index = out.lastChild;
-      if (index && index.nodeName === "SUB" && /^[A-Za-z]/.test(tokens[i0 - 1] || "")) {
-        const stack = el("span", "scripts");
-        stack.append(sup, index);
-        out.append(stack);
-      } else out.append(sup);
-      before = "operand";
-      beforeWord = false;
-    } else if (t === "(") {
-      // (1/2) is shown as the fraction alone.
-      if (integer(at(i + 1)) && at(i + 2) === "/" && integer(at(i + 3)) && at(i + 4) === ")" && !power(at(i + 5))) {
-        out.append(fraction(tokens[i + 1], tokens[i + 3]));
-        i += 4;
-        before = "operand";
-        beforeWord = false;
-      } else {
-        out.append("(");
-        before = "open";
-      }
-    } else if (t === ")") {
-      out.append(")");
-      before = "operand";
-      beforeWord = false;
-    } else if (t === ",") {
-      out.append(", ");
-      before = "sep";
-    } else if (t === "=") {
-      out.append(" = ");
-      before = "sep";
-    } else {
-      out.append(t);
-      before = "sep";
-    }
-  }
-}
-function typeset(source, suffix) {
-  const text = String(source);
-  const node = el("span", "m");
-  try {
-    if (text.length > 40000) throw new Error("too long to typeset");
-    const tokens = tokensOf(text);
-    renderTokens(tokens, 0, tokens.length, node);
-  } catch {
-    node.replaceChildren(text);
-  }
-  if (suffix) node.append(suffix);
-  return node;
-}
-// E1 → E with index 1. Chart names such as B1.u stay as they are.
-function idNode(id) {
-  const match = /^([A-Z])(\d[A-Za-z0-9.]*)$/.exec(String(id));
-  if (!match) return el("span", "", String(id));
-  const node = el("span", "m");
-  node.append(el("i", "", match[1]), el("sub", "", match[2]));
-  return node;
-}
 function tuple(entries, open = "(", close = ")", separator = ", ") {
   const node = el("span", "m");
   node.append(open);
@@ -318,23 +148,22 @@ function dataList(entries) {
   }
   return list;
 }
-function sectionHead(title, hint) {
-  const head = el("div", "section-head");
-  const heading = el("h3", "", title);
-  if (hint) heading.title = hint;
-  head.append(heading);
-  return head;
-}
-// A section that stays folded until its heading is clicked.
-function foldedSection(panel, title, count) {
+// Remember which parts of a resolution the reader wants visible, including
+// when a follow-up computation redraws the report or another run is opened.
+const foldPreferences = new Map();
+function foldedSection(panel, title, count, initiallyOpen = false, key = title, heading = "h3") {
   const details = el("details", "fold");
   const summary = el("summary");
   const number = el("span", "count", count === undefined ? "" : String(count));
   const body = el("div", "fold-body");
-  summary.append(el("h3", "", title), number);
+  summary.append(el(heading, "", title), number);
   details.append(summary, body);
+  details.open = foldPreferences.get(key) ?? initiallyOpen;
+  details.addEventListener("toggle", () => {
+    if (details.isConnected) foldPreferences.set(key, details.open);
+  });
   panel.append(details);
-  return { body, number };
+  return { body, number, summary };
 }
 function disclosure(label, content) {
   const details = el("details", "more");
@@ -407,335 +236,6 @@ function columnsOf(records, first, omit) {
   return keys;
 }
 
-/* ---------- Dual graph ---------- */
-
-const STEP_X = 84;
-const STEP_Y = 60;
-const SLOTS = {
-  N: { angle: -90, x: 0, y: -12, anchor: "middle" }, S: { angle: 90, x: 0, y: 25, anchor: "middle" },
-  E: { angle: 0, x: 12, y: 5, anchor: "start" }, W: { angle: 180, x: -12, y: 5, anchor: "end" },
-  NE: { angle: -45, x: 9, y: -9, anchor: "start" }, NW: { angle: -135, x: -9, y: -9, anchor: "end" },
-  SE: { angle: 45, x: 9, y: 21, anchor: "start" }, SW: { angle: 135, x: -9, y: 21, anchor: "end" },
-};
-function angleBetween(a, b) {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
-}
-
-// A tree is drawn the way resolution graphs are drawn by hand: its longest
-// chain runs left to right and the other chains hang from it. If that would
-// make two vertices collide, the tree is drawn in layers instead.
-function treeLayout(group, adj, order) {
-  function pathFrom(start, banned) {
-    const parent = new Map([[start, null]]);
-    const depth = new Map([[start, 0]]);
-    const queue = [start];
-    for (const v of queue) {
-      for (const w of adj.get(v)) {
-        if (parent.has(w) || w === banned) continue;
-        parent.set(w, v);
-        depth.set(w, depth.get(v) + 1);
-        queue.push(w);
-      }
-    }
-    let end = start;
-    for (const v of queue) {
-      if (depth.get(v) > depth.get(end) || (depth.get(v) === depth.get(end) && order.get(v) < order.get(end))) end = v;
-    }
-    const path = [];
-    for (let v = end; v !== null; v = parent.get(v)) path.push(v);
-    return path.reverse();
-  }
-  const firstEnd = pathFrom(group[0]).pop();
-  const spine = pathFrom(firstEnd);
-  if (order.get(spine[spine.length - 1]) < order.get(spine[0])) spine.reverse();
-
-  const points = new Map();
-  function place(path, x, y, dx, dy) {
-    path.forEach((v, k) => points.set(v, [x + k * dx * STEP_X, y + k * dy * STEP_Y]));
-    for (const v of path) {
-      const sides = [...adj.get(v)].filter((w) => !points.has(w)).sort((a, b) => order.get(a) - order.get(b));
-      sides.forEach((w, n) => {
-        const sign = n % 2 ? -1 : 1;
-        const [vx, vy] = points.get(v);
-        const sx = dx ? 0 : sign;
-        const sy = dx ? sign : 0;
-        place(pathFrom(w, v), vx + sx * STEP_X, vy + sy * STEP_Y, sx, sy);
-      });
-    }
-  }
-  place(spine, 0, 0, 1, 0);
-  const placed = [...points.values()];
-  const crowded = placed.some(([x, y], i) => placed.some(([u, v], j) => j > i && Math.hypot(x - u, y - v) < 40));
-  if (!crowded) return points;
-
-  points.clear();
-  let leaf = 0;
-  (function walk(v, from, depth) {
-    const children = [...adj.get(v)].filter((w) => w !== from).sort((a, b) => order.get(a) - order.get(b));
-    const heights = children.map((w) => walk(w, v, depth + 1));
-    const y = children.length ? (heights[0] + heights[heights.length - 1]) / 2 : leaf++ * 54;
-    points.set(v, [depth * STEP_X, y]);
-    return y;
-  })(spine[Math.floor(spine.length / 2)], null, 0);
-  return points;
-}
-function ringLayout(group) {
-  const radius = Math.max(58, group.length * 68 / (2 * Math.PI));
-  return new Map(group.map((id, k) => {
-    const angle = -Math.PI / 2 + 2 * Math.PI * k / group.length;
-    return [id, [radius * Math.cos(angle), radius * Math.sin(angle)]];
-  }));
-}
-// Returns the position of every vertex, or null when the complex is too
-// large for a drawing to be of any use.
-function graphLayout(ids, edges) {
-  const order = new Map(ids.map((id, index) => [id, index]));
-  const adj = new Map(ids.map((id) => [id, new Set()]));
-  for (const [a, b] of edges) {
-    if (a === b) continue;
-    adj.get(a).add(b);
-    adj.get(b).add(a);
-  }
-  const components = [];
-  const seen = new Set();
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-    const group = [id];
-    seen.add(id);
-    for (const v of group) {
-      for (const w of adj.get(v)) {
-        if (seen.has(w)) continue;
-        seen.add(w);
-        group.push(w);
-      }
-    }
-    components.push(group);
-  }
-  const isTree = (group) => group.reduce((sum, id) => sum + adj.get(id).size, 0) === 2 * (group.length - 1);
-  const forest = components.every(isTree);
-  if (ids.length > 64 || (!forest && (ids.length > 24 || edges.length > 72))) return null;
-
-  // Lay out each connected piece, then set the pieces side by side in rows.
-  const points = new Map();
-  let row = [];
-  let x = 0;
-  let top = 0;
-  function closeRow() {
-    const height = Math.max(0, ...row.map((piece) => piece.height));
-    for (const piece of row) {
-      for (const [id, [px, py]] of piece.points) points.set(id, [piece.x + px, top + (height - piece.height) / 2 + py]);
-    }
-    top += height + STEP_Y + 16;
-    row = [];
-    x = 0;
-  }
-  for (const group of components) {
-    const local = group.length === 1 ? new Map([[group[0], [0, 0]]]) : isTree(group) ? treeLayout(group, adj, order) : ringLayout(group);
-    const xs = [...local.values()].map((p) => p[0]);
-    const ys = [...local.values()].map((p) => p[1]);
-    const width = Math.max(...xs) - Math.min(...xs);
-    const shifted = new Map([...local].map(([id, [px, py]]) => [id, [px - Math.min(...xs), py - Math.min(...ys)]]));
-    if (row.length && x + width > 840) closeRow();
-    row.push({ points: shifted, x, height: Math.max(...ys) - Math.min(...ys) });
-    x += width + STEP_X;
-  }
-  closeRow();
-  return { points, adj };
-}
-
-function drawGraph(vertices, cells, branches) {
-  if (!vertices.length || vertices.length > 64 || cells.length > 256) return null;
-  const ids = vertices.map((v) => String(v.id));
-  const record = new Map(vertices.map((v) => [String(v.id), v]));
-  const valid = cells.map((cell) => (cell.vertices || []).map(String)).filter((list) => list.every((id) => record.has(id)));
-  const edges = valid.filter((list) => list.length === 2);
-  const faces = valid.filter((list) => list.length === 3);
-  const layout = graphLayout(ids, edges);
-  if (!layout) return null;
-  const { points, adj } = layout;
-
-  const everyVertexHas = (key) => ids.every((id) => isNumeric(record.get(id)[key]));
-  const weightKey = everyVertexHas("self_intersection") ? "self_intersection" : null;
-  const sizeKey = ["total_multiplicity", "multiplicity", "ambient_order"].find(everyVertexHas) || null;
-  const arrows = new Map();
-  for (const branch of branches) {
-    const meets = Array.isArray(branch.ambient_components) ? branch.ambient_components.map(String) : [];
-    if (meets.length !== 1 || !record.has(meets[0])) continue;
-    if (!arrows.has(meets[0])) arrows.set(meets[0], []);
-    arrows.get(meets[0]).push(String(branch.id));
-  }
-
-  const svg = svgElement("svg", { role: "group", "aria-label": "Dual graph with " + plural(ids.length, "vertex", "vertices") + " and " + plural(edges.length, "edge", "edges") });
-  for (const face of faces) {
-    svg.append(svgElement("polygon", { class: "face", points: face.map((id) => points.get(id).join(",")).join(" ") }));
-  }
-  const bundles = new Map();
-  for (const [a, b] of edges) {
-    const ends = [a, b].sort();
-    const key = JSON.stringify(ends);
-    if (!bundles.has(key)) bundles.set(key, { ends, count: 0 });
-    bundles.get(key).count++;
-  }
-  for (const { ends: [a, b], count } of bundles.values()) {
-    const [x1, y1] = points.get(a);
-    const [x2, y2] = points.get(b);
-    const length = Math.hypot(x2 - x1, y2 - y1);
-    for (let i = 0; i < count; i++) {
-      const bend = (i - (count - 1) / 2) * 34;
-      let path;
-      if (!length) {
-        const radius = 28 + i * 11;
-        path = "M " + x1 + " " + y1 + " c " + -radius + " " + -radius + " " + radius + " " + -radius + " 0 0";
-      } else {
-        const cx = (x1 + x2) / 2 - (y2 - y1) * bend / length;
-        const cy = (y1 + y2) / 2 + (x2 - x1) * bend / length;
-        path = "M " + x1 + " " + y1 + " Q " + cx + " " + cy + " " + x2 + " " + y2;
-      }
-      svg.append(svgElement("path", { class: "edge", d: path }));
-    }
-  }
-
-  const groups = new Map();
-  const extent = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
-  for (const id of ids) {
-    const [x, y] = points.get(id);
-    extent.left = Math.min(extent.left, x);
-    extent.right = Math.max(extent.right, x);
-    extent.top = Math.min(extent.top, y);
-    extent.bottom = Math.max(extent.bottom, y);
-    const taken = [...adj.get(id)].map((other) => {
-      const [ox, oy] = points.get(other);
-      return Math.atan2(oy - y, ox - x) * 180 / Math.PI;
-    });
-    const v = record.get(id);
-    const group = svgElement("g", { class: "vertex", transform: "translate(" + x + "," + y + ")", tabindex: "0", role: "button", "aria-pressed": "false" });
-    const facts = [id];
-    if (v.label && String(v.label) !== id) facts.push(String(v.label));
-    if (weightKey) facts.push("self-intersection " + signed(v[weightKey]));
-    if (sizeKey) facts.push(labelFor(sizeKey).toLowerCase() + " " + v[sizeKey]);
-    group.append(svgElement("title", {}, facts.join(", ")));
-
-    // Arrows for the branches of the strict transform fan out in the widest
-    // sector left free by the edges: upwards on a chain, onwards at its end.
-    const count = (arrows.get(id) || []).length;
-    const fan = [];
-    if (count) {
-      let from = -270;
-      let size = 360;
-      if (taken.length) {
-        const sorted = taken.map((a) => ((a % 360) + 360) % 360).sort((a, b) => a - b);
-        let best = null;
-        sorted.forEach((start, k) => {
-          const span = sorted.length === 1 ? 360 : ((sorted[(k + 1) % sorted.length] - start) + 360) % 360;
-          const lean = angleBetween(start + span / 2, -90) + angleBetween(start + span / 2, 0) / 1000;
-          if (!best || span > best.span + 1 || (Math.abs(span - best.span) <= 1 && lean < best.lean)) best = { start, span, lean };
-        });
-        from = best.start;
-        size = best.span;
-      }
-      const spread = Math.min(30 * (count - 1), 100, Math.max(0, size - 70));
-      for (let k = 0; k < count; k++) fan.push(from + size / 2 + (count > 1 ? (k / (count - 1) - 0.5) * spread : 0));
-      for (const degrees of fan) {
-        const [ux, uy] = [Math.cos(degrees * Math.PI / 180), Math.sin(degrees * Math.PI / 180)];
-        const tip = [34 * ux, 34 * uy];
-        group.append(svgElement("line", { class: "arrow", x1: 7 * ux, y1: 7 * uy, x2: 30 * ux, y2: 30 * uy }),
-          svgElement("polygon", { class: "arrow-head", points: [
-            tip, [27 * ux - 3.4 * uy, 27 * uy + 3.4 * ux], [27 * ux + 3.4 * uy, 27 * uy - 3.4 * ux],
-          ].map((p) => p.map((n) => n.toFixed(1)).join(",")).join(" ") }));
-        extent.left = Math.min(extent.left, x + tip[0]);
-        extent.right = Math.max(extent.right, x + tip[0]);
-        extent.top = Math.min(extent.top, y + tip[1]);
-        extent.bottom = Math.max(extent.bottom, y + tip[1]);
-      }
-    }
-
-    // The name and the weight take the first place that is clear of the edges
-    // and arrows at this vertex, and clear of each other.
-    const occupied = [...taken, ...fan];
-    const room = (slot) => Math.min(360, ...occupied.map((a) => angleBetween(a, SLOTS[slot].angle)));
-    const place = (preference, apartFrom) => {
-      const allowed = preference.filter((slot) => !apartFrom || angleBetween(SLOTS[slot].angle, SLOTS[apartFrom].angle) >= 90);
-      return allowed.find((slot) => room(slot) >= 38) || allowed.reduce((best, slot) => (room(slot) > room(best) ? slot : best));
-    };
-    const along = (axis) => taken.every((a) => angleBetween(a, axis) < 20 || angleBetween(a, axis + 180) < 20);
-    const upright = taken.length > 0 && along(90);
-    const nameSlot = place(along(0) ? ["S", "SE", "SW", "N", "E", "W", "NE", "NW"]
-      : upright ? ["E", "W", "SE", "NE", "S", "N", "SW", "NW"]
-        : weightKey ? ["S", "SE", "SW", "E", "W", "N", "NE", "NW"] : ["S", "N", "E", "W", "SE", "SW", "NE", "NW"]);
-    const weightSlot = weightKey ? place(upright ? ["W", "E", "NW", "SW", "N", "S", "NE", "SE"]
-      : ["N", "NW", "NE", "W", "E", "S", "SW", "SE"], nameSlot) : null;
-
-    group.append(svgElement("circle", { class: "hit", r: 15 }), svgElement("circle", { class: "ring", r: 9 }),
-      svgElement("circle", { class: "dot", r: 4.3 }));
-    const slot = SLOTS[nameSlot];
-    const name = svgElement("text", { x: slot.x, y: slot.y, "text-anchor": slot.anchor });
-    const shown = id.length > 12 ? id.slice(0, 11) + "…" : id;
-    const parts = /^([A-Z])(\d[A-Za-z0-9.]*)$/.exec(shown);
-    if (parts) {
-      name.append(svgElement("tspan", { "font-style": "italic" }, parts[1]), svgElement("tspan", { class: "small", dy: 4 }, parts[2]));
-      if (sizeKey) name.append(svgElement("tspan", { class: "paren", dy: -4 }, " (" + v[sizeKey] + ")"));
-    } else {
-      name.append(svgElement("tspan", {}, shown));
-      if (sizeKey) name.append(svgElement("tspan", { class: "paren" }, " (" + v[sizeKey] + ")"));
-    }
-    group.append(name);
-    if (weightSlot) {
-      const w = SLOTS[weightSlot];
-      group.append(svgElement("text", { class: "weight", x: w.x, y: w.y, "text-anchor": w.anchor }, signed(v[weightKey])));
-    }
-    const toggle = () => selectComponent(selected === id ? null : id);
-    group.addEventListener("click", toggle);
-    group.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      toggle();
-    });
-    groups.set(id, group);
-    svg.append(group);
-  }
-
-  const box = [extent.left - 74, extent.top - 42, extent.right - extent.left + 148, extent.bottom - extent.top + 90];
-  svg.setAttribute("viewBox", box.join(" "));
-  svg.setAttribute("width", box[2]);
-  svg.setAttribute("height", box[3]);
-
-  const figure = el("figure", "graph");
-  const scroll = el("div", "graph-scroll");
-  scroll.append(svg);
-  // A one-line key instead of a caption.
-  const key = el("figcaption");
-  const entry = (symbol, meaning) => {
-    const item = el("span", "key");
-    item.append(symbol, " " + meaning);
-    key.append(item);
-  };
-  const n = () => el("i", "", "n");
-  if (weightKey) {
-    const symbol = el("span", "m");
-    symbol.append(n());
-    entry(symbol, "self-intersection");
-  }
-  if (sizeKey) {
-    const symbol = el("span", "m");
-    symbol.append("(", n(), ")");
-    entry(symbol, labelFor(sizeKey).toLowerCase());
-  }
-  if (arrows.size) entry("↑", "strict transform");
-  if (faces.length) entry("▲", "triple intersection");
-  if (cells.some((cell) => (cell.vertices || []).length > 3)) entry("", "2-skeleton only");
-  key.style.maxWidth = Math.max(240, box[2]) + "px";
-  figure.append(scroll);
-  if (key.childElementCount) figure.append(key);
-  selectionViews.push((id) => {
-    for (const [key, group] of groups) {
-      group.classList.toggle("selected", key === id);
-      group.setAttribute("aria-pressed", String(key === id));
-    }
-  });
-  return figure;
-}
-
 /* ---------- Sections of the result ---------- */
 
 // Which exceptional components each chart meets.
@@ -760,11 +260,11 @@ function complexData(vertices, cells, charts, branches, dual) {
     for (const id of componentsOf(chart)) chartCount.set(id, (chartCount.get(id) || 0) + 1);
   }
 
-  side.append(el("h4", "sub", "0-dimensional cells · vertices"));
+  const vertexTable = foldedSection(side, "0-dimensional cells · vertices", vertices.length, true, "vertices", "h4");
   const keys = columnsOf(vertices, ["total_multiplicity", "multiplicity", "ambient_order", "self_intersection", "genus", "dimension"], ["id", "label"]);
   const countCharts = chartCount.size > 0;
   const rows = [];
-  side.append(table(["Divisor", ...keys.map((key) => key === "dimension" ? "Divisor dimension" : labelFor(key)), ...(countCharts ? ["Charts"] : [])], vertices, (v, index, tr) => {
+  vertexTable.body.append(table(["Divisor", ...keys.map((key) => key === "dimension" ? "Divisor dimension" : labelFor(key)), ...(countCharts ? ["Charts"] : [])], vertices, (v, index, tr) => {
     const id = String(v.id);
     tr.dataset.id = id;
     tr.classList.toggle("selected", selected === id);
@@ -797,8 +297,9 @@ function complexData(vertices, cells, charts, branches, dual) {
   for (const [dimension, group] of [...dimensions].sort(([a], [b]) => a - b)) {
     const extras = columnsOf(group, [], ["id", "vertices", "faces", "dimension"]);
     const hasFaces = group.some((cell) => Array.isArray(cell.faces));
-    side.append(el("h4", "sub", dimension + "-dimensional cells"));
-    side.append(table(["Cell ID", "Intersecting divisors", ...(hasFaces ? ["Boundary faces"] : []), ...extras.map(labelFor)],
+    const title = dimension + "-dimensional cells";
+    const cellTable = foldedSection(side, title, group.length, true, title, "h4");
+    cellTable.body.append(table(["Cell ID", "Intersecting divisors", ...(hasFaces ? ["Boundary faces"] : []), ...extras.map(labelFor)],
       group, (cell) => [
         cell.id ?? "—",
         joined(cell.vertices.map(idNode), " ∩ "),
@@ -821,16 +322,16 @@ function complexData(vertices, cells, charts, branches, dual) {
 
 function showComplex(data) {
   const dual = data.dual_complex;
-  const panel = $("panel-complex");
-  panel.replaceChildren();
+  const section = $("panel-complex");
+  section.replaceChildren();
   if (!dual || (dual.status !== "complete" && dual.status !== "partial" && data.status !== "resolved")) return;
 
   const vertices = dual.vertices || [];
   const cells = dual.cells || [];
   const isGraph = cells.every((cell) => cellDimension(cell) <= 1);
-  const head = sectionHead(isGraph ? "Dual graph" : "Dual complex", dual.convention);
-  head.classList.add("complex-heading");
-  panel.append(head);
+  const { body: panel, summary } = foldedSection(section, isGraph ? "Dual graph" : "Dual complex",
+    undefined, true, "dual complex");
+  if (dual.convention) summary.title = dual.convention;
   if (dual.status !== "complete") {
     const state = dual.status === "partial" ? "Partial complex" : "Dual complex unavailable";
     panel.append(el("p", "notice", dual.reason ? state + ". " + dual.reason : state + "."));
@@ -842,7 +343,8 @@ function showComplex(data) {
 
   const vertexIds = new Set(vertices.map((v) => String(v.id)));
   const branches = (data.branches || []).filter((b) => !vertexIds.has(String(b.id)));
-  const figure = drawGraph(vertices, cells, branches);
+  const figure = drawGraph(vertices, cells, branches,
+    id => selectComponent(selected === id ? null : id), update => selectionViews.push(update));
   const controls = el("div", "complex-switch");
   controls.setAttribute("role", "group");
   controls.setAttribute("aria-label", "Dual complex view");
@@ -850,7 +352,7 @@ function showComplex(data) {
   const records = el("button", "", "Data");
   picture.type = records.type = "button";
   controls.append(picture, records);
-  head.append(controls);
+  panel.append(controls);
 
   if (figure) panel.append(figure);
   else {
@@ -889,35 +391,12 @@ function zetaName(variable) {
   node.append("ζ", index, "(", el("i", "", variable), ")");
   return node;
 }
-// The quotient of products of (1 − T^n), built from the recorded factors.
-function zetaQuotient(zeta, variable) {
-  const factors = Array.isArray(zeta.factors) && zeta.factors.every((f) => Number.isInteger(f?.multiplicity) && Number.isInteger(f?.exponent))
-    ? zeta.factors.filter((f) => f.exponent) : null;
-  if (!factors) return typeset(zeta.expression ?? "");
-  const product = (list) => {
-    const node = el("span");
-    if (!list.length) node.append("1");
-    for (const { multiplicity, exponent } of list) {
-      node.append("(1 − ", el("i", "", variable));
-      if (multiplicity !== 1) node.append(el("sup", "", String(multiplicity)));
-      node.append(")");
-      if (Math.abs(exponent) !== 1) node.append(el("sup", "", String(Math.abs(exponent))));
-    }
-    return node;
-  };
-  const above = factors.filter((f) => f.exponent > 0);
-  const below = factors.filter((f) => f.exponent < 0);
-  if (!below.length) return product(above);
-  const quotient = el("span", "quotient");
-  quotient.append(product(above), product(below));
-  return quotient;
-}
 function showZeta(data) {
-  const panel = $("panel-zeta");
-  panel.replaceChildren();
+  const section = $("panel-zeta");
+  section.replaceChildren();
   const zeta = data.monodromy_zeta;
   if (!zeta || typeof zeta !== "object") return;
-  panel.append(sectionHead("Monodromy zeta function at the origin"));
+  const { body: panel } = foldedSection(section, "Monodromy zeta function at the origin", undefined, true);
   if (zeta.status !== "computed") {
     panel.append(el("p", "notice", zeta.reason || "Not computed for this resolution."));
     return;
@@ -957,8 +436,8 @@ function showZeta(data) {
   }
   const strata = zeta.nearby_strata;
   if (Array.isArray(strata) && strata.length) {
-    panel.append(sectionHead("Monodromy zeta functions on certified nearby strata"));
-    panel.append(table(["Stratum", "Local zeta function"], strata, stratum => {
+    const nearby = foldedSection(section, "Monodromy zeta functions on certified nearby strata", strata.length, true);
+    nearby.body.append(table(["Stratum", "Local zeta function"], strata, stratum => {
       const locus = el("div");
       locus.append(stratumLocus(stratum));
       const model = el("div", "helper");
@@ -984,33 +463,6 @@ function showZeta(data) {
   }
 }
 
-function stratumLocus(stratum) {
-  const locus = el("span");
-  if (stratum.model === "smooth component") {
-    if (stratum.component === "strict") locus.append(stratum.multiplicity > 1
-      ? "Generic smooth points of the reduced hypersurface" : "Generic smooth points of the hypersurface");
-    else locus.append("Generic smooth points of branch ", idNode(stratum.component));
-    const equation = stratum.equation || stratum.coordinates?.[0];
-    if (equation) locus.append(" (", typeset(equation + " = 0"), ")");
-    return locus;
-  }
-  if (Array.isArray(stratum.equations)) {
-    stratum.equations.forEach((equation, index) => {
-      if (index) locus.append(", ");
-      locus.append(typeset(equation + " = 0"));
-    });
-    return locus;
-  }
-  if (stratum.model === "sum of squares" || stratum.model === "transverse composition") locus.append("Generic points of ");
-  const equations = stratum.coordinates.join(" = ") + " = 0";
-  locus.append(typeset(equations));
-  if (stratum.model === "constant transverse type") locus.append(" away from the origin");
-  if (stratum.model === "X^a + Y^b" || stratum.model === "X*Y + Z^m") {
-    for (const name of stratum.parameters) locus.append(", ", typeset(name), " ≠ 0");
-  }
-  return locus;
-}
-
 /* The topological zeta function of Denef and Loeser, which the engine sums
    over the strata of the total transform. */
 
@@ -1018,10 +470,10 @@ function minus(text) {
   return String(text).replace(/-/g, "−");
 }
 function showTopological(data) {
-  const panel = $("panel-zeta");
+  const section = $("panel-zeta");
   const zeta = data.topological_zeta;
   if (!zeta || typeof zeta !== "object") return;
-  panel.append(sectionHead("Topological zeta function"));
+  const { body: panel } = foldedSection(section, "Topological zeta function", undefined, true);
   if (zeta.status !== "computed") {
     panel.append(el("p", "notice", zeta.reason || "Not computed for this resolution."));
     return;
@@ -1072,13 +524,13 @@ function showTopological(data) {
       (row) => [(Array.isArray(row.components) ? row.components : []).join(" ∩ ") + "°", signed(row.euler_characteristic)], 12));
   }
   if (body.childElementCount) panel.append(disclosure("Formula", body));
-  showMonodromyCheck(panel, data);
+  showMonodromyCheck(section, data);
 }
 
-function showMonodromyCheck(panel, data) {
+function showMonodromyCheck(section, data) {
   const check = data.monodromy_check;
   if (data.monodromy_zeta?.status !== "computed" || !check) return;
-  panel.append(sectionHead("Topological monodromy conjecture"));
+  const { body: panel } = foldedSection(section, "Topological monodromy conjecture", undefined, true);
   const verified = check.status === "verified";
   const verdict = el("p", "monodromy-verdict");
   verdict.append(el("strong", "", verified ? "Verified for this germ." :

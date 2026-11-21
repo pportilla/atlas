@@ -9,7 +9,8 @@ else
 endif
 
 .PHONY: all clean
-all: $(LIBRARY)
+ZOO_LIBRARY := $(subst libresolution,libzoo_search,$(LIBRARY))
+all: $(LIBRARY) $(ZOO_LIBRARY)
 ifeq ($(shell uname -s),Linux)
 all: build/resolve_supervisor
 endif
@@ -21,6 +22,10 @@ build/resolve_supervisor: resolve_supervisor.cpp
 $(LIBRARY): ordinary.cpp chart_batch.cpp chart_equation.hpp
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC $(SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) -lgmpxx -lgmp
+
+$(ZOO_LIBRARY): zoo_search.cpp
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC $(SHARED) $< -o $@ $(LDFLAGS)
 
 clean:
 	$(RM) -r build

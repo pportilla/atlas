@@ -4,6 +4,19 @@ The Atlas server provides the resolution workspace in a browser and accepts calc
 
 When Atlas runs on a remote machine, forward the port from the machine with your browser. In a terminal on that machine, use `ssh -N -L 8765:127.0.0.1:8765 user@host` with your usual SSH destination in place of `user@host`. Keep the SSH session open, then open the local address in your browser. The same tunnel carries the requests on this page.
 
+## Browse the Resolution Zoo
+
+Open `/zoo/` on the Atlas server to browse the catalogue. The page fetches the searchable index from `/zoo/zoo-data/index.json` and a selected record from `/zoo/zoo-data/records/<id>.json`.
+
+To find records containing a particular monomial pattern, send the same query accepted by the Atlas session.
+
+```sh
+curl -sS http://127.0.0.1:8765/api/zoo/search \
+  -H 'Content-Type: application/json' -d '{"query":"1/2*x*y^3"}'
+```
+
+The response contains an `ids` array in catalogue order. An empty query returns every ID. An invalid query returns HTTP 400. [Search syntax](resolution.md#search-the-resolution-zoo) · [Catalogue record format](../thematic/resolution-records.md#resolution-zoo-catalogue)
+
 ## Request a resolution
 
 To resolve the plane cusp $y^2=x^3$, send its equation and ordered coordinates to `POST /api/resolve`. The following request asks for the embedded resolution and both zeta functions.

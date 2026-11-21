@@ -1,0 +1,31 @@
+{
+  "equation": "(x^2+y^2+z^2)^2+x^5",
+  "variables": [
+    "x",
+    "y",
+    "z"
+  ],
+  "mode": "intrinsic",
+  "compute": "cpu",
+  "conditions": "One complete fresh CLI solve followed by alternating verification on its fixed serialized charts within one Python process. Each trial checks the full labelled complex against the published Zoo record. Other system load is uncontrolled.",
+  "charts": 62,
+  "steps": 17,
+  "vertices": 17,
+  "cells": 16,
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "trials": 3,
+  "cli_wall_seconds": 8.7784501130227,
+  "verification_seconds": {
+    "all_pairs": [
+      44.249015209963545,
+      46.7041107880068,
+      57.119960971002
+    ],
+    "global_divisor_labels": [
+      0.7607708669966087,
+      0.7691951199667528,
+      0.7604776630178094
+    ]
+  },
+  "complex_sha256": "4292ef26051e87535c2831a99c06214d97df4015f3323f5e4ffee106f645cef1"
+}

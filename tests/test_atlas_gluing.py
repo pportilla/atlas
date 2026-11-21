@@ -217,7 +217,9 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         rows = (("D",1,1,(x,)), ("E",1,1,(y,)), ("F",1,1,(z,)), ("strict",1,1,(y-x,)))
         images = (x*y*z,x*x*y*z,x*y*z*z,x*y*z*w)
         chart = Chart(variables, (), rows, images, (), tuple(zip(("a","b","c","d"),images)), ())
-        dual = glued_complex([chart,replace(chart,region=(api.S.One,))],4,intrinsic=True)
+        cover = [chart,replace(chart,region=(api.S.One,))]
+        dual = glued_complex(cover,4,intrinsic=True)
+        self.assertEqual(glued_complex(cover,4,intrinsic=True,global_boundary_labels=True), dual)
         self.assertEqual(dual["status"], "complete")
         self.assertEqual(len(dual["vertices"]), 2)
         shared, = [v for v in dual["vertices"] if v.get("ambient_components") == ["D","E"]]
@@ -226,6 +228,13 @@ class FieldAndOpenOverlaps(unittest.TestCase):
         from engine.strata import annotate_complex
         annotated = {**dual, "vertices": [{"id": v["id"], "dimension": 99} for v in dual["vertices"]]}
         self.assertEqual(annotate_complex(annotated, dual)["vertices"], dual["vertices"])
+
+        # A chart-local alias for F has no certified global identity. Keep using
+        # unrestricted overlap comparison unless the caller reconstructed the labels.
+        renamed = tuple(("localF" if k == "F" else k, n, nu, ideal) for k,n,nu,ideal in rows)
+        generic = glued_complex([chart, replace(cover[1], components=renamed)], 4, intrinsic=True)
+        self.assertEqual(len(generic["vertices"]), 2)
+        self.assertIn(["F", "localF"], [v.get("ambient_components") for v in generic["vertices"]])
 
     def test_two_triangles_have_different_parallel_edges(self):
         from engine.chart_expressions import runtime_expressions

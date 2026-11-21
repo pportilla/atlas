@@ -1,13 +1,6 @@
-.complex-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-bottom: 14px;
-}
 .complex-switch {
   display: inline-flex;
+  margin-bottom: 12px;
   gap: 0;
   border: 1px solid var(--rule);
   border-radius: 2px;
@@ -25,5 +18,7 @@
   color: var(--brand);
   box-shadow: inset 0 -2px var(--brand);
 }
-.complex-data .sub:first-child { margin-top: 12px; }
+.complex-data .fold > summary { padding-block: .6rem; }
+.complex-data .fold h4 { display: inline; margin-right: .5rem; color: var(--ink); font-size: 1rem; }
+.complex-data .fold-body { padding-bottom: .8rem; }
 .complex-data th { white-space: nowrap; }

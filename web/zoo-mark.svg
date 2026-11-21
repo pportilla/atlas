@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>Fox</title>
+  <path fill="#087976" d="m7 6 19 11 6-2 6 2L57 6l-3 26 5 4-15 8-12 15-12-15-15-8 5-4z"/>
+  <path fill="#66b2a4" d="m10 11 14 9-11 9zm44 0-14 9 11 9z"/>
+  <path fill="#0a5a59" d="m32 15 12 11 10 6 5 4-15 8-12 15z"/>
+  <path fill="#ecf4ea" d="m8 35 14-5 10 22-13-12zm48 0-14-5-10 22 13-12z"/>
+  <path fill="#263b38" d="m17 33 6 1 3 5-7-3zm30 0-6 1-3 5 7-3zM27 50h10l-5 8z"/>
+  <path fill="none" stroke="#b5d6c4" stroke-width="1.2" d="m21 20 11 5 11-5M32 25v19"/>
+</svg>

@@ -168,7 +168,7 @@ struct Driver {
     Callback callback;
     std::vector<Chart> charts;
     int dimension;
-    bool intrinsic, absolute;
+    bool intrinsic, absolute, global_boundary_labels;
     V vertices = array(), cells = array();
     using Pair = std::pair<unsigned, unsigned>;
     std::map<Pair, V> transitions, diagonals;
@@ -176,7 +176,7 @@ struct Driver {
     std::map<Piece, std::vector<std::optional<Polynomial>>> images;
     Driver(const V &q, Callback cb)
         : callback(cb), dimension(q["dimension"].asInt()), intrinsic(q["intrinsic"].asBool()),
-          absolute(q["absolute"].asBool()) {
+          absolute(q["absolute"].asBool()), global_boundary_labels(q["global_boundary_labels"].asBool()) {
         charts.reserve(q["charts"].size());
         for (const auto &x : q["charts"])
             charts.emplace_back(x);
@@ -618,12 +618,31 @@ void Driver::intrinsic_complex() {
 
     std::map<Names, Groups> by_labels;
     std::set<std::string> reserved, used;
-    for (auto &group : groups(pieces)) {
-        std::set<std::string> ambient;
-        for (const auto &piece : group)
-            ambient.insert(labels.at(piece).begin(), labels.at(piece).end());
-        by_labels[Names(ambient.begin(), ambient.end())].push_back(std::move(group));
-        reserved.insert(ambient.begin(), ambient.end());
+    if (global_boundary_labels) {
+        // On a reconstructed blowup atlas, each label denotes one closed ambient
+        // divisor on every open. Two presentations of the same generic point lie
+        // in exactly the same ambient divisors. Overlaps still identify the branches
+        // of each restricted divisor, including branches defined over an extension.
+        std::map<Names, Group> candidates;
+        for (const auto &piece : pieces) {
+            const auto &ambient = labels.at(piece);
+            candidates[Names(ambient.begin(), ambient.end())].push_back(piece);
+        }
+        for (const auto &[key, candidates_here] : candidates) {
+            auto visible = groups(candidates_here);
+            if (!visible.empty()) {
+                by_labels.emplace(key, std::move(visible));
+                reserved.insert(key.begin(), key.end());
+            }
+        }
+    } else {
+        for (auto &group : groups(pieces)) {
+            std::set<std::string> ambient;
+            for (const auto &piece : group)
+                ambient.insert(labels.at(piece).begin(), labels.at(piece).end());
+            by_labels[Names(ambient.begin(), ambient.end())].push_back(std::move(group));
+            reserved.insert(ambient.begin(), ambient.end());
+        }
     }
     using Named = std::vector<std::pair<std::string, Basis>>;
     std::map<std::pair<Section, Names>, Named> faces;

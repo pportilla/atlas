@@ -32,7 +32,7 @@ def certified_outputs(record, names, mode, integrals):
     charts = record["atlas"]
     repeated = any(step.get("rule") == "repeated tangent" for step in record["steps"])
     output = native_general_outputs({"variables": names}, charts, intrinsic=mode == "intrinsic",
-                                    integrals=integrals, factor_fibre=repeated)
+                                    integrals=integrals, factor_fibre=repeated, global_boundary_labels=True)
     return charts, output
 
 

@@ -61,7 +61,7 @@ class WorkbenchBrowserTests(BrowserCase):
         expect(page.locator(".monodromy-verdict")).to_contain_text("Verified for this germ.")
         panel = page.locator("#panel-zeta")
         expect(panel.get_by_text("Poles: −1, −5/6", exact=True)).to_be_visible()
-        formulas = panel.locator("details").filter(has=page.get_by_text("Formula", exact=True))
+        formulas = panel.locator("details.more").filter(has=page.get_by_text("Formula", exact=True))
         expect(formulas).to_have_count(2)
         formulas.first.locator("summary").click()
         expect(formulas.first.locator("table")).to_be_visible()
@@ -99,6 +99,40 @@ class WorkbenchBrowserTests(BrowserCase):
         page.locator('a[href="#output"]').press("Enter")
         expect(page.locator("#output")).to_be_focused()
         self.assertEqual(page.url, address)
+
+    def test_folding_results_and_inputs_preserves_the_graph_and_later_zeta_choices(self):
+        page = self.page
+        page.goto(self.url)
+        inputs = page.locator("details.query-fold")
+        for group in inputs.all():
+            group.locator("summary").first.press("Enter")
+            expect(group.locator(".query-fields")).to_be_hidden()
+            group.locator("summary").first.press("Enter")
+        page.get_by_label("Topological zeta function", exact=True).uncheck()
+        page.get_by_role("button", name="Resolve", exact=True).click()
+        graph = page.locator("#panel-complex > details")
+        expect(graph.locator(".vertex").first).to_be_visible()
+        graph.get_by_role("button", name="Data", exact=True).click()
+        graph.locator("summary").first.press("Enter")
+        expect(graph.locator(".complex-data")).to_be_hidden()
+        graph.locator("summary").first.press("Enter")
+        expect(graph.locator(".complex-data")).to_be_visible()
+        graph.locator("summary").first.press("Enter")
+
+        origin = page.locator("#panel-zeta > details").filter(has=page.get_by_role(
+            "heading", name="Monodromy zeta function at the origin", exact=True))
+        origin.locator("summary").first.press("Enter")
+        page.get_by_role("button", name="Compute topological zeta function").click()
+        expect(page.get_by_role("heading", name="Topological monodromy conjecture")).to_be_visible()
+        expect(origin.locator(".zeta")).to_be_hidden()
+        expect(graph.locator(".complex-data")).to_be_hidden()
+        for section in page.locator("#panel-zeta > details").all():
+            summary = section.locator("summary").first
+            if section.evaluate("element => element.open"):
+                summary.press("Enter")
+            expect(section.locator(".fold-body").first).to_be_hidden()
+            summary.press("Enter")
+            expect(section.locator(".fold-body").first).to_be_visible()
 
     def test_singular_line_shows_nearby_zeta_before_poles_are_requested(self):
         page = self.page

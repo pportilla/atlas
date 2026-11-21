@@ -11,7 +11,10 @@
   <link rel="stylesheet" href="/resolution.css">
   <link rel="stylesheet" href="/runs.css">
   <link rel="stylesheet" href="/complex.css">
+  <link rel="stylesheet" href="/zoo.css">
   <script src="/exact-json.js" defer></script>
+  <script src="/typeset.js" defer></script>
+  <script src="/dual-graph.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -20,6 +23,7 @@
     <div class="page masthead-inner">
       <a class="wordmark" href="/" aria-label="Atlas home"><pre class="ascii-art" aria-hidden="true"><!--atlas:wordmark--></pre></a>
       <h1 class="workspace-name">Resolution</h1>
+      <a class="zoo-nav-link" href="/zoo/"><img src="/zoo-mark.svg" width="25" height="25" alt="">Resolution Zoo</a>
       <a class="output-jump" href="#output">View results <span aria-hidden="true">↓</span></a>
     </div>
   </header>
@@ -28,47 +32,57 @@
     <div class="workbench">
       <div class="input-pane">
         <form id="resolve-form" class="query">
-          <label class="field" for="polynomial">
-            <span>Polynomial</span>
-            <textarea id="polynomial" name="polynomial" rows="2" spellcheck="false" autocapitalize="off" autocomplete="off" required>y^2-x^3</textarea>
-          </label>
-          <div class="example-controls" role="group" aria-label="Examples">
-            <span>Examples</span>
-            <button type="button" data-example="cusp" aria-pressed="true">Cusp</button>
-            <button type="button" data-example="node" aria-pressed="false">Node</button>
-            <button type="button" data-example="tacnode" aria-pressed="false">Tacnode</button>
-            <button type="button" data-example="singular-line" aria-pressed="false">Singular line</button>
-          </div>
-          <label class="field" for="variables">
-            <span>Variables</span>
-            <input type="text" id="variables" name="variables" value="x, y" spellcheck="false" autocapitalize="off" autocomplete="off" required>
-          </label>
-          <p class="query-hint warn" id="name-hint" hidden></p>
-          <fieldset class="resolution-mode">
-            <legend>Resolution mode</legend>
-            <label><input type="radio" name="mode" value="embedded" checked> Embedded</label>
-            <label><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
-          </fieldset>
-          <label class="field" for="compute">
-            <span>Compute device</span>
-            <select id="compute" name="compute">
-              <option value="cpu">CPU</option>
-              <option value="auto">Auto</option>
-              <option value="gpu">GPU</option>
-            </select>
-          </label>
-          <fieldset class="resolution-options">
-            <legend>Zeta functions</legend>
-            <label><input type="checkbox" id="zeta" name="zeta" checked> Monodromy zeta function</label>
-            <label><input type="checkbox" id="topological" name="topological" checked> Topological zeta function</label>
-          </fieldset>
-          <div class="search-option">
-            <label><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive search</label>
-            <details class="info-popover">
-              <summary aria-label="About exhaustive search"><span aria-hidden="true">i</span></summary>
-              <p>Start the exhaustive search immediately. It continues until Atlas verifies a resolution or you cancel it. With this option off, Atlas tries a time-limited search first.</p>
-            </details>
-          </div>
+          <details class="query-fold" open>
+            <summary>Equation and coordinates</summary>
+            <div class="query-fields">
+              <label class="field" for="polynomial">
+                <span>Polynomial</span>
+                <textarea id="polynomial" name="polynomial" rows="2" spellcheck="false" autocapitalize="off" autocomplete="off" required>y^2-x^3</textarea>
+              </label>
+              <div class="example-controls" role="group" aria-label="Examples">
+                <span>Examples</span>
+                <button type="button" data-example="cusp" aria-pressed="true">Cusp</button>
+                <button type="button" data-example="node" aria-pressed="false">Node</button>
+                <button type="button" data-example="tacnode" aria-pressed="false">Tacnode</button>
+                <button type="button" data-example="singular-line" aria-pressed="false">Singular line</button>
+              </div>
+              <label class="field" for="variables">
+                <span>Variables</span>
+                <input type="text" id="variables" name="variables" value="x, y" spellcheck="false" autocapitalize="off" autocomplete="off" required>
+              </label>
+              <p class="query-hint warn" id="name-hint" hidden></p>
+            </div>
+          </details>
+          <details class="query-fold" open>
+            <summary>Resolution options</summary>
+            <div class="query-fields">
+              <fieldset class="resolution-mode">
+                <legend>Resolution mode</legend>
+                <label><input type="radio" name="mode" value="embedded" checked> Embedded</label>
+                <label><input type="radio" name="mode" value="intrinsic"> Intrinsic</label>
+              </fieldset>
+              <label class="field" for="compute">
+                <span>Compute device</span>
+                <select id="compute" name="compute">
+                  <option value="cpu">CPU</option>
+                  <option value="auto">Auto</option>
+                  <option value="gpu">GPU</option>
+                </select>
+              </label>
+              <fieldset class="resolution-options">
+                <legend>Zeta functions</legend>
+                <label><input type="checkbox" id="zeta" name="zeta" checked> Monodromy zeta function</label>
+                <label><input type="checkbox" id="topological" name="topological" checked> Topological zeta function</label>
+              </fieldset>
+              <div class="search-option">
+                <label><input type="checkbox" id="exhaustive" name="exhaustive"> Exhaustive search</label>
+                <details class="info-popover">
+                  <summary aria-label="About exhaustive search"><span aria-hidden="true">i</span></summary>
+                  <p>Start the exhaustive search immediately. It continues until Atlas verifies a resolution or you cancel it. With this option off, Atlas tries a time-limited search first.</p>
+                </details>
+              </div>
+            </div>
+          </details>
           <button class="primary" id="run" type="submit"><span id="run-label">Resolve</span></button>
           <p class="error" id="form-error" role="alert" hidden></p>
         </form>
@@ -84,12 +98,13 @@
           <p class="welcome-hint">Enter a polynomial and press Resolve. Each run gets a row here that you can open to follow the search.</p>
         </div>
         <article id="result" hidden aria-label="Selected resolution">
-          <header class="result-head">
+          <details class="result-head" open>
+            <summary>Resolution status</summary>
             <p id="result-summary" hidden></p>
             <p id="result-diagnostic" hidden></p>
-          </header>
-          <section class="section" id="panel-complex"></section>
-          <section class="section" id="panel-zeta"></section>
+          </details>
+          <section class="section folded" id="panel-complex"></section>
+          <section class="section folded" id="panel-zeta"></section>
           <section class="section folded" id="panel-steps"></section>
           <section class="section folded" id="panel-charts"></section>
           <footer class="record-export"><button class="link export" type="button" id="export" disabled>Download JSON</button></footer>

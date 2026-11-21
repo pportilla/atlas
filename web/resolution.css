@@ -9,6 +9,12 @@
 .resolution .workbench { border-top: 0; }
 .resolution .input-pane, .resolution .output-pane { padding-top: clamp(20px, 2.5vw, 32px); }
 .resolution .query { display: grid; gap: 21px; }
+.query-fold { min-width: 0; }
+.query-fold > summary, .result-head > summary {
+  width: 100%; font: 600 1rem/1.4 var(--font-text); color: var(--ink);
+}
+.query-fields { display: grid; gap: 18px; padding-top: 14px; }
+.query-fold + .query-fold { border-top: 1px solid var(--rule); padding-top: 14px; }
 .resolution .query .query-hint { margin: -12px 0 0; font-size: 14px; color: var(--name); }
 #resolve-form #polynomial { min-height: 64px; max-height: 40vh; padding: 12px; resize: vertical; }
 .example-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; margin-top: -12px; }
@@ -47,8 +53,7 @@
 .welcome-hint { max-width: 36em; color: var(--ink-soft); }
 
 .resolution #result { scroll-margin-top: 16px; }
-.resolution .result-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
-.resolution .result-head p { flex: 1 1 240px; overflow-wrap: anywhere; }
+.resolution .result-head p { margin-top: .5rem; overflow-wrap: anywhere; }
 .resolution #result-diagnostic { color: var(--ink-soft); font-size: 14px; }
 .record-export { padding-top: 9px; border-top: 1px solid var(--rule); text-align: right; }
 .record-export .link { text-decoration: underline; }

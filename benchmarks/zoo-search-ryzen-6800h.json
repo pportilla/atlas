@@ -1,0 +1,70 @@
+{
+  "conditions": "One warmup per query, same rational surface equations in both systems, in-memory catalogues. Atlas timings include ctypes transport, parsing and the returned list of IDs. Singular times exclude parsing the equations, preparation of all six variable permutations, and printing the result bit vector. Its loop checks the term counts after adding and subtracting each remapped query. Ordered row IDs are compared for equality.",
+  "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "corpus_sha256": "075201cf305822058a87b0457c65910422fe5e50fb13aaf0ad05efcc34580e7b",
+  "surface_equations": 50,
+  "copies": 100,
+  "rows": 5000,
+  "trials": 5,
+  "atlas_load_ms": 11.480625,
+  "queries": {
+    "x*y^2": {
+      "matches": 700,
+      "atlas_ms": [
+        0.145826,
+        0.109247,
+        0.089379,
+        0.082145,
+        0.071124
+      ],
+      "singular_ms": [
+        165.347,
+        168.771,
+        166.822,
+        173.58,
+        167.218
+      ],
+      "atlas_median_ms": 0.089379,
+      "singular_median_ms": 167.218
+    },
+    "1/2*x*y^3 - x^4": {
+      "matches": 100,
+      "atlas_ms": [
+        0.088256,
+        0.059061,
+        0.051076,
+        0.045075,
+        0.04271
+      ],
+      "singular_ms": [
+        176.248,
+        176.807,
+        177.897,
+        176.105,
+        176.05
+      ],
+      "atlas_median_ms": 0.051076,
+      "singular_median_ms": 176.248
+    },
+    "x^2 + y^3 + z^5": {
+      "matches": 100,
+      "atlas_ms": [
+        0.215928,
+        0.167326,
+        0.139393,
+        0.122421,
+        0.109928
+      ],
+      "singular_ms": [
+        174.618,
+        174.013,
+        178.91,
+        184.789,
+        215.063
+      ],
+      "atlas_median_ms": 0.139393,
+      "singular_median_ms": 178.91
+    }
+  }
+}

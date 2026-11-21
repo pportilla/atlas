@@ -32,6 +32,35 @@ class WebAPITests(unittest.TestCase):
         self.assertEqual(r['dual_complex']['vertices'][0]['id'],'P1')
         self.assertEqual(len(r['charts']),2)
 
+    def test_catalogue_search_and_lazy_record_routes(self):
+        def search(query):
+            request = Request(self.url + '/api/zoo/search', json.dumps({'query': query}).encode(),
+                              {'Content-Type': 'application/json'})
+            with urlopen(request, timeout=5) as response:
+                return json.load(response)['ids']
+
+        with urlopen(self.url + '/zoo', timeout=5) as response:
+            self.assertTrue(response.url.endswith('/zoo/'))
+            self.assertIn('Search by monomials', response.read().decode())
+        with urlopen(self.url + '/zoo/zoo-data/index.json', timeout=5) as response:
+            entries = json.load(response)['entries']
+        self.assertEqual(search(''), [e['id'] for e in entries])
+        self.assertIn('mixed-quartic', search(['1/2*u*v^3', '-v^4']))
+        self.assertNotIn('mixed-quartic', search('1/2*u*v^3, v^4'))
+        with self.assertRaises(HTTPError) as invalid:
+            search('1/0*u')
+        self.assertEqual(invalid.exception.code, 400)
+        invalid.exception.close()
+        with urlopen(self.url + '/zoo/zoo-data/records/mixed-quartic.json', timeout=5) as response:
+            record = json.load(response)
+        self.assertEqual(record['embedded']['status'], 'resolved')
+        self.assertEqual(record['zeta']['topological']['status'], 'computed')
+        for path in ('records/does-not-exist.json', 'records/../../index.html'):
+            with self.assertRaises(HTTPError) as missing:
+                urlopen(self.url + '/zoo/zoo-data/' + path, timeout=5)
+            self.assertEqual(missing.exception.code, 404)
+            missing.exception.close()
+
     def test_invalid_or_inconclusive(self):
         with self.assertRaises(HTTPError) as err:
             self.post({'polynomial':'x/0','variables':['x','y']})

@@ -70,7 +70,7 @@ def operation(payload, handle, *, symbol="atlas_chart_gluing"):
 
 
 def chart_complex(charts, overlap, transition, dimension=0, intrinsic=False, *, character=None, absolute=False,
-                  pieces=None):
+                  pieces=None, global_boundary_labels=False):
     from .absolute_sections import absolute_primes
     from .atlas_gluing import _NeedsSplittingField, _geometric_primes
     from .constructible_euler import euler_characteristic
@@ -130,7 +130,7 @@ def chart_complex(charts, overlap, transition, dimension=0, intrinsic=False, *, 
         return None if primes is None else [rows(axes,tuple(ideal)) for ideal in primes]
 
     payload = dict(charts=[chart_input(c) for c in charts], dimension=dimension, intrinsic=intrinsic,
-                   absolute=absolute, operation="complex")
+                   absolute=absolute, operation="complex", global_boundary_labels=global_boundary_labels)
     if pieces is not None:
         payload.update(operation="groups",pieces=[(i, label or "", rows(charts[i].variables, prime))
                                                   for (i,label),prime in pieces])

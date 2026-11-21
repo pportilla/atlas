@@ -18,6 +18,7 @@ from .session_polynomial import QQ, Polynomial, _CoordinateSpace, coordinates as
 from .session_quotient import QuotientElement, QuotientIdeal, QuotientRing, quotient_ring
 from .session_rings import ring_bindings
 from .session_values import Divisor, DualComplex, Resolution
+from .zoo_search import zoo_search
 
 
 def json_value(value):
@@ -158,7 +159,8 @@ def new_session(calculate):
     session.builtins.update({"QQ": QQ, "coordinates": declare, "ring": ring, "resolve": resolve,
                              "matrix_analysis": matrix_analysis, "modular_arithmetic": modular_arithmetic,
                              "recompute_dual_complex": recompute_dual_complex, "dual_complex": dual_complex,
-                             "monodromy_check": monodromy_check, "len": len, "print": print, "print_json": print_json,
+                             "monodromy_check": monodromy_check, "zoo_search": zoo_search,
+                             "len": len, "print": print, "print_json": print_json,
                              "quotient_ring": quotient_ring, "hom": hom, **algebra, **ring_bindings(rings),
                              "polynomial_arithmetic": polynomial_arithmetic})
     return session

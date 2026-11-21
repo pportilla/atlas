@@ -251,6 +251,9 @@ FUNCTIONS = {
                                        'Use one source ring over `QQ` with at least one coordinate. Pass the '
                                        'components separately or as one list or tuple.',
                             **POLYNOMIAL_OPTIONS),
+    'zoo_search': entry('A dictionary whose `ids` field lists matching Zoo record IDs in catalogue order.',
+                        query='A signed monomial query as text, a rational polynomial or a list or tuple of either kind. '
+                              'Polynomial inputs must share one live coordinate space.'),
     'resolve': entry('A resolution with `.status`, `.charts`, `.divisors`, `.branches` and `.dual_complex`. '
                      'Read the status to see whether the search certified the resolution.',
                      polynomial='Hypersurface equation vanishing at the origin, as a polynomial over `QQ` '

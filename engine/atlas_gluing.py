@@ -170,7 +170,7 @@ def _ordinary_overlaps(charts, boundaries):
     return overlap
 
 
-def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended=False):
+def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended=False, global_boundary_labels=False):
     """Return the full complex when local geometric primes can be identified.
 
     On charts over marked fields, use the diagonal of the common coefficient
@@ -295,17 +295,20 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
     def retry(enlarged):
         if enlarged is None:
             return None
-        return glued_complex(enlarged, dimension, intrinsic=intrinsic, _descended=_descended)
+        return glued_complex(enlarged, dimension, intrinsic=intrinsic, _descended=_descended,
+                             global_boundary_labels=global_boundary_labels)
 
     if plan["restricted"]:
         try:
-            return chart_complex(charts, overlap, transition, carrier_dimension, True, character=character)
+            return chart_complex(charts, overlap, transition, carrier_dimension, True, character=character,
+                                 global_boundary_labels=global_boundary_labels)
         except _NeedsSplittingField as failed:
             enlarged = splitting_charts(charts, failed.args)
             if enlarged is not None:
                 return retry(enlarged)
             try:
-                return chart_complex(charts, overlap, transition, carrier_dimension, True, character=character, absolute=True)
+                return chart_complex(charts, overlap, transition, carrier_dimension, True, character=character,
+                                     absolute=True, global_boundary_labels=global_boundary_labels)
             except ExtendSectionField as extension:
                 return retry(extend_section_field(charts, extension.args[0]))
             except _NeedsSplittingField:

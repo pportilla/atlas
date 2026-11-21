@@ -15,7 +15,8 @@ class ResolutionStepsBrowserTests(BrowserCase):
             page.locator("#run").click()
             expect(page.locator(".resolution-run").first).to_have_attribute("data-state", "completed", timeout=30000)
             panel = page.locator("#panel-steps")
-            panel.locator("summary").first.click()
+            if not panel.locator("details.fold").first.evaluate("section => section.open"):
+                panel.locator("summary").first.click()
             expect(panel.get_by_role("columnheader")).to_have_text(["Step", "Method", "Center", "Details"])
             return panel.locator("tbody tr")
 
