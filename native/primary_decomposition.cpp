@@ -866,7 +866,7 @@ Polynomial power(Polynomial f, mpz_class exponent, size_t n) {
     return result;
 }
 
-Factors factors(const Polynomial& f, size_t n) {
+Factors factors(const Polynomial& f, size_t n, mpq_class* primitive_unit) {
     if (certificate_work) {
         // Large eliminants can be expensive to factor even when the input
         // equations were sparse. Decline these in the speculative path.
@@ -884,6 +884,11 @@ Factors factors(const Polynomial& f, size_t n) {
         ~Factorization() { fmpq_mpoly_factor_clear(value,ctx); }
     } split(ring.ctx);
     ordered_factors(split.value,poly.p,ring.ctx);
+    if (primitive_unit) {
+        if (!fmpq_mpoly_factor_make_integral(split.value,ring.ctx))
+            throw std::runtime_error("The rational factors could not be made integral.");
+        fmpq_get_mpq(primitive_unit->get_mpq_t(),split.value->constant);
+    }
     fmpq_mpoly_factor_sort(split.value,ring.ctx);
     Factors result;
     for (slong i=0;i<split.value->num;++i) {

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import subprocess
 import unittest
+from unittest.mock import patch
 
 import sympy as sp
 
@@ -45,11 +46,34 @@ class RepairedNewtonAtlas(unittest.TestCase):
         self.assertEqual(record["monodromy_zeta"]["expression"], "1/(1-T^4)^3")
         self.assertEqual(record["topological_zeta"]["expression"], "(3*s^2 + 6*s + 4)/(4*(s + 1)^3)")
 
-    def test_intrinsic_nonisolated_quartic_has_two_chains_of_seven(self):
+    def test_unrepairable_candidate_leaves_the_existing_newton_search_order(self):
+        # The first degenerate candidate has no isolated repair to perform.
+        # The next adapted fan already certifies D6 in 15 charts.
+        with patch("engine.newton_trials.resolve_trials", side_effect=AssertionError("premature fan trial")):
+            record = resolve(dict(polynomial="x^2+y^5+y*z^2", variables=list("xyz"), mode="intrinsic",
+                                  compute="cpu", search="quick"))
+        self.assertEqual((record["engine"], len(record["charts"]), record["dual_complex"]["status"]),
+                         ("newton-polyhedron", 15, "complete"))
+
+    def test_intrinsic_quartic_certifies_the_original_fan_before_repair(self):
         cli = Path(__file__).resolve().parents[1] / "atlas"
         record = json.loads(subprocess.check_output(
             [cli, "resolve", "x^4-x^2+y^2*z^2", "--vars", "x,y,z", "--mode", "intrinsic", "--json"],
             text=True, timeout=120))
+        graph = record.pop("dual_complex")
+        self.assertEqual((record["status"], graph["status"]), ("resolved", "complete"))
+        self.assertEqual((len(record["charts"]),len(graph["vertices"]),len(graph["cells"])), (3,4,2))
+        ends = [vertex for edge in graph["cells"] for vertex in edge["vertices"]]
+        self.assertCountEqual(ends, [v["id"] for v in graph["vertices"]])
+        replay = subprocess.check_output([cli, "dual-complex", "-"], input=json.dumps(record),
+                                         text=True, timeout=120)
+        self.assertEqual(json.loads(replay), graph)
+
+    def test_intrinsic_nonisolated_quartic_repair_fallback_has_two_chains_of_seven(self):
+        cli = Path(__file__).resolve().parents[1] / "atlas"
+        with patch("engine.newton_trials.resolve_trials", return_value=None):
+            record = resolve(dict(polynomial="x^4-x^2+y^2*z^2", variables=list("xyz"),
+                                  mode="intrinsic", compute="cpu", search="quick"))
         self.assertEqual(record["status"], "resolved")
         graph = record.pop("dual_complex")
         self.assertEqual(graph["status"], "complete", graph.get("reason"))
@@ -85,6 +109,53 @@ class RepairedNewtonAtlas(unittest.TestCase):
         replay = subprocess.check_output([cli, "dual-complex", "-"], input=json.dumps(record),
                                          text=True, timeout=120)
         self.assertEqual(json.loads(replay), graph)
+
+    def test_rational_point_repairs_replay_on_their_verified_newton_parents(self):
+        from engine.resolution_complex import dual_complex
+
+        # Permute the cusp axes and vary a coefficient in the repeated face.
+        source = "x^3+(z^2-y^3)^2+2*y^5*z"
+        record = resolve(dict(polynomial=source, variables=list("xyz"), mode="intrinsic",
+                              compute="cpu", search="quick"))
+        graph = record.pop("dual_complex")
+        self.assertEqual((graph["status"], len(graph["vertices"]), len(graph["cells"])), ("complete", 7, 6))
+        owned = json.loads(json.dumps(record["atlas"]))
+        for presentation in ("charts", "atlas"):
+            saved = {k: v for k, v in record.items() if k != presentation}
+            self.assertEqual(dual_complex(saved), graph)
+        link = next(chart["repair_projection"] for chart in owned if chart.get("repair_projection"))
+        link["map"][0] += "+1"
+        self.assertEqual(dual_complex(dict(record, atlas=owned))["status"], "partial")
+
+    def test_rational_repair_component_labels_survive_shuffled_charts(self):
+        from random import Random
+        from engine.resolution_complex import dual_complex
+
+        record = resolve(dict(polynomial="z^4+(y^3-x^4)^2+x^7*y", variables=list("xyz"),
+                              mode="intrinsic", compute="cpu", search="quick"))
+        graph = record.pop("dual_complex")
+        charts = json.loads(json.dumps(record["atlas"]))
+        self.assertEqual(graph["status"], "complete")
+        self.assertTrue(any(c.get("repair_projection") for c in charts))
+        order = Random(436).sample(range(len(charts)), len(charts))
+        for chart in charts:
+            if link := chart.get("repair_projection"):
+                link["parent"] = order.index(link["parent"])
+        saved = {k: v for k, v in record.items() if k not in ("steps", "charts")}
+        self.assertEqual(dual_complex(dict(saved, atlas=[charts[i] for i in order])), graph)
+
+    def test_point_repairs_wait_until_all_orbits_have_isolated_defects(self):
+        from engine.newton_backend import coordinate_choices
+        from engine.newton_fan import build_fan
+
+        for source in ("x*(y^3+z^2+t^4)-(y*z+t^2)^2", "t*(y^3+z^2+x^4)-(y*z+x^2)^2"):
+            names = list("xyzt")
+            adapted, _, _ = next(iter(coordinate_choices(parse(source, names), 4)))
+            diagnostics = {}
+            with patch("engine.newton_repair.acampo_over", side_effect=AssertionError("premature point repair")):
+                self.assertIsNone(strata(adapted, names, build_fan(adapted), count_strata=False,
+                                         diagnostics=diagnostics))
+            self.assertIn("curve of an orbit", diagnostics["point_repair"])
 
     def test_repaired_cycle_over_conjugate_centres_in_a_product(self):
         from collections import Counter

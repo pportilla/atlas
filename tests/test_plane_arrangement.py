@@ -19,6 +19,8 @@ class PlaneArrangementTests(unittest.TestCase):
         names = list("xyzt")
         base = dict(zip(names, sp.symbols(names)))
         for equation, chi in (("x*y*z*t*(x+y+z+t)", -5), ("x*y*z*t*(x+y)*(z+t)", 0),
+                              ("x*y*z*t*(2*x-9*t)*(3*y+5*z)", 0),
+                              (f"(-2/13)*x*y*z*t*(3*x-{2**131}*t)*(7*y+11*z)", 0),
                               (f"(-3/7)*x*y*z*t*(x+{2**131}*y)", 0)):
             record = resolve(dict(polynomial=equation, variables=names, mode="embedded",
                                   search="quick", compute="cpu", monodromy=True))
@@ -59,6 +61,7 @@ class PlaneArrangementTests(unittest.TestCase):
     def test_four_variable_nonreduced_weights_and_named_chart_provenance(self):
         for polynomial, exceptional_order, strict_orders in (
                 ("(-3/5)*x*y*z*t*(x+y)^2", 4, [1, 1, 1, 1, 2]),
+                ("(-13/7)*x^2*y*z^3*t*(5*x+2*y)^4", 7, [1, 1, 2, 3, 4]),
                 ("(x*y*z*t*(x+y))^2", 6, [2, 2, 2, 2, 2])):
             record = resolve(dict(polynomial=polynomial, variables=list("xyzt"), mode="embedded",
                                   search="quick", compute="cpu", monodromy=True))

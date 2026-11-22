@@ -240,7 +240,7 @@ class MonodromyTests(unittest.TestCase):
 
     def test_quadric_composition_witnesses_the_missing_order_ten_eigenvalue(self):
         # The singular lines x = y^2+z^2 = 0 have no rational point except the origin.
-        record = resolve({"polynomial": "(x^2+y^2+z^2)^2+x^5", "variables": list("xyz"), "search": "quick",
+        record = resolve({"polynomial": "(x^2+y^2+z^2)^2+x^5", "variables": list("xyz"), "search": "exhaustive",
                           "zetas": ["monodromy", "topological"]})
         zeta = record["monodromy_zeta"]
         self.assertEqual(zeta["expression"], "1/(1-T^4)")

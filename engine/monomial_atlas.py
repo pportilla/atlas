@@ -703,11 +703,15 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     if complex:
         from .atlas_torus import section_complex
         local_coordinates = [chart["coordinates"] for chart, _ in charts] if local_sections else None
-        boundary = section_complex(sections, n, intrinsic, common_source=True, embedded_snc=embedded,
-                                   local_coordinates=local_coordinates)
+        options = dict(common_source=True, embedded_snc=embedded, local_coordinates=local_coordinates)
+        boundary = section_complex(sections, n, intrinsic, defer_relative_coordinates=bool(surface_charts), **options)
         if boundary is None and surface_charts:
             from .fan_surface import surface_complex
+            # Preserve the affine factor ordering of previously certified curve
+            # ideals. Relative orbit closures can also certify nonsplit charts.
             boundary = surface_complex(surface_charts, local_coordinates=local_coordinates)
+            if boundary is None and embedded:
+                boundary = section_complex(sections, n, intrinsic, **options)
         if boundary is None or local_sections and "chart_sections" not in boundary:
             return None
         if (intrinsic and internal_surface and record.get("engine") == "native-toric"
@@ -730,7 +734,7 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
         from .newton_trials import restore_hyperplane_model
         record = restore_hyperplane_model(record, polynomial)
     n = len(record["variables"])
-    if not 2 <= n <= 8 or (record.get("input_divisor") and not record.get("atlas")):
+    if not 2 <= n <= 8:
         return None
     translation = record.get("certificate", {}).get("coordinate_translation")
     if translation is None:
@@ -741,6 +745,8 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
         return translated_outputs(record, polynomial, translation, fan_outputs,
                                   dict(complex=complex, intrinsic=intrinsic, integrals=integrals, bounded=bounded,
                                        local_sections=local_sections))
+    if record.get("input_divisor") and not record.get("atlas"):
+        return None
     charts = _charts(record, n)
     if charts is None:
         return None

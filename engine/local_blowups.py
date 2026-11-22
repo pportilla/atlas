@@ -70,7 +70,7 @@ class Chart:
     # Optional exact root coordinates from the last field extension. The
     # native section solver checks them against the chart's current modulus.
     section_root_images: tuple = field(default=(), compare=False, repr=False)
-    coordinate_translation: tuple = ()  # (coordinate, polynomial offset) from torus frame to input
+    coordinate_translation: tuple = ()  # coordinate, polynomial offset and optional construction method
     arrangement_chart: tuple = ()  # projective pivot and optional intersection-line patch
 
     def one_sheet(self, count):

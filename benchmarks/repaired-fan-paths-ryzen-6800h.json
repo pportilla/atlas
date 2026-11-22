@@ -1,0 +1,497 @@
+{
+  "conditions": "Fresh public CLI processes, CPU, QQ at the origin, quick. Independent 30-second default per command. Successful baseline and final resolutions replay their complete graphs from the saved records after removing dual_complex. Replay and local invariant checks run separately from resolution. Timings include process startup. Singular resolve.lib checks all charts of its embedded resolution. Scalar agreement uses Singular local ds Jacobian lengths and 1+(-1)^dim*mu for isolated germs. Other validation shared the host.",
+  "cpu_affinity": [
+    14
+  ],
+  "baseline": "c8abfc2088ce5340878c14b1918ea694451072ff",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "timeout_s": 30,
+  "trials": 3,
+  "cases": {
+    "repaired-cusp": {
+      "equation": "x^3+(z^2-y^3)^2+2*y^5*z",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        32,
+        28,
+        33
+      ],
+      "trials": {
+        "embedded": {
+          "baseline": [
+            {
+              "status": "complete",
+              "wall_s": 0.615,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 0.5367,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.5995,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 0.4495,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.8473,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 0.6535,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 0.8796,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 0.6975,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            },
+            {
+              "status": "complete",
+              "wall_s": 1.2704,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 0.9662,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            },
+            {
+              "status": "complete",
+              "wall_s": 2.077,
+              "topological_zeta": "(112*s^2 + 318*s + 177)/((s + 1)*(4*s + 3)*(78*s + 59))",
+              "monodromy_zeta": "(1-T^6)^2*(1-T^26)*(1-T^39)/((1-T^3)*(1-T^4)*(1-T^12)*(1-T^13)*(1-T^78))",
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 12,
+              "cells": 33,
+              "replay_s": 1.5145,
+              "graph_sha256": "f4856e8b38d6e85692129e842a4e29ee2d0e52c5b0e62a783540fb1c0b16d322"
+            }
+          ]
+        },
+        "intrinsic": {
+          "baseline": [
+            {
+              "status": "timeout",
+              "wall_s": 30.0818
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 1.5021,
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 7,
+              "cells": 6,
+              "replay_s": 1.1907,
+              "graph_sha256": "c423c5e40e659dd4aa84c8426cd35a8c00f855187b93e6a641d6da4048a92276"
+            },
+            {
+              "status": "complete",
+              "wall_s": 1.8296,
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 7,
+              "cells": 6,
+              "replay_s": 1.3252,
+              "graph_sha256": "c423c5e40e659dd4aa84c8426cd35a8c00f855187b93e6a641d6da4048a92276"
+            },
+            {
+              "status": "complete",
+              "wall_s": 1.0876,
+              "engine": "newton-polyhedron",
+              "charts": 38,
+              "repair_charts": 27,
+              "vertices": 7,
+              "cells": 6,
+              "replay_s": 1.5394,
+              "graph_sha256": "c423c5e40e659dd4aa84c8426cd35a8c00f855187b93e6a641d6da4048a92276"
+            }
+          ]
+        },
+        "Singular_resolve": [
+          {
+            "status": "timeout",
+            "wall_s": 30.0288
+          }
+        ]
+      }
+    },
+    "two-conics": {
+      "equation": "(x*z-2*y^2)*(y*z-x^2)+(x+3*y+7*z)^5",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        31,
+        26,
+        32
+      ],
+      "trials": {
+        "embedded": {
+          "baseline": [
+            {
+              "status": "complete",
+              "wall_s": 1.3879,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 1.6192,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            },
+            {
+              "status": "complete",
+              "wall_s": 4.322,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 1.3708,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            },
+            {
+              "status": "complete",
+              "wall_s": 1.5083,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 1.3973,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 1.9332,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 2.0483,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            },
+            {
+              "status": "complete",
+              "wall_s": 2.5108,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 2.2159,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            },
+            {
+              "status": "complete",
+              "wall_s": 2.5999,
+              "topological_zeta": "(31*s^2 + 35*s + 12)/((s + 1)*(4*s + 3)*(5*s + 4))",
+              "monodromy_zeta": "1/((1-T^4)^3*(1-T^5)^4)",
+              "engine": "newton-polyhedron",
+              "charts": 28,
+              "repair_charts": 7,
+              "vertices": 16,
+              "cells": 25,
+              "replay_s": 2.889,
+              "graph_sha256": "51a5b8d32e0cf0f60b9a38ecc5c3286788e1b25a79d46ef71e8858db0face1f2"
+            }
+          ]
+        },
+        "intrinsic": {
+          "baseline": [
+            {
+              "status": "timeout",
+              "wall_s": 30.348
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 0.2185,
+              "engine": "verified-monomial-modification",
+              "charts": 21,
+              "repair_charts": 0,
+              "vertices": 9,
+              "cells": 11,
+              "replay_s": 0.1978,
+              "graph_sha256": "496c73455ddeb51bdeb1462811d20b06f4bb7475f7296d1e4eedd63df714cebc"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.2193,
+              "engine": "verified-monomial-modification",
+              "charts": 21,
+              "repair_charts": 0,
+              "vertices": 9,
+              "cells": 11,
+              "replay_s": 0.5025,
+              "graph_sha256": "496c73455ddeb51bdeb1462811d20b06f4bb7475f7296d1e4eedd63df714cebc"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.1967,
+              "engine": "verified-monomial-modification",
+              "charts": 21,
+              "repair_charts": 0,
+              "vertices": 9,
+              "cells": 11,
+              "replay_s": 0.1827,
+              "graph_sha256": "496c73455ddeb51bdeb1462811d20b06f4bb7475f7296d1e4eedd63df714cebc"
+            }
+          ]
+        },
+        "Singular_resolve": [
+          {
+            "status": "timeout",
+            "wall_s": 30.0235
+          }
+        ]
+      }
+    },
+    "four-variable-chain": {
+      "equation": "x^2*y+2*y^3*z+3*z^2*t+t^3",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        22,
+        22,
+        -21
+      ],
+      "trials": {
+        "embedded": {
+          "baseline": [
+            {
+              "status": "complete",
+              "wall_s": 1.5403,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 0.4616,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.6221,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 1.244,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            },
+            {
+              "status": "complete",
+              "wall_s": 1.3964,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 0.7867,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 0.3037,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 0.1941,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.2632,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 0.2749,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.3467,
+              "topological_zeta": "-(4*s - 23)/((s + 1)*(18*s + 23))",
+              "monodromy_zeta": "(1-T^3)*(1-T^18)^2/(1-T^9)^2",
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 68,
+              "cells": 597,
+              "replay_s": 0.3299,
+              "graph_sha256": "32cc974687b7e9242f498e8e4f4a046a1e6fa965dc956b2d063f3a63199b8280"
+            }
+          ]
+        },
+        "intrinsic": {
+          "baseline": [
+            {
+              "status": "complete",
+              "wall_s": 1.564,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.5223,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.4025,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.4079,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.4891,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.3673,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            }
+          ],
+          "final": [
+            {
+              "status": "complete",
+              "wall_s": 0.6868,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.339,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.3198,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.35,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            },
+            {
+              "status": "complete",
+              "wall_s": 0.3434,
+              "engine": "verified-monomial-modification",
+              "charts": 263,
+              "repair_charts": 0,
+              "vertices": 41,
+              "cells": 158,
+              "replay_s": 0.2992,
+              "graph_sha256": "d35e7e69e0c7d5a4d8c0dc6e8ea4fb739423539426b093256ae0448bd015c6af"
+            }
+          ]
+        },
+        "Singular_resolve": [
+          {
+            "status": "complete",
+            "wall_s": 0.8994,
+            "charts": 15
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.7565,
+            "charts": 15
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.7565,
+            "charts": 15
+          }
+        ]
+      }
+    }
+  }
+}

@@ -161,12 +161,23 @@ def repair_charts(charts, *, order_components=False):
         coeff = tuple(map(integer_from_decimal,item["coefficients"]))
         roots = tuple(flint_literal(coeff,k) for k in range(1,len(coeff)))
         covers[i] = c.variables[item["axis"]],c.ambient[item["relation"]],roots
-    if not covers:
+    if not covers and any(c.ambient or c.coefficient_field for c in charts):
         return [replace(c,repair_projection=()) for c in charts]
     order = range(len(charts))
     if order_components:
         from .chart_gluing_kernel import chart_input
         order = _repair_geometry("chart_order", charts=[chart_input(c) for c in charts])
+    if not covers:
+        # Order the verified rational opens before assigning anonymous component
+        # names. Keep each parent index valid in the resulting chart list.
+        positions = {old: new for new, old in enumerate(order)}
+        result = []
+        for i in order:
+            chart = charts[i]
+            parent, mapping = chart.repair_projection or (i, chart.variables)
+            result.append(replace(chart, repair_projection=(positions[parent], mapping)))
+        return result
+    if order_components:
         links = [(i,charts[i].repair_projection) for i in order if charts[i].repair_projection]
     existing = {field:_field_mark(field) for i in order if (field := charts[i].coefficient_field)}
     if any(mark is None for mark in existing.values()):

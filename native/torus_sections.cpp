@@ -232,7 +232,9 @@ Value plan(const Value& request) {
         charts.push_back(std::move(chart));
     }
 
-    if (intrinsic && common && relative) {
+    const bool closed_sections = request.get("closed_sections", false).asBool();
+    if (closed_sections && (!intrinsic || !common)) return {};
+    if (intrinsic && common && relative && !closed_sections) {
         Value result;
         result["complex"] = single_coordinate_section(charts, labels, n);
         if (!result["complex"].isNull()) return result;
@@ -246,10 +248,8 @@ Value plan(const Value& request) {
     // For relative fans an exceptional divisor can miss the origin fibre.
     // Use every orbit to witness visibility, including when the caller
     // needs chart-local ideals from an embedded SNC certificate.
-    const bool closed_request = request.get("closed_sections", false).asBool();
-    if (closed_request && (!intrinsic || !common)) return {};
-    const bool closed_sections = closed_request && !relative;
     std::map<Face, Face> coordinate_components;
+    Value contained_fibre_orbits = array();
     Sections ambient;
     std::set<Face> seen;
     Value checks = array(), orbits = array();
@@ -273,7 +273,7 @@ Value plan(const Value& request) {
                 if (boundary_face) ambient.emplace(std::move(boundary), Section{1, 0});
                 continue;
             }
-            if (closed_sections && !boundary_face && boundary.size()+1 != cone_face.size()) continue;
+            if (closed_sections && !relative && !boundary_face && boundary.size()+1 != cone_face.size()) continue;
             if (common) {
                 std::sort(cone_face.begin(), cone_face.end());
                 if (!seen.insert(std::move(cone_face)).second) continue;
@@ -281,13 +281,21 @@ Value plan(const Value& request) {
             Value terms = array();
             for (unsigned i = 0; i < chart.terms.size(); ++i)
                 if (!(mask & chart.terms[i])) terms.append(i);
-            if (closed_sections && !boundary_face) {
-                if (terms.empty()) {
-                    for (unsigned j = 0; j < n; ++j) if ((mask & (1U << j)) && !chart.boundary.count(j))
-                        coordinate_components[boundary].push_back(chart.rays[j]);
+            if (closed_sections && !boundary_face && terms.empty()) {
+                if (relative && request.get("defer_relative_coordinates", false).asBool()) return {};
+                Face extra;
+                for (unsigned j = 0; j < n; ++j)
+                    if ((mask & (1U << j)) && !chart.boundary.count(j)) extra.push_back(chart.rays[j]);
+                if (extra.size() == 1) coordinate_components[boundary].push_back(extra.front());
+                if (relative && image == full) {
+                    Value pair = array();
+                    pair.append(indices(boundary));
+                    pair.append(indices(extra));
+                    contained_fibre_orbits.append(std::move(pair));
                 }
                 continue;
             }
+            if (closed_sections && !relative && !boundary_face) continue;
             if (terms.empty()) return {};
             Value check = array();
             check.append(ci);
@@ -311,6 +319,7 @@ Value plan(const Value& request) {
         incidence["labels"] = std::move(labels);
         incidence["relative"] = relative;
         incidence["orbits"] = std::move(orbits);
+        incidence["contained_fibre_orbits"] = std::move(contained_fibre_orbits);
         for (auto& [face, rays] : coordinate_components) {
             // Order coordinate components by their original coordinate axis.
             std::sort(rays.begin(), rays.end(), [&](unsigned a, unsigned b) { return images[a] < images[b]; });
@@ -439,16 +448,35 @@ Value glue(const Value& request) {
             }
         }
     }
-    if (incidence["relative"].asBool()) {
-        for (auto it = sections.begin(); it != sections.end();) {
-            if (!visible.count(it->first)) it = sections.erase(it);
-            else ++it;
-        }
-    }
     for (const auto& pair : incidence["coordinate_components"]) {
         const auto it = sections.find(indices(pair[0]));
         if (it == sections.end()) return {};
         it->second.coordinates = indices(pair[1]);
+    }
+    if (incidence["relative"].asBool()) {
+        // A contained orbit witnesses a dense-torus component precisely when
+        // no coordinate component covers it. Near the fibre the section on
+        // each exceptional face is smooth, so different components are disjoint.
+        for (const auto& pair : incidence["contained_fibre_orbits"]) {
+            const Face face = indices(pair[0]), extra = indices(pair[1]);
+            for (unsigned mask = 1; mask < (1U << face.size()); ++mask) {
+                Face subset;
+                for (size_t j = 0; j < face.size(); ++j) if (mask & (1U << j)) subset.push_back(face[j]);
+                if (visible.count(subset)) continue;
+                const auto& section = sections.at(subset);
+                if (std::any_of(extra.begin(), extra.end(), [&](unsigned r) {
+                        return std::find(section.coordinates.begin(), section.coordinates.end(), r) != section.coordinates.end();
+                    })) continue;
+                if (section.count != 1) return {};
+                visible.insert(std::move(subset));
+            }
+        }
+        for (auto it = sections.begin(); it != sections.end();) {
+            // Every coordinate orbit closure contains a fixed point over zero.
+            if (!visible.count(it->first)) it->second.count = 0;
+            if (!it->second.count && it->second.coordinates.empty()) it = sections.erase(it);
+            else ++it;
+        }
     }
     auto result = cells(sections, incidence["labels"], incidence["dimension"].asUInt(), true);
     if (result.isNull() || !request.isMember("charts")) return result;

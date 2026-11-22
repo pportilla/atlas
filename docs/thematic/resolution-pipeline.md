@@ -56,12 +56,19 @@ A surface can have a diagonal Newton face in nonlinear coordinates. For
 `X^2+y^5+z^5`. Each displayed chart composes its fan projection with
 `x=X-y*z`. The certificate stores the coordinate and its polynomial offset
 in `coordinate_translation`. Replay derives the offset again from the input
-equation and verifies the projections. The quadratic translation fixes the
-origin and has Jacobian determinant one, so it preserves the origin fibre
-and volume orders. In four coordinates the same substitution can expose a
-regular Newton modification, as for `(x-y*z-t^2)^2+y^3+z^4+t^7`. Atlas
+equation and verifies the projections. A nonlinear offset can include linear
+terms, provided it vanishes at the origin. The translation has Jacobian
+determinant one, so it preserves the origin fibre and volume orders.
+Both surfaces and threefolds can use a nondiagonal
+regular fan after this substitution, as for `(x-y*z)^2+y^2*(y^3+z^5)`
+and `(x-y*z-t^2)^2+y^3+z^4+t^7`.
+On a cyclic surface cover, a square-free decomposition of the ramification
+polynomial can also expose a repeated graph `y=h(z)` through the origin.
+A bounded substitution straightens this graph before fan verification. Atlas
 checks the adapted fan and its intrinsic sections, then composes its chart
-maps with the translation to the original coordinates. A translated fan's
+maps with the translation to the original coordinates. For an embedded
+divisor with repeated factors, Atlas derives the translation from its reduced
+support and computes the original factors' orders on those charts. A translated fan's
 rays and exponents refer to its adapted coordinates. Its certificate lists
 the exceptional boundary images in the input coordinates under
 `boundary_image_ideals` and their adapted coordinate ideals under
@@ -79,6 +86,15 @@ For $xyz(x+y)$, three planes meet along the $z$-axis. After blowing up the
 origin, the solver blows up the strict transform of that axis. The three
 planes then meet its exceptional divisor at distinct directions.
 [Four planes with a triple line](../../web/zoo-data/records/cone-d4-quartic.json)
+
+Before committing to point blowups, Atlas classifies the defects on all
+orbits of the candidate fan. A curve of defects rules out isolated point
+repairs on that fan. For intrinsic resolution, if isolated repairs remain,
+the solver first tests whether a regular monomial modification already has
+a smooth strict transform with a certified exceptional complex. Repaired
+affine charts over rational points retain their certified maps to the parent
+Newton charts. These maps let the verifier check the parent and child
+projections separately when gluing their exceptional components.
 
 A repair centre can contain several geometric points conjugate over the
 rationals. Atlas follows each point through the repair charts and uses those

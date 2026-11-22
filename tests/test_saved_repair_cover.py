@@ -13,8 +13,11 @@ from engine.topological import topological_zeta
 class SavedRepairCoverTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.record = resolve({"polynomial": "x^4-x^2+y^2*z^2", "variables": ["x", "y", "z"],
-                              "mode": "intrinsic", "search": "quick"})
+        # Exercise the repaired cover even when the unmodified fan also
+        # certifies a different intrinsic model for the same germ.
+        with patch("engine.newton_trials.resolve_trials", return_value=None):
+            cls.record = resolve({"polynomial": "x^4-x^2+y^2*z^2", "variables": ["x", "y", "z"],
+                                  "mode": "intrinsic", "search": "quick"})
 
     def test_partition_accepts_exactly_one_whole_owner_per_origin_orbit(self):
         from engine.kernel_json import kernel_json

@@ -111,7 +111,7 @@ def _rational(coords, free, points, count):
 
 
 def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count_strata=True,
-           certify_subfaces=False, diagnostics=None):
+           certify_subfaces=False, diagnostics=None, before_points=None):
     """The numerical data, the strata over the origin and the blowups made.
 
     `poly` is the reduced equation, in the coordinates of the fan. `parts`
@@ -124,7 +124,9 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
     Returns {"data": {label: (N, nu)}, "strata": {frozenset of labels: chi},
     "repairs": [...]}, or None when the modification is not of the expected
     kind or normal crossings fail along more than finitely many points.
-    With count_strata=False only the local blowup charts are needed.
+    With count_strata=False only the local blowup charts are needed. If
+    before_points supplies a verified alternative after orbit classification,
+    return it under "alternative" before constructing the first blowup.
     """
     n = len(variables)
     rays, cones = fan["rays"], fan["cones"]
@@ -224,9 +226,10 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
         degenerate = [i for i, face in enumerate(all_faces) if face and not nondegenerate(face)]
         plans = repair_operation("orbit_plan", orbits=classified["orbits"], faces=all_faces, degenerate=degenerate,
                                  count_strata=count_strata, all_subfaces=refines or certify_subfaces)
+        point_orbits = []
         for source, orbit, plan in zip(orbit_rows, classified["orbits"], plans):
             ci = source["chart"]
-            cone, index = cones[ci], ci+1
+            cone = cones[ci]
             face = all_faces[orbit["face_id"]]
             faces = list(map(tuple, orbit["faces"]))
             off = frozenset(map(label, orbit["exceptional"]))
@@ -272,6 +275,17 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
                     add(off if k<0 else off | {parts[k].label}, _integer(chi), sign)
             if not isolated:
                 continue
+            point_orbits.append((source, orbit, free, singular))
+
+        # A later orbit can have a whole curve of defects, which isolated
+        # point blowups cannot repair. Classify the complete fan first.
+        if point_orbits and before_points is not None:
+            alternative = before_points()
+            if alternative is not None:
+                return {"alternative": alternative}
+        for source, orbit, free, singular in point_orbits:
+            ci = source["chart"]
+            cone, index = cones[ci], ci + 1
             components = [(label(cone[i]), *data[label(cone[i])], (coords[i],)) for i in orbit["exceptional_axes"]]
             components.extend((part.label, part.weight, 1, (part.strict(cone),)) for part in parts)
             # Each component over Q of the set of singular points is a problem of

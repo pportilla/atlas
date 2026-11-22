@@ -201,6 +201,13 @@ def _use_native(native):
     return True if native is None else native
 
 
+def _translation_tuple(translation):
+    if translation is None:
+        return ()
+    required = (translation["coordinate"], translation["offset"])
+    return (*required, translation["method"]) if "method" in translation else required
+
+
 def from_record(record, polynomial, *, native=None):
     """Build the atlas of a resolution record, including its original map,
     coefficient field, removed centres and the owned part of each chart."""
@@ -285,8 +292,7 @@ def from_record(record, polynomial, *, native=None):
                 tuple(int(i == j) for j in range(len(base))) for i in range(len(base)))
             translation = record.get("certificate", {}).get("coordinate_translation")
             affine = replace(affine, torus=(rays, linear),
-                             coordinate_translation=(translation["coordinate"], translation["offset"])
-                             if translation else ())
+                             coordinate_translation=_translation_tuple(translation))
         charts.append(affine)
     if fan and any("blown_up" in item or "ray_indices" not in item for item in items):
         from .newton_repair import join_atlas
@@ -341,7 +347,7 @@ def to_json(charts):
              "removed": [[_record_text(g, c.variables) for g in z] for z in c.removed],
              "map": {name: _record_text(expr, c.variables) for name, expr in c.coordinates},
              **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1],
-                           **({"coordinate_translation": dict(zip(("coordinate", "offset"), c.coordinate_translation))}
+                           **({"coordinate_translation": dict(zip(("coordinate", "offset", "method"), c.coordinate_translation))}
                               if c.coordinate_translation else {})}} if c.torus else {}),
              **({"arrangement_chart": dict(c.arrangement_chart)} if c.arrangement_chart else {}),
              **({"split_cone": c.split_cone} if c.split_cone else {}),
@@ -424,9 +430,7 @@ def from_json(data, *, native=None):
                             if item.get("torus") else (),
                             (item["point_blowup"]["parent"], tuple(item["point_blowup"]["center"]))
                             if "point_blowup" in item else (), split_cone(item, len(item["map"])), projection,
-                            coordinate_translation=tuple(item["torus"]["coordinate_translation"][k]
-                                                         for k in ("coordinate", "offset"))
-                            if "coordinate_translation" in item.get("torus", {}) else (),
+                            coordinate_translation=_translation_tuple(item.get("torus", {}).get("coordinate_translation")),
                             arrangement_chart=tuple(sorted(arrangement.items()))))
     return charts
 

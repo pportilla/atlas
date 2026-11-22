@@ -137,7 +137,7 @@ def torus_complex(charts, dimension, intrinsic):
 
 
 def section_complex(chart_terms, dimension, intrinsic, *, common_source=False, embedded_snc=False,
-                    local_coordinates=None):
+                    local_coordinates=None, defer_relative_coordinates=False):
     """Orbit sections of a verified regular cover with its maps in the common torus.
 
     With a common source, the caller has derived every strict equation from
@@ -169,7 +169,8 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False, e
         return None
     plan = None if local_coordinates is not None else kernel_json("atlas_torus_sections", "plan", **inputs)
     if plan is None and embedded_snc and intrinsic and common_source:
-        plan = kernel_json("atlas_torus_sections", "plan", closed_sections=True, **inputs)
+        plan = kernel_json("atlas_torus_sections", "plan", closed_sections=True,
+                           defer_relative_coordinates=defer_relative_coordinates, **inputs)
     if plan is None:
         return None
     if "complex" in plan:

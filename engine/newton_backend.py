@@ -1,4 +1,5 @@
 """A regular Newton modification of a hypersurface germ in arbitrary input dimension."""
+from functools import cache
 from .kernel_json import kernel_json
 
 from .chart_batch import transform_atlas
@@ -111,7 +112,7 @@ def _boundary_centres(poly, variables, fan):
 
 
 def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False,
-              diagnostics=None):
+              diagnostics=None, before_repair=None):
     n=len(variables)
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
@@ -164,7 +165,10 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
 
         # Repair uses the fan and adapted equation. A failed trial has no
         # atlas to return, so test its singular orbits before expanding charts.
-        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False, diagnostics=diagnostics)
+        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False,
+                               diagnostics=diagnostics, before_points=before_repair)
+        if repair is not None and "alternative" in repair:
+            return repair["alternative"]
         if repair is None or not repair['repairs']:
             return None
     coords=[f'u{i+1}' for i in range(n)]
@@ -314,38 +318,36 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                         return result
         except LimitError as error:
             last_limit = error
-    # A repaired threefold needs general absolute decomposition to glue its
-    # exceptional surfaces. An unmodified monomial fan can already certify
-    # their equations, incidences and chart ownership by torus descent.
-    prefer_unrepaired = mode == 'intrinsic' and len(variables) == 4 and nonconvenient
-    repaired = None
+    # Failure of embedded transversality can still leave a smooth strict
+    # transform. Test its own boundary before constructing point blowups.
+    # All adapted-coordinate candidates share the same original equation.
+    @cache
+    def intrinsic_trial():
+        nonlocal last_limit
+        from .newton_trials import resolve_trials
+        try:
+            return resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
+        except LimitError as error:
+            last_limit = error
+            return None
+
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
             fan=build_fan(transformed, exhaustive=exhaustive_faces())
             if not fan['isomorphism_off_origin']:
                 continue
             result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
-                             defer_outputs=defer_outputs or prefer_unrepaired, diagnostics=diagnostics)
+                             defer_outputs=defer_outputs, diagnostics=diagnostics,
+                             before_repair=intrinsic_trial if mode == 'intrinsic' else None)
         except LimitError as error:
             last_limit = error
             continue
         if result is not None:
-            if prefer_unrepaired and result['dual_complex']['status'] == 'unavailable':
-                repaired = result
-                break
             return result
     if mode == 'intrinsic' and nonconvenient:
-        from .newton_trials import resolve_trials
-        try:
-            trial = resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
-            if trial is not None:
-                return trial
-        except LimitError as error:
-            last_limit = error
-    if repaired is not None:
-        if not defer_outputs:
-            _repaired_boundary(repaired, poly)
-        return repaired
+        trial = intrinsic_trial()
+        if trial is not None:
+            return trial
     if len(variables) == 3:
         from .quadratic_fan import resolve_translated
         result = resolve_translated(poly, variables, mode, compute, ramification=True)

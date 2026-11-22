@@ -1,0 +1,103 @@
+{
+  "conditions": "Exact factorization in QQ[a]/(minpoly)[x,y,z]. Each trial times the uncached native affine call including row I/O or Singular factorize on the same polynomial. Timers exclude interpreter and coefficient field setup. Each Singular result is checked factor-by-factor up to a field unit, including multiplicity.",
+  "cpu_affinity": [
+    10
+  ],
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "cases": {
+    "cusp-shape": {
+      "equation": "x^6*(y^2+1)*((2*x+4*y+z)^2+y^2+1)^2+256*x^3*(y^2+1)*(2*x+4*y+z)+4096",
+      "relation": "a^2-(-1)",
+      "factors": 1,
+      "multiplicities": [
+        "1"
+      ],
+      "atlas_s": [
+        0.0017597750411368906,
+        0.001888187020085752,
+        0.0017382840160280466
+      ],
+      "singular_s": [
+        0.00258,
+        0.00248,
+        0.00254
+      ]
+    },
+    "split-repeated": {
+      "equation": "((x*y+z+1)^2+(x^2+y*z)^2)^2*(1298074214633706907132624082305024*x+y*z+1)^3",
+      "relation": "a^2-(-1)",
+      "factors": 3,
+      "multiplicities": [
+        "3",
+        "2",
+        "2"
+      ],
+      "atlas_s": [
+        0.005477597995195538,
+        0.005725226015783846,
+        0.0055028360220603645
+      ],
+      "singular_s": [
+        0.008292,
+        0.008264,
+        0.008219
+      ]
+    },
+    "nonsplit-repeated": {
+      "equation": "((x*y+z+1)^2+(x^2+y*z)^2)^2*(1298074214633706907132624082305024*x+y*z+1)^3",
+      "relation": "a^2-(2)",
+      "factors": 2,
+      "multiplicities": [
+        "3",
+        "2"
+      ],
+      "atlas_s": [
+        0.004278262029401958,
+        0.004558411019388586,
+        0.005202519008889794
+      ],
+      "singular_s": [
+        0.005057,
+        0.004953,
+        0.007728
+      ]
+    },
+    "primitive-product": {
+      "equation": "(x*(z^2-y))^2+1",
+      "relation": "a^2-(-1)",
+      "factors": 2,
+      "multiplicities": [
+        "1",
+        "1"
+      ],
+      "atlas_s": [
+        0.00048289302503690124,
+        0.0006663990207016468,
+        0.000509553006850183
+      ],
+      "singular_s": [
+        0.015874,
+        0.012874,
+        0.006628
+      ]
+    },
+    "primitive-sum": {
+      "equation": "x^2+(z^2-y)^2",
+      "relation": "a^2-(2)",
+      "factors": 1,
+      "multiplicities": [
+        "1"
+      ],
+      "atlas_s": [
+        0.0002178220311179757,
+        0.0003964289790019393,
+        0.00022256001830101013
+      ],
+      "singular_s": [
+        0.001131,
+        0.001135,
+        0.001158
+      ]
+    }
+  }
+}

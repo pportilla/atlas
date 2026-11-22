@@ -372,6 +372,41 @@ class FourVariableTorus(unittest.TestCase):
 
 
 class BoundaryRaysOverPositiveDimensionalCentres(unittest.TestCase):
+    def test_coordinate_component_keeps_only_the_sections_over_zero(self):
+        from engine.atlas_torus import section_complex
+        from engine.polynomial import parse_expression
+        names = list("abuv")
+        rays = ((1,1,0,0), (0,1,0,0), (0,0,1,0), (0,0,0,1))
+        # The fibre ideal is (a,u,v). On A=(a) there are three components.
+        # The orbit closure u=0 meets the fibre; the torus roots v=±1 miss it.
+        strict = tuple(parse("a+u*(v^2-1)", names).items())
+        result = section_complex([(rays, {0:"A"}, strict)], 4, True, common_source=True,
+                                 embedded_snc=True, local_coordinates=[names])
+        self.assertEqual(result["vertices"], [{"id":"A", "dimension":2}])
+        self.assertEqual(result["chart_sections"], [[{"id":"A", "ambient_divisor":"A", "ideal":["a","u"]}]])
+        strict = tuple(parse_expression("a+v^2-1", names).items())
+        result = section_complex([(rays, {0:"A"}, strict)], 4, True, common_source=True,
+                                 embedded_snc=True, local_coordinates=[names])
+        self.assertEqual((result["vertices"], result["cells"], result["chart_sections"]), ([], [], [[]]))
+        # Both torus components through u=v=0 would meet in the fibre.
+        # A whole contained orbit cannot assign an individual square root.
+        strict = tuple(parse("a+u^2-v^2", names).items())
+        self.assertIsNone(section_complex([(rays, {0:"A"}, strict)], 4, True, common_source=True,
+                                          embedded_snc=True, local_coordinates=[names]))
+
+    def test_relative_coordinate_primes_and_all_faces_replay(self):
+        from engine.resolution_complex import dual_complex
+        for extra, size in (("", (15,13,0)), ("+y*t^3", (21,37,18)), ("+y*z*t", (40,82,44))):
+            with self.subTest(extra=extra):
+                record = resolve(dict(polynomial=f"y*(x^2+y^3+y*z^3{extra})", variables=list("xyzt"),
+                                      mode="intrinsic", search="quick", compute="cpu"))
+                answer = record["dual_complex"]
+                dimensions = Counter(c["dimension"] for c in answer["cells"])
+                self.assertEqual((len(answer["vertices"]), dimensions[1], dimensions[2]), size)
+                for omit in ("atlas", "charts"):
+                    saved = {k:v for k,v in record.items() if k not in ("dual_complex", omit)}
+                    self.assertEqual(dual_complex(saved), answer)
+
     def test_higher_rank_relative_fan_from_saved_equations(self):
         from engine.native_library import affine_request
         from engine.polynomial import format_poly, sparse_row

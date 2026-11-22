@@ -346,11 +346,11 @@ Json::Value quadratic_translations(const Terms& f, size_t n) {
                 break;
             }
         }
-        // Use translations tangent to the identity. Linear coordinate changes
-        // have their own resolution paths. Bound this trial's square expansion.
-        if (!quadratic || shift.empty() || shift.size() > 128 ||
-            std::any_of(shift.begin(), shift.end(), [](const auto& term) {
-                return std::accumulate(term.first.begin(), term.first.end(), Z(0)) < 2;
+        // The nonlinear shift may include linear terms, but must fix the origin.
+        // Leave purely linear changes to the existing linear-coordinate routes.
+        if (!quadratic || shift.size() > 128 || shift.count(Powers(n)) ||
+            std::none_of(shift.begin(), shift.end(), [](const auto& term) {
+                return std::accumulate(term.first.begin(), term.first.end(), Z(0)) > 1;
             })) continue;
         bool cancelled = false;
         for (const auto& [e, c] : atlas::primary::multiply(shift, shift)) {
@@ -402,15 +402,28 @@ Json::Value ramification_translations(const Terms& f, size_t n) {
         fmpq_mpoly_factor_clear(squarefree,ring.ctx);
         ring.write(source.p,f);
         for (const auto& factor : repeated) {
-            if (factor.size()!=2) continue;
+            if (factor.size()<2 || factor.count(Powers(n))) continue;
             for (size_t axis=0;axis<n;++axis) {
                 Powers unit(n);unit[axis]=1;
                 const auto leading=factor.find(unit);
                 if (leading==factor.end()) continue;
-                const auto other=leading==factor.begin() ? std::next(leading) : factor.begin();
-                if (other->first[axis]!=0 || std::accumulate(other->first.begin(),other->first.end(),Z(0))<2)
-                    continue;
-                Terms shift{{other->first,-other->second/leading->second}};
+                Terms shift=factor;
+                shift.erase(unit);
+                if (std::any_of(shift.begin(),shift.end(),[&](const auto& term){return term.first[axis]!=0;}))
+                    continue;  // The branch must be a graph a*y+h(z) with scalar a.
+                for (auto& [e,c] : shift) c/=-leading->second;
+                if (shift.size()>1) {
+                    // Translating a bivariate branch preserves its degree in y.
+                    // Bound its new z-degree before expanding a polynomial shift.
+                    const size_t z=3-cover-axis;
+                    const Z shift_degree=shift.rbegin()->first[z];
+                    Z y_degree=0, z_degree=0;
+                    for (const auto& [e,c] : branch) {
+                        y_degree=std::max(y_degree,e[axis]);
+                        z_degree=std::max(z_degree,Z(e[z]+e[axis]*shift_degree));
+                    }
+                    if ((1+y_degree)*(1+z_degree)>4096) continue;
+                }
                 Terms image=shift;image[unit]=1;
                 atlas::PolyValue adapted(ring.ctx);
                 std::vector<atlas::PolyValue> coordinates;

@@ -34,7 +34,9 @@ def translate_map(chart, names, translation, *, inverse=False):
 def _adapted_fan(adapted, names, mode, compute, *, ramification=False):
     if len(names) == 3 and not ramification:
         from .toric_backend import _diagonal
-        return _diagonal(adapted, names, mode, compute)
+        diagonal = _diagonal(adapted, names, mode, compute)
+        if diagonal is not None:
+            return diagonal
     from .newton_trials import _try
     return _try(adapted, names, adapted, mode=mode, construct=False)
 
@@ -50,8 +52,10 @@ def _translated_certificate(proof, names, translation):
     return proof
 
 
-def resolve_translated(polynomial, names, mode, compute=None, *, ramification=False):
+def resolve_translated(polynomial, names, mode, compute=None, *, ramification=False, expected_translation=None):
     for translation, adapted in translations(polynomial, names, ramification=ramification):
+        if expected_translation is not None and translation != expected_translation:
+            continue
         record = _adapted_fan(adapted, names, mode, compute, ramification=ramification)
         if record is None:
             continue
@@ -134,6 +138,42 @@ def _verify_owned_fan(charts, fan, n):
         raise InvalidChart("The owned charts omit cones of the translated fan.")
 
 
+def _weighted_outputs(record, polynomial, translation, options):
+    """Lift and independently check the original divisor on the translated support charts."""
+    from . import atlas
+    from .exact_json import result_json, sorted_record
+    from .general_atlas import native_general_outputs
+    from .weighted_record import nonreduced_resolution
+
+    names = record["variables"]
+    if record["mode"] != "embedded" or not (record.get("atlas") or record.get("charts")):
+        raise InvalidChart("A translated effective divisor requires an embedded chart cover.")
+
+    def reconstruct(support):
+        model = resolve_translated(support, names, "embedded", "cpu", expected_translation=translation,
+                                   ramification=translation.get("method") == "ramification graph")
+        if model is None:
+            raise InvalidChart("The reduced divisor has no such verified coordinate translation.")
+        return dict(model, variables=names, mode="embedded")
+
+    model = nonreduced_resolution(polynomial, names, "embedded", reconstruct)
+    if model is None:
+        raise InvalidChart("The coordinate translation disagrees with the defining polynomial.")
+    owned = atlas.to_json(atlas.from_record(model, polynomial, native=True))
+    model["atlas"] = owned
+    def same(a, b):
+        return result_json(sorted_record(a)) == result_json(sorted_record(b))
+    for key in ("atlas", "charts", "input_divisor", "fan", "root_families", "steps"):
+        if key in record and not same(record[key], model.get(key)):
+            raise InvalidChart(f"The saved translated divisor {key} differs from its reconstruction.")
+    proof = record.get("certificate", {})
+    for key in ("weights", "weighted_degree", "principal_exponents", "fan_ideal_exponents", "fan_coordinate_frame",
+                "boundary_image_ideals", "adapted_boundary_image_coordinate_ideals", "adapted_polynomial"):
+        if key in proof and not same(proof[key], model["certificate"].get(key)):
+            raise InvalidChart("The saved translated divisor certificate differs from its reconstruction.")
+    return owned, native_general_outputs(model, owned, complex=options["complex"], integrals=options["integrals"])
+
+
 def translated_outputs(record, polynomial, translation, verify, options):
     """Verify the fan after undoing the coordinate translation on every chart map."""
     names = record["variables"]
@@ -142,8 +182,8 @@ def translated_outputs(record, polynomial, translation, verify, options):
     ramification = translation.get("method") == "ramification graph"
     adapted = next((p for change, p in translations(polynomial, names, ramification=ramification)
                     if change == translation), None)
-    if adapted is None:
-        raise InvalidChart("The coordinate translation disagrees with the defining polynomial.")
+    if adapted is None or record.get("input_divisor"):
+        return _weighted_outputs(record, polynomial, translation, options)
     model = _adapted_fan(adapted, names, record["mode"], "cpu", ramification=ramification)
     if model is None:
         raise InvalidChart("The adapted polynomial did not verify the declared fan.")
@@ -166,8 +206,7 @@ def translated_outputs(record, polynomial, translation, verify, options):
         raise InvalidChart("The adapted polynomial differs from the translated source.")
     # A minimal archive may omit the producer name. Its verified coordinate
     # translation still identifies the chart and root conventions.
-    producer = "native-toric" if len(names) == 3 and not ramification else "verified-monomial-modification"
-    normalized_record = {"engine": producer, **record, key: normalized, "fan": model["fan"],
+    normalized_record = {**record, "engine": model["engine"], key: normalized, "fan": model["fan"],
                          "certificate": model["certificate"]}
     if "root_families" in model:
         normalized_record["root_families"] = model["root_families"]

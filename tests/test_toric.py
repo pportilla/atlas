@@ -43,6 +43,7 @@ def neighbors(dual):
 
 class ToricAtlas(unittest.TestCase):
     def test_ramification_graph_transports_original_fibres_and_replays(self):
+        from engine.atlas import from_json, to_json
         from engine.quadratic_fan import translations
         from engine.resolution_complex import dual_complex
         from engine.resolution_zetas import replay_zetas
@@ -55,6 +56,10 @@ class ToricAtlas(unittest.TestCase):
             change = {"coordinate":"y", "offset":"z^2", "method":"ramification graph"}
             self.assertEqual(result["certificate"]["coordinate_translation"], change)
             self.assertEqual(result["dual_complex"]["status"], "complete")
+            converted = to_json(from_json(result["atlas"], native=True))
+            self.assertTrue(all(c["torus"]["coordinate_translation"] == change for c in converted))
+            archive = {k:result[k] for k in ("mode", "variables", "status", "polynomial")}
+            self.assertEqual(dual_complex(dict(archive, atlas=converted)), result["dual_complex"])
             for omitted in ("atlas", "charts"):
                 saved = deepcopy(result)
                 del saved[omitted]
@@ -75,6 +80,93 @@ class ToricAtlas(unittest.TestCase):
         self.assertEqual(adapted, parse(f"x^{exponent}-((y+{coefficient}*z^2)^2+z^3)*y^2", BASE, bounded=False))
         reduced = parse("x^2-(y^2+z^3)*(y-z^2)", BASE)
         self.assertEqual(list(translations(reduced, BASE, ramification=True)), [])
+
+    def test_nondiagonal_surface_fans_under_polynomial_translations(self):
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+
+        for source, adapted in (
+            ("(x-y*z)^2+y^2*(y^3+z^5)", "x^2+y^2*(y^3+z^5)"),
+            ("(x-y-z^2)^2+y^2*(y^3+z^5)", "x^2+y^2*(y^3+z^5)"),
+            ("(z-2*x^2+y^3)^2+x^3*y^2+y^5", "z^2+x^3*y^2+y^5"),
+            ("x^2-(y^2+z^3)*(y-z^2-z^3)^2", "x^2-((y+z^2+z^3)^2+z^3)*y^2"),
+        ):
+            options = dict(variables=BASE, search="quick", compute="cpu")
+            reference = resolve(dict(options, polynomial=adapted, mode="embedded", monodromy=True))
+            for mode in ("embedded", "intrinsic"):
+                with self.subTest(source=source, mode=mode):
+                    result = resolve(dict(options, polynomial=source, mode=mode, monodromy=mode=="embedded"))
+                    self.assertEqual(result["engine"], "verified-monomial-modification")
+                    self.assertEqual(parse(result["certificate"]["adapted_polynomial"], BASE), parse(adapted, BASE))
+                    self.assertEqual(result["dual_complex"]["status"], "complete")
+                    for representation in ("charts", "atlas"):
+                        saved = {k:result[k] for k in ("mode", "variables", "status", "polynomial", representation)}
+                        if representation=="charts":
+                            saved["certificate"] = result["certificate"]
+                        self.assertEqual(dual_complex(saved), result["dual_complex"])
+                        if mode=="embedded":
+                            replay = replay_zetas(dict(record=saved, monodromy=True))
+                            for key in ("monodromy_zeta", "topological_zeta"):
+                                self.assertEqual(replay[key]["expression"], reference[key]["expression"])
+
+    def test_ramification_graph_requires_scalar_linear_coefficient_and_fixed_origin(self):
+        from engine.quadratic_fan import translations
+
+        for source in ("x^2-(y^2+z^3)*(y-1-z^2)^2", "x^2-(1+z)*((1+z)*y+z^3)^2"):
+            self.assertEqual(list(translations(parse(source, BASE), BASE, ramification=True)), [])
+        exponent, coefficient = 2**71+1, 2**151+1
+        source = f"x^{exponent}+(y-z^3)*(3*y-z^2-{coefficient}*z^3)^2"
+        (change, adapted), = translations(parse(source, BASE, bounded=False), BASE, ramification=True)
+        offset = f"(z^2+{coefficient}*z^3)/3"
+        self.assertEqual(change["coordinate"], "y")
+        self.assertEqual(parse(change["offset"], BASE, bounded=False), parse(offset, BASE, bounded=False))
+        self.assertEqual(adapted, parse(f"x^{exponent}+(y+({offset})-z^3)*9*y^2", BASE, bounded=False))
+
+        displaced = polynomial("(x-1-y-z^2)^2+y^2*(y^3+z^5)", BASE)
+        self.assertEqual(list(translations(displaced, BASE)), [])
+
+    def test_original_weighted_divisor_on_a_translated_fan(self):
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import InvalidChart
+        import json
+        import sympy as sp
+
+        s, t = sp.symbols("s T")
+        req = dict(variables=BASE, mode="embedded", compute="cpu", search="quick", monodromy=True)
+        for support, power in (("(x+y*z)^2+y^5+z^5", 3), ("(x-y*z)^2+y^2*(y^3+z^5)", 2)):
+            reduced = resolve(dict(req, polynomial=support))
+            result = json.loads(json.dumps(resolve(dict(req, polynomial=f"({support})^{power}"))))
+            self.assertEqual(result["dual_complex"]["status"], "complete")
+            self.assertEqual(result["input_divisor"]["factors"][0]["multiplicity"], power)
+            for field, variable, replacement in (("topological_zeta", s, power*s), ("monodromy_zeta", t, t**power)):
+                expected = sp.sympify(reduced[field]["expression"]).subs(variable, replacement)
+                self.assertEqual(sp.cancel(sp.sympify(result[field]["expression"])-expected), 0)
+            for view in ("atlas", "charts"):
+                archive = {k: result[k] for k in ("variables", "polynomial", "mode", "status", view)}
+                if view == "charts":
+                    archive["certificate"] = result["certificate"]
+                self.assertEqual(dual_complex(archive)["status"], "complete")
+                self.assertEqual(replay_zetas(dict(record=archive, monodromy=True))["monodromy_zeta"]["expression"],
+                                 result["monodromy_zeta"]["expression"])
+                broken = deepcopy(archive)
+                broken[view][0]["map"]["x"] = "0"
+                with self.assertRaises(InvalidChart):
+                    dual_complex(broken)
+            forged = deepcopy(result)
+            forged["input_divisor"]["unit_at_origin"] = "2"
+            with self.assertRaises(InvalidChart):
+                dual_complex(forged)
+
+        # Unequal orders on two different strict branches survive the frame change.
+        f = "(x-2*y*z-y^3)^2*(x-2*y*z+y^3)^3"
+        result = json.loads(json.dumps(resolve(dict(req, polynomial=f))))
+        self.assertEqual(result["monodromy_zeta"]["expression"], "(1-T^15)/(1-T^5)")
+        strict = [d["multiplicity"] for d in result["topological_zeta"]["numerical_data"]
+                  if d["component"].startswith("S")]
+        self.assertEqual(sorted(strict), [2, 3])
+        self.assertEqual(replay_zetas(dict(record=result, monodromy=True))["monodromy_zeta"],
+                         result["monodromy_zeta"])
 
     def test_completed_square_keeps_original_projection_on_replay(self):
         from engine.atlas import from_json, to_json

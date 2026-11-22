@@ -141,9 +141,8 @@ def monodromy_zeta(record, *, polynomial=None, strata=None):
     if record.get("origin", [0]*len(variables)) != [0]*len(variables):
         raise InputError("The resolution must be at the origin.")
 
-    saved = isinstance(record.get("atlas"), list) and bool(record["atlas"])
-    if record.get("mode") not in ("embedded", "intrinsic") or not (
-            saved or (record.get("engine") and record.get("charts"))):
+    has_cover = any(isinstance(record.get(key), list) and record[key] for key in ("atlas", "charts"))
+    if record.get("mode") not in ("embedded", "intrinsic") or not has_cover:
         raise InputError("The record needs its resolution mode and charts.")
     if polynomial is None:
         polynomial = parse(record.get("polynomial"), variables, bounded=False)

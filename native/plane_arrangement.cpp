@@ -338,7 +338,8 @@ struct Arrangement {
 
 using Factors = std::vector<std::pair<atlas::local::Polynomial, Z>>;
 
-Factors rational_hyperplanes(const atlas::local::Polynomial& f, size_t width, int minimum) {
+Factors rational_hyperplanes(const atlas::local::Polynomial& f, size_t width, int minimum,
+                            Q* primitive_unit = nullptr) {
     if (f.empty())
         return {};
     const Z d = atlas::local::total_degree(f.begin()->first);
@@ -348,7 +349,7 @@ Factors rational_hyperplanes(const atlas::local::Polynomial& f, size_t width, in
     for (const auto &term : f)
         if (atlas::local::total_degree(term.first) != d)
             return {};
-    auto factors = atlas::primary::factors(f, width);
+    auto factors = atlas::primary::factors(f, width, primitive_unit);
     if (Z(factors.size()) != d)
         return {};
     for (const auto &[factor, multiplicity] : factors) {
@@ -394,9 +395,9 @@ V resolve_arrangement(const V &request) {
         for (const auto& name : request["variables"]) names.push_back(name.asString());
         if (names.size() != 4) return {};
         auto f = atlas::sparse_json::read_terms(request["terms"], names.size());
-        const auto factors = rational_hyperplanes(f, names.size(), 3);
+        Q unit;
+        const auto factors = rational_hyperplanes(f, names.size(), 3, &unit);
         if (factors.empty()) return {};
-        const Q unit = f.rbegin()->second;
         V result;
         result["unit_at_origin"] = unit.get_str();
         for (auto& [e,c] : f) c /= unit;

@@ -13,6 +13,7 @@ EQUATIONS = {
     "triple-flat": "x*y*z*t*(x+2*y)",
     "five-general": "x*y*z*t*(x+y+z+t)",
     "two-pencils": "x*y*z*t*(x+y)*(z+t)",
+    "primitive-rational-pencils": "(-2/13)*x*y*z*t*(2*x-9*t)*(3*y+5*z)",
     "doubled-quadric": "x^2+(y*z-t^2)^2+y^5+z^5",
 }
 NAMES = list("xyzt")

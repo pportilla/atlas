@@ -62,6 +62,33 @@ class ComponentTests(unittest.TestCase):
                 reference = {(v.monic().as_expr(), m) for v, m in poly.factor_list()[1]}
                 self.assertEqual(actual, reference)
 
+    def test_rational_factors_descend_before_extension_to_the_marked_field(self):
+        from engine.field_factors import factors
+        x, y, z = self.v
+        real = x*y + z + 1
+        imag = x**2 + y*z
+        linear = 2**110*x + y*z + 1
+        expression = (real**2 + imag**2)**2 * linear**3
+        for extension, expected in (
+                (sp.I, [(real+sp.I*imag, 2), (real-sp.I*imag, 2)]),
+                (sp.sqrt(2), [(real**2+imag**2, 2)])):
+            poly = sp.Poly(expression, x, y, z, domain=sp.QQ.algebraic_field(extension))
+            result = {(p.monic().as_expr(), m) for p, m in factors(poly)}
+            reference = {(sp.Poly(p, x, y, z, domain=poly.domain).monic().as_expr(), m)
+                         for p, m in [*expected, (linear, 3)]}
+            self.assertEqual(result, reference)
+
+    def test_marked_rational_factor_with_wide_degree_and_coefficient(self):
+        from engine import native_polynomial as np
+        from engine.candidate_field import indexed_field
+        from engine.field_factors import factors
+        from engine.field_polynomial import polynomial
+        axes = np.symbols("v0:3")
+        x, y, z = axes
+        field, _ = indexed_field((1, 0, -2), 0)
+        p = polynomial(x**(2**75) + y*z + 2**110, axes, field)
+        self.assertEqual(factors(p), [(p, 1)])
+
     def test_translated_norm_preserves_multiplicities_and_skips_a_bad_shift(self):
         from engine.field_factors import factors
         x,y,_ = self.v

@@ -24,6 +24,10 @@ mpz_class degree(const Polynomial& f) {
     return out;
 }
 
+bool rational_coefficients(const Polynomial& f) {
+    return std::all_of(f.begin(), f.end(), [](const auto& term) { return term.first.back() == 0; });
+}
+
 struct FieldRing {
     size_t width; // ordinary coordinates followed by theta
     local::SparseLexRing ring;
@@ -40,6 +44,13 @@ struct FieldRing {
 
     Polynomial monic(const Polynomial& f) {
         if (f.empty()) return {};
+        if (rational_coefficients(f)) {
+            const auto& leading = f.rbegin()->second;
+            if (leading == 1) return f;
+            auto normalized = f;
+            for (auto& [e,c] : normalized) c /= leading;
+            return normalized;
+        }
         // The reduced QQ basis of (m,f) contains the unique monic K-polynomial
         // and m. A nonzero constant of K gives the unit ideal instead.
         auto g = primary::reduced({modulus,f},width,true);
@@ -126,8 +137,7 @@ struct FieldRing {
     // when W^2+c splits over K. Gauss's lemma applies since one of the two
     // coefficients in x_i is a unit.
     std::optional<Factors> quadratic_composition(const Polynomial& f) {
-        if (width <= 2 || f.size() < 2 ||
-            std::any_of(f.begin(),f.end(),[](const auto& t){ return t.first.back() != 0; }))
+        if (width <= 2 || f.size() < 2 || !rational_coefficients(f))
             return std::nullopt;
         for (size_t axis = 0; axis+1 < width; ++axis) {
             const bool constant = f.count(Powers(width)) && std::all_of(f.begin(),f.end(),[&](const auto& term) {
@@ -197,6 +207,27 @@ struct FieldRing {
             factors.insert(factors.end(),split->begin(),split->end());
             return factors;
         }
+        if (!section_axis && rational_coefficients(f)) {
+            // The absolute factors of a QQ-irreducible polynomial in characteristic
+            // zero are distinct Galois conjugates. Each has positive degree in
+            // every coordinate on which the input depends. Translate only the
+            // coordinate of least positive degree in the square-free norm.
+            for (const auto& [part, power] : primary::factors(f,width)) {
+                Powers degrees(width);
+                for (const auto& [e,c] : part)
+                    for (size_t i = 0; i+1 < width; ++i) degrees[i] = std::max(degrees[i],e[i]);
+                size_t axis = 0;
+                for (size_t i = 1; i+1 < width; ++i)
+                    if (degrees[i] && (!degrees[axis] || degrees[i] < degrees[axis])) axis = i;
+                if (degrees[axis] == 1) {
+                    factors.emplace_back(monic(part),power);
+                } else {
+                    for (auto& [prime,m] : factor(part,axis))
+                        factors.emplace_back(std::move(prime), power*m);
+                }
+            }
+            return factors;
+        }
 
         PolyValue original(ring.ctx), derivative(ring.ctx);
         ring.write(original.p,f);
@@ -206,9 +237,11 @@ struct FieldRing {
             if (!fmpq_mpoly_is_zero(derivative.p,ring.ctx))
                 common = gcd(common,monic(ring.read(derivative.p)));
         }
-        const auto squarefree = quotient(f,common);
+        const auto squarefree = common == one ? std::move(f) : quotient(f,common);
         PolyValue shifted(ring.ctx), norm(ring.ctx);
-        for (mpz_class a = 0;; ++a) {
+        // At shift zero a rational polynomial has norm f^[K:QQ].
+        const bool repeated_norm = modulus.rbegin()->first.back() > 1 && rational_coefficients(squarefree);
+        for (mpz_class a = repeated_norm ? 1 : 0;; ++a) {
             ring.write(shifted.p,translate(squarefree,a,false,section_axis));
             if (!fmpq_mpoly_resultant(norm.p,relation.p,shifted.p,width-1,ring.ctx))
                 throw std::runtime_error("Unable to compute the number-field norm.");
@@ -216,6 +249,10 @@ struct FieldRing {
             // Norm = product of all conjugate translates. For squarefree F
             // it is squarefree precisely when the conjugates are disjoint.
             if (std::any_of(rational.begin(),rational.end(),[](const auto& p){ return p.second != 1; })) continue;
+            if (section_axis && rational.size() == 1) {
+                factors.emplace_back(squarefree,1);
+                return factors;
+            }
             for (const auto& [image,m] : rational) {
                 auto prime = gcd(squarefree,monic(translate(image,a,true,section_axis)));
                 if (prime == one || prime.empty()) throw std::logic_error("A norm factor has no marked-field branch.");
