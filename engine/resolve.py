@@ -372,6 +372,9 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             r = resolve_binomial(p,variables,mode,compute=compute)
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
+    if r is None and native_range and len(variables) == 3:
+        from .plane_arrangement import resolve_arrangement
+        r = resolve_arrangement(p, variables, mode, verified, bool(selected_zetas(request)))
     if r is None and parallel_search and mode == "embedded" and len(p) <= 3 and len(variables) <= 4:
         from .newton_trials import bounded_first_trial
         from .native_library import Unavailable

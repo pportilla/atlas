@@ -18,6 +18,46 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MonodromyTests(unittest.TestCase):
+    def test_arrangement_triple_line_certifies_the_missing_order_three(self):
+        from engine.resolution_zetas import replay_zetas
+        names = list("xyz")
+        for equation, point in (("x*y*z*(x+y)", ["0", "0", "1"]),
+                                ("(x-2*z)*(y+3*z)*(x+y+z)*(x+2*y+z)", ["1", "-3/2", "1/2"])):
+            record = resolve(dict(polynomial=equation, variables=names, search="quick", monodromy=True))
+            zeta = record["monodromy_zeta"]
+            index, witness = next((i, s) for i, s in enumerate(zeta["nearby_strata"])
+                                  if s["model"] == "ordinary multiple point")
+            self.assertEqual((zeta["expression"], witness["expression"], witness["point"]), ("1", "(1-T^3)", point))
+            # Independently substitute the displayed transverse plane into the
+            # exact original polynomial, including its nonconstant local unit.
+            base = dict(zip(sp.symbols("x y z"), map(sp.Rational, point)))
+            slice_map = dict(base)
+            for axis, transverse in zip(witness["slice_axes"], witness["transverse_coordinates"]):
+                slice_map[sp.Symbol(axis)] += sp.Symbol(transverse)
+            self.assertEqual(sp.expand(sp.sympify(equation).subs(slice_map) -
+                                       sp.sympify(witness["transverse_germ"])), 0)
+            self.assertTrue(all(sp.sympify(f).subs(base) == 0 for f in witness["coordinates"]))
+            pole = next(p for p in record["monodromy_check"]["poles"] if p["value"] == "-2/3")
+            self.assertEqual(pole["witness"], "nearby ordinary multiple point")
+            self.assertEqual(pole["nearby_matches"], [{"stratum_index": index, "cyclotomic_exponent": 1}])
+            self.assertEqual(record["monodromy_check"]["status"], "verified")
+            record["monodromy_zeta"] = {**zeta, "nearby_strata": []}
+            replay = replay_zetas(dict(record=record, zetas=["monodromy", "topological"]))
+            self.assertEqual(replay["monodromy_zeta"], zeta)
+            self.assertEqual(replay["monodromy_check"], record["monodromy_check"])
+
+    def test_four_planes_on_one_line_preserve_wide_transverse_coefficients(self):
+        scalar = 2**110 + 3
+        record = resolve(dict(polynomial=f"{scalar}*x*y*(x+y)*(x+2*y)*z",
+                              variables=list("xyz"), search="quick", monodromy=True))
+        witness, = [row for row in record["monodromy_zeta"]["nearby_strata"]
+                    if row["model"] == "ordinary multiple point"]
+        u, v = sp.symbols("u1 u2")
+        self.assertEqual(witness["multiplicity"], 4)
+        self.assertEqual(witness["factors"], [{"multiplicity": 4, "exponent": 2}])
+        self.assertEqual(sp.expand(sp.sympify(witness["transverse_germ"]) -
+                                   scalar*u*v*(u + v)*(u + 2*v)), 0)
+
     def test_isolated_curve_has_only_the_origin_zeta(self):
         record = resolve({"polynomial": "y^2-x^3", "variables": ["x", "y"], "search": "quick",
                           "zetas": ["monodromy"]})

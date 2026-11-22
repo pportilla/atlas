@@ -24,6 +24,19 @@ def default(text):
 
 
 class BlowupsFromTheOrigin(unittest.TestCase):
+    def test_shared_curve_ends_the_repeated_surface_point_choice(self):
+        record = resolve(dict(polynomial="x^5+(y^2-z^3)^2", variables=NAMES, mode="embedded",
+                              search="quick", compute="cpu", monodromy=True))
+        self.assertEqual(record["dual_complex"]["status"], "complete")
+        shared = [s for s in record["steps"] if s["rule"] == "shared boundary curve"]
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(shared[0]["center"], "curve")
+        self.assertEqual(set(shared[0]["components"]), {"strict", "B1", "B11"})
+        self.assertEqual(len(record["steps"]), 34)
+        # The squared cusp has two disjoint cusp Milnor fibres (chi=-1 each).
+        # Joining with the five-point x^5 fibre gives reduced Euler number 12.
+        self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], 13)
+
     def test_same_zeta_functions_as_the_newton_resolutions(self):
         # Two resolutions of the same germ, by different centres.
         for text in ("x^2+y^3+z^5", "x^2+y^3+z^3", "x^3+y^3+z^4", "x^2+y^2+z^4"):

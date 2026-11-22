@@ -94,6 +94,38 @@ class NewtonSingularCentres(unittest.TestCase):
         self.assertEqual(solved["monodromy_zeta"]["expression"], "1")
         self.assertEqual(len(solved["atlas"]), 3)
 
+    def test_intrinsic_chain_and_loop_sections_replay_on_their_own_charts(self):
+        from engine.resolution_complex import dual_complex
+        from engine.resolve import resolve
+        from engine.session_values import Resolution
+
+        names = list("xyz")
+        for source, count in (("x^3*y+y^3+z^4", 12), ("x^3*y+y^2*z+z^4", 13),
+                              ("x^2*y+x*y^4+z^4", 10), ("x^2*y+y^3*z+z^3*x", 12),
+                              ("x^2*y+y^3*z+z^4*x", 10)):
+            with self.subTest(source=source):
+                record = resolve(dict(polynomial=source, variables=names, mode="intrinsic",
+                                      search="quick", compute="cpu"))
+                self.assertEqual(record["status"], "resolved")
+                boundary = dual_complex(record)
+                self.assertEqual(boundary, record["dual_complex"])
+                self.assertEqual((len(boundary["vertices"]), len(boundary["cells"])), (count, count-1))
+                resolution = Resolution(record)
+                divisors = {d.id for chart in resolution.charts for d in chart.divisors}
+                self.assertEqual(divisors, {v["id"] for v in boundary["vertices"]})
+                for chart in resolution.charts:
+                    for divisor in chart.divisors:
+                        self.assertTrue(divisor.ideal_in(chart))
+
+        # This chart has two disjoint curves on one exceptional plane.
+        # Setting u3=0 in u1^2+u1+u3 gives the factors u1 and u1+1.
+        record = resolve(dict(polynomial="x^2*y+x*y^4+z^4", variables=names, mode="intrinsic",
+                              search="quick", compute="cpu"))
+        chart = next(c for c in record["charts"] if c["strict_transform"] == "u1^2+u1+u3")
+        curves = [d for d in chart["exceptional"] if d["ambient_divisor"] == "E4"]
+        self.assertEqual({d["id"] for d in curves}, {"E4.1", "E4.2"})
+        self.assertEqual({tuple(d["ideal"]) for d in curves}, {("u3", "u1"), ("u3", "u1+1")})
+
     def test_auxiliary_fan_euler_on_chart_orbits_and_fallback(self):
         from engine import monomial_atlas
         from engine.newton_trials import _try
@@ -117,3 +149,61 @@ class NewtonSingularCentres(unittest.TestCase):
                 self.assertEqual(fan.call_count, fan_calls)
                 self.assertEqual(sum(not call.kwargs.get("monomial_only") for call in rows.call_args_list), general_calls)
                 self.assertEqual(topological_zeta(record, strata=strata)["expression"], expected)
+
+    def test_intrinsic_fan_replay_checks_a_singular_exceptional_section(self):
+        from engine.newton_trials import _try
+        from engine.resolution_complex import dual_complex
+
+        # The ordinary blowup gives a smooth strict surface. In its z chart
+        # the exceptional plane cuts out two lines that meet, so a rule for
+        # smooth, disjoint components of a single section cannot apply.
+        names = list("xyz")
+        support = [(1,0,0), (0,1,0), (0,0,1)]
+        source = "x*y+z^3"
+        verified = []
+        record = _try(parse(source, names), names, support, mode="intrinsic", verified=verified)
+        record.update(polynomial=source, atlas=verified[0][1][0])
+        record["certificate"]["atlas_verification"] = "Embedded normal crossings on the owned origin fibre"
+        replay = dual_complex(record)
+        self.assertEqual(replay, record["dual_complex"])
+        self.assertEqual([cell["vertices"] for cell in replay["cells"]], [["E1.1", "E1.2"]])
+        # For z^5 even the strict surface remains singular on this fan.
+        self.assertIsNone(_try(parse("x*y+z^5", names), names, support, mode="intrinsic"))
+
+    def test_intrinsic_fan_rejects_contradictory_displayed_chart_claims(self):
+        import json
+        from engine.resolution_complex import dual_complex
+        from engine.resolve import resolve
+        from engine.strata import InvalidChart
+
+        record = resolve(dict(polynomial="x^2*y+x*y^4+z^4", variables=list("xyz"), mode="intrinsic",
+                              search="quick", compute="cpu"))
+        saved = json.loads(json.dumps(record))
+        for component in saved["atlas"][0]["components"]:
+            generator, = component["ideal"]
+            component["ideal"] = [f"2*({generator})", f"3*({generator})"]
+        self.assertEqual(dual_complex(saved), record["dual_complex"])
+        saved["fan"]["rays"][0][0] = bool(saved["fan"]["rays"][0][0])
+        with self.assertRaises(InvalidChart):
+            dual_complex(saved)
+        minimal = json.loads(json.dumps(record))
+        del minimal["engine"], minimal["certificate"]
+        self.assertEqual(dual_complex(minimal), record["dual_complex"])
+        minimal["charts"][0]["exceptional"][0]["ideal"] = ["1"]
+        with self.assertRaises(InvalidChart):
+            dual_complex(minimal)
+        for owned in (True, False):
+            for field in ("map", "strict_transform", "exceptional"):
+                with self.subTest(owned=owned, field=field):
+                    saved = json.loads(json.dumps(record))
+                    if not owned:
+                        del saved["atlas"]
+                    chart = saved["charts"][0]
+                    if field == "map":
+                        chart["map"]["x"] = "1"
+                    elif field == "strict_transform":
+                        chart[field] = "1"
+                    else:
+                        chart[field][0]["ideal"] = ["1"]
+                    with self.assertRaises(InvalidChart):
+                        dual_complex(saved)

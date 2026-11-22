@@ -321,9 +321,61 @@ Json::Value two_blowups(const Terms& f,size_t n,size_t x,size_t y) {
     return result;
 }
 
+// For f = a*x^2 + b*x + c, substitute x = X - b/(2*a).
+// b and c use only the other variables. With b(0)=0 this triangular
+// automorphism fixes the origin and has Jacobian determinant one.
+Json::Value quadratic_translations(const Terms& f, size_t n) {
+    Json::Value candidates(Json::arrayValue);
+    for (size_t axis = 0; axis < n; ++axis) {
+        Powers square(n);
+        square[axis] = 2;
+        const auto leading = f.find(square);
+        if (leading == f.end()) continue;
+        const Q a = leading->second;
+        Terms shift, adapted;
+        bool quadratic = true;
+        for (const auto& [e, coefficient] : f) {
+            if (e[axis] == 0 || e == square) {
+                adapted.emplace(e, coefficient);
+            } else if (e[axis] == 1) {
+                auto power = e;
+                power[axis] = 0;
+                shift.emplace(std::move(power), -coefficient / (2*a));
+            } else {
+                quadratic = false;
+                break;
+            }
+        }
+        // Use translations tangent to the identity. Linear coordinate changes
+        // have their own resolution paths. Bound this trial's square expansion.
+        if (!quadratic || shift.empty() || shift.size() > 128 ||
+            std::any_of(shift.begin(), shift.end(), [](const auto& term) {
+                return std::accumulate(term.first.begin(), term.first.end(), Z(0)) < 2;
+            })) continue;
+        bool cancelled = false;
+        for (const auto& [e, c] : atlas::primary::multiply(shift, shift)) {
+            if ((adapted[e] -= a*c) == 0) {
+                adapted.erase(e);
+                cancelled = true;
+            }
+        }
+        // Search for a hidden square in the given face. If no constant-part
+        // monomial cancels, leave the original face to the Newton verifier.
+        if (!cancelled) continue;
+        Json::Value choice;
+        choice["axis"] = Json::UInt64(axis);
+        choice["shift"] = atlas::local::encode_row(shift);
+        choice["adapted"] = atlas::local::encode_row(adapted);
+        candidates.append(std::move(choice));
+    }
+    return candidates;
+}
+
 Json::Value decode(const Json::Value& request) {
     const auto n = request["width"].asUInt64();
     const auto op = request["operation"].asString();
+    if (op == "quadratic_translations")
+        return quadratic_translations(atlas::local::decode_row(request["row"].asString(), n), n);
     if (op=="jacobian_support" || op=="two_blowups") {
         if (!n) throw std::invalid_argument("Expected a positive number of coordinates.");
         const auto f=atlas::local::decode_row(request["row"].asString(),n);

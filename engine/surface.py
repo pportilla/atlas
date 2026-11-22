@@ -15,7 +15,7 @@ Two facts used below. Since the differentials of the divisors through q are
 independent in W, and those of the divisors tangent to X at q (the E with
 D_E of order at least 2 at q) lie on the line of forms vanishing on the
 tangent plane of X: at most one divisor is tangent to X at a point; and two
-divisors that share a curve through q exclude a tangent one there.
+divisors that share a curve through q exclude a third tangent divisor there.
 
 The blowup of W at a point q of X blows up X at q; the new curve A has
 m(E, A) = (order of D_E at q) - 1 for the old divisors through q and
@@ -32,9 +32,13 @@ Procedure. Its steps, in this order of priority:
      largest multiplicity m(E, C). If M >= 2, take the last label E that
      attains it and the union G of the curves with m(E, C) = M; if M = 1,
      the last pair of labels with a common curve and the union G of their
-     common curves. If G is singular (two of its curves cross, or one
-     crosses itself), blow up its singular points: they are nodes of R,
-     their number goes down, and the new curves do not belong to G.
+     common curves. At a singular point of G the surface centre selector
+     can distinguish one branch as a shared curve of two exceptional
+     divisors. Their intersection is a smooth toroidal centre. On an affine
+     coordinate chart its line belongs to X exactly when the restriction
+     of the strict equation to the line vanishes identically. Blowing up
+     this curve leaves X fixed and lowers its total trace multiplicity by
+     one. Otherwise the point rule blows up the singular points of G.
      Otherwise blow up G, the curves contained in a given other divisor
      first when the others are not. A curve C of G has normal crossings
      with E: a divisor through one of its points q that does not contain C
@@ -52,10 +56,10 @@ Procedure. Its steps, in this order of priority:
      multiplicities (1, 1); after its blowup by (b) the two branches and
      the new curve belong to three different divisors.
 
-When none applies, the Lemma gives normal crossings. Each step either
-lowers the number of points of R that are not nodes after finitely many
-repetitions, or a sum of multiplicities, or the number of nodes of (c),
-without undoing the earlier ones: the procedure is finite.
+When none applies, the Lemma gives normal crossings. The shared-curve
+test matters when two traces of equal multiplicity m meet. A point blowup
+can give multiplicity 2m-1 along the new exceptional curve and recreate
+the tie after further blowups.
 
 Computation. The curves and multiplicities are those of polynomials in two
 variables when X is the graph of a rational function over a coordinate
@@ -359,6 +363,33 @@ def _line_centre(variables, ambient, strict, divisors, working, away):
     if found is not None:
         return (2, integer_from_decimal(found["top"]), 0, tuple(found["labels"])), "curve", exprs(variables, found["ideal"])
     return None
+
+
+def shared_boundary_curve(charts, surfaces, key):
+    """Try a common pair of exceptional divisors to separate multiple trace branches."""
+    from .centre_weights import centre_rows
+    from .kernel import exprs
+    from .kernel_json import kernel_json
+    from .polynomial import integer_text
+    data = []
+    for chart, strict in zip(charts, surfaces):
+        if strict is None:
+            data.append(None)
+            continue
+        variables = chart.variables
+        def rows(ideal):
+            return centre_rows(variables, ideal)
+        affine = not chart.ambient and len(variables) == 3 and len(strict) == 1
+        data.append(dict(affine=affine, strict=rows(strict)[0] if affine else None,
+                         divisors={label: rows(ideal) for label, _, _, ideal in chart.components
+                                   if label != "strict" and label.startswith("B")},
+                         fibre_region=rows((*chart.fibre, *chart.region)), removed=[rows(h) for h in chart.removed]))
+    kind, multiplicity, point, labels = key
+    answer = kernel_json("atlas_surface_centre_choice", "shared_curve", charts=data,
+                         key=[kind, integer_text(multiplicity), point, labels])
+    if answer is not None:
+        return [None if centre is None else exprs(chart.variables, centre)
+                for chart, centre in zip(charts, answer, strict=True)]
 
 
 def step(variables, ambient, strict, divisors, working, deadline=None, away=()):

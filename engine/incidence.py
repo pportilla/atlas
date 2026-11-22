@@ -31,10 +31,11 @@ def incidence(operation, **fields):
     return kernel_json("atlas_incidence", operation, **fields)
 
 
-def counted_boundary(counts, orbits, dimension, intrinsic, marked):
+def counted_boundary(counts, orbits, dimension, intrinsic, marked, *, charts=()):
     labels = [next(iter(key)) for key in counts if len(key) == 1]
+    from .chart_gluing_kernel import chart_input
     return incidence("boundary", labels=labels, counts=_intersections(counts), dimension=dimension,
-                     intrinsic=intrinsic, marked=marked,
+                     intrinsic=intrinsic, marked=marked, charts=[chart_input(c) for c in charts],
                      orbits={next(iter(k)): v == 1 for k,v in orbits.items() if len(k) == 1})
 
 

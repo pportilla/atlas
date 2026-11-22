@@ -35,6 +35,10 @@ def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False,
     if replay_canonical and record.get("engine") == "canonical-blowups":
         from .canonical_replay import canonical_outputs
         return canonical_outputs(record, polynomial, **options)
+    if record.get("engine") == "central-plane-arrangement" or any(
+            isinstance(chart, dict) and "arrangement_chart" in chart for chart in (record.get("atlas") or ())):
+        from .plane_arrangement import arrangement_outputs
+        return arrangement_outputs(record, polynomial, integrals)
     identity = identity_outputs(record, polynomial, **options)
     if identity is not None:
         return identity

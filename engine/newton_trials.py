@@ -1,33 +1,85 @@
 """Try regular monomial ideal blowups and verify the original equation in every chart."""
 from .newton_fan import bounded_fan, build_fan, trial_supports
-from .polynomial import LimitError
+from .polynomial import LimitError, parse_expression
 from .strata import InvalidChart
 
 
-def _record(names, support, fan, centres, charts):
+def _record(names, support, fan, centres, charts, mode):
     proof = {"method": "regular monomial modification and chart Jacobian criteria",
              "fan_ideal_exponents": [list(e) for e in sorted(support)],
              "boundary_image_coordinate_ideals": centres,
              "description": "The fan is regular and covers the positive orthant. The exceptional "
                             "images lie in the singular locus. Each chart uses the original polynomial."}
-    return dict(status="resolved", engine="verified-monomial-modification", variables=names, mode="embedded",
+    return dict(status="resolved", engine="verified-monomial-modification", variables=names, mode=mode,
                   charts=charts, steps=[{"id":"Toric", "type":"regular toric modification"}],
                   summary=f"Certified toric modification with {len(charts)} charts.", fan=fan, certificate=proof)
 
 
-def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integrals=False, construct=True):
+def _chart_divisors(owned, sections):
+    strict = "1"
+    ambient = []
+    for component in owned["components"]:
+        equation, = component["ideal"]
+        if component["id"] == "strict":
+            strict = equation
+        else:
+            ambient.append(dict(id=component["id"], equation=equation, total_multiplicity=component["multiplicity"]))
+    if sections is None:
+        return dict(strict_transform=strict, exceptional=ambient)
+    local = [dict(section, equation=", ".join(section["ideal"])) for section in sections]
+    return dict(strict_transform=strict, ambient_components=ambient, exceptional=local)
+
+
+def verify_intrinsic_presentation(record, atlas, output):
+    """Cross-check public fan charts against rederived pullbacks and local sections."""
+    charts = record["charts"]
+    if (len(charts) != len(atlas) or len({chart.get("id") for chart in charts}) != len(atlas) or
+            record.get("root_families", {}) != output.get("root_families", {})):
+        raise InvalidChart("The displayed chart cover or root labels differ from the verified intrinsic fan.")
+    fan = record.get("fan", {})
+    rays = fan.get("rays", ())
+    cones = [tuple(chart.get("ray_indices", ())) for chart in charts]
+    if (not rays or any(len(ray) != len(record["variables"]) or any(type(k) is not int for k in ray) for ray in rays)
+            or any(type(i) is not int for cone in cones for i in cone)
+            or {i for cone in cones for i in cone} != set(range(len(rays)))
+            or sorted(cones) != sorted(map(tuple, fan.get("cones", ())))):
+        raise InvalidChart("The displayed cones differ from the intrinsic fan chart cover.")
+    for chart, owned, sections in zip(charts, atlas, output["chart_sections"], strict=True):
+        coordinates = owned["coordinates"]
+        indices = chart.get("ray_indices", ())
+        if (chart.get("coordinates") != coordinates or
+                [tuple(rays[i]) for i in indices] != list(map(tuple, owned["torus"]["rays"]))):
+            raise InvalidChart("The displayed intrinsic chart does not match its verified cone.")
+        def agrees(actual, expected):
+            return isinstance(actual, str) and (actual == expected or
+                parse_expression(actual, coordinates, as_row=True) == parse_expression(expected, coordinates, as_row=True))
+        mapping = chart.get("map", {})
+        if set(mapping) != set(owned["map"]) or any(not agrees(mapping[k], v) for k, v in owned["map"].items()):
+            raise InvalidChart("The displayed intrinsic chart projection differs from its verified map.")
+        shown = _chart_divisors(owned, sections)
+        if not agrees(chart.get("strict_transform"), shown["strict_transform"]):
+            raise InvalidChart("The displayed strict transform differs from its verified pullback.")
+        for kind in ("ambient_components", "exceptional"):
+            expected = {c["id"]: c for c in shown[kind]}
+            reported = chart.get(kind, ())
+            if len(reported) != len(expected) or {c.get("id"): c for c in reported} != expected:
+                raise InvalidChart("The displayed exceptional ideals differ from the verified intrinsic sections.")
+
+
+def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, verified=None, integrals=False,
+         construct=True):
     from .newton_backend import _boundary_centres, monomial
     from .newton_faces import exhaustive_faces
     if fan is None:
         fan = build_fan(support, exhaustive=exhaustive_faces())
     if len(fan["cones"]) > 32768:
         return None
-    if verified is not None and construct:
+    if verified is not None and construct and mode == "embedded":
         from .monomial_construction import construct as native_construct
         value = native_construct(poly, names, fan, integrals)
         if value is not None:
             centres, charts, atlas, output = value
-            result = _record(names, support, fan, centres, charts)
+            result = _record(names, support, fan, centres, charts, mode)
             result["dual_complex"] = output["dual_complex"]
             verified.append((result, (atlas, output)))
             return result
@@ -40,10 +92,12 @@ def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integr
         rays = [fan["rays"][i] for i in cone]
         mapping = dict(zip(names, (monomial(coordinates, e) for e in zip(*rays))))
         charts.append(dict(id=f"N{k}", coordinates=coordinates, ray_indices=cone, map=mapping))
-    result = _record(names, support, fan, centres, charts)
+    result = _record(names, support, fan, centres, charts, mode)
     from .monomial_atlas import fan_outputs
     try:
-        checked = fan_outputs(result, poly, integrals=False, bounded=bounded)
+        intrinsic = mode == "intrinsic"
+        checked = fan_outputs(result, poly, intrinsic=intrinsic, integrals=False, bounded=bounded,
+                              local_sections=intrinsic)
     except InvalidChart:
         return None
     if checked is None:
@@ -52,11 +106,10 @@ def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integr
     # The public charts and serialized atlas describe the same pullbacks.
     # Keep the compact fan chart format so the shared verifier will stream
     # the original equation on the requested fibre when called by the solver.
-    for chart, owned in zip(charts, atlas):
-        strict = [c for c in owned["components"] if c["id"] == "strict"]
-        chart["strict_transform"] = strict[0]["ideal"][0] if strict else "1"
-        chart["exceptional"] = [{"id":c["id"], "equation":c["ideal"][0], "total_multiplicity":c["multiplicity"]}
-                                for c in owned["components"] if c["id"] != "strict"]
+    for index, (chart, owned) in enumerate(zip(charts, atlas, strict=True)):
+        chart.update(_chart_divisors(owned, outputs["chart_sections"][index] if intrinsic else None))
+    if "root_families" in outputs:
+        result["root_families"] = outputs["root_families"]
     result["dual_complex"] = outputs["dual_complex"]
     if verified is not None and not bounded and not integrals:
         # The caller attaches this certified atlas instead of verifying the
@@ -65,10 +118,15 @@ def _try(poly, names, support, *, fan=None, bounded=False, verified=None, integr
     return result
 
 
-def resolve_trials(poly, names, *, verified=None, integrals=False, construct=True):
-    for support in trial_supports(poly):
+def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=False, construct=True):
+    def supports():
+        if mode == "intrinsic":
+            yield poly  # The original fan has not yet been tested on the strict transform.
+        yield from trial_supports(poly)
+
+    for support in supports():
         try:
-            result = _try(poly, names, support, verified=verified, integrals=integrals, construct=construct)
+            result = _try(poly, names, support, mode=mode, verified=verified, integrals=integrals, construct=construct)
         except LimitError:
             continue
         if result is not None:

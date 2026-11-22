@@ -81,7 +81,7 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp p
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
 # The canonical blowup stage composes the operations above in one call.
 KERNEL_SOURCES += canonical_blowup.cpp centre_maximum.cpp conjugate_plane_crossing.cpp
-KERNEL_SOURCES += weighted_resolution.cpp
+KERNEL_SOURCES += weighted_resolution.cpp plane_arrangement.cpp
 KERNEL_SOURCES += triton_factor_division.cpp hensel_factors.cpp modular_batch.cpp finite_field_batch.cpp
 KERNEL_SOURCES += absolute_factorization.cpp polynomial_gcd.cpp polynomial_gcd_image.cpp rational_factor_fallback.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))

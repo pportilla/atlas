@@ -16,6 +16,35 @@ from engine.resolve import resolve
 
 
 class RepairedNewtonAtlas(unittest.TestCase):
+    def test_hesse_quartic_embedded_repairs_descend_over_the_three_nodes(self):
+        from engine.resolution_complex import dual_complex
+
+        text = "x^3+y^3+z^3-3*x*y*z+x^4"
+        record = resolve(dict(polynomial=text, variables=list("xyz"), mode="embedded",
+                              search="quick", compute="cpu", monodromy=True))
+        boundary = record["dual_complex"]
+        self.assertEqual(boundary["status"], "complete")
+        saved = json.loads(json.dumps(record))
+        self.assertEqual(dual_complex(saved), boundary)
+        saved["atlas"].reverse()
+        for chart in saved["atlas"]:
+            if link := chart.get("repair_projection"):
+                link["parent"] = len(saved["atlas"]) - 1 - link["parent"]
+        self.assertEqual(dual_complex(saved), boundary)
+        # Dropping a region creates a double owner on the parent fan.
+        next(c for c in saved["atlas"] if c.get("torus") and c["region"])["region"] = []
+        self.assertEqual(dual_complex(saved)["status"], "partial")
+        # At each vertex of the tangent triangle the point blowup introduces
+        # B1, then blowing up its intersection with E1 separates them by B2.
+        arms = [("P1.B1", "P1.B2"), ("P2.B1.1", "P2.B2.1"), ("P2.B1.2", "P2.B2.2")]
+        self.assertEqual({v["id"] for v in boundary["vertices"]}, {"E1", *(v for arm in arms for v in arm)})
+        edges = [frozenset(c["vertices"]) for c in boundary["cells"]]
+        self.assertCountEqual(edges, [frozenset(edge) for first, second in arms
+                                      for edge in (("E1", second), (second, first))])
+        self.assertTrue(all(c["dimension"] == 1 and c["vertices"] == c["faces"] for c in boundary["cells"]))
+        self.assertEqual(record["monodromy_zeta"]["expression"], "1/(1-T^4)^3")
+        self.assertEqual(record["topological_zeta"]["expression"], "(3*s^2 + 6*s + 4)/(4*(s + 1)^3)")
+
     def test_intrinsic_nonisolated_quartic_has_two_chains_of_seven(self):
         cli = Path(__file__).resolve().parents[1] / "atlas"
         record = json.loads(subprocess.check_output(
@@ -179,6 +208,45 @@ class RepairedNewtonAtlas(unittest.TestCase):
                 charts = atlas.from_record(json.loads(json.dumps(weighted)), polynomial)
                 actual = atlas.outputs(charts, 3, complex=False)["numerical_data"]
                 self.assertEqual({row["component"]: row["multiplicity"] for row in actual}, oracle)
+
+    def test_quartic_with_two_conjugate_tacnodes(self):
+        from collections import Counter
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+
+        request = dict(polynomial="x^4+y^4+z^4+2*x^2*y^2", variables=list("xyz"), search="quick", compute="cpu")
+        embedded = resolve(dict(request, mode="embedded", monodromy=True))
+        boundary = embedded["dual_complex"]
+        self.assertEqual(boundary["status"], "complete")
+        # E1 is the exceptional projective plane. The repairs over [1:i:0]
+        # and [1:-i:0] are disjoint, with conjugate copies of all eight centres.
+        def conjugate(label):
+            if label == "E1":
+                return label
+            base, sheet = label.rsplit(".", 1)
+            return base + "." + {"1":"2", "2":"1"}[sheet]
+        expected = {"E1"} | {f"P1.B{stage}.{sheet}" for stage in range(1, 9) for sheet in (1, 2)}
+        self.assertEqual({v["id"] for v in boundary["vertices"]}, expected)
+        cells = Counter(frozenset(c["vertices"]) for c in boundary["cells"])
+        self.assertEqual(cells, Counter({frozenset(map(conjugate, face)): n for face, n in cells.items()}))
+        for face in cells:
+            self.assertEqual(len({v.rsplit(".", 1)[1] for v in face if v != "E1"}), 1)
+        self.assertEqual(Counter(c["dimension"] for c in boundary["cells"]), {1:32, 2:16})
+        # The two smooth projective conics have two common points. Their
+        # union has Euler number two, giving a four-sheet Milnor fibre over
+        # a complement of Euler number one. Scalar monodromy acts freely.
+        zeta = embedded["monodromy_zeta"]
+        self.assertEqual((zeta["milnor_fiber_euler_characteristic"], zeta["expression"]), (4, "1/(1-T^4)"))
+        archived = {k: v for k, v in embedded.items() if k not in (
+            "dual_complex", "monodromy_zeta", "topological_zeta", "monodromy_check")}
+        rebuilt = dual_complex(archived)
+        self.assertEqual((rebuilt["vertices"], rebuilt["cells"]), (boundary["vertices"], boundary["cells"]))
+        replay = replay_zetas(dict(record=archived, monodromy=True))
+        self.assertEqual(replay["topological_zeta"]["expression"], embedded["topological_zeta"]["expression"])
+
+        intrinsic = resolve(dict(request, mode="intrinsic"))["dual_complex"]
+        self.assertEqual(intrinsic["status"], "complete")
+        self.assertEqual((len(intrinsic["vertices"]), len(intrinsic["cells"])), (18, 16))
 
     def test_separate_strict_factors_on_an_implicit_chart(self):
         x, y, z = sp.symbols("x y z")

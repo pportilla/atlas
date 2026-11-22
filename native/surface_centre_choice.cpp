@@ -172,9 +172,56 @@ V try_projection(size_t axis, const Polynomial& a, const Polynomial& b,
     out["ideal"] = rows(centre);
     return out;
 }
+// At a crossing of two equally multiple trace curves, blowing up their
+// intersection can recreate the same choice with increased multiplicities.
+// If one branch belongs to two coordinate boundary divisors, their shared
+// line is a smooth toroidal centre. Blowing up the line fixes the strict
+// surface and lowers the sum of the trace multiplicities there by one.
+V shared_curve(const V& request) {
+    const auto& key = request["key"];
+    if (key[0].asInt() != 2 || mpz_class(key[1].asString()) < 2 || key[2].asInt() != 1 ||
+        key[3].size() != 1) return {};
+    const std::string tangent = key[3][0].asString();
+    const auto& charts = request["charts"];
+    std::set<std::string> partners;
+    for (const auto& chart : charts) {
+        const auto& boundary = chart["divisors"];
+        if (boundary.isMember(tangent))
+            for (const auto& label : boundary.getMemberNames()) if (label != tangent) partners.insert(label);
+    }
+    for (const auto& partner : partners) {
+        V centres = array();
+        bool eligible = true, present = false;
+        for (const auto& chart : charts) {
+            centres.append(V());
+            const auto& boundary = chart["divisors"];
+            if (!boundary.isMember(tangent) || !boundary.isMember(partner)) continue;
+            // Each such chart supplies its whole shared curve or certifies
+            // that none meets its owned portion of the origin fibre.
+            if (!chart["affine"].asBool()) { eligible = false; break; }
+            const auto a = parse(boundary[tangent],width), b = parse(boundary[partner],width);
+            const auto x = support(a,width), y = support(b,width);
+            if (x.size()!=1 || y.size()!=1 || x==y || a!=Basis{var(x.front(),width)} ||
+                b!=Basis{var(y.front(),width)}) { eligible = false; break; }
+            const auto f = local::decode_row(chart["strict"].asString(),width);
+            if (std::any_of(f.begin(),f.end(),[&](const auto& term) {
+                return !term.first[x.front()] && !term.first[y.front()];
+            })) continue; // The coordinate line is not contained in the surface.
+            Basis line{var(std::min(x.front(),y.front()),width),var(std::max(x.front(),y.front()),width)};
+            Owned owned{f,{parse(chart["fibre_region"],width)},{}};
+            for (const auto& hole : chart["removed"]) owned.holes.push_back(parse(hole,width));
+            const auto meets = owned.meets(line);
+            if (!meets.has_value()) { eligible = false; break; }
+            if (*meets) { centres[centres.size()-1] = rows(line); present = true; }
+        }
+        if (eligible && present) return centres;
+    }
+    return {};
+}
 } // namespace
 
 Json::Value surface_centre_choice(const Json::Value& q) {
+    if (q["operation"] == "shared_curve") return shared_curve(q);
     auto f = local::decode_row(q["surface"].asString(),width);
     Owned owned{f,{},{}};
     for (const auto& rs : q["work"]) owned.work.push_back(parse(rs,width));

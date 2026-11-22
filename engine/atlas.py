@@ -283,7 +283,10 @@ def from_record(record, polynomial, *, native=None):
             linear = record.get("certificate", {}).get("linear_map_to_input")
             linear = tuple(tuple(row) for row in linear) if linear else tuple(
                 tuple(int(i == j) for j in range(len(base))) for i in range(len(base)))
-            affine = replace(affine, torus=(rays, linear))
+            translation = record.get("certificate", {}).get("coordinate_translation")
+            affine = replace(affine, torus=(rays, linear),
+                             coordinate_translation=(translation["coordinate"], translation["offset"])
+                             if translation else ())
         charts.append(affine)
     if fan and any("blown_up" in item or "ray_indices" not in item for item in items):
         from .newton_repair import join_atlas
@@ -337,7 +340,10 @@ def to_json(charts):
              "fibre": [_record_text(g, c.variables) for g in c.fibre], "region": [_record_text(g, c.variables) for g in c.region],
              "removed": [[_record_text(g, c.variables) for g in z] for z in c.removed],
              "map": {name: _record_text(expr, c.variables) for name, expr in c.coordinates},
-             **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1]}} if c.torus else {}),
+             **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1],
+                           **({"coordinate_translation": dict(zip(("coordinate", "offset"), c.coordinate_translation))}
+                              if c.coordinate_translation else {})}} if c.torus else {}),
+             **({"arrangement_chart": dict(c.arrangement_chart)} if c.arrangement_chart else {}),
              **({"split_cone": c.split_cone} if c.split_cone else {}),
              **({"repair_projection": {"parent": c.repair_projection[0], "map":
                     [_record_text(g, c.variables) for g in c.repair_projection[1]]}}
@@ -406,6 +412,9 @@ def from_json(data, *, native=None):
                     or link["parent"] < 0 or not isinstance(link.get("map"), list)):
                 raise InputError("A repair projection needs its parent chart index and coordinate map.")
             projection = (link["parent"], ideal(link["map"]))
+        arrangement = item.get("arrangement_chart", {})
+        if not isinstance(arrangement, dict) or not all(isinstance(v, str) for v in arrangement.values()):
+            raise InputError("Invalid projective patch for a plane arrangement.")
         charts.append(Chart(tuple(symbols.values()), ambient,
                             tuple((c["id"], c["multiplicity"], c["nu"], ideal(c["ideal"])) for c in item["components"]),
                             ideal(item["fibre"]), ideal(item["region"]),
@@ -414,7 +423,11 @@ def from_json(data, *, native=None):
                             (tuple(map(tuple, item["torus"]["rays"])), tuple(map(tuple, item["torus"]["linear_map"])))
                             if item.get("torus") else (),
                             (item["point_blowup"]["parent"], tuple(item["point_blowup"]["center"]))
-                            if "point_blowup" in item else (), split_cone(item, len(item["map"])), projection))
+                            if "point_blowup" in item else (), split_cone(item, len(item["map"])), projection,
+                            coordinate_translation=tuple(item["torus"]["coordinate_translation"][k]
+                                                         for k in ("coordinate", "offset"))
+                            if "coordinate_translation" in item.get("torus", {}) else (),
+                            arrangement_chart=tuple(sorted(arrangement.items()))))
     return charts
 
 
@@ -478,7 +491,8 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
         answer.update(numerical_data=rows, strata=listed)
     found, reason = None, None
     if complex:
-        boundary = boundary_complex(charts, dimension, intrinsic, global_boundary_labels=global_boundary_labels)
+        boundary = boundary_complex(charts, dimension, intrinsic, global_boundary_labels=global_boundary_labels,
+                                    verified_embedded=not intrinsic)
         answer["dual_complex"] = boundary
         found, reason = boundary["cells"], boundary.get("reason")
         if reason:
@@ -566,7 +580,7 @@ def _intrinsic_product(charts, dimension):
     return {**boundary, "vertices": [{**v, "dimension": d} for v,d in zip(boundary["vertices"], dimensions)]}
 
 
-def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labels=False):
+def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labels=False, verified_embedded=False):
     """The exceptional intersections meeting the origin. Restriction to each
     smooth strict component computes its boundary in intrinsic mode."""
     from dataclasses import replace
@@ -593,7 +607,11 @@ def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labe
     dimension = stratum_dimension(ambient_dimension, int(intrinsic))
     orbits = {}
     counts = cells(charts, dimension, rational_counts=orbits)
-    incidence_data = counted_boundary(counts, orbits, ambient_dimension, intrinsic, any(c.coefficient_field for c in charts))
+    marked = any(c.coefficient_field for c in charts)
+    certify_relative = (global_boundary_labels and verified_embedded and not marked and
+                        not incomplete_repair and None in counts.values())
+    incidence_data = counted_boundary(counts, orbits, ambient_dimension, intrinsic, marked,
+                                      charts=charts if certify_relative else ())
     vertices, edges, reason = incidence_data["vertices"], incidence_data["edges"], incidence_data["reason"]
     convention = ("Exceptional divisor on the smooth strict transform" if intrinsic else
                   "Ambient exceptional divisor") + " in the germ over the origin over Qbar."

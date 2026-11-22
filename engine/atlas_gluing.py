@@ -184,22 +184,22 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
                        dimension=dimension, intrinsic=intrinsic)
     if not plan["valid"]:
         return None
-    if counts is not None and not intrinsic:
-        from .atlas_finite import finite_complex
-        finite = finite_complex(charts, dimension, counts)
-        if finite is not None:
-            return finite
-    if intrinsic and not _descended:
+    if not _descended and (intrinsic or any(c.repair_projection for c in charts)):
         from .repair_replay import restore_repair_maps
         charts = restore_repair_maps(charts)
         if charts is None:
             return None
-    if intrinsic and not _descended and any(c.repair_projection for c in charts):
+    if not _descended and any(c.repair_projection for c in charts):
         from .repair_gluing import repair_charts
         charts = repair_charts(charts)
         if charts is None:
             return None
         _descended = True
+    if counts is not None and not intrinsic and not _descended:
+        from .atlas_finite import finite_complex
+        finite = finite_complex(charts, dimension, counts)
+        if finite is not None:
+            return finite
     charts = _common_field(charts)
     if charts is None:
         return None
@@ -208,7 +208,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
         charts, character = _character_field(charts)
     carrier_dimension = plan["carrier"]
     # Repair and base change may introduce new charts or new presentations.
-    if intrinsic and not plan["restricted"]:
+    if (intrinsic or _descended) and not plan["restricted"]:
         plan = kernel_json("atlas_chart_geometry","preflight",charts=[chart_input(c) for c in charts],
                            dimension=dimension,intrinsic=intrinsic)
     for i, ideal in plan["check"]:
