@@ -4,6 +4,7 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from engine.app import AtlasServer
+from engine.zoo_search import zoo_search
 from tests.http_support import QuietHandler
 
 
@@ -44,7 +45,9 @@ class WebAPITests(unittest.TestCase):
             self.assertIn('Search by monomials', response.read().decode())
         with urlopen(self.url + '/zoo/zoo-data/index.json', timeout=5) as response:
             entries = json.load(response)['entries']
-        self.assertEqual(search(''), [e['id'] for e in entries])
+        ordered_ids = search('')
+        self.assertCountEqual(ordered_ids, [e['id'] for e in entries])
+        self.assertEqual(ordered_ids, zoo_search('')['ids'])
         self.assertIn('mixed-quartic', search(['1/2*u*v^3', '-v^4']))
         self.assertNotIn('mixed-quartic', search('1/2*u*v^3, v^4'))
         with self.assertRaises(HTTPError) as invalid:
