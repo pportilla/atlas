@@ -112,6 +112,7 @@ struct Surface {
     std::vector<std::string> parents;
     std::map<std::pair<unsigned,unsigned>,mpz_class> counts;
     std::map<std::pair<std::string,unsigned>,std::optional<std::vector<Factor>>> factor_cache;
+    Value chart_sections;
 
     bool chart(const Value& chart, const Strings& ray_rows) {
         std::array<int,3> rays;
@@ -123,6 +124,10 @@ struct Surface {
         const auto row=chart["strict"].asString();
         const auto strict=decode_row(row,3);
         Strings ideals,owned;
+        Strings coordinates;
+        for (const auto& v : chart["coordinates"]) coordinates.push_back(v.asString());
+        if (!coordinates.empty() && coordinates.size()!=3) return false;
+        Value local(Json::arrayValue);
         for (const auto& f : chart["owned"]) owned.push_back(f.asString());
         std::vector<unsigned> pieces;
         for (const auto& component : chart["boundary"]) {
@@ -144,6 +149,14 @@ struct Surface {
                 if (parents.at(id)!=name || std::find(pieces.begin(),pieces.end(),id)!=pieces.end()) return false;
                 pieces.push_back(id);
                 ideals.push_back(axis_row(i)); ideals.push_back(encode_row(factor));
+                if (!coordinates.empty()) {
+                    Value section;
+                    section["id"]=id;
+                    section["ambient_divisor"]=name;
+                    section["ideal"].append(coordinates[i]);
+                    section["ideal"].append(format_polynomial(factor,coordinates));
+                    local.append(std::move(section));
+                }
             }
         }
         std::string sizes=std::to_string(pieces.size());
@@ -165,6 +178,7 @@ struct Surface {
                 counts[std::minmax(pieces.at(a),pieces.at(b))]+=chi;
             }
         }
+        if (!coordinates.empty()) chart_sections.append(std::move(local));
         return true;
     }
     Value complex() const {
@@ -182,6 +196,11 @@ struct Surface {
                 if (!parent.emplace(name,label).second) return {};
                 Value vertex;vertex["id"]=name;vertex["dimension"]=1;vertices.append(std::move(vertex));
             }
+        }
+        if (!chart_sections.isNull()) {
+            auto& charts=result["chart_sections"]=chart_sections;
+            for (auto& chart : charts) for (auto& section : chart)
+                section["id"]=names.at(section["id"].asUInt());
         }
         using Pair=std::pair<std::string,std::string>;
         std::map<Pair,mpz_class> pairs,serial;

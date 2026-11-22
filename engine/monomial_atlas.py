@@ -385,7 +385,7 @@ def _fan_orbit_strata(polynomial, base, linear, charts, cones, axes, saved):
 
 
 def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integrals, bounded=False,
-                   *, pullbacks_only=False):
+                   *, pullbacks_only=False, local_sections=False, verified_parent_partition=False):
     from .point_atlas import _field, _invertible, _same_ideal, monomial_matrix
     base = record["variables"]
     n = len(base)
@@ -516,7 +516,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             true_fibre = [*ambient_rows, *(_row(g, coords) for g in projection)]
             saved_region = [*true_fibre, *(_row(g, coords) for g in chart["region"])]
             true_region = [*true_fibre, *(_row(g, coords) for g in region)]
-            if not _same_locus(dimension, saved_fibre, true_fibre) or not _same_locus(dimension, saved_region, true_region):
+            if not _same_locus(dimension, saved_fibre, true_fibre) or (
+                    not verified_parent_partition and not _same_locus(dimension, saved_region, true_region)):
                 raise InvalidChart("The fibre or partition differs from the chart projection and overlaps.")
             labels = {}
             candidate, branches = [], {}
@@ -671,7 +672,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                 for indices, chi in strata.items():
                     labels = frozenset(components[i]["id"] for i in indices)
                     contributions.append((labels, degree, chi))
-        if not saved:
+        if not saved or local_sections:
             header = {"split_cone": cone} if split else {"torus": {"rays": cone, "linear_map": linear}}
             output.append({"coordinates": list(coords), "ambient_ideal": ambient, "components": components,
                        "fibre": list(projection), "region": region, "removed": [], "map": dict(zip(base, projection)),
@@ -701,25 +702,68 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         found.update(numerical_data=rows, strata=listed)
     if complex:
         from .atlas_torus import section_complex
-        boundary = section_complex(sections, n, intrinsic, common_source=True)
+        local_coordinates = [chart["coordinates"] for chart, _ in charts] if local_sections else None
+        boundary = section_complex(sections, n, intrinsic, common_source=True, embedded_snc=embedded,
+                                   local_coordinates=local_coordinates)
         if boundary is None and surface_charts:
             from .fan_surface import surface_complex
-            boundary = surface_complex(surface_charts)
-        if boundary is None:
+            boundary = surface_complex(surface_charts, local_coordinates=local_coordinates)
+        if boundary is None or local_sections and "chart_sections" not in boundary:
             return None
+        if (intrinsic and internal_surface and record.get("engine") == "native-toric"
+                and linear == tuple(_unit(i, n) for i in range(n))):
+            from .toric_backend import diagonal_annotations
+            boundary = diagonal_annotations(polynomial, cones, by_ray, boundary)
+        if local_sections:
+            found["chart_sections"] = boundary.pop("chart_sections")
+            if "root_families" in boundary:
+                found["root_families"] = boundary.pop("root_families")
         found.update(cells=boundary["cells"], dual_complex=boundary)
-    return (record["atlas"] if saved else output), found
+    return (record["atlas"] if saved and not local_sections else output), found
 
 
-def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True, bounded=False):
+def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True, bounded=False,
+                local_sections=False):
     n = len(record["variables"])
     if not 2 <= n <= 8 or (record.get("input_divisor") and not record.get("atlas")):
         return None
+    translation = record.get("certificate", {}).get("coordinate_translation")
+    if translation is None:
+        translation = next((c["torus"]["coordinate_translation"] for c in record.get("atlas", ())
+                            if "coordinate_translation" in c.get("torus", {})), None)
+    if translation is not None:
+        from .quadratic_fan import translated_outputs
+        return translated_outputs(record, polynomial, translation, fan_outputs,
+                                  dict(complex=complex, intrinsic=intrinsic, integrals=integrals, bounded=bounded,
+                                       local_sections=local_sections))
     charts = _charts(record, n)
     if charts is None:
         return None
     try:
-        result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded)
+        # New intrinsic trial records expose geometric chart ideals separately
+        # from the owned ambient atlas. Both presentations refer to the same
+        # verified cones, even when a replay only requests Euler integrals.
+        displayed = record.get("charts", ())
+        if (record.get("mode") == "intrinsic" and displayed and ("atlas" in record or "polynomial" in record)
+                and (record.get("engine") == "verified-monomial-modification" or
+                     any("ray_indices" in c and "ambient_components" in c for c in displayed))):
+            from .newton_trials import verify_intrinsic_presentation
+            verified = _verify_charts(record, polynomial, *charts, True, True, integrals and intrinsic, bounded,
+                                      local_sections=True)
+            if verified is None:
+                raise InvalidChart("The displayed intrinsic fan sections could not be certified.")
+            atlas, output = verified
+            verify_intrinsic_presentation(record, atlas, output)
+            if intrinsic:
+                if not local_sections:
+                    output.pop("chart_sections")
+                    output.pop("root_families", None)
+                if not complex:
+                    output.pop("dual_complex")
+                    output["cells"] = None
+                return record.get("atlas", atlas), output
+        result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded,
+                                local_sections=local_sections)
     except native_library.Unavailable:
         return None
     return result
@@ -728,7 +772,7 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
 def verified_parent_pullbacks(record, polynomial, charts):
     """Check the complete parent fan and its divisors before local chart verification."""
     from .atlas import to_json
-    from .repair_parent_cover import _cone
+    from .repair_parent_cover import _cone, certified_parent_cover
 
     n = len(record["variables"])
     if not 2 <= n <= 8:
@@ -752,5 +796,9 @@ def verified_parent_pullbacks(record, polynomial, charts):
     family = _charts(parent_record, n)
     if family is None:
         return False
+    # A repaired record can reorder the parent charts while retaining its
+    # original partition. The cover proof checks each orbit has exactly one
+    # owner using the actual region equations in that record.
+    checked_partition = len(parents) < len(charts) and certified_parent_cover(parents)
     return _verify_charts(parent_record, polynomial, *family, complex=False, intrinsic=False, integrals=False,
-                          pullbacks_only=True)
+                          pullbacks_only=True, verified_parent_partition=checked_partition)

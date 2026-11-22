@@ -16,6 +16,31 @@ class SavedRepairCoverTests(unittest.TestCase):
         cls.record = resolve({"polynomial": "x^4-x^2+y^2*z^2", "variables": ["x", "y", "z"],
                               "mode": "intrinsic", "search": "quick"})
 
+    def test_partition_accepts_exactly_one_whole_owner_per_origin_orbit(self):
+        from engine.kernel_json import kernel_json
+
+        # The same ray is the first coordinate of one cone and the second
+        # of another. Its dense orbit is a punctured line in each chart.
+        owner = dict(rays=[0, 1], faces=[[0]], region=["1 1 0"])
+        def partition(region):
+            other = dict(rays=[2, 0], faces=[[1]], region=region)
+            return kernel_json("atlas_repair_geometry", "parent_partition", charts=[other, owner])
+
+        self.assertFalse(partition([]))  # both charts own it
+        self.assertFalse(partition(["1 1 0;1 0 0"]))  # one chart owns a proper part
+        self.assertTrue(partition(["1 1 0;1 0 0", "1 1 0;-1 0 0"]))  # disjoint on G_m
+        self.assertTrue(partition([f"{2**130 + 1} {2**75 + 1} 0"]))
+        self.assertFalse(kernel_json("atlas_repair_geometry", "parent_partition",
+                                     charts=[dict(owner, region=["1 0 0"])]))
+
+        # Recover a chart whose common projection has large rational
+        # coefficients and exponents outside a machine word.
+        power, coefficient = 2**90 + 1, 2**101 + 1
+        recovered = kernel_json("atlas_repair_geometry", "parent_cone", images=[
+            f"1 0 1;{coefficient}/5 {power} 1", f"2 {power} 1"])
+        self.assertEqual(recovered, dict(linear=[["1", "0"], [f"{coefficient}/5", "2"]],
+                                        rays=[["0", str(power)], ["1", "1"]]))
+
     def test_public_replay_requires_every_declared_repair_over_a_deleted_centre(self):
         self.assertEqual(self.record["status"], "resolved")
         for damage in ("uncovered centre", "no repair children", "spurious plane marker", "unmarked orphan",

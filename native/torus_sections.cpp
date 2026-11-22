@@ -1,5 +1,6 @@
 // Orbit sections of a verified regular fan in the nonnegative orthant.
 #include "rational_sparse_json.hpp"
+#include "local_io.hpp"
 
 #include <algorithm>
 #include <map>
@@ -38,10 +39,11 @@ unsigned support(const Value& coordinates, unsigned n) {
 }
 
 struct Section {
-    Z count;
+    Z count;  // components meeting the dense torus
     unsigned character;  // zero for an unsplit section without a primitive character
+    Face coordinates{};  // additional components contained in coordinate divisors
     bool operator==(const Section& other) const {
-        return count == other.count && character == other.character;
+        return count == other.count && character == other.character && coordinates == other.coordinates;
     }
 };
 using Sections = std::map<Face, Section, FaceOrder>;
@@ -71,10 +73,11 @@ Value cells(const Sections& sections, const Value& labels, unsigned n, bool intr
                 base += vertex ? "E" + std::to_string(face[j] - n + 1) : std::to_string(face[j]);
             else base += labels[face[j]].asString();
         }
-        for (Z root = 1; root <= section.count; ++root) {
+        const Z total = section.count + section.coordinates.size();
+        for (Z root = 1; root <= total; ++root) {
             Value item;
             auto name = base;
-            if (!vertex || section.count > 1) name += "." + root.get_str();
+            if (!vertex || total > 1) name += "." + root.get_str();
             item["id"] = name;
             if (newton_families && section.character)
                 item["root"] = (*newton_families)[section.character].asString() + "_" + root.get_str();
@@ -90,9 +93,22 @@ Value cells(const Sections& sections, const Value& labels, unsigned n, bool intr
                     const auto found = ids.find(subface);
                     if (found == ids.end()) return false;
                     const auto& choices = found->second;
-                    if (choices.size() == 1) target.append(choices.front());
-                    else if (section.character && choices.size() == section.count &&
-                             sections.at(subface).character == section.character)
+                    const auto& parent = sections.at(subface);
+                    // A coordinate component is the orbit closure with that
+                    // extra ray. A child's generic point belongs to it exactly
+                    // when the child has the same extra (nonexceptional) ray.
+                    if (root > section.count) {
+                        const Z offset = root - section.count - 1;
+                        const auto ray = section.coordinates.at(offset.get_ui());
+                        const auto it = std::find(parent.coordinates.begin(), parent.coordinates.end(), ray);
+                        if (it != parent.coordinates.end()) {
+                            target.append(choices.at(parent.count.get_ui() + (it-parent.coordinates.begin())));
+                            return true;
+                        }
+                    }
+                    if (parent.count == 1) target.append(choices.front());
+                    else if (root <= section.count && section.character && parent.count == section.count &&
+                             parent.character == section.character)
                         target.append(choices[root.get_ui()-1]);
                     else return false;
                     return true;
@@ -221,6 +237,15 @@ Value plan(const Value& request) {
         result["complex"] = single_coordinate_section(charts, labels, n);
         if (!result["complex"].isNull()) return result;
     }
+    // In an embedded SNC atlas with internal rays, every pure exceptional
+    // intersection V(F) lies over the origin. Its strict section is a
+    // smooth divisor or empty. A component either meets the dense torus
+    // or equals a toric prime divisor V(F+r) contained in the section.
+    // The extra ray r must be nonexceptional by normal crossings. Higher
+    // codimension orbits cannot supply an additional divisor component.
+    const bool closed_sections = request.get("closed_sections", false).asBool();
+    if (closed_sections && (!intrinsic || !common || relative)) return {};
+    std::map<Face, Face> coordinate_components;
     Sections ambient;
     std::set<Face> seen;
     Value checks = array(), orbits = array();
@@ -244,6 +269,7 @@ Value plan(const Value& request) {
                 if (boundary_face) ambient.emplace(std::move(boundary), Section{1, 0});
                 continue;
             }
+            if (closed_sections && !boundary_face && boundary.size()+1 != cone_face.size()) continue;
             if (common) {
                 std::sort(cone_face.begin(), cone_face.end());
                 if (!seen.insert(std::move(cone_face)).second) continue;
@@ -251,10 +277,17 @@ Value plan(const Value& request) {
             Value terms = array();
             for (unsigned i = 0; i < chart.terms.size(); ++i)
                 if (!(mask & chart.terms[i])) terms.append(i);
+            if (closed_sections && !boundary_face) {
+                if (terms.empty()) {
+                    for (unsigned j = 0; j < n; ++j) if ((mask & (1U << j)) && !chart.boundary.count(j))
+                        coordinate_components[boundary].push_back(chart.rays[j]);
+                }
+                continue;
+            }
             if (terms.empty()) return {};
             Value check = array();
             check.append(ci);
-            check.append(relative && boundary_face);  // require absolute irreducibility
+            check.append((relative || closed_sections) && boundary_face);  // require absolute irreducibility
             check.append(std::move(terms));
             checks.append(std::move(check));
             Value orbit = array();
@@ -274,6 +307,101 @@ Value plan(const Value& request) {
         incidence["labels"] = std::move(labels);
         incidence["relative"] = relative;
         incidence["orbits"] = std::move(orbits);
+        for (auto& [face, rays] : coordinate_components) {
+            // Order coordinate components by their original coordinate axis.
+            std::sort(rays.begin(), rays.end(), [&](unsigned a, unsigned b) { return images[a] < images[b]; });
+            Value pair = array();
+            pair.append(indices(face));
+            pair.append(indices(rays));
+            incidence["coordinate_components"].append(std::move(pair));
+        }
+    }
+    return result;
+}
+
+// On the torus of an exceptional ray, a monomial is a unit. Removing
+// the common monomial gives the closure of its hypersurface in this chart.
+atlas::local::Polynomial torus_closure(const atlas::local::Polynomial& strict, unsigned axis) {
+    atlas::local::Powers minimum;
+    for (const auto& [powers, coefficient] : strict) {
+        if (powers.at(axis)) continue;
+        if (minimum.empty()) minimum = powers;
+        else for (size_t i = 0; i < powers.size(); ++i)
+            minimum[i] = std::min(minimum[i], powers[i]);
+    }
+    atlas::local::Polynomial reduced;
+    for (const auto& [powers, coefficient] : strict) {
+        if (powers.at(axis)) continue;
+        auto exponent = powers;
+        for (size_t i = 0; i < powers.size(); ++i) exponent[i] -= minimum[i];
+        reduced.emplace(std::move(exponent), coefficient);
+    }
+    return reduced;
+}
+
+// Numerator and denominator of the primitive character in a chart basis.
+std::pair<std::string, std::string> chart_character(const Value& direction, const Value& rays,
+                                                     const Face& cone, const std::vector<std::string>& names) {
+    using namespace atlas::sparse_json;
+    const auto n = names.size();
+    Powers positive(n), negative(n);
+    for (size_t i = 0; i < n; ++i) {
+        const auto ray = read_exponents(rays[cone[i]], n);
+        Z pairing = 0;
+        for (unsigned k = 0; k < n; ++k) pairing += ray[k] * Z(direction[k].asString());
+        if (pairing > 0) positive[i] = pairing;
+        else negative[i] = -pairing;
+    }
+    return {atlas::local::format_polynomial({{positive, 1}}, names),
+            atlas::local::format_polynomial({{negative, 1}}, names)};
+}
+
+Value chart_sections(const Value& request, const Sections& sections, const Value& labels) {
+    using namespace atlas::sparse_json;
+    Value result = array();
+    std::map<std::string, unsigned> by_name;
+    for (unsigned i = 0; i < labels.size(); ++i) by_name.emplace(labels[i].asString(), i);
+    for (const auto& chart : request["charts"]) {
+        const auto rays = indices(chart["rays"]);
+        std::vector<std::string> names;
+        for (const auto& name : chart["coordinates"]) names.push_back(name.asString());
+        if (names.size() != rays.size()) return {};
+        const auto coefficients = read_row(chart["coefficients"]);
+        Terms strict;
+        for (unsigned j = 0; j < chart["powers"].size(); ++j)
+            strict.emplace(read_exponents(chart["powers"][j], names.size()), coefficients.at(j));
+        Value local = array();
+        for (const auto& pair : chart["boundary"]) {
+            const auto axis = pair[0].asUInt();
+            const auto label = pair[1].asString();
+            const auto& section = sections.at({by_name.at(label)});
+            const auto& coords = section.coordinates;
+            const Z total = section.count + coords.size();
+            auto append = [&](const Z& index, std::string equation) {
+                Value item;
+                item["id"] = total == 1 ? label : label + "." + index.get_str();
+                item["ambient_divisor"] = label;
+                item["ideal"].append(names.at(axis));
+                item["ideal"].append(std::move(equation));
+                local.append(std::move(item));
+            };
+            if (section.count == 1) {
+                const auto closure = torus_closure(strict, axis);
+                if (closure.size() < 2) return {};
+                append(1, atlas::local::format_polynomial(closure, names));
+            } else if (section.count > 1) {
+                const auto& direction = request["directions"][section.character];
+                if (direction.size() != names.size()) return {};
+                const auto [a,b] = chart_character(direction, request["rays"], rays, names);
+                const auto family = "-alpha" + std::to_string(section.character) + "_";
+                for (Z i = 1; i <= section.count; ++i) append(i, a + family + i.get_str() + "*" + b);
+            }
+            for (size_t j = 0; j < coords.size(); ++j) {
+                const auto at = std::find(rays.begin(), rays.end(), coords[j]);
+                if (at != rays.end()) append(section.count + j + 1, names.at(at-rays.begin()));
+            }
+        }
+        result.append(std::move(local));
     }
     return result;
 }
@@ -309,7 +437,16 @@ Value glue(const Value& request) {
             else ++it;
         }
     }
-    return cells(sections, incidence["labels"], incidence["dimension"].asUInt(), true);
+    for (const auto& pair : incidence["coordinate_components"]) {
+        const auto it = sections.find(indices(pair[0]));
+        if (it == sections.end()) return {};
+        it->second.coordinates = indices(pair[1]);
+    }
+    auto result = cells(sections, incidence["labels"], incidence["dimension"].asUInt(), true);
+    if (result.isNull() || !request.isMember("charts")) return result;
+    result["chart_sections"] = chart_sections(request, sections, incidence["labels"]);
+    if (result["chart_sections"].isNull()) return {};
+    return result;
 }
 
 // All primitive character roots on a terminal binomial are geometrically

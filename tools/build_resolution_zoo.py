@@ -47,7 +47,7 @@ def resolution_summary(raw):
     # timings, row-reduction traces and repeated copies of zeta strata do not belong here.
     certificate = raw["certificate"]
     record["certificate"] = select(certificate, ("method", "description", "atlas_verification",
-        "components", "normalized_chart", "linear_map_to_input", "adapted_polynomial", "face_coordinates",
+        "components", "normalized_chart", "linear_map_to_input", "coordinate_translation", "adapted_polynomial", "face_coordinates",
         "compact_faces", "weights", "weighted_degree", "principal_exponents", "primitive_difference",
         "character_degree", "fan_ideal_exponents", "boundary_image_coordinate_ideals"))
     if "fan" in raw:

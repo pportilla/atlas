@@ -75,6 +75,14 @@ def _nearby_strata(polynomial, variables, data, strata, origin_factors):
         if "determinant" in row:
             stratum["transverse_hessian_determinant"] = row["determinant"]
             stratum["parameter_values"] = [1] * len(stratum["parameters"])
+        if "normal_coordinates" in row:
+            names = _transverse_names(len(row["slice_axes"]), variables)
+            stratum.update(
+                coordinates=[format_poly(decode_terms(f), variables) for f in row["normal_coordinates"]],
+                parameters=[variables[row["parameter_axis"]]], parameter_values=[1], point=row["point"],
+                slice_axes=[variables[i] for i in row["slice_axes"]], transverse_coordinates=names,
+                transverse_germ=format_poly(decode_terms(row["germ"]), names), multiplicity=row["multiplicity"],
+            )
         result.append(stratum)
     return result + _transverse_compositions(polynomial, variables)
 

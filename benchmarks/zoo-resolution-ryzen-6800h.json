@@ -1,0 +1,1555 @@
+{
+  "conditions": "Fresh processes, local germ over QQ, wall time includes startup. Atlas quick CPU embedded resolution requests its dual complex and both zetas. Separate intrinsic trials request its dual complex. Singular resolve.lib uses checks and keeps all charts (1,L,A). Outside the timer Singular computes local Milnor and Tjurina numbers and an independent Milnor fibre Euler characteristic. Distinct valid resolutions can have different chart counts.",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "timeout_s": 15,
+  "trial_count": 3,
+  "cases": [
+    {
+      "id": "chain-3-3-4",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x^3*y+y^3+z^4",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        21,
+        21,
+        22
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.1312132470193319,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.10862713499227539,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.10315820900723338,
+            "charts": 39
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.01143019302981
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.008981850987766
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.009574119991157
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.2093066240195185,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.148440451011993,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12037548498483375,
+            "charts": 39
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.10862713499227539,
+        "atlas_intrinsic": 0.148440451011993
+      }
+    },
+    {
+      "id": "chain-3-2-4",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x^3*y+y^2*z+z^4",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        19,
+        19,
+        20
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.08710929000517353,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08766715304227546,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08625661005498841,
+            "charts": 33
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 1.2043676679604687,
+            "charts": 35
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.1960064430022612,
+            "charts": 35
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.1888352439855225,
+            "charts": 35
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.1190315880230628,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12210235494421795,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.11922901100479066,
+            "charts": 33
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.08710929000517353,
+        "singular": 1.1960064430022612,
+        "atlas_intrinsic": 0.11922901100479066
+      }
+    },
+    {
+      "id": "loop2-2-4-4",
+      "cpu_affinity": [
+        3
+      ],
+      "equation": "x^2*y+x*y^4+z^4",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        24,
+        24,
+        25
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.14498136099427938,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.11872641200898215,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.11606818303698674,
+            "charts": 43
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.02100197400432
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.012918121996336
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.01513633003924
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.24380283197388053,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.157110609987285,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.15741736901691183,
+            "charts": 43
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.11872641200898215,
+        "atlas_intrinsic": 0.15741736901691183
+      }
+    },
+    {
+      "id": "loop-2-3-3",
+      "cpu_affinity": [
+        3
+      ],
+      "equation": "x^2*y+y^3*z+z^3*x",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        18,
+        18,
+        19
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.14587883499916643,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.15854052000213414,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.26087089598877355,
+            "charts": 31
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 1.7392916179960594,
+            "charts": 35
+          },
+          {
+            "status": "complete",
+            "wall_s": 2.3015910719987005,
+            "charts": 35
+          },
+          {
+            "status": "complete",
+            "wall_s": 2.049416313995607,
+            "charts": 35
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.26805007096845657,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5817077059764415,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.771036121994257,
+            "charts": 31
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.15854052000213414,
+        "singular": 2.049416313995607,
+        "atlas_intrinsic": 0.5817077059764415
+      }
+    },
+    {
+      "id": "loop-2-3-4",
+      "cpu_affinity": [
+        7
+      ],
+      "equation": "x^2*y+y^3*z+z^4*x",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        24,
+        24,
+        25
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.20492175599792972,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.2673247010097839,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.2145274810027331,
+            "charts": 43
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 2.3404842410236597,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 2.496872216986958,
+            "charts": 31
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.7624216769472696,
+            "charts": 31
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.2984304269775748,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.2922377659706399,
+            "charts": 43
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.4386122659780085,
+            "charts": 43
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.2145274810027331,
+        "singular": 2.3404842410236597,
+        "atlas_intrinsic": 0.2984304269775748
+      }
+    },
+    {
+      "id": "cone-four-lines",
+      "cpu_affinity": [
+        5
+      ],
+      "equation": "x*y*z*(x+y+z)",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        4
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.12537001498276368,
+            "charts": 3
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.13323491299524903,
+            "charts": 3
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.3823494340176694,
+            "charts": 3
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 3.0511104009929113,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 3.1682402090518735,
+            "charts": 39
+          },
+          {
+            "status": "complete",
+            "wall_s": 3.7354644099832512,
+            "charts": 39
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.10077758500119671,
+            "charts": 15
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08429544698446989,
+            "charts": 15
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08214547799434513,
+            "charts": 15
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.13323491299524903,
+        "singular": 3.1682402090518735,
+        "atlas_intrinsic": 0.08429544698446989
+      }
+    },
+    {
+      "id": "cone-braid-arrangement",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x*y*z*(x-y)*(y-z)*(x-z)",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        12
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.08050655398983508,
+            "charts": 11
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.07675606303382665,
+            "charts": 11
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.07681791996583343,
+            "charts": 11
+          }
+        ],
+        "singular": [
+          {
+            "status": "failed",
+            "wall_s": 4.502483549003955,
+            "reason": "? `invSat` is not defined"
+          },
+          {
+            "status": "failed",
+            "wall_s": 4.42889317299705,
+            "reason": "? `invSat` is not defined"
+          },
+          {
+            "status": "failed",
+            "wall_s": 4.387003066018224,
+            "reason": "? `invSat` is not defined"
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.06247141398489475,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.063466552994214,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.06288802000926808,
+            "charts": 17
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.07681791996583343,
+        "atlas_intrinsic": 0.06288802000926808
+      }
+    },
+    {
+      "id": "hidden-e12",
+      "cpu_affinity": [
+        5
+      ],
+      "equation": "(x-y^2)^2+y^7+z^3",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        12,
+        12,
+        13
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.09855269402032718,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12890435697045177,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1618296999949962,
+            "charts": 17
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 7.055746970989276,
+            "charts": 83
+          },
+          {
+            "status": "complete",
+            "wall_s": 5.832232002983801,
+            "charts": 83
+          },
+          {
+            "status": "complete",
+            "wall_s": 8.330917193030473,
+            "charts": 83
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.30016245698789135,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1792457599658519,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.21693337301257998,
+            "charts": 17
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.12890435697045177,
+        "singular": 7.055746970989276,
+        "atlas_intrinsic": 0.21693337301257998
+      }
+    },
+    {
+      "id": "hidden-bp-2-5-5",
+      "cpu_affinity": [
+        5
+      ],
+      "equation": "(x+y*z)^2+y^5+z^5",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        16,
+        16,
+        17
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.11497283499920741,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.0861196109908633,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08298243797617033,
+            "charts": 9
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.01615809003124
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.013341061014216
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.015182957984507
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.10782907798420638,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.18635414104210213,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.09265665296697989,
+            "charts": 9
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.0861196109908633,
+        "atlas_intrinsic": 0.10782907798420638
+      }
+    },
+    {
+      "id": "hidden-bp-2-5-5-quadric",
+      "cpu_affinity": [
+        7
+      ],
+      "equation": "(x-y^2-z^2)^2+y^5+z^5",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        16,
+        16,
+        17
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.07332890201359987,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.0857189049711451,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.0746749039972201,
+            "charts": 9
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.022175791033078
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.02042195998365
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.020949043973815
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.07709825900383294,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.07608000701293349,
+            "charts": 9
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.0767271489603445,
+            "charts": 9
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.0746749039972201,
+        "atlas_intrinsic": 0.0767271489603445
+      }
+    },
+    {
+      "id": "threefold-e7",
+      "cpu_affinity": [
+        3
+      ],
+      "equation": "x^2+y^3+y*z^3+t^2",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        7,
+        7,
+        -6
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.09393206099048257,
+            "charts": 42
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.09448832098860294,
+            "charts": 42
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.09569893596926704,
+            "charts": 42
+          }
+        ],
+        "singular": [
+          {
+            "status": "failed",
+            "wall_s": 7.012133590003941,
+            "reason": "? `invSat` is not defined"
+          },
+          {
+            "status": "failed",
+            "wall_s": 6.984632488980424,
+            "reason": "? `invSat` is not defined"
+          },
+          {
+            "status": "failed",
+            "wall_s": 7.085646810010076,
+            "reason": "? `invSat` is not defined"
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.1862779269577004,
+            "charts": 42
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.15106869296869263,
+            "charts": 42
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.15876535401912406,
+            "charts": 42
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.09448832098860294,
+        "atlas_intrinsic": 0.15876535401912406
+      }
+    },
+    {
+      "id": "laufer-1",
+      "cpu_affinity": [
+        3
+      ],
+      "equation": "x^2+y^3+t*z^2+t^3*y",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        11,
+        11,
+        -10
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.1403001420549117,
+            "charts": 172
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12908160197548568,
+            "charts": 172
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12748651002766564,
+            "charts": 172
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.242062731005717
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.21711468999274
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.224874990992248
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.19397756300168112,
+            "charts": 172
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.18784404400503263,
+            "charts": 172
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.18675771297421306,
+            "charts": 172
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.12908160197548568,
+        "atlas_intrinsic": 0.18784404400503263
+      }
+    },
+    {
+      "id": "laufer-2",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x^2+y^3+t*z^2+t^5*y",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        17,
+        17,
+        -16
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.15520991099765524,
+            "charts": 141
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.14783317397814244,
+            "charts": 141
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1474875719868578,
+            "charts": 141
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.263967114966363
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.206619896052871
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.216832697042264
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.21954656700836495,
+            "charts": 141
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.21233936003409326,
+            "charts": 141
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.20997497596545145,
+            "charts": 141
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.14783317397814244,
+        "atlas_intrinsic": 0.21233936003409326
+      }
+    },
+    {
+      "id": "threefold-chain-2-3-2-2",
+      "cpu_affinity": [
+        5
+      ],
+      "equation": "x^2*y+y^3*z+z^2*t+t^2",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        15,
+        15,
+        -14
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.12439928198000416,
+            "charts": 155
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12104006001027301,
+            "charts": 155
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12312206003116444,
+            "charts": 155
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 5.947584714973345,
+            "charts": 119
+          },
+          {
+            "status": "complete",
+            "wall_s": 5.871831084950827,
+            "charts": 119
+          },
+          {
+            "status": "complete",
+            "wall_s": 6.183202854997944,
+            "charts": 119
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.3339823979767971,
+            "charts": 155
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.31855785701191053,
+            "charts": 155
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.3016276230337098,
+            "charts": 155
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.12312206003116444,
+        "singular": 5.947584714973345,
+        "atlas_intrinsic": 0.31855785701191053
+      }
+    },
+    {
+      "id": "threefold-loop2-loop2",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x^2*y+x*y^3+z^2*t+z*t^3",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        36,
+        36,
+        -35
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.1418789130402729,
+            "charts": 72
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.13434475904796273,
+            "charts": 72
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1753600939991884,
+            "charts": 72
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 0.34201805002521724,
+            "charts": 8
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.30623236700193956,
+            "charts": 8
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.33445014199241996,
+            "charts": 8
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.25326694000978023,
+            "charts": 72
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.3510101260035299,
+            "charts": 72
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.26436198700685054,
+            "charts": 72
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.1418789130402729,
+        "singular": 0.33445014199241996,
+        "atlas_intrinsic": 0.26436198700685054
+      }
+    },
+    {
+      "id": "threefold-chain-loop",
+      "cpu_affinity": [
+        7
+      ],
+      "equation": "x^2*y+y^4+z^3*t+z*t^2",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        30,
+        30,
+        -29
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.15927403402747586,
+            "charts": 263
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5532178480061702,
+            "charts": 263
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.24076532700564712,
+            "charts": 263
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.005332080007065
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.010401320992969
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.00581650499953
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.703764064994175,
+            "charts": 263
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.4959888309822418,
+            "charts": 263
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.6078954069525935,
+            "charts": 263
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.24076532700564712,
+        "atlas_intrinsic": 0.6078954069525935
+      }
+    },
+    {
+      "id": "threefold-e13",
+      "cpu_affinity": [
+        7
+      ],
+      "equation": "x^3+x*y^5+z^2+t^2",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        13,
+        13,
+        -12
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.5984332230291329,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.14501434296835214,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.13012002204777673,
+            "charts": 33
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 4.860420471988618,
+            "charts": 76
+          },
+          {
+            "status": "complete",
+            "wall_s": 3.730971207958646,
+            "charts": 76
+          },
+          {
+            "status": "complete",
+            "wall_s": 3.0773772730026394,
+            "charts": 76
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.12853847700171173,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12681797804543748,
+            "charts": 33
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12781986000481993,
+            "charts": 33
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.14501434296835214,
+        "singular": 3.730971207958646,
+        "atlas_intrinsic": 0.12781986000481993
+      }
+    },
+    {
+      "id": "cusp-curve-a4",
+      "cpu_affinity": [
+        5
+      ],
+      "equation": "x^5+(y^2-z^3)^2",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        13
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.5875312209827825,
+            "charts": 144
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5539177589816973,
+            "charts": 144
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5436553150066175,
+            "charts": 144
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.008297338965349
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.007342465978581
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.009786890994292
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 1.1200603389879689,
+            "charts": 98
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.145222303981427,
+            "charts": 98
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.1213559950119816,
+            "charts": 98
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.5539177589816973,
+        "atlas_intrinsic": 1.1213559950119816
+      }
+    },
+    {
+      "id": "cone-d4-quartic",
+      "cpu_affinity": [
+        1
+      ],
+      "equation": "x*y*z*(x+y)",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        0
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.06296206102706492,
+            "charts": 5
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.06409141200128943,
+            "charts": 5
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.062320098048076034,
+            "charts": 5
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 0.7607287429855205,
+            "charts": 20
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.7702360220137052,
+            "charts": 20
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.8963985620066524,
+            "charts": 20
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.08155816001817584,
+            "charts": 11
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.09947112802183256,
+            "charts": 11
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.09313827200094238,
+            "charts": 11
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.06296206102706492,
+        "singular": 0.7702360220137052,
+        "atlas_intrinsic": 0.09313827200094238
+      }
+    },
+    {
+      "id": "quartic-face-plus",
+      "cpu_affinity": [
+        3
+      ],
+      "equation": "x^4+y^4+z^4+2*x^2*y^2",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        4
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 1.1564305649953894,
+            "charts": 26
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.7897385710384697,
+            "charts": 26
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.6406926870113239,
+            "charts": 26
+          }
+        ],
+        "singular": [
+          {
+            "status": "complete",
+            "wall_s": 7.666398842993658,
+            "charts": 29
+          },
+          {
+            "status": "complete",
+            "wall_s": 7.025223031989299,
+            "charts": 29
+          },
+          {
+            "status": "complete",
+            "wall_s": 9.027272990031634,
+            "charts": 29
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 2.4204360580188222,
+            "charts": 26
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.8407563209766522,
+            "charts": 26
+          },
+          {
+            "status": "complete",
+            "wall_s": 1.5322277590166777,
+            "charts": 26
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 1.6406926870113239,
+        "singular": 7.666398842993658,
+        "atlas_intrinsic": 1.8407563209766522
+      }
+    },
+    {
+      "id": "hesse-triangle-quartic",
+      "cpu_affinity": [
+        7
+      ],
+      "equation": "x^3+y^3+z^3-3*x*y*z+x^4",
+      "variables": [
+        "x",
+        "y",
+        "z"
+      ],
+      "mu_tau_fibre_euler": [
+        11,
+        10,
+        12
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.3712398190400563,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.358569998992607,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.3316322610480711,
+            "charts": 17
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.147917527006939
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.15433408197714
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.17899500101339
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.5523405320127495,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5732151219854131,
+            "charts": 17
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.5644003810011782,
+            "charts": 17
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.358569998992607,
+        "atlas_intrinsic": 0.5644003810011782
+      }
+    }
+  ],
+  "processor": "AMD Ryzen 7 6800H",
+  "execution": "Each comparison group was pinned to one logical CPU, with up to four groups running concurrently. Each case used the same logical CPU for both executables. Intrinsic runs were timed separately."
+}

@@ -6,7 +6,11 @@
 #include <cctype>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <set>
+
+extern "C" char* atlas_ideal(const char*, size_t) noexcept;
+extern "C" void atlas_groebner_release(char*) noexcept;
 
 namespace {
 using atlas::sparse_json::Z;
@@ -112,6 +116,73 @@ struct Intersections {
         return result;
     }
 };
+
+// Does the union of the proposed divisors cover the intersection on every
+// owned origin fibre? Test the complement as a locally closed ideal locus.
+bool covers_fibre(const Value& charts, const Names& intersection, const Names& cover) {
+    for (const auto& chart : charts) {
+        std::map<std::string, Names> ideals;
+        for (const auto& component : chart["components"])
+            if (!component[2].asBool()) ideals.emplace(component[0].asString(), names(component[1]));
+        if (!std::all_of(intersection.begin(), intersection.end(), [&](const auto& label) { return ideals.count(label); }))
+            continue;
+        Names equations = names(chart["ambient"]);
+        auto add = [&](const Names& rows) { equations.insert(equations.end(), rows.begin(), rows.end()); };
+        add(names(chart["owned"]));
+        for (const auto& label : intersection) add(ideals.at(label));
+        std::vector<Names> removed;
+        for (const auto& hole : chart["holes"]) removed.push_back(names(hole));
+        for (const auto& label : cover)
+            if (auto it = ideals.find(label); it != ideals.end()) removed.push_back(it->second);
+        std::ostringstream wire;
+        wire << "open_locus " << chart["width"].asUInt() << " " << equations.size() << " " << removed.size();
+        for (const auto& hole : removed) wire << " " << hole.size();
+        wire << "\n";
+        for (const auto& row : equations) wire << row << "\n";
+        for (const auto& hole : removed) for (const auto& row : hole) wire << row << "\n";
+        const auto input = wire.str();
+        std::unique_ptr<char, decltype(&atlas_groebner_release)> answer(
+            atlas_ideal(input.data(), input.size()), atlas_groebner_release);
+        if (!answer || std::string_view(answer.get()) != "no\n") return false;
+    }
+    return true;
+}
+
+void certify_relative_intersections(Intersections& data, const Value& charts) {
+    // The embedded crossing check makes E_J smooth near the fibre, so
+    // distinct components there are disjoint. Each known irreducible
+    // E_(J+k) meets just one component. Connected incidence among these
+    // witnesses and coverage of all fibre points prove that exactly one
+    // component of E_J meets the fibre, even when it extends off it.
+    auto strata = data.ordered;
+    std::stable_sort(strata.begin(), strata.end(), [](const auto& a, const auto& b) { return a.size() > b.size(); });
+    for (const auto& key : strata) {
+        if (!data.counts.at(key).isNull()) continue;
+        Key witnesses;
+        for (const auto& [face, count] : data.counts) {
+            if (face.size() != key.size()+1 || count.isNull() || count.asString() != "1") continue;
+            Key difference;
+            std::set_difference(face.begin(), face.end(), key.begin(), key.end(), std::back_inserter(difference));
+            if (difference.size() == 1) witnesses.push_back(difference.front());
+        }
+        if (witnesses.empty()) continue;
+        Key connected{witnesses.front()};
+        for (size_t i = 0; i < connected.size(); ++i) {
+            for (auto witness : witnesses) {
+                if (std::find(connected.begin(), connected.end(), witness) != connected.end()) continue;
+                auto overlap = key;
+                overlap.push_back(connected[i]);
+                overlap.push_back(witness);
+                std::sort(overlap.begin(), overlap.end());
+                const auto it = data.counts.find(overlap);
+                if (it != data.counts.end() && !it->second.isNull() && Z(it->second.asString()) > 0)
+                    connected.push_back(witness);
+            }
+        }
+        if (connected.size() == witnesses.size() && covers_fibre(charts, data.vertices(key), data.vertices(connected)))
+            data.counts[key] = "1";
+    }
+}
 
 // For a curve or surface, a single rational orbit opposite an unsplit
 // component has the same number of edges to every conjugate endpoint.
@@ -474,7 +545,11 @@ Value execute(const Value& r) {
     if (op=="coordinate_exceptional") return coordinate_exceptional(r, false);
     if (op=="polynomial_graph_exceptional") return coordinate_exceptional(r, true);
     if (op=="cells") return Intersections(r).cells();
-    if (op=="boundary") return boundary(r,Intersections(r));
+    if (op=="boundary") {
+        Intersections data(r);
+        if (!r["charts"].empty()) certify_relative_intersections(data, r["charts"]);
+        return boundary(r, data);
+    }
     if (op=="aliases") return aliases(r["old"],r["found"]);
     throw std::invalid_argument("Unknown atlas incidence operation.");
 }

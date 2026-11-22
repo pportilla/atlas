@@ -70,6 +70,8 @@ class Chart:
     # Optional exact root coordinates from the last field extension. The
     # native section solver checks them against the chart's current modulus.
     section_root_images: tuple = field(default=(), compare=False, repr=False)
+    coordinate_translation: tuple = ()  # (coordinate, polynomial offset) from torus frame to input
+    arrangement_chart: tuple = ()  # projective pivot and optional intersection-line patch
 
     def one_sheet(self, count):
         """A field parameter describes one fixed embedding. Over Q the kernel
@@ -571,7 +573,8 @@ class _Canonical:
     # far from a centre keeps the equations it had.
     name, stages, retains = "complete", 150, True
 
-    def __init__(self, components):
+    def __init__(self, components, *, shared_curves=True):
+        self.shared_curves = shared_curves
         self._loci, self._steps = {}, {}
         # For each exceptional divisor, the invariant of the centre that created it
         # (None for those given at the start), and the divisors in order of creation.
@@ -642,6 +645,12 @@ class _Canonical:
         selected = surface_maxima(found)
         if not selected:
             raise GiveUp("Normal crossings fail where the procedure for a surface has nothing to do.")
+        key, kind, _ = found[selected[0]]
+        if self.shared_curves and kind == "points":
+            from .surface import shared_boundary_curve
+            shared = shared_boundary_curve(current, surfaces, key)
+            if shared is not None:
+                return shared, {"rule": "shared boundary curve"}
         centres = [None] * len(current)
         for i in selected:
             _, kind, locus = found[i]

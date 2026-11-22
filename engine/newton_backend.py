@@ -309,6 +309,17 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
             continue
         if result is not None:
             return result
+    if mode == 'intrinsic' and not all(_axial_data(poly)[1]):
+        # Preserve a certified Newton resolution in adapted coordinates first.
+        # Other regular fans can still resolve its strict transform when the
+        # original Newton fan has an exceptional image outside the singular locus.
+        from .newton_trials import resolve_trials
+        try:
+            trial = resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
+            if trial is not None:
+                return trial
+        except LimitError as error:
+            last_limit = error
     if last_limit is not None:
         raise last_limit
     return None

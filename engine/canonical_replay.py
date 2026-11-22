@@ -18,8 +18,8 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
 
     def reconstruct(support):
         components = [("strict", 1, 1, (np.from_terms(axes, support),))]
-        if rules <= {"invariant", "surface", "complete"}:
-            rule = _Canonical(components)
+        if rules <= {"invariant", "surface", "complete", "shared boundary curve"}:
+            rule = _Canonical(components, shared_curves="shared boundary curve" in rules)
         elif rules == {"direct"}:
             rule = _Direct()
         elif rules == {"repeated tangent"}:

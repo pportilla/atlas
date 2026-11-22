@@ -2,9 +2,11 @@
 from functools import lru_cache
 from .binomial_kernel import run
 
-from .affine_kernel import frame_locus, sparse_terms
 from .blowup_ideal import radical_subset
+from .centre_weights import centre_rows
 from .fan_geometry import _determinant, fan_cover
+from .kernel_json import kernel_json
+from .polynomial import integer_from_decimal, kernel_fraction
 
 
 def _cone(chart, names):
@@ -13,18 +15,13 @@ def _cone(chart, names):
     if (chart.coefficient_field or chart.ambient or len(chart.variables) != len(names)
             or len(mapping) != len(chart.coordinates) or mapping.keys() != set(names)):
         return None
-    rows = [dict(sparse_terms(chart.variables, mapping[name])) for name in names]
-    exponents = set().union(*rows)
-    if len(exponents) != len(names):
+    cone = kernel_json("atlas_repair_geometry", "parent_cone",
+                       images=centre_rows(chart.variables, (mapping[name] for name in names)))
+    if cone is None:
         return None
-    columns = {}
-    for e in exponents:
-        c = tuple(row.get(e, 0) for row in rows)
-        if c in columns:
-            return None
-        columns[c] = e
-    linear = tuple(sorted(columns))
-    return linear, tuple(zip(*(columns[c] for c in linear)))
+    linear = tuple(tuple(map(kernel_fraction, row)) for row in cone["linear"])
+    rays = tuple(tuple(map(integer_from_decimal, ray)) for ray in cone["rays"])
+    return linear, rays
 
 
 @lru_cache(maxsize=128)
@@ -44,30 +41,16 @@ def _parent_cover(parents):
     if fan_cover(cones, len(names)) is None:
         return False
 
-    # On a regular chart every torus orbit is given by zero coordinates
-    # with all the others units. The set of their rays identifies this
-    # very same orbit in every cone containing the face. The invertible
-    # common linear map sends it to the origin precisely when every base
-    # monomial has a positive exponent at some zero coordinate.
-    owners = {}
+    ray_ids, charts = {}, []
     for chart, cone in zip(parents, cones):
         coords = chart.variables
         maps = tuple(f for _, f in chart.coordinates)
         if not (radical_subset(coords, maps, chart.fibre) and radical_subset(coords, chart.fibre, maps)):
             return False
-        for row in run(f"origin_orbits {len(names)}", *cone):
-            face = tuple(map(int, row.split()))
-            rays = frozenset(cone[i] for i in face)
-            owners.setdefault(rays, 0)
-            zeros = tuple(coords[i] for i in face)
-            units = tuple(v for v in coords if v not in zeros)
-            if any(not frame_locus(coords, zeros, (*units,g)) for g in chart.region):
-                # A valid fan partition owns all of this orbit or none of it.
-                if not frame_locus(coords, (*zeros,*chart.region), units):
-                    return False
-                continue
-            owners[rays] += 1
-    return all(count == 1 for count in owners.values())
+        charts.append(dict(rays=[ray_ids.setdefault(ray, len(ray_ids)) for ray in cone],
+                           faces=[list(map(int, row.split())) for row in run(f"origin_orbits {len(names)}", *cone)],
+                           region=centre_rows(coords, chart.region)))
+    return kernel_json("atlas_repair_geometry", "parent_partition", charts=charts)
 
 
 def certified_parent_cover(parents):

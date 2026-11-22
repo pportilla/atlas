@@ -20,7 +20,7 @@ from functools import lru_cache
 
 from .fan_geometry import canonical_laurent_terms, complete_fan as _complete_fan, _determinant
 from .kernel_json import kernel_json
-from .polynomial import integer_from_decimal, integer_text
+from .polynomial import format_poly, integer_from_decimal, integer_text, rational_text
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
 
 
@@ -136,7 +136,8 @@ def torus_complex(charts, dimension, intrinsic):
     return section_complex((_chart_terms(c, dimension, linear) for c in charts), dimension, intrinsic)
 
 
-def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
+def section_complex(chart_terms, dimension, intrinsic, *, common_source=False, embedded_snc=False,
+                    local_coordinates=None):
     """Orbit sections of a verified regular cover with its maps in the common torus.
 
     With a common source, the caller has derived every strict equation from
@@ -148,11 +149,13 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
     if any(details is None for details in chart_terms):
         return None
     ray_ids, equations, charts = {}, {}, []
-    for rays, boundary, terms in chart_terms:
+    for i, (rays, boundary, terms) in enumerate(chart_terms):
         chart = {"rays": [ray_ids.setdefault(ray, len(ray_ids)) for ray in rays],
                  "boundary": list(boundary.items())}
         if intrinsic:
             chart["powers"] = [list(map(integer_text, e)) for e, _ in terms]
+        if local_coordinates is not None:
+            chart.update(coordinates=local_coordinates[i], coefficients=[rational_text(c) for _,c in terms])
         if not common_source:
             try:
                 equation = _normalized(canonical_laurent_terms(rays, dict(terms)))
@@ -160,16 +163,20 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
                 return None
             chart["equation"] = equations.setdefault(equation, len(equations))
         charts.append(chart)
-    plan = kernel_json("atlas_torus_sections", "plan", dimension=dimension, intrinsic=intrinsic,
-                       common_source=common_source, rays=[list(map(integer_text, ray)) for ray in ray_ids],
-                       charts=charts)
+    inputs = dict(dimension=dimension, intrinsic=intrinsic, common_source=common_source,
+                  rays=[list(map(integer_text, ray)) for ray in ray_ids], charts=charts)
+    if local_coordinates is not None and not (embedded_snc and intrinsic and common_source):
+        return None
+    plan = None if local_coordinates is not None else kernel_json("atlas_torus_sections", "plan", **inputs)
+    if plan is None and embedded_snc and intrinsic and common_source:
+        plan = kernel_json("atlas_torus_sections", "plan", closed_sections=True, **inputs)
     if plan is None:
         return None
     if "complex" in plan:
-        return plan["complex"]
+        return plan["complex"] if local_coordinates is None else None
 
     exhaustive = exhaustive_faces()
-    sections, characters = [], {None: 0}
+    sections, characters, families = [], {None: 0}, {}
     for index, affine, terms in plan["checks"]:
         rays, _, polynomial = chart_terms[index]
         restricted = tuple(polynomial[j] for j in terms)
@@ -178,5 +185,18 @@ def section_complex(chart_terms, dimension, intrinsic, *, common_source=False):
         if section is None:
             return None
         count, character = section
-        sections.append((integer_text(count), characters.setdefault(character, len(characters))))
-    return kernel_json("atlas_torus_sections", "glue", incidence=plan["incidence"], sections=sections)
+        index = characters.setdefault(character, len(characters))
+        sections.append((integer_text(count), index))
+        if local_coordinates is not None and count > 1 and f"alpha{index}" not in families:
+            name = f"alpha{index}"
+            polynomial = format_poly(dict(character[1]), ["T"])
+            families[name] = {"degree": count, "polynomial": polynomial, "direction": list(character[0]),
+                              "definition": f"{name}_j is root j of {polynomial} = 0, ordered by real then imaginary part, starting at 1."}
+    payload = {}
+    if local_coordinates is not None:
+        payload = dict(charts=charts, rays=inputs["rays"],
+                       directions=[list(map(integer_text, key[0])) if key else [] for key in characters])
+    result = kernel_json("atlas_torus_sections", "glue", incidence=plan["incidence"], sections=sections, **payload)
+    if result is not None and families:
+        result["root_families"] = families
+    return result

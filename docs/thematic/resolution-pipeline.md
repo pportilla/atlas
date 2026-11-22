@@ -43,6 +43,35 @@ supply the charts and satisfy the checks for the requested mode.
 | A-series surface singularity | Try the chain of surface charts before the ordinary-point test. [Surface chains](../../native/chain.cpp) |
 | Smooth projectivized tangent cone | Try the ordinary blowup of the origin. [Ordinary points](../../native/ordinary.cpp) |
 | Diagonal surface or binomial | Try a fan adapted to the diagonal surface, or coordinate blowups for the binomial. [Diagonal surface fans](../../native/toricfan.cpp) · [Binomial charts](../../native/binomial_fan.cpp) |
+| Reduced central arrangement of four to twelve rational planes spanning three coordinates | Blow up the origin. Its exceptional plane carries the projective line arrangement. In embedded mode blow up the strict intersection lines whose directions have at least three incident planes. Intrinsic mode also separates each pair meeting at an ordinary double direction. [Arrangement charts and incidence](../../native/plane_arrangement.cpp) |
+
+A surface can have a diagonal Newton face in nonlinear coordinates. For
+`(x+y*z)^2+y^5+z^5`, the solver completes the square and uses the fan of
+`X^2+y^5+z^5`. Each displayed chart composes its fan projection with
+`x=X-y*z`. The certificate stores the coordinate and its polynomial offset
+in `coordinate_translation`. Replay derives the offset again from the input
+equation and verifies the projections. The quadratic translation fixes the
+origin and has Jacobian determinant one, so it preserves the origin fibre
+and volume orders. [Quadratic candidates](../../native/resolution_candidate.cpp)
+
+A singular direction of the tangent cone rules out the ordinary-point criterion.
+For example, $xyz(x+y+z)$ has a singular tangent direction $[1:0:0]$.
+One blowup gives an embedded resolution. The four projective lines have
+only transverse double intersections, and the exceptional plane supplies the
+third transverse component there. [Four-line resolution](../../web/zoo-data/records/cone-four-lines.json)
+
+For $xyz(x+y)$, three planes meet along the $z$-axis. After blowing up the
+origin, the solver blows up the strict transform of that axis. The three
+planes then meet its exceptional divisor at distinct directions.
+[Four planes with a triple line](../../web/zoo-data/records/cone-d4-quartic.json)
+
+A repair centre can contain several geometric points conjugate over the
+rationals. Atlas follows each point through the repair charts and uses those
+labels on intersections of exceptional divisors. For the Hesse triangle
+with a quartic perturbation this gives one arm of the embedded tree for each
+of the three nodes. For the cone over two tangent conics it gives one set
+of exceptional divisors over each of their two points of tangency.
+[Hesse triangle](../../web/zoo-data/records/hesse-triangle-quartic.json) · [Two tangent conics](../../web/zoo-data/records/quartic-face-plus.json)
 
 The fast ordinary-point engine accepts two to eight variables, at most 4,096
 expanded terms and total degree at most 128. Outside that range a nonzero
@@ -170,6 +199,14 @@ by successive restriction to hypersurfaces of maximal contact. In embedded mode,
 in a threefold has become smooth, the curves cut out on it by the exceptional
 divisors determine the remaining blowups. [Bierstone and Milman, *Desingularization algorithms I. Role of exceptional divisors*, Theorem 1.14 (2003)](https://arxiv.org/abs/math/0207098) · [Centre calculation](../../native/centre_affine_maximum.cpp) · [Surface step](../../native/surface_centre_choice.cpp)
 
+For `x^5+(y^2-z^3)^2`, two boundary curves of multiplicity two cross on
+the smooth strict surface. Blowing up their intersection point creates a
+new curve of multiplicity three and can repeat the tie. Here a second
+exceptional divisor distinguishes one branch. The solver verifies that the
+intersection of the two exceptional divisors lies on the strict surface,
+then blows up that smooth curve. The resulting record identifies this step
+as a `shared boundary curve`. [Centre verification](../../native/surface_centre_choice.cpp)
+
 Intrinsic mode can stop as soon as the strict transform is smooth on all
 charts over the origin. For example, take $A=x+y+z$ and $B=x-y$ in the
 sheared cusp cylinder $A^2-B^3=0$. Atlas finds the line $A=B=0$. Its
@@ -192,6 +229,14 @@ control to the other resolution rules. [Finite centre selection](../../native/ce
 | Ideal blowups | The graph equations give the strict transform, projection and exceptional orders. Decomposition over the rationals or a marked number field, followed by comparison on overlaps, identifies the geometric components. [Graph verification](../../native/graph_replay.cpp) · [Wide inputs](../../native/graph_wide.cpp) · [Component projections](../../native/component_projection.cpp) |
 | Newton charts | The fan verifier checks exceptional ray images against the singular locus of the reduced source, then verifies substitutions, pullbacks, face domains and crossings. Torus sections give incidence and the faces of each cell. On a degenerate stratum the saturated Jacobian and a finite-locus test guide the repair. [Ray images](../../engine/fan_centres.py) · [Fan verification](../../native/fan_verification.cpp) · [Torus sections](../../native/torus_sections.cpp) · [Newton repair](../../native/newton_repair.cpp) |
 | Saved charts | The verifier recovers the projection, chart domains and exceptional ideals from the saved equations, then glues components and computes the requested invariants. [Projection coefficients](../../native/projection_coefficients.hpp) · [Gluing](../../native/chart_gluing.cpp) |
+
+For chain and loop singularities, a regular monomial modification can have a
+whole torus orbit in the smooth strict transform. Atlas checks the chart
+equations and embedded crossings before using this case for intrinsic
+incidence. On each exceptional intersection it identifies both the closures
+of the torus factors and the coordinate divisors contained in the strict
+transform. Their chart ideals and common faces determine the intrinsic dual
+complex. [Toric sections](../../native/torus_sections.cpp) · [Surface gluing](../../native/fan_surface.cpp)
 
 ## What the record certifies
 

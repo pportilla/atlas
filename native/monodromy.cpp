@@ -11,6 +11,8 @@
 #include <set>
 #include <tuple>
 
+namespace atlas { Json::Value arrangement_nearby_strata(const local::Polynomial& f); }
+
 namespace {
 using namespace atlas::sparse_json;
 namespace primary = atlas::primary;
@@ -743,7 +745,13 @@ Json::Value compute(const Json::Value& r) {
     }
     const size_t width = r["width"].asUInt64();
     const auto terms = read_terms(r["terms"], width);
-    if (op == "nearby_strata") return nearby_strata(terms, width, r);
+    if (op == "nearby_strata") {
+        auto strata = nearby_strata(terms, width, r);
+        if (width == 3) {
+            for (const auto& row : atlas::arrangement_nearby_strata(terms)) strata.append(row);
+        }
+        return strata;
+    }
     if (op == "transverse_compositions") return transverse_compositions(terms, width);
     if (op == "morse") {
         Axes axes(width);

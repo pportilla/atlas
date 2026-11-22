@@ -32,6 +32,11 @@ def _nearby_witness(stratum, exponent):
         transverse.update(transverse_coordinates=tuple(stratum["transverse_coordinates"]),
                           transverse_germ=stratum["transverse_germ"])
         return {"witness": "nearby transverse composition", "transverse": transverse}
+    if model == "ordinary multiple point":
+        transverse.update(transverse_germ=stratum["transverse_germ"], multiplicity=stratum["multiplicity"])
+        for key in ("point", "slice_axes", "transverse_coordinates", "parameters", "parameter_values"):
+            transverse[key] = tuple(stratum[key])
+        return {"witness": "nearby ordinary multiple point", "transverse": transverse}
     transverse["powers"] = tuple(stratum["powers"])
     return {"witness": "nearby transverse binomial", "transverse": transverse}
 

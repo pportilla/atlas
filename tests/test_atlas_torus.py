@@ -34,6 +34,13 @@ class SurfaceSectionFallback(unittest.TestCase):
         self.assertEqual([(c["id"], c["faces"]) for c in output["cells"]],
                          [("CA-B.1", ["A.1", "B"]), ("CA-B.2", ["A.2", "B"])])
         self.assertEqual(output, surface_complex([chart]))
+        presented = surface_complex([chart], local_coordinates=[["u", "v", "w"]])
+        sections, = presented.pop("chart_sections")
+        self.assertEqual(presented, output)
+        self.assertEqual({(s["id"], s["ambient_divisor"]) for s in sections},
+                         {("A.1", "A"), ("A.2", "A"), ("B", "B")})
+        self.assertEqual({tuple(s["ideal"]) for s in sections if s["ambient_divisor"] == "A"},
+                         {("u", "v-1"), ("u", "v+1")})
         # An orbit curve lying in both exceptional divisors cannot carry
         # two independent labels. Leave this case to the general gluer.
         shared = tuple(sorted(parse_expression("x+y*z", list("xyz")).items()))
@@ -97,6 +104,53 @@ class TorusChartCertification(unittest.TestCase):
         self.assertEqual(first, reciprocal)
         self.assertEqual(first, scaled)
         self.assertNotEqual(first, different)
+
+    def test_coordinate_and_open_torus_components_have_distinct_attachments(self):
+        from engine.atlas_torus import section_complex
+        names = list("abuv")
+        rays = ((1,1,1,1), (1,2,1,1), (0,0,1,0), (0,0,0,1))
+        # On A the section splits into u=0 and u*v=1, which are disjoint.
+        # B carries a single smooth graph. Each component on A meets it.
+        terms = tuple(parse("a+u*(u*v-1)", names).items())
+        charts = [(rays, {0:"A", 1:"B"}, terms)]
+        self.assertIsNone(section_complex(charts, 4, True, common_source=True))
+        result = section_complex(charts, 4, True, common_source=True, embedded_snc=True,
+                                 local_coordinates=[names])
+        self.assertEqual({c["id"]:c["ideal"] for c in result["chart_sections"][0]},
+                         {"A.1":["a", "u*v-1"], "A.2":["a", "u"], "B":["b", "u^2*v+a-u"]})
+        self.assertEqual([c["faces"] for c in result["cells"]], [["A.1","B"], ["A.2","B"]])
+
+    def test_threefold_split_factors_multiply_to_every_affine_restriction(self):
+        from engine.monomial_atlas import fan_outputs
+        names = list("xyzt")
+        f = "x^2+y^3+y*z^3+t^2"
+        record = resolve(dict(variables=names, polynomial=f, mode="intrinsic", search="quick", compute="cpu"))
+        self.assertEqual(record["status"], "resolved")
+        self.assertEqual(record["root_families"]["alpha1"]["polynomial"], "T^2+1")
+        coordinates = sp.symbols("u1:5")
+        constants = {str(x):x for x in coordinates}
+        constants.update(alpha1_1=-sp.I, alpha1_2=sp.I)
+        def poly(text):
+            return sp.sympify(text.replace("^","**"), locals=constants)
+        visible = set()
+        for chart in record["charts"]:
+            for ambient in chart["ambient_components"]:
+                axis = poly(ambient["equation"])
+                restriction = sp.Poly(poly(chart["strict_transform"]).subs(axis,0), *coordinates)
+                factors = []
+                for component in chart["exceptional"]:
+                    if component["ambient_divisor"] == ambient["id"]:
+                        visible.add(component["id"])
+                        first, second = map(poly, component["ideal"])
+                        self.assertEqual(first, axis)
+                        factors.append(second)
+                # Over Q(i), the product of the local geometric factors must
+                # recover the entire affine section, including coordinate factors.
+                product = sp.Poly(sp.prod(factors), *coordinates)
+                self.assertEqual(product.monic(), restriction.monic())
+        self.assertEqual(visible, {v["id"] for v in record["dual_complex"]["vertices"]})
+        _, replay = fan_outputs(record, parse(f, names), intrinsic=True, integrals=False)
+        self.assertEqual(replay["dual_complex"], record["dual_complex"])
 
     def test_fan_uses_original_equation_across_differently_named_charts(self):
         from engine.monomial_atlas import fan_outputs

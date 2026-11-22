@@ -1,5 +1,6 @@
 """Geometric and chart-level regression checks for the regular Newton fan."""
 from collections import Counter, defaultdict
+from copy import deepcopy
 from fractions import Fraction
 from itertools import combinations
 from math import prod
@@ -41,6 +42,70 @@ def neighbors(dual):
 
 
 class ToricAtlas(unittest.TestCase):
+    def test_completed_square_keeps_original_projection_on_replay(self):
+        from engine.atlas import from_json, to_json
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import InvalidChart
+        coefficient = 2**130 + 1
+        source = f"(x-{coefficient}*y*z)^2+y^5+z^5"
+        request = dict(variables=BASE, mode="embedded", search="quick", compute="cpu", monodromy=True)
+        shifted = resolve(dict(request, polynomial=source))
+        diagonal = resolve(dict(request, polynomial="x^2+y^5+z^5"))
+        self.assertEqual(shifted["certificate"]["coordinate_translation"],
+                         {"coordinate": "x", "offset": f"{coefficient}*y*z"})
+        self.assertEqual(shifted["dual_complex"], diagonal["dual_complex"])
+        archived = {k:shifted[k] for k in ("status", "mode", "variables", "polynomial", "atlas")}
+        archived["atlas"] = to_json(from_json(archived["atlas"], native=True))
+        replay = replay_zetas(dict(record=archived, monodromy=True))
+        for kind in ("monodromy_zeta", "topological_zeta"):
+            self.assertEqual(replay[kind]["expression"], diagonal[kind]["expression"])
+        for chart in shifted["charts"]:
+            mapped = re.sub(r'[xyz]', lambda m: "(" + chart["map"][m[0]] + ")", source)
+            full = f"({chart['pullback_factor']})*({chart['strict_transform']})"
+            self.assertEqual(polynomial(mapped, chart["coordinates"]), polynomial(full, chart["coordinates"]))
+        tampered = deepcopy(archived)
+        tampered["atlas"][0]["map"]["x"] += "+1"
+        with self.assertRaisesRegex(InvalidChart, "projection"):
+            dual_complex(tampered)
+        tampered = deepcopy(archived)
+        tampered["atlas"][0]["torus"]["coordinate_translation"]["offset"] = "0"
+        with self.assertRaisesRegex(InvalidChart, "translation"):
+            dual_complex(tampered)
+        for field, wrong in (("strict_transform", "1"), ("exceptional", [])):
+            tampered = deepcopy(shifted)
+            chart = next(c for c in tampered["charts"] if c["exceptional"])
+            chart[field] = wrong
+            with self.assertRaises(InvalidChart):
+                dual_complex(tampered)
+        intrinsic = resolve(dict(request, polynomial=source, mode="intrinsic", monodromy=False))
+        family = next(iter(intrinsic["root_families"].values()))
+        family["polynomial"] = "T^2-T"
+        with self.assertRaisesRegex(InvalidChart, "root families"):
+            dual_complex(intrinsic)
+
+    def test_completed_square_preserves_wide_translation_powers(self):
+        from engine.quadratic_fan import translations
+        n = 2**65 + 1
+        equation = f"(z-x^{n})^2+x^5+y^5"
+        choices = list(translations(parse(equation, BASE, bounded=False), BASE))
+        self.assertEqual(choices, [({"coordinate": "z", "offset": f"x^{n}"},
+                                    parse("z^2+x^5+y^5", BASE))])
+
+    def test_intrinsic_archive_preserves_diagonal_root_names(self):
+        from engine.resolution_complex import dual_complex
+        for source in ("(x-y^2)^2+y^7+z^3", E8, SPLIT):
+            with self.subTest(source=source):
+                result = run(source, "intrinsic")
+                expected = result.pop("dual_complex")
+                self.assertTrue(any(
+                    family["degree"] == 1 for family in result["root_families"].values()))
+                self.assertEqual(dual_complex(result), expected)
+                fields = ["status", "variables", "polynomial", "mode", "atlas"]
+                if "coordinate_translation" not in result["certificate"]:
+                    fields.append("engine")
+                self.assertEqual(dual_complex({k: result[k] for k in fields}), expected)
+
     def test_e8_graph(self):
         result = run(E8, "intrinsic")
         self.assertEqual(result["engine"], "native-toric")

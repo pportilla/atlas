@@ -20,6 +20,27 @@ from tests.cli_support import run_prompt
 
 
 class ResolutionComplexTests(unittest.TestCase):
+    def test_relative_component_requires_a_connected_cover_of_every_owned_fibre_point(self):
+        from engine import native_polynomial as np
+        from engine.incidence import counted_boundary
+        x, y, z = np.symbols("x y z")
+        components = (("E",1,1,(x,)), ("F",1,1,(y,)), ("G",1,1,(z,)))
+        chart = Chart((x,y,z), (), components, (y*z,), (), (), ())
+        counts = {frozenset(names): (None if names == "E" else 1)
+                  for names in ("E", "F", "G", "EF", "EG", "FG", "EFG")}
+        def reason(charts, incidences=counts):
+            return counted_boundary(incidences, {}, 3, False, False, charts=charts)["reason"]
+        # The fibre on E is the union of two lines meeting at the origin.
+        self.assertIsNone(reason([chart]))
+        extra = replace(chart, fibre=(y*z*(z-1),))
+        self.assertIsNotNone(reason([extra]))
+        self.assertIsNone(reason([replace(extra, removed=((z-1,),))]))
+        # Two disjoint visible sections do not identify their parent.
+        parallel = replace(chart, fibre=(y*(y-1),),
+                           components=(*components[:2], ("G",1,1,(y-1,))))
+        separate = {k:v for k,v in counts.items() if not frozenset("FG") <= k}
+        self.assertIsNotNone(reason([parallel], separate))
+
     def test_graph_cannot_remove_an_entire_smooth_component_as_its_centre(self):
         # Blowing up the Cartier ideal (x) is the identity. Saturating the
         # pullback of x by that pivot would incorrectly erase the whole curve.

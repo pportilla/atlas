@@ -17,6 +17,93 @@ def monomial(names, powers):
 def resolve_toric(p, variables, mode, compute=None):
     if len(variables)!=3:
         return None
+    record = _diagonal(p, variables, mode, compute)
+    if record is not None:
+        return record
+    from .quadratic_fan import translate_map, translations
+    from .polynomial import format_poly
+    for translation, adapted in translations(p, variables):
+        record = _diagonal(adapted, variables, mode, compute)
+        if record is not None:
+            for chart in record["charts"]:
+                chart["map"] = translate_map(chart, variables, translation)
+            proof = record["certificate"]
+            proof.update(coordinate_translation=translation, adapted_polynomial=format_poly(adapted, variables))
+            proof["description"] = ("Completing the square gives an origin-preserving polynomial change "
+                                    "of coordinates with Jacobian determinant one. " + proof["description"])
+            return record
+    return None
+
+
+def _face_geometry(p, principal, rays, cones, eid, mode):
+    # The Newton polyhedron is the diagonal simplex plus the positive orthant:
+    # every higher-weight exponent lies above its supporting plane.
+    valuations = pairings(rays, principal)
+    orders, face = minimum_faces(valuations)
+    characters = {}
+    for edge in dict.fromkeys(f for f in face[3:] if mode == "intrinsic" and len(f) == 2):
+        a, b = edge
+        _, degree, direction, coefficient = character(principal[a], principal[b], p[principal[a]], p[principal[b]])
+        characters[edge] = degree, tuple(v for v, in pairings(rays, (direction,))), rational_text(coefficient)
+    divs={}
+    vertices=[]
+    roots={}
+    for i in range(3,len(rays)):
+        v={'id':eid(i),'ray':list(rays[i]),'total_multiplicity':orders[i]}
+        if mode=='embedded':
+            vertices.append(v);divs[i]=[v['id']]
+        elif len(face[i])==3:
+            # Its open torus slice is the quotient of an irreducible Laurent
+            # hypersurface by the radial G_m. Its strict closure is irreducible.
+            v['label']='Central curve';vertices.append(v);divs[i]=[v['id']]
+        elif len(face[i])==2:
+            a,b=face[i];g=characters[face[i]][0]
+            divs[i]=[]
+            family=f'alpha{a+1}{b+1}'
+            roots[family]={'degree':g,'power_value':characters[a,b][2],
+                'definition':f'{family}_j is root j of T^{g} = {characters[a,b][2]}, ordered by real then imaginary part, starting at 1.'}
+            for j in range(1,g+1):
+                ident=f'{eid(i)}.{j}';divs[i].append(ident)
+                vertices.append({'id':ident,'ray':list(rays[i]),'root':f'{family}_{j}','ambient_divisor':eid(i)})
+        else:
+            divs[i]=[]
+    face_rows = [(len(indices), *indices) for indices in face]
+    incidence = run(f"diagonal_cells 3 {len(rays)} {len(cones)} {int(mode == 'intrinsic')}", *face_rows, *cones)
+    cells = []
+    for row in incidence:
+        kind, *fields = row.split()
+        indices = list(map(int, fields))
+        if kind == "triangle" or mode == "embedded":
+            cells.append({"vertices": [eid(i) for i in indices]})
+            continue
+        i, j, a, b = indices
+        for t in range(characters[a,b][0]):
+            cells.append({"vertices": [divs[i][t if len(face[i]) == 2 else 0], divs[j][t if len(face[j]) == 2 else 0]],
+                          "stratum_root": f"alpha{a+1}{b+1}_{t+1}"})
+    dual={'status':'complete','convention':('Reduced ambient exceptional divisor' if mode=='embedded'
+            else 'Reduced exceptional curves on the resolved surface')+' over the origin, over the algebraic closure of Q.',
+          'vertices':vertices,'cells':cells}
+    return dual, roots, divs, characters, orders, face
+
+
+def diagonal_annotations(polynomial, cones, by_ray, boundary):
+    """Restore diagonal root names from the verified rays and source polynomial."""
+    from .strata import annotate_complex
+    rows = run(f"diagonal 3 {len(polynomial)}", *polynomial)
+    if rows == ["none"]:
+        return boundary
+    principal = [tuple(map(_integer, row.split())) for row in rows[1:4]]
+    # The diagonal producer numbers divisors E1, E2, ... in fan order.
+    # Atlas charts can encounter them in a different order (e.g. E3 first).
+    named_rays = sorted(by_ray, key=lambda ray: (len(by_ray[ray]), by_ray[ray]))
+    rays = [(1, 0, 0), (0, 1, 0), (0, 0, 1), *named_rays]
+    ray_indices = {ray: index for index, ray in enumerate(rays)}
+    indexed = [[ray_indices[ray] for ray in cone] for cone in cones]
+    dual, *_ = _face_geometry(polynomial, principal, rays, indexed, lambda i: by_ray[rays[i]], "intrinsic")
+    return annotate_complex(dual, boundary)
+
+
+def _diagonal(p, variables, mode, compute):
     rows = run(f"diagonal 3 {len(p)}", *p)
     if rows == ["none"]:
         return None
@@ -36,55 +123,12 @@ def resolve_toric(p, variables, mode, compute=None):
     cones=fan['cones']
     if len(exps)*len(cones)>150_000:
         raise LimitError('Toric atlas exceeds the chart expansion budget.')
-    # The Newton polyhedron is the diagonal simplex plus the positive orthant:
-    # every higher-weight exponent lies above its supporting plane.
-    valuations = pairings(rays, principal)
-    orders, face = minimum_faces(valuations)
-    from .chart_batch import transform_batch
-    transformed,batch_info=transform_batch(exps,rays,cones,orders,compute=compute)
-    characters = {}
-    for edge in dict.fromkeys(f for f in face[3:] if mode == "intrinsic" and len(f) == 2):
-        a, b = edge
-        _, degree, direction, coefficient = character(principal[a], principal[b], p[principal[a]], p[principal[b]])
-        characters[edge] = degree, tuple(v for v, in pairings(rays, (direction,))), rational_text(coefficient)
-    coords=['u','v','w']
     def eid(i):
         return f'E{i-2}'
-    divs={}
-    vertices=[]
-    roots={}
-    for i in range(3,len(rays)):
-        v={'id':eid(i),'ray':rays[i],'total_multiplicity':orders[i]}
-        if mode=='embedded':
-            vertices.append(v);divs[i]=[v['id']]
-        elif len(face[i])==3:
-            # Its open torus slice is the quotient of an irreducible Laurent
-            # hypersurface by the radial G_m. Its strict closure is irreducible.
-            v['label']='Central curve';vertices.append(v);divs[i]=[v['id']]
-        elif len(face[i])==2:
-            a,b=face[i];g=characters[face[i]][0]
-            divs[i]=[]
-            family=f'alpha{a+1}{b+1}'
-            roots[family]={'degree':g,'power_value':characters[a,b][2],
-                'definition':f'{family}_j is root j of T^{g} = {characters[a,b][2]}, ordered by real then imaginary part, starting at 1.'}
-            for j in range(1,g+1):
-                ident=f'{eid(i)}.{j}';divs[i].append(ident)
-                vertices.append({'id':ident,'ray':rays[i],'root':f'{family}_{j}','ambient_divisor':eid(i)})
-        else:
-            divs[i]=[]
-    face_rows = [(len(indices), *indices) for indices in face]
-    incidence = run(f"diagonal_cells 3 {len(rays)} {len(cones)} {int(mode == 'intrinsic')}", *face_rows, *cones)
-    cells = []
-    for row in incidence:
-        kind, *fields = row.split()
-        indices = list(map(int, fields))
-        if kind == "triangle" or mode == "embedded":
-            cells.append({"vertices": [eid(i) for i in indices]})
-            continue
-        i, j, a, b = indices
-        for t in range(characters[a,b][0]):
-            cells.append({"vertices": [divs[i][t if len(face[i]) == 2 else 0], divs[j][t if len(face[j]) == 2 else 0]],
-                          "stratum_root": f"alpha{a+1}{b+1}_{t+1}"})
+    dual, roots, divs, characters, orders, face = _face_geometry(p, principal, rays, cones, eid, mode)
+    from .chart_batch import transform_batch
+    transformed,batch_info=transform_batch(exps,rays,cones,orders,compute=compute)
+    coords=['u','v','w']
     # A unimodular substitution is injective on monomials. Keep the input's
     # canonical term order across charts; no per-chart sorting or collecting
     # is needed. Reuse the same coefficient and monomial strings in the atlas.
@@ -127,9 +171,6 @@ def resolve_toric(p, variables, mode, compute=None):
         charts.append({'id':f'T{no}','coordinates':coords,'map':maps,
             'strict_transform':equation(transformed[no-1]),'exceptional':exc,
             'pullback_factor':monomial(coords,ords),'ray_indices':cone})
-    dual={'status':'complete','convention':('Reduced ambient exceptional divisor' if mode=='embedded'
-            else 'Reduced exceptional curves on the resolved surface')+' over the origin, over the algebraic closure of Q.',
-          'vertices':vertices,'cells':cells}
     return {'status':'resolved','engine':'native-toric','summary':f'Regular toric resolution with {len(cones)} affine charts.',
         'charts':charts,'dual_complex':dual,'steps':[{'id':'Toric','type':'toric modification','weight':list(w)}],
         'fan':fan,'root_families':roots,'certificate':{'method':'regular refinement of a diagonal compact Newton face',

@@ -16,11 +16,14 @@ from .kernel_json import kernel_json
 from .polynomial import encode_sparse_row, integer_text
 
 
-def surface_complex(charts):
+def surface_complex(charts, *, local_coordinates=None):
     rays, pieces = {}, []
     for cone, boundary, terms, owned in charts:
         pieces.append({"rays": [rays.setdefault(r, len(rays)) for r in cone],
                        "boundary": list(boundary.items()), "strict": encode_sparse_row(dict(terms)),
                        "owned": owned})
+    if local_coordinates is not None:
+        for piece, coords in zip(pieces, local_coordinates, strict=True):
+            piece["coordinates"] = coords
     return kernel_json("atlas_torus_sections", "surface", charts=pieces,
                        rays=[list(map(integer_text, ray)) for ray in rays])
