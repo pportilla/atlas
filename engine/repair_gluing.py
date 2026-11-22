@@ -142,12 +142,11 @@ def _point_images(chart, parent, mapping):
     return images
 
 
-def repair_charts(charts):
+def repair_charts(charts, *, order_components=False):
     links = [(i,c.repair_projection) for i,c in enumerate(charts) if c.repair_projection]
     if not links:
         return charts
     covers = {}
-    marks = []
     from .centre_weights import centre_rows
     from .polynomial import integer_from_decimal
     relation_rows = _repair_geometry("relations", charts=[
@@ -161,14 +160,19 @@ def repair_charts(charts):
         c = charts[i]
         coeff = tuple(map(integer_from_decimal,item["coefficients"]))
         roots = tuple(flint_literal(coeff,k) for k in range(1,len(coeff)))
-        marks.extend(roots)
         covers[i] = c.variables[item["axis"]],c.ambient[item["relation"]],roots
     if not covers:
         return [replace(c,repair_projection=()) for c in charts]
-    existing = {c.coefficient_field:_field_mark(c.coefficient_field) for c in charts if c.coefficient_field}
+    order = range(len(charts))
+    if order_components:
+        from .chart_gluing_kernel import chart_input
+        order = _repair_geometry("chart_order", charts=[chart_input(c) for c in charts])
+        links = [(i,charts[i].repair_projection) for i in order if charts[i].repair_projection]
+    existing = {field:_field_mark(field) for i in order if (field := charts[i].coefficient_field)}
     if any(mark is None for mark in existing.values()):
         return None
-    marks = tuple(dict.fromkeys([*marks,*existing.values()]))
+    roots = [root for i in order if i in covers for root in covers[i][2]]
+    marks = tuple(dict.fromkeys([*roots,*existing.values()]))
     api = chart_expressions(charts[0].variables)
     theta = api.Dummy("repair_field")
     mark, text, degree, images = common_fields(marks,"T")
@@ -177,8 +181,8 @@ def repair_charts(charts):
         return decode((T,),word).xreplace({T:theta})
     field = theta,read(text),degree,mark
     values = {s:read(word) for s,word in zip(marks,images)}
-    ordinary = {i:_extend_chart(c,field,values.get(existing.get(c.coefficient_field)))
-                for i,c in enumerate(charts) if not c.repair_projection}
+    ordinary = {i:_extend_chart(charts[i],field,values.get(existing.get(charts[i].coefficient_field)))
+                for i in order if not charts[i].repair_projection}
     sheets = []
     for i,(j,mapping) in links:
         v,relation,roots = covers.get(i,(None,None,(None,)))

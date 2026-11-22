@@ -191,7 +191,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
             return None
     if not _descended and any(c.repair_projection for c in charts):
         from .repair_gluing import repair_charts
-        charts = repair_charts(charts)
+        charts = repair_charts(charts, order_components=intrinsic)
         if charts is None:
             return None
         _descended = True

@@ -71,6 +71,9 @@ labels on intersections of exceptional divisors. For the Hesse triangle
 with a quartic perturbation this gives one arm of the embedded tree for each
 of the three nodes. For the cone over two tangent conics it gives one set
 of exceptional divisors over each of their two points of tangency.
+When several components have no independent root name, their numbering
+uses the verified chart maps, divisor ideals and parent charts. Permuting
+the saved affine charts preserves those labels.
 [Hesse triangle](../../web/zoo-data/records/hesse-triangle-quartic.json) · [Two tangent conics](../../web/zoo-data/records/quartic-face-plus.json)
 
 The fast ordinary-point engine accepts two to eight variables, at most 4,096
@@ -237,6 +240,12 @@ incidence. On each exceptional intersection it identifies both the closures
 of the torus factors and the coordinate divisors contained in the strict
 transform. Their chart ideals and common faces determine the intrinsic dual
 complex. [Toric sections](../../native/torus_sections.cpp) · [Surface gluing](../../native/fan_surface.cpp)
+
+For $x^2y+y^3z+z^2t+t^3$, an adapted Newton chart requires further
+blowups and expensive component factorization. The intrinsic search
+compares it with a regular monomial fan before gluing the repaired
+charts. In this example the monomial fan certifies 41 exceptional
+components directly. [Candidate selection](../../engine/newton_backend.py) · [Threefold regression](../../tests/test_newton_singular_centres.py)
 
 ## What the record certifies
 

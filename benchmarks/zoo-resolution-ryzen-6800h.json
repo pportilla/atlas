@@ -1423,65 +1423,65 @@
         "atlas_embedded": [
           {
             "status": "complete",
-            "wall_s": 1.1564305649953894,
+            "wall_s": 1.6890936150448397,
             "charts": 26
           },
           {
             "status": "complete",
-            "wall_s": 1.7897385710384697,
+            "wall_s": 1.3233157889917493,
             "charts": 26
           },
           {
             "status": "complete",
-            "wall_s": 1.6406926870113239,
+            "wall_s": 1.0943243489600718,
             "charts": 26
           }
         ],
         "singular": [
           {
             "status": "complete",
-            "wall_s": 7.666398842993658,
+            "wall_s": 9.86475560895633,
             "charts": 29
           },
           {
             "status": "complete",
-            "wall_s": 7.025223031989299,
+            "wall_s": 10.475415244000033,
             "charts": 29
           },
           {
             "status": "complete",
-            "wall_s": 9.027272990031634,
+            "wall_s": 6.055420290038455,
             "charts": 29
           }
         ],
         "atlas_intrinsic": [
           {
             "status": "complete",
-            "wall_s": 2.4204360580188222,
+            "wall_s": 2.068718163005542,
             "charts": 26
           },
           {
             "status": "complete",
-            "wall_s": 1.8407563209766522,
+            "wall_s": 2.0707490569911897,
             "charts": 26
           },
           {
             "status": "complete",
-            "wall_s": 1.5322277590166777,
+            "wall_s": 1.7962047589826398,
             "charts": 26
           }
         ]
       },
       "median_wall_s": {
-        "atlas_embedded": 1.6406926870113239,
-        "singular": 7.666398842993658,
-        "atlas_intrinsic": 1.8407563209766522
+        "atlas_embedded": 1.3233157889917493,
+        "singular": 9.86475560895633,
+        "atlas_intrinsic": 2.068718163005542
       }
     },
     {
       "id": "hesse-triangle-quartic",
       "cpu_affinity": [
-        7
+        3
       ],
       "equation": "x^3+y^3+z^3-3*x*y*z+x^4",
       "variables": [
@@ -1498,55 +1498,55 @@
         "atlas_embedded": [
           {
             "status": "complete",
-            "wall_s": 0.3712398190400563,
+            "wall_s": 0.3637449590023607,
             "charts": 17
           },
           {
             "status": "complete",
-            "wall_s": 0.358569998992607,
+            "wall_s": 0.5405562479863875,
             "charts": 17
           },
           {
             "status": "complete",
-            "wall_s": 0.3316322610480711,
+            "wall_s": 0.8557465519988909,
             "charts": 17
           }
         ],
         "singular": [
           {
             "status": "timeout",
-            "wall_s": 15.147917527006939
+            "wall_s": 15.227837664016988
           },
           {
             "status": "timeout",
-            "wall_s": 15.15433408197714
+            "wall_s": 15.142362646001857
           },
           {
             "status": "timeout",
-            "wall_s": 15.17899500101339
+            "wall_s": 15.149525300017558
           }
         ],
         "atlas_intrinsic": [
           {
             "status": "complete",
-            "wall_s": 0.5523405320127495,
+            "wall_s": 1.0497643140261061,
             "charts": 17
           },
           {
             "status": "complete",
-            "wall_s": 0.5732151219854131,
+            "wall_s": 1.0366729800007306,
             "charts": 17
           },
           {
             "status": "complete",
-            "wall_s": 0.5644003810011782,
+            "wall_s": 1.0669251320068724,
             "charts": 17
           }
         ]
       },
       "median_wall_s": {
-        "atlas_embedded": 0.358569998992607,
-        "atlas_intrinsic": 0.5644003810011782
+        "atlas_embedded": 0.5405562479863875,
+        "atlas_intrinsic": 1.0497643140261061
       }
     }
   ],

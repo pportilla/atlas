@@ -94,6 +94,39 @@ class NewtonSingularCentres(unittest.TestCase):
         self.assertEqual(solved["monodromy_zeta"]["expression"], "1")
         self.assertEqual(len(solved["atlas"]), 3)
 
+    def test_intrinsic_threefold_chain_uses_the_verified_fan_before_repair_gluing(self):
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.resolve import resolve
+
+        names = list("xyzt")
+        for source, search in (("x^2*y+y^3*z+z^2*t+t^3", "quick"),
+                               ("t^2*z+z^3*x+x^2*y+y^3", "exhaustive")):
+            with self.subTest(source=source, search=search):
+                record = resolve(dict(polynomial=source, variables=names, mode="intrinsic",
+                                      search=search, compute="cpu", monodromy=True))
+                self.assertEqual(record["engine"], "verified-monomial-modification")
+                boundary = dual_complex(record)
+                self.assertEqual(boundary["status"], "complete")
+                self.assertEqual(boundary, record["dual_complex"])
+                visible = {d["id"] for chart in record["charts"] for d in chart["exceptional"]}
+                self.assertEqual(visible, {v["id"] for v in boundary["vertices"]})
+                self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], -21)
+                replay = replay_zetas(dict(record=record, zetas=["monodromy", "topological"]))
+                for kind in ("monodromy_zeta", "topological_zeta", "monodromy_check"):
+                    self.assertEqual(replay[kind], record[kind])
+
+    def test_intrinsic_threefold_keeps_the_repaired_atlas_after_a_fan_decline(self):
+        from engine.newton_backend import resolve_newton
+        names = list("xyzt")
+        poly = parse("x^2*y+y^3*z+z^2*t+t^3", names)
+        with patch("engine.newton_trials.resolve_trials", return_value=None) as trials:
+            record = resolve_newton(poly, names, "intrinsic", compute="cpu", defer_outputs=True)
+        trials.assert_called_once()
+        self.assertEqual(record["engine"], "newton-polyhedron")
+        self.assertTrue(any(step.get("centers") for step in record["steps"]))
+        self.assertTrue(any(chart.get("blown_up") for chart in record["charts"]))
+
     def test_intrinsic_chain_and_loop_sections_replay_on_their_own_charts(self):
         from engine.resolution_complex import dual_complex
         from engine.resolve import resolve

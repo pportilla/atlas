@@ -20,6 +20,18 @@ from tests.cli_support import run_prompt
 
 
 class ResolutionComplexTests(unittest.TestCase):
+    def test_archived_branch_names_and_markings_are_recovered_from_the_equation(self):
+        for equation, names in (("x*y-z^4", "xyz"), ("x^2+y^2+z^5", "xyz"),
+                                ("y^2-x^3", "xy"), ("y^2-x^4", "xy")):
+            with self.subTest(equation=equation):
+                record = resolve(dict(polynomial=equation, variables=list(names),
+                                      mode="intrinsic", search="quick", compute="cpu"))
+                expected = record.pop("dual_complex")
+                record["dual_complex"] = {"status": "complete", "vertices": [], "cells": []}
+                self.assertEqual(dual_complex(record), expected)
+                archived = {k: record[k] for k in ("polynomial", "variables", "mode", "status", "atlas")}
+                self.assertEqual(dual_complex(archived), expected)
+
     def test_relative_component_requires_a_connected_cover_of_every_owned_fibre_point(self):
         from engine import native_polynomial as np
         from engine.incidence import counted_boundary

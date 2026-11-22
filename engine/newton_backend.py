@@ -247,10 +247,7 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
                               'vertices':[], 'cells':[]}
     result.update(variables=list(variables), mode=mode)
     if not defer_outputs:
-        from .atlas import boundary_complex, from_record, to_json
-        charts = from_record(result, original, native=True)
-        result['atlas'] = to_json(charts)
-        result['dual_complex'] = boundary_complex(charts, len(variables), mode == 'intrinsic')
+        _repaired_boundary(result, original)
     result['summary'] = (f"Regular Newton modification with {len(parents)} charts, then {blowups} blowups over "
                          f"{points} point{'s' if points!=1 else ''} where a face is degenerate.")
     proof = result['certificate']
@@ -261,6 +258,13 @@ def _blow_up_failures(result, variables, mode, original, defer_outputs, repair):
     return result
 
 
+def _repaired_boundary(record, polynomial):
+    from .atlas import boundary_complex, from_record, to_json
+    charts = from_record(record, polynomial, native=True)
+    record['atlas'] = to_json(charts)
+    record['dual_complex'] = boundary_complex(charts, len(record['variables']), record['mode'] == 'intrinsic')
+
+
 def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False,
                    construct=True):
     """A regular Newton modification, completed by blowups where a face is
@@ -269,7 +273,8 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
     from time import monotonic
     deadline = monotonic()+seconds
     last_limit = None
-    if mode == 'embedded' and not all(_axial_data(poly)[1]):
+    nonconvenient = not all(_axial_data(poly)[1])
+    if mode == 'embedded' and nonconvenient:
         # A subdivision on the boundary is permissible if it preserves the
         # smooth locus. Each exceptional ray maps onto the coordinate subspace
         # cut out by its positive entries. For a reduced polynomial, membership
@@ -298,21 +303,27 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                         return result
         except LimitError as error:
             last_limit = error
+    # A repaired threefold needs general absolute decomposition to glue its
+    # exceptional surfaces. An unmodified monomial fan can already certify
+    # their equations, incidences and chart ownership by torus descent.
+    prefer_unrepaired = mode == 'intrinsic' and len(variables) == 4 and nonconvenient
+    repaired = None
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
             fan=build_fan(transformed, exhaustive=exhaustive_faces())
             if not fan['isomorphism_off_origin']:
                 continue
-            result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,defer_outputs=defer_outputs)
+            result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
+                             defer_outputs=defer_outputs or prefer_unrepaired)
         except LimitError as error:
             last_limit = error
             continue
         if result is not None:
+            if prefer_unrepaired and result['dual_complex']['status'] == 'unavailable':
+                repaired = result
+                break
             return result
-    if mode == 'intrinsic' and not all(_axial_data(poly)[1]):
-        # Preserve a certified Newton resolution in adapted coordinates first.
-        # Other regular fans can still resolve its strict transform when the
-        # original Newton fan has an exceptional image outside the singular locus.
+    if mode == 'intrinsic' and nonconvenient:
         from .newton_trials import resolve_trials
         try:
             trial = resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
@@ -320,6 +331,10 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 return trial
         except LimitError as error:
             last_limit = error
+    if repaired is not None:
+        if not defer_outputs:
+            _repaired_boundary(repaired, poly)
+        return repaired
     if last_limit is not None:
         raise last_limit
     return None

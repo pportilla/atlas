@@ -7,6 +7,30 @@ using atlas::local::Basis;
 using atlas::local::Polynomial;
 using atlas::local::Powers;
 
+// Give anonymous sheet components a reproducible traversal. All ideals and
+// maps use local coordinate columns. Replace the sole positional reference
+// by its verified parent presentation before ordering the charts.
+Json::Value chart_order(const Json::Value& charts) {
+    std::vector<Json::Value> signatures;
+    std::vector<unsigned> order;
+    for (unsigned i = 0; i < charts.size(); ++i) {
+        auto chart = charts[i];
+        const int parent = chart["parent"].asInt();
+        chart.removeMember("parent");
+        if (parent >= 0) {
+            auto base = charts[parent];
+            base.removeMember("parent");
+            chart["parent"] = std::move(base);
+        }
+        signatures.push_back(std::move(chart));
+        order.push_back(i);
+    }
+    std::sort(order.begin(), order.end(), [&](unsigned i, unsigned j) { return signatures[i] < signatures[j]; });
+    Json::Value result(Json::arrayValue);
+    for (auto i : order) result.append(i);
+    return result;
+}
+
 // Sort monomials by their columns in the common linear change of coordinates.
 // The ordered exponent vectors, transposed, are this chart's rays.
 Json::Value parent_cone(const Json::Value& images) {
@@ -88,6 +112,7 @@ bool parent_partition(const Json::Value& charts) {
 extern "C" const char* atlas_repair_geometry(const char* input) noexcept {
     return atlas::sparse_json::invoke(input,[](const Json::Value& r)->Json::Value {
         const auto op=r["operation"].asString();
+        if(op=="chart_order") return chart_order(r["charts"]);
         if(op=="parent_cone") return parent_cone(r["images"]);
         if(op=="parent_partition") return parent_partition(r["charts"]);
         if(op=="relations") return atlas::repair::chart_relations(r);

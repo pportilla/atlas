@@ -244,9 +244,18 @@ class RepairedNewtonAtlas(unittest.TestCase):
         replay = replay_zetas(dict(record=archived, monodromy=True))
         self.assertEqual(replay["topological_zeta"]["expression"], embedded["topological_zeta"]["expression"])
 
-        intrinsic = resolve(dict(request, mode="intrinsic"))["dual_complex"]
+        record = resolve(dict(request, mode="intrinsic"))
+        intrinsic = record["dual_complex"]
         self.assertEqual(intrinsic["status"], "complete")
         self.assertEqual((len(intrinsic["vertices"]), len(intrinsic["cells"])), (18, 16))
+        import random
+        for indices in (list(reversed(range(len(record["atlas"])))),
+                        random.Random(2718).sample(range(len(record["atlas"])), len(record["atlas"]))):
+            charts = json.loads(json.dumps(record["atlas"]))
+            for c in charts:
+                if link := c.get("repair_projection"):
+                    link["parent"] = indices.index(link["parent"])
+            self.assertEqual(dual_complex(dict(record, atlas=[charts[i] for i in indices])), intrinsic)
 
     def test_separate_strict_factors_on_an_implicit_chart(self):
         x, y, z = sp.symbols("x y z")
