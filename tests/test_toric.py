@@ -91,6 +91,46 @@ class ToricAtlas(unittest.TestCase):
         choices = list(translations(parse(equation, BASE, bounded=False), BASE))
         self.assertEqual(choices, [({"coordinate": "z", "offset": f"x^{n}"},
                                     parse("z^2+x^5+y^5", BASE))])
+        names = [*BASE, "t"]
+        equation = f"(x-y*t^{n})^2+y^3+z^4+t^7"
+        self.assertEqual(list(translations(parse(equation, names, bounded=False), names)),
+                         [({"coordinate": "x", "offset": f"y*t^{n}"}, parse("x^2+y^3+z^4+t^7", names))])
+
+    def test_translated_threefold_fibre_and_sections_replay(self):
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import InvalidChart
+        coefficient = 2**90+1
+        names = [*BASE, "t"]
+        source = f"(x-{coefficient}*y*z-t^2)^2+y^3+z^4+t^7"
+        for mode in ("embedded", "intrinsic"):
+            with self.subTest(mode=mode):
+                request = dict(variables=names, mode=mode, search="quick", compute="cpu", monodromy=mode=="embedded")
+                result = resolve(dict(request, polynomial=source))
+                self.assertEqual(result["status"], "resolved")
+                self.assertEqual(result["certificate"]["adapted_polynomial"], "t^7+z^4+y^3+x^2")
+                expected = result["dual_complex"]
+                self.assertEqual(expected["status"], "complete")
+                archived = {k:v for k,v in result.items() if k not in
+                            ("dual_complex", "topological_zeta", "monodromy_zeta", "monodromy_check")}
+                for omit in ((), ("atlas",), ("charts", "engine", "certificate", "fan", "root_families")):
+                    self.assertEqual(dual_complex({k:v for k,v in archived.items() if k not in omit}), expected)
+                if mode == "embedded":
+                    diagonal = resolve(dict(request, polynomial="x^2+y^3+z^4+t^7"))
+                    replay = replay_zetas(dict(record=archived, zetas=["monodromy","topological"]))
+                    for key in ("monodromy_zeta", "topological_zeta"):
+                        self.assertEqual(replay[key]["expression"], diagonal[key]["expression"])
+                    self.assertEqual(result["monodromy_zeta"]["milnor_fiber_euler_characteristic"], -35)
+                else:
+                    broken = deepcopy(archived)
+                    chart = next(c for c in broken["charts"] if c["exceptional"])
+                    chart["exceptional"][0]["ideal"] = ["1"]
+                    with self.assertRaisesRegex(InvalidChart, "ideals"):
+                        dual_complex(broken)
+                broken = deepcopy(archived)
+                broken["atlas"][0]["map"]["x"] += "+1"
+                with self.assertRaisesRegex(InvalidChart, "projection"):
+                    dual_complex(broken)
 
     def test_intrinsic_archive_preserves_diagonal_root_names(self):
         from engine.resolution_complex import dual_complex

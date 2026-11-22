@@ -58,7 +58,10 @@ A surface can have a diagonal Newton face in nonlinear coordinates. For
 in `coordinate_translation`. Replay derives the offset again from the input
 equation and verifies the projections. The quadratic translation fixes the
 origin and has Jacobian determinant one, so it preserves the origin fibre
-and volume orders. [Quadratic candidates](../../native/resolution_candidate.cpp)
+and volume orders. In four coordinates the same substitution can expose a
+regular Newton modification, as for `(x-y*z-t^2)^2+y^3+z^4+t^7`. Atlas
+checks the adapted fan and its intrinsic sections, then composes its chart
+maps with the translation to the original coordinates. [Quadratic candidates](../../native/resolution_candidate.cpp)
 
 A singular direction of the tangent cone rules out the ordinary-point criterion.
 For example, $xyz(x+y+z)$ has a singular tangent direction $[1:0:0]$.

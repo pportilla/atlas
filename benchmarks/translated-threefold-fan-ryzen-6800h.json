@@ -1,0 +1,152 @@
+{
+  "conditions": "QQ at the origin. Fresh CPU processes including startup and serialization. Atlas embedded trials produce verified charts, incidence and both zetas. Intrinsic trials include incidence. Singular resolve.lib checks the embedded resolution and retains all charts, with independent Jacobian and Tjurina lengths and Milnor-fibre Euler agreement.",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "trials": 3,
+  "timeout_s": 15.0,
+  "cases": [
+    {
+      "id": "diagonal-2347",
+      "cpu_affinity": [
+        12
+      ],
+      "equation": "x^2+y^3+z^4+t^7",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        36,
+        36,
+        -35
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.11864053999306634,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08432637102669105,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08437222801148891,
+            "charts": 71
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.004921007028315
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.004630478972103
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.004769783001393
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.08641827298561111,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08681683603208512,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.08526171802077442,
+            "charts": 71
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.08437222801148891,
+        "atlas_intrinsic": 0.08641827298561111
+      }
+    },
+    {
+      "id": "shifted-2347",
+      "cpu_affinity": [
+        12
+      ],
+      "equation": "(x-y*z-t^2)^2+y^3+z^4+t^7",
+      "variables": [
+        "x",
+        "y",
+        "z",
+        "t"
+      ],
+      "mu_tau_fibre_euler": [
+        36,
+        36,
+        -35
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.09939970396226272,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.21164853201480582,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.20382933499058709,
+            "charts": 71
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.017822027031798
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.024473483965266
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.016787457978353
+          }
+        ],
+        "atlas_intrinsic": [
+          {
+            "status": "complete",
+            "wall_s": 0.12659662897931412,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.12104476895183325,
+            "charts": 71
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1268255720497109,
+            "charts": 71
+          }
+        ]
+      },
+      "median_wall_s": {
+        "atlas_embedded": 0.20382933499058709,
+        "atlas_intrinsic": 0.12659662897931412
+      }
+    }
+  ]
+}

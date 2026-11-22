@@ -111,7 +111,7 @@ def _rational(coords, free, points, count):
 
 
 def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count_strata=True,
-           certify_subfaces=False):
+           certify_subfaces=False, diagnostics=None):
     """The numerical data, the strata over the origin and the blowups made.
 
     `poly` is the reduced equation, in the coordinates of the fan. `parts`
@@ -305,7 +305,9 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
                                                           for label, m, nu, ideal in c.components))
                                for c in charts],
                 })
-    except GiveUp:
+    except GiveUp as error:
+        if diagnostics is not None:
+            diagnostics.setdefault("point_repair", str(error))
         return None
     return {"data": data, "strata": strata_totals(contributions), "repairs": repairs}
 

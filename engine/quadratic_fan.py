@@ -1,4 +1,4 @@
-"""Transport diagonal fan charts through an origin-preserving completion of the square."""
+"""Transport verified fan charts through an origin-preserving completion of the square."""
 from .kernel_json import kernel_json
 from .native_library import affine_request
 from .polynomial import encode_sparse_row, format_poly, parse_expression, sparse_row
@@ -27,33 +27,58 @@ def translate_map(chart, names, translation, *, inverse=False):
     return {**projection, axis: format_poly(sparse_row(row), coords)}
 
 
+def _adapted_fan(adapted, names, mode, compute):
+    if len(names) == 3:
+        from .toric_backend import _diagonal
+        return _diagonal(adapted, names, mode, compute)
+    from .newton_trials import _try
+    return _try(adapted, names, adapted, mode=mode, construct=False)
+
+
+def resolve_translated(polynomial, names, mode, compute=None):
+    for translation, adapted in translations(polynomial, names):
+        record = _adapted_fan(adapted, names, mode, compute)
+        if record is None:
+            continue
+        for chart in record["charts"]:
+            chart["map"] = translate_map(chart, names, translation)
+        proof = record["certificate"]
+        proof.update(coordinate_translation=translation, adapted_polynomial=format_poly(adapted, names))
+        proof["description"] = ("Completing the square gives an origin-preserving polynomial change "
+                                "of coordinates with Jacobian determinant one. " + proof["description"])
+        return record
+    return None
+
+
 def _verify_display(record, adapted, translation):
-    """Check the displayed diagonal charts, including split intrinsic curve equations."""
+    """Check the displayed fan charts, including split intrinsic sections."""
     from .exact_json import sorted_record
-    from .toric_backend import _diagonal
     names = record["variables"]
-    expected = _diagonal(adapted, names, record["mode"], "cpu")
+    expected = _adapted_fan(adapted, names, record["mode"], "cpu")
     if expected is None or len(record["charts"]) != len(expected["charts"]):
-        raise InvalidChart("The displayed charts differ from the translated diagonal fan.")
+        raise InvalidChart("The displayed charts differ from the translated fan.")
     if "fan" in record and any(record["fan"].get(k) != expected["fan"][k] for k in ("rays", "cones")):
-        raise InvalidChart("The declared fan differs from the translated diagonal charts.")
-    if "root_families" in record and record["root_families"] != expected["root_families"]:
-        raise InvalidChart("The root families differ from the diagonal curve equations.")
+        raise InvalidChart("The declared fan differs from the translated charts.")
+    if "root_families" in record and record["root_families"] != expected.get("root_families", {}):
+        raise InvalidChart("The root families differ from the translated fan sections.")
     proof = record.get("certificate", {})
-    fields = ("weights", "weighted_degree", "principal_exponents")
-    if any(k in proof and sorted_record(proof[k]) != sorted_record(expected["certificate"][k]) for k in fields):
-        raise InvalidChart("The declared principal face differs from the translated diagonal polynomial.")
+    fields = ("weights", "weighted_degree", "principal_exponents", "fan_ideal_exponents", "boundary_image_coordinate_ideals")
+    if any(k in proof and sorted_record(proof[k]) != sorted_record(expected["certificate"].get(k)) for k in fields):
+        raise InvalidChart("The declared fan certificate differs from the translated polynomial.")
     for chart, source in zip(record["charts"], expected["charts"]):
-        if any(chart.get(k) != source[k] for k in ("id", "coordinates", "ray_indices", "exceptional")):
+        if any(chart.get(k) != source.get(k) for k in ("id", "coordinates", "ray_indices", "exceptional", "ambient_components")):
             raise InvalidChart("The displayed fan chart has inconsistent rays or exceptional ideals.")
         coords = chart["coordinates"]
         def agrees(actual, wanted):
-            return actual == wanted or parse_expression(actual, coords) == parse_expression(wanted, coords)
-        if any(not agrees(chart.get(k), source[k]) for k in ("strict_transform", "pullback_factor")):
+            return isinstance(actual, str) and (
+                actual == wanted or parse_expression(actual, coords) == parse_expression(wanted, coords))
+        if ("pullback_factor" in chart) != ("pullback_factor" in source) or any(
+                not agrees(chart.get(k), source[k]) for k in ("strict_transform", "pullback_factor") if k in source):
             raise InvalidChart("The displayed chart equations differ from their computed pullback.")
         projection = translate_map(source, names, translation)
         if set(chart["map"]) != set(names) or any(not agrees(chart["map"][v], projection[v]) for v in names):
-            raise InvalidChart("The displayed projection differs from the translated diagonal fan.")
+            raise InvalidChart("The displayed projection differs from the translated fan.")
+    return expected["charts"]
 
 
 def translated_outputs(record, polynomial, translation, verify, options):
@@ -62,8 +87,7 @@ def translated_outputs(record, polynomial, translation, verify, options):
     adapted = next((p for change, p in translations(polynomial, names) if change == translation), None)
     if adapted is None:
         raise InvalidChart("The coordinate translation disagrees with the defining polynomial.")
-    if "charts" in record:
-        _verify_display(record, adapted, translation)
+    displayed = _verify_display(record, adapted, translation) if "charts" in record else None
     key = "atlas" if "atlas" in record else "charts"
     charts = record[key]
     normalized = []
@@ -79,8 +103,13 @@ def translated_outputs(record, polynomial, translation, verify, options):
     if "adapted_polynomial" in certificate and parse_expression(certificate["adapted_polynomial"], names) != adapted:
         raise InvalidChart("The adapted polynomial differs from the translated source.")
     # A minimal archive may omit the producer name. Its verified coordinate
-    # translation still identifies the diagonal chart and root conventions.
-    normalized_record = {"engine": "native-toric", **record, key: normalized, "certificate": certificate}
+    # translation still identifies the chart and root conventions.
+    producer = "native-toric" if len(names) == 3 else "verified-monomial-modification"
+    normalized_record = {"engine": producer, **record, key: normalized, "certificate": certificate}
+    if "polynomial" in normalized_record:
+        normalized_record["polynomial"] = format_poly(adapted, names)
+    if key == "atlas" and displayed is not None:
+        normalized_record["charts"] = displayed
     verified = verify(normalized_record, adapted, **options)
     if verified is None:
         return None

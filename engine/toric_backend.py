@@ -20,19 +20,8 @@ def resolve_toric(p, variables, mode, compute=None):
     record = _diagonal(p, variables, mode, compute)
     if record is not None:
         return record
-    from .quadratic_fan import translate_map, translations
-    from .polynomial import format_poly
-    for translation, adapted in translations(p, variables):
-        record = _diagonal(adapted, variables, mode, compute)
-        if record is not None:
-            for chart in record["charts"]:
-                chart["map"] = translate_map(chart, variables, translation)
-            proof = record["certificate"]
-            proof.update(coordinate_translation=translation, adapted_polynomial=format_poly(adapted, variables))
-            proof["description"] = ("Completing the square gives an origin-preserving polynomial change "
-                                    "of coordinates with Jacobian determinant one. " + proof["description"])
-            return record
-    return None
+    from .quadratic_fan import resolve_translated
+    return resolve_translated(p, variables, mode, compute)
 
 
 def _face_geometry(p, principal, rays, cones, eid, mode):

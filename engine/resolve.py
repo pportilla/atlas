@@ -368,6 +368,9 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             if r is None and len(variables)==3:
                 from .toric_backend import resolve_toric
                 r = resolve_toric(p,variables,mode,compute=compute)
+            elif r is None and len(variables) == 4:
+                from .quadratic_fan import resolve_translated
+                r = resolve_translated(p, variables, mode, compute)
         if r is None and len(p)==2 and 2 <= len(variables) <= 8 and 'plane_limit' not in diagnostic:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
@@ -396,17 +399,22 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     if r is None and native_range and singular and len(variables) >= 3 and len(p)>3:
         from .reduced_centre import smooth_reduced_graph
         r = smooth_reduced_graph(p, variables, mode)
+    newton_declines = {}
     try:
         if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
             from .newton_backend import resolve_newton
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
-                               defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)))
+                               defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)),
+                               diagnostics=newton_declines)
             if r is None:
                 fallback_details.append("The Newton search returned no certified atlas.")
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
         fallback_details.append(f"The Newton search reached a limit ({error}).")
+    if r is None and newton_declines:
+        diagnostic["newton_declines"] = newton_declines
+        fallback_details.extend(newton_declines.values())
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
         report("Searching for a verified resolution with independent methods")

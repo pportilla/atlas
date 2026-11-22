@@ -110,7 +110,8 @@ def _boundary_centres(poly, variables, fan):
     return singular_ray_images(format_poly(poly, variables), variables, (fan["rays"][i] for i in fan["boundary_rays"]))
 
 
-def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False):
+def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False,
+              diagnostics=None):
     n=len(variables)
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
@@ -139,6 +140,8 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
         initial={exponents[i]:poly[exponents[i]] for i in sorted(mask)}
         proof=certify_face(initial)
         if proof['status']=='undetermined':
+            if diagnostics is not None:
+                diagnostics.setdefault("face", "A Newton face could not be certified.")
             return None
         # On a degenerate face the strict transform fails normal crossings at
         # the singular points of the cut it makes on the orbit. The
@@ -153,12 +156,14 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     repair = None
     if degenerate:
         if not fan['isomorphism_off_origin']:
+            if diagnostics is not None:
+                diagnostics.setdefault("relative_repair", "A degenerate face needs repair on a fan with centres extending beyond the origin.")
             return None  # The point-repair chart producer uses exceptional rays over the origin.
         from .newton_repair import strata as repair_strata
 
         # Repair uses the fan and adapted equation. A failed trial has no
         # atlas to return, so test its singular orbits before expanding charts.
-        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False)
+        repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False, diagnostics=diagnostics)
         if repair is None or not repair['repairs']:
             return None
     coords=[f'u{i+1}' for i in range(n)]
@@ -266,7 +271,7 @@ def _repaired_boundary(record, polynomial):
 
 
 def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False,
-                   construct=True):
+                   construct=True, diagnostics=None):
     """A regular Newton modification, completed by blowups where a face is
     degenerate. Those blowups may use `seconds` in all, over the coordinate
     choices tried; past that the degenerate choices give no answer."""
@@ -292,7 +297,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 else:
                     matrix = tuple(tuple(int(i == j) for j in range(len(variables))) for i in range(len(variables)))
                     result = _assemble(poly, variables, mode, fan, matrix, compute, deadline, original=poly,
-                                       defer_outputs=defer_outputs)
+                                       defer_outputs=defer_outputs, diagnostics=diagnostics)
                     if result is not None:
                         proof = result['certificate']
                         proof['boundary_image_coordinate_ideals'] = centres
@@ -314,7 +319,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
             if not fan['isomorphism_off_origin']:
                 continue
             result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
-                             defer_outputs=defer_outputs or prefer_unrepaired)
+                             defer_outputs=defer_outputs or prefer_unrepaired, diagnostics=diagnostics)
         except LimitError as error:
             last_limit = error
             continue
