@@ -50,6 +50,10 @@ class ExhaustiveFallback(unittest.TestCase):
         exhaustive.assert_not_called()
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["monodromy_zeta"]["status"], "inconclusive")
+        reason = result["diagnostic"]["description"]
+        self.assertIn("Newton search reached a limit (fan limit)", reason)
+        self.assertIn("repeated-tangent search", reason)
+        self.assertIn("general search checked 0 candidates", reason)
 
     def test_newton_limit_leaves_fallbacks_eligible(self):
         payload = dict(terms=[[[2, 0, 0], "1"]], variables=list("xyz"), mode="embedded",

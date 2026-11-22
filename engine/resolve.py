@@ -15,7 +15,7 @@ BUILD = ROOT / 'native' / 'build'
 def inconclusive(request, diagnostic, elapsed_ms, polynomial=None):
     variables = request['variables']
     result = {'status':'inconclusive', 'engine':'general-search', 'can_search':True,
-            'summary':'The quick search reached its budget. Continue the exhaustive search to test more blowups.',
+            'summary':'The quick search could not certify all requested outputs. Exhaustive search can test more blowups.',
             'diagnostic':diagnostic, 'charts':[], 'steps':[], 'schema_version':1,
             'variables':variables, 'polynomial':polynomial or request['polynomial'],
             'mode':request.get('mode','embedded'), 'base_field':'Q',
@@ -299,6 +299,7 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     compute = request.get('compute')
     exhaustive = request.get('search','exhaustive')=='exhaustive'
     diagnostic = {}
+    fallback_details = []
     r = None
     # Keep the optimized engines in their tested representation and dimensions.
     # The unbounded ideal search works over Q in any finite ambient dimension.
@@ -401,8 +402,11 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             # A quick request is given 55 seconds in all by the worker.
             r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
                                defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)))
+            if r is None:
+                fallback_details.append("The Newton search returned no certified atlas.")
     except (LimitError,subprocess.TimeoutExpired) as error:
         diagnostic['fast_path_limit']=str(error)
+        fallback_details.append(f"The Newton search reached a limit ({error}).")
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
         report("Searching for a verified resolution with independent methods")
@@ -412,12 +416,16 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True,
                            verified=verified, integrals=bool(selected_zetas(request)))
+        if r is None:
+            fallback_details.append("The successive blowup search returned no certified atlas.")
     elif r is None and native_range and singular and len(variables) >= 4:
         # The repeated tangent rule has five specified centres. Let a quick
         # request try those without entering the open-ended invariant search.
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
                            verified=verified, integrals=bool(selected_zetas(request)))
+        if r is None:
+            fallback_details.append("The repeated-tangent search returned no certified atlas.")
     if r is None:
         from .general_resolution import search
         report("Searching for a blow-up centre")
@@ -425,8 +433,14 @@ def _resolve_polynomial(p, request, start, *, verified=None):
             r = search(p, variables, mode, exhaustive=True, integrals=bool(selected_zetas(request)),
                        verified=verified, resolve_reduced_first=True)
         else:
-            r = search(p, variables, mode, exhaustive=exhaustive)
+            counts = {}
+            r = search(p, variables, mode, exhaustive=False, candidate_outcomes=counts)
+            if r is None:
+                diagnostic["candidate_outcomes"] = counts
+                fallback_details.append(f"The general search checked {sum(counts.values())} candidates "
+                                        f"({counts.get('rejected', 0)} rejected, {counts.get('undecided', 0)} undecided).")
     if r is None:
+        diagnostic["description"] = " ".join(filter(None, [diagnostic.get("description"), *fallback_details]))
         return inconclusive(request,diagnostic,(perf_counter()-start)*1000,format_poly(p,variables))
     r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
              mode=mode, base_field='Q', geometric_field='algebraic closure of Q',

@@ -34,6 +34,12 @@ A particular family often admits a short construction. If its hypotheses
 fail, the search moves on to a more general method. Any candidate must still
 supply the charts and satisfy the checks for the requested mode.
 
+On an inconclusive quick search, a singular tangent direction explains why
+the single ordinary blowup test declined. The diagnostic also reports the
+outcome of the Newton and successive blowup searches when these ran. The
+general search records how many candidate certificates it rejected and how
+many it left undecided within the search budget.
+
 ### Structured inputs
 
 | Geometry of the input | Construction |

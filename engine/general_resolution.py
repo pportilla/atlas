@@ -694,7 +694,7 @@ def _certify_original(record, names, mode, asked):
 
 
 def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,prewarm_spare=True,
-           integrals=False,verified=None,resolve_reduced_first=False):
+           integrals=False,verified=None,resolve_reduced_first=False,candidate_outcomes=None):
     from .affine_kernel import _sparse_expression, _sparse_terms, frame_function, rational_factor_rows
     from .resolution_search import priority_candidates, scheduled_attempts
     api = runtime_expressions()
@@ -773,6 +773,8 @@ def search(poly,names,mode,*,exhaustive=False,seconds=4,transverse_centre=None,p
             if outcome is None:
                 return None
             state,result = outcome
+        if candidate_outcomes is not None:
+            candidate_outcomes[state] = candidate_outcomes.get(state, 0) + 1
         if state=="rejected" and priority_key is not None:
             rejected_priority.add(priority_key)
         if state=="certified" and result is not None:
