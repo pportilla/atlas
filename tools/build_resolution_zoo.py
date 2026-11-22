@@ -48,6 +48,7 @@ def resolution_summary(raw):
     certificate = raw["certificate"]
     record["certificate"] = select(certificate, ("method", "description", "atlas_verification",
         "components", "normalized_chart", "linear_map_to_input", "coordinate_translation", "adapted_polynomial", "face_coordinates",
+        "fan_coordinate_frame", "adapted_boundary_image_coordinate_ideals", "boundary_image_ideals",
         "compact_faces", "weights", "weighted_degree", "principal_exponents", "primitive_difference",
         "character_degree", "fan_ideal_exponents", "boundary_image_coordinate_ideals"))
     if "fan" in raw:

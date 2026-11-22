@@ -1,0 +1,101 @@
+{
+  "conditions": "Identical precomputed affine Newton charts. Atlas computes the labelled complex and local ideals via the orbit plan or affine surface sections. Singular factors each affine restriction over Q(i) and checks the visible primes and pair intersections via Groebner bases of their origin fibres. Atlas wall time includes transport; Singular rtimer excludes process startup. Load uncontrolled.",
+  "ramification_branch_and_substitution": {
+    "atlas_s": [
+      0.0007710280478931963,
+      0.0003366970340721309,
+      0.00035671499790623784,
+      0.00037140201311558485,
+      0.00036003103014081717
+    ],
+    "singular_s": [
+      0.000594,
+      0.000638,
+      0.00063,
+      0.000621,
+      0.000627
+    ]
+  },
+  "cases": [
+    {
+      "equation": "x^4+y^5+z*x^2*y^2",
+      "charts": 20,
+      "vertices": 4,
+      "edges": 3,
+      "atlas_s": [
+        0.009532427007798105,
+        0.0021815960062667727,
+        0.0022907729726284742,
+        0.0022030670079402626,
+        0.0022986370022408664
+      ],
+      "singular_s": [
+        0.005974,
+        0.006001,
+        0.006368,
+        0.005744,
+        0.00663
+      ]
+    },
+    {
+      "equation": "z^4+x^2*y^2*(x^3+y^4)",
+      "charts": 47,
+      "vertices": 18,
+      "edges": 17,
+      "atlas_s": [
+        0.0076202210038900375,
+        0.007716111955232918,
+        0.005260757985524833,
+        0.005266028980258852,
+        0.005264826002530754
+      ],
+      "singular_s": [
+        0.026555,
+        0.026919,
+        0.021317,
+        0.021636,
+        0.021986
+      ]
+    },
+    {
+      "equation": "y*(x^2+y^3+y*z^3)",
+      "charts": 27,
+      "vertices": 15,
+      "edges": 13,
+      "atlas_s": [
+        0.004912190022878349,
+        0.004828460980206728,
+        0.007972106977831572,
+        0.007593610032927245,
+        0.004344736982602626
+      ],
+      "singular_s": [
+        0.012445,
+        0.012,
+        0.010719,
+        0.01023,
+        0.007149
+      ]
+    },
+    {
+      "equation": "x^2-(y^2+z^3)*(y-z^2)^2",
+      "charts": 12,
+      "vertices": 4,
+      "edges": 3,
+      "atlas_s": [
+        0.0027431779890321195,
+        0.0011787989642471075,
+        0.001212543051224202,
+        0.0011547040194272995,
+        0.0012689089635387063
+      ],
+      "singular_s": [
+        0.004338,
+        0.004041,
+        0.00375,
+        0.003881,
+        0.004253
+      ]
+    }
+  ]
+}

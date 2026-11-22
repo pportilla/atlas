@@ -17,6 +17,39 @@ from engine.toric_backend import resolve_toric
 
 
 class SurfaceSectionFallback(unittest.TestCase):
+    def test_relative_fan_prunes_only_curves_missing_the_origin(self):
+        from engine.resolution_complex import dual_complex
+        from engine.strata import InvalidChart
+
+        # Independent affine factorization over Q(i) and fibre Groebner
+        # bases in benchmarks/relative_fan_sections.py give these graphs.
+        cases = (("x^4+y^5+z*x^2*y^2", 4, 3, 7),
+                 ("z^4+x^2*y^2*(x^3+y^4)", 18, 17, 13),
+                 ("y*(x^2+y^3+y*z^3)", 15, 13, 4))
+        for f, vertices, edges, invisible in cases:
+            with self.subTest(f=f):
+                record = resolve(dict(variables=list("xyz"), polynomial=f, mode="intrinsic",
+                                      compute="cpu", search="quick"))
+                self.assertEqual(record["status"], "resolved")
+                answer = record["dual_complex"]
+                self.assertEqual((len(answer["vertices"]), len(answer["cells"])), (vertices, edges))
+                public = record["charts"]
+                visible = {v["ambient_divisor"] for c in public for v in c["exceptional"]}
+                all_labels = {v["id"] for c in public for v in c["ambient_components"]}
+                self.assertEqual(len(all_labels - visible), invisible)
+                for owned in (True, False):
+                    saved = deepcopy(record)
+                    if not owned:
+                        del saved["atlas"]
+                    self.assertEqual(dual_complex(saved), answer)
+                    chart = next(c for c in saved["charts"] if any(
+                        a["id"] not in visible for a in c["ambient_components"]))
+                    phantom = next(a for a in chart["ambient_components"] if a["id"] not in visible)
+                    chart["exceptional"].append(dict(id=phantom["id"], ambient_divisor=phantom["id"],
+                                                     ideal=[phantom["equation"], "1"], equation="1"))
+                    with self.assertRaises(InvalidChart):
+                        dual_complex(saved)
+
     def test_owned_curves_and_their_attachments_survive_chart_reordering(self):
         from engine.fan_surface import surface_complex
         from engine.polynomial import parse_expression

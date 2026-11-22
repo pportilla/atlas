@@ -110,6 +110,7 @@ struct Surface {
     std::map<Curve,unsigned> curves;
     std::map<std::string,std::vector<unsigned>> groups;
     std::vector<std::string> parents;
+    std::set<unsigned> visible;
     std::map<std::pair<unsigned,unsigned>,mpz_class> counts;
     std::map<std::pair<std::string,unsigned>,std::optional<std::vector<Factor>>> factor_cache;
     Value chart_sections;
@@ -149,6 +150,15 @@ struct Surface {
                 if (parents.at(id)!=name || std::find(pieces.begin(),pieces.end(),id)!=pieces.end()) return false;
                 pieces.push_back(id);
                 ideals.push_back(axis_row(i)); ideals.push_back(encode_row(factor));
+                // A curve on a relative exceptional divisor can be disjoint
+                // from the origin. A point on any owned chart witnesses it.
+                if (!visible.count(id)) {
+                    Strings locus{"dimension 3",ideals[ideals.size()-2],ideals.back()};
+                    locus.insert(locus.end(),owned.begin(),owned.end());
+                    const auto dimension=request(atlas_ideal,locus);
+                    if (dimension==Strings{"0"} || dimension==Strings{"1"}) visible.insert(id);
+                    else if (dimension!=Strings{"-1"}) return false;
+                }
                 if (!coordinates.empty()) {
                     Value section;
                     section["id"]=id;
@@ -189,7 +199,9 @@ struct Surface {
         auto& cells=result["cells"]=Value(Json::arrayValue);
         std::vector<std::string> names(parents.size());
         std::map<std::string,std::string> parent;
-        for (const auto& [label,group] : groups) {
+        for (const auto& [label,members] : groups) {
+            std::vector<unsigned> group;
+            for (auto id : members) if (visible.count(id)) group.push_back(id);
             for (size_t i=0;i<group.size();++i) {
                 auto& name=names[group[i]];
                 name=label+(group.size()>1 ? "."+std::to_string(i+1) : "");
@@ -198,9 +210,17 @@ struct Surface {
             }
         }
         if (!chart_sections.isNull()) {
-            auto& charts=result["chart_sections"]=chart_sections;
-            for (auto& chart : charts) for (auto& section : chart)
-                section["id"]=names.at(section["id"].asUInt());
+            auto& charts=result["chart_sections"]=Value(Json::arrayValue);
+            for (const auto& chart : chart_sections) {
+                Value kept(Json::arrayValue);
+                for (auto section : chart) {
+                    const auto id=section["id"].asUInt();
+                    if (!visible.count(id)) continue;
+                    section["id"]=names.at(id);
+                    kept.append(std::move(section));
+                }
+                charts.append(std::move(kept));
+            }
         }
         using Pair=std::pair<std::string,std::string>;
         std::map<Pair,mpz_class> pairs,serial;

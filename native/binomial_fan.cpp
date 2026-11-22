@@ -451,7 +451,7 @@ std::string coordinate_shear(std::istream& in, size_t n) {
 
 // Geometric face on every ray and every cone stratum. Intersecting their
 // sorted minima is equivalent to taking the initial form on the sum ray.
-std::string initial_faces(std::istream& in, size_t n) {
+std::string initial_faces(std::istream& in, size_t n, bool exceptional_orders) {
     const size_t nr = read<size_t>(in), nc = read<size_t>(in), nt = read<size_t>(in);
     if (!nt) throw std::invalid_argument("Empty Newton support.");
     std::vector<Face> minima;
@@ -461,7 +461,10 @@ std::string initial_faces(std::istream& in, size_t n) {
         const Integer minimum = *std::min_element(values.begin(), values.end());
         Face mask;
         for (size_t j = 0; j < nt; ++j) if (values[j] == minimum) mask.push_back(j);
-        out << minimum; write(out, mask); out << '\n';
+        out << minimum;
+        // The first n rays are strict coordinate hyperplanes of the source.
+        if (exceptional_orders) out << ' ' << (i < n ? Integer(0) : minimum);
+        write(out, mask); out << '\n';
         minima.push_back(std::move(mask));
     }
     std::set<Face> seen;
@@ -732,7 +735,8 @@ extern "C" char* atlas_binomial(const char* data,size_t length) noexcept {
         }
         if(n && op=="newton_axial") return atlas::copy_text(axial_data(in,n));
         if(n && op=="newton_shear") return atlas::copy_text(coordinate_shear(in,n));
-        if(n && op=="newton_faces") return atlas::copy_text(initial_faces(in,n));
+        if(n && (op=="newton_faces" || op=="newton_face_orders"))
+            return atlas::copy_text(initial_faces(in,n,op=="newton_face_orders"));
         if(n && op=="common_coordinate") {
             const size_t count = read<size_t>(in);
             std::vector<bool> common(n,true);

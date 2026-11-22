@@ -15,6 +15,111 @@ def _record(names, support, fan, centres, charts, mode):
                   summary=f"Certified toric modification with {len(charts)} charts.", fan=fan, certificate=proof)
 
 
+def _fan_charts(names, fan):
+    from .newton_backend import monomial
+    coordinates = [f"u{i+1}" for i in range(len(names))]
+    charts = []
+    for k, cone in enumerate(fan["cones"], 1):
+        rays = [fan["rays"][i] for i in cone]
+        mapping = dict(zip(names, (monomial(coordinates, e) for e in zip(*rays))))
+        charts.append(dict(id=f"N{k}", coordinates=coordinates, ray_indices=cone, map=mapping))
+    return charts
+
+
+def _hyperplane_presentation(chart, saved, names, equation):
+    from .native_library import affine_request
+    from .polynomial import format_poly, sparse_row
+    from .weighted_record import _product
+
+    coords = saved["coordinates"]
+    exceptional = [dict(id=c["id"], total_multiplicity=c["multiplicity"], equation=c["ideal"][0])
+                   for c in saved["components"] if c["id"].startswith("E")]
+    axes = " ".join(str(coords.index(c["equation"])) for c in exceptional)
+    rows = affine_request(["chart", " ".join(coords), " ".join(names), *(saved["map"][v] for v in names),
+                           "0", equation, axes])
+    return dict(chart, strict_transform=format_poly(sparse_row(rows[-1]), coords),
+                exceptional=exceptional,
+                strict_transform_components=[c for c in saved["components"] if c["id"].startswith("S")],
+                pullback_factor=_product([(c["equation"], c["total_multiplicity"]) for c in exceptional]))
+
+
+def _hyperplane_model(poly, names, fan=None, *, factor_original=False):
+    """Test the strict transform of each rational hyperplane on the given fan."""
+    from . import atlas
+    from .kernel_json import kernel_json
+    from .newton_backend import _boundary_centres
+    from .newton_faces import exhaustive_faces
+    from .point_geometry import encode_terms
+    from .polynomial import format_poly
+
+    if fan is not None and len(fan["cones"]) > 512:
+        return None
+    support = poly
+    if factor_original:
+        from .weighted_record import _factor, _product
+        factors, unit = _factor(format_poly(poly, names), tuple(names))
+        support = parse_expression(_product([(f, 1) for f, _ in factors]), names)
+    divisor = kernel_json("atlas_plane_arrangement", "hyperplanes", variables=names, terms=encode_terms(support))
+    if divisor is None:
+        return None
+    if factor_original:
+        divisor = dict(reduced_equation=format_poly(support, names), unit_at_origin=unit,
+                       factors=[dict(equation=f, multiplicity=m) for f, m in factors])
+    if fan is None:
+        fan = build_fan(support, exhaustive=exhaustive_faces())
+        if len(fan["cones"]) > 512:
+            return None
+    centres = _boundary_centres(support, names, fan) if fan["boundary_rays"] else []
+    if centres is None:
+        return None
+    charts = _fan_charts(names, fan)
+    result = _record(names, support, fan, centres, charts, "embedded")
+    result.update(engine="hyperplane-arrangement-fan", input_divisor=divisor)
+    owned = atlas.to_json(atlas.from_record(result, poly, native=True))
+    result["atlas"] = owned
+    equation = format_poly(poly, names)
+    result["charts"] = [_hyperplane_presentation(c, a, names, equation) for c, a in zip(charts, owned, strict=True)]
+    return result
+
+
+def restore_hyperplane_model(record, polynomial):
+    """Reconstruct either saved chart presentation from the named original hyperplanes."""
+    if not (record.get("charts") or record.get("atlas")):
+        raise InvalidChart("The named hyperplane fan requires its chart cover.")
+    names = record["variables"]
+    model = _hyperplane_model(polynomial, names)
+    if model is None:
+        model = _hyperplane_model(polynomial, names, factor_original=True)
+    if model is None or record["mode"] != "embedded":
+        raise InvalidChart("The named hyperplane fan does not match its original divisor.")
+    for key in ("atlas", "charts", "fan", "input_divisor", "steps"):
+        if key in record and record[key] != model[key]:
+            raise InvalidChart(f"The saved hyperplane {key} differs from its reconstruction.")
+    for key in ("boundary_image_coordinate_ideals", "fan_ideal_exponents"):
+        if key in record.get("certificate", {}) and record["certificate"][key] != model["certificate"][key]:
+            raise InvalidChart("The saved hyperplane fan centre or ideal differs from its reconstruction.")
+    return dict(record, atlas=model["atlas"], charts=model["charts"],
+                fan=model["fan"], input_divisor=model["input_divisor"])
+
+
+def hyperplane_fan(poly, names, fan, verified, integrals, *, factor_original=False):
+    from .monomial_atlas import fan_outputs
+    result = _hyperplane_model(poly, names, fan, factor_original=factor_original)
+    if result is None:
+        return None
+    try:
+        checked = fan_outputs(result, poly, integrals=integrals)
+    except InvalidChart:
+        return None
+    if checked is None:
+        return None
+    _, outputs = checked
+    result["dual_complex"] = outputs["dual_complex"]
+    if verified is not None:
+        verified.append((result, checked))
+    return result
+
+
 def _chart_divisors(owned, sections):
     strict = "1"
     ambient = []
@@ -68,7 +173,7 @@ def verify_intrinsic_presentation(record, atlas, output):
 
 def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, verified=None, integrals=False,
          construct=True):
-    from .newton_backend import _boundary_centres, monomial
+    from .newton_backend import _boundary_centres
     from .newton_faces import exhaustive_faces
     if fan is None:
         fan = build_fan(support, exhaustive=exhaustive_faces())
@@ -86,12 +191,7 @@ def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, veri
     centres = _boundary_centres(poly, names, fan) if fan["boundary_rays"] else []
     if centres is None:
         return None
-    coordinates = [f"u{i+1}" for i in range(len(names))]
-    charts = []
-    for k, cone in enumerate(fan["cones"], 1):
-        rays = [fan["rays"][i] for i in cone]
-        mapping = dict(zip(names, (monomial(coordinates, e) for e in zip(*rays))))
-        charts.append(dict(id=f"N{k}", coordinates=coordinates, ray_indices=cone, map=mapping))
+    charts = _fan_charts(names, fan)
     result = _record(names, support, fan, centres, charts, mode)
     from .monomial_atlas import fan_outputs
     try:

@@ -75,6 +75,28 @@ def eval_poly(source, symbols, dimension):
 
 
 class NewtonCoordinateChoices(unittest.TestCase):
+    def test_original_coordinate_divisors_stay_in_the_displayed_strict_transform(self):
+        from engine.binomial_kernel import _newton
+        names = list("xyz")
+        source = f"({2**101}+1)*x*y*z-x*z^2"
+        result = resolve_newton(parse(source, names), names, "embedded")
+        self.assertEqual(result["engine"], "newton-polyhedron")
+        for chart in result["charts"]:
+            coords = chart["coordinates"]
+            axes = set(c["equation"] for c in chart["exceptional"])
+            for exp in parse(chart["pullback_factor"], coords):
+                self.assertTrue(all(c in axes or e == 0 for c, e in zip(coords, exp)))
+            units = [tuple(int(i == j) for i in range(3)) for j in range(3)]
+            symbols = {s: {e: 1} for s, e in zip(coords, units)}
+            mapped = {x: eval_poly(expr, symbols, 3) for x, expr in chart["map"].items()}
+            self.assertEqual(eval_poly(source, mapped, 3),
+                             mul(eval_poly(chart["strict_transform"], symbols, 3),
+                                 eval_poly(chart["pullback_factor"], symbols, 3)))
+        wide = 2**90 + 3
+        faces = _newton("face_orders", 2, (3, 1, 1), (wide,), (2*wide,), (3*wide,), (0, 2))
+        self.assertEqual([list(map(int, row.split()[:2])) for row in faces[:3]],
+                         [[wide, 0], [2*wide, 0], [3*wide, 3*wide]])
+
     def test_bounded_first_trial_preserves_earlier_boundary_and_parallel_fallback(self):
         from unittest.mock import patch
         from engine import newton_trials

@@ -632,9 +632,11 @@ function stepCenter(step, data, chartCoordinates, repair) {
     block.append("Orbit closure for rays " + step.center_ray_indices.join(", "));
   } else if (step.type?.includes("toric modification")) {
     // A fan modification can represent many blow-ups without specifying their factorization.
-    const images = data.certificate?.boundary_image_coordinate_ideals;
+    const proof = data.certificate;
+    const images = proof?.boundary_image_ideals ?? proof?.boundary_image_coordinate_ideals;
     if (images?.length) {
-      block.append("Exceptional images");
+      block.append(proof.coordinate_translation && !proof.boundary_image_ideals
+        ? "Exceptional images in adapted coordinates" : "Exceptional images");
       for (const ideal of images) block.append(locus(ideal));
     } else if (data.fan?.isomorphism_off_origin || data.engine === "native-toric") {
       block.append("Over the origin");

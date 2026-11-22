@@ -3,6 +3,7 @@
 // blowup at the vertex is the line bundle O(-1) on P^2, so subsequent charts
 // are ordinary blowups of direction points, with the radial coordinate fixed.
 #include "chart_expr.hpp"
+#include "branch_order.hpp"
 #include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 #include <array>
@@ -335,27 +336,39 @@ struct Arrangement {
     }
 };
 
-V analyze_arrangement(const atlas::local::Polynomial& f, const V& names, bool intrinsic, bool nearby) {
+using Factors = std::vector<std::pair<atlas::local::Polynomial, Z>>;
+
+Factors rational_hyperplanes(const atlas::local::Polynomial& f, size_t width, int minimum) {
     if (f.empty())
         return {};
     const Z d = atlas::local::total_degree(f.begin()->first);
     // Bound the number of charts and the size of the expanded chart equations.
-    if (d < 4 || d > 12)
+    if (d < minimum || d > 12)
         return {};
     for (const auto &term : f)
         if (atlas::local::total_degree(term.first) != d)
             return {};
-    const auto factors = atlas::primary::factors(f, 3);
+    auto factors = atlas::primary::factors(f, width);
     if (Z(factors.size()) != d)
         return {};
-    Arrangement a{names, {}, {}, intrinsic, f.rbegin()->second};
     for (const auto &[factor, multiplicity] : factors) {
         if (multiplicity != 1)
             return {};
-        Triple coefficients{};
         for (const auto &[e, c] : factor) {
             if (atlas::local::total_degree(e) != 1)
                 return {};
+        }
+    }
+    return factors;
+}
+
+V analyze_arrangement(const atlas::local::Polynomial& f, const V& names, bool intrinsic, bool nearby) {
+    const auto factors = rational_hyperplanes(f, 3, 4);
+    if (factors.empty()) return {};
+    Arrangement a{names, {}, {}, intrinsic, f.rbegin()->second};
+    for (const auto &[factor, multiplicity] : factors) {
+        Triple coefficients{};
+        for (const auto &[e, c] : factor) {
             coefficients[std::find(e.begin(), e.end(), 1) - e.begin()] = c;
         }
         a.planes.push_back(coefficients);
@@ -376,6 +389,26 @@ V analyze_arrangement(const atlas::local::Polynomial& f, const V& names, bool in
 }
 
 V resolve_arrangement(const V &request) {
+    if (request["operation"] == "hyperplanes") {
+        std::vector<std::string> names;
+        for (const auto& name : request["variables"]) names.push_back(name.asString());
+        if (names.size() != 4) return {};
+        auto f = atlas::sparse_json::read_terms(request["terms"], names.size());
+        const auto factors = rational_hyperplanes(f, names.size(), 3);
+        if (factors.empty()) return {};
+        const Q unit = f.rbegin()->second;
+        V result;
+        result["unit_at_origin"] = unit.get_str();
+        for (auto& [e,c] : f) c /= unit;
+        result["reduced_equation"] = atlas::local::format_polynomial(f,names);
+        for (const auto i : atlas::archived_branch_order(factors,names.size())) {
+            V row;
+            row["equation"] = atlas::local::format_polynomial(factors[i].first,names);
+            row["multiplicity"] = 1;
+            result["factors"].append(row);
+        }
+        return result;
+    }
     if (request["variables"].size() != 3) return {};
     return analyze_arrangement(atlas::sparse_json::read_terms(request["terms"], 3),
                                request["variables"], request["intrinsic"].asBool(), false);

@@ -61,7 +61,13 @@ origin and has Jacobian determinant one, so it preserves the origin fibre
 and volume orders. In four coordinates the same substitution can expose a
 regular Newton modification, as for `(x-y*z-t^2)^2+y^3+z^4+t^7`. Atlas
 checks the adapted fan and its intrinsic sections, then composes its chart
-maps with the translation to the original coordinates. [Quadratic candidates](../../native/resolution_candidate.cpp)
+maps with the translation to the original coordinates. A translated fan's
+rays and exponents refer to its adapted coordinates. Its certificate lists
+the exceptional boundary images in the input coordinates under
+`boundary_image_ideals` and their adapted coordinate ideals under
+`adapted_boundary_image_coordinate_ideals`. In older translated archives
+`boundary_image_coordinate_ideals` gives the adapted ideals.
+[Quadratic candidates](../../native/resolution_candidate.cpp)
 
 A singular direction of the tangent cone rules out the ordinary-point criterion.
 For example, $xyz(x+y+z)$ has a singular tangent direction $[1:0:0]$.

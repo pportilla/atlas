@@ -13,6 +13,24 @@ def coordinates(names):
 
 
 class RepeatedProjectiveTangent(unittest.TestCase):
+    def test_canonical_positive_dimensional_centres_have_a_complete_replayable_cover(self):
+        from engine.resolve import resolve
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import InvalidChart
+
+        record = resolve(dict(polynomial="x^2+(y*z-t^2)^2+y^5+z^5", variables=list("xyzt"),
+                              mode="embedded", search="quick", compute="cpu", monodromy=True))
+        self.assertEqual(record["engine"], "canonical-blowups")
+        self.assertEqual(len(record["atlas"]), 24)
+        self.assertEqual(record["dual_complex"]["status"], "complete")
+        self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], -42)
+        self.assertEqual(replay_zetas(dict(record=record, zetas=["topological"]))["topological_zeta"],
+                         record["topological_zeta"])
+        for presentation in ("charts", "atlas"):
+            with self.assertRaises(InvalidChart):
+                dual_complex(dict(record, **{presentation: record[presentation][1:]}))
+
     def test_smooth_repeated_quadric_produces_a_certified_fourfold_atlas(self):
         x, y, z, t, u = variables = coordinates("xyztu")
         quadric = x*y - z*t + u**2

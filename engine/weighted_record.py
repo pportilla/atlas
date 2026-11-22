@@ -169,6 +169,13 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
     record["input_divisor"] = metadata
     if record["status"] != "resolved":
         return record
+    if record["engine"] == "hyperplane-arrangement-fan":
+        from .newton_trials import hyperplane_fan
+        lifted = hyperplane_fan(poly, list(names), record["fan"], None, False, factor_original=True)
+        if lifted is None:
+            raise ArithmeticError("Could not verify the original weighted divisor on its hyperplane fan.")
+        record.update(lifted)
+        return record
     if record["engine"] == "conjugate-plane-crossing":
         # Both marked branches lie over the same irreducible rational factor.
         # Keep their equations in the splitting field for original-divisor replay.

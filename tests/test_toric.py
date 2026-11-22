@@ -42,6 +42,40 @@ def neighbors(dual):
 
 
 class ToricAtlas(unittest.TestCase):
+    def test_ramification_graph_transports_original_fibres_and_replays(self):
+        from engine.quadratic_fan import translations
+        from engine.resolution_complex import dual_complex
+        from engine.resolution_zetas import replay_zetas
+        from engine.strata import InvalidChart
+
+        f = "x^2-(y^2+z^3)*(y-z^2)^2"
+        for mode in ("embedded", "intrinsic"):
+            result = resolve(dict(variables=BASE, polynomial=f, mode=mode, search="quick", compute="cpu",
+                                  monodromy=mode=="embedded"))
+            change = {"coordinate":"y", "offset":"z^2", "method":"ramification graph"}
+            self.assertEqual(result["certificate"]["coordinate_translation"], change)
+            self.assertEqual(result["dual_complex"]["status"], "complete")
+            for omitted in ("atlas", "charts"):
+                saved = deepcopy(result)
+                del saved[omitted]
+                self.assertEqual(dual_complex(saved), result["dual_complex"])
+                if mode == "embedded":
+                    zetas = replay_zetas(dict(record=saved, monodromy=True))
+                    for key in ("topological_zeta", "monodromy_zeta"):
+                        self.assertEqual(zetas[key]["expression"], result[key]["expression"])
+                saved["certificate"]["coordinate_translation"]["offset"] = "z^3"
+                with self.assertRaises(InvalidChart):
+                    dual_complex(saved)
+        # A large cover exponent stays in its own coordinate, and the
+        # recovered offset keeps the exact large rational coefficient.
+        exponent, coefficient = 2**70 + 1, 2**137 + 1
+        wide = parse(f"x^{exponent}-(y^2+z^3)*(y-{coefficient}*z^2)^2", BASE, bounded=False)
+        (choice, adapted), = translations(wide, BASE, ramification=True)
+        self.assertEqual(choice["offset"], f"{coefficient}*z^2")
+        self.assertEqual(adapted, parse(f"x^{exponent}-((y+{coefficient}*z^2)^2+z^3)*y^2", BASE, bounded=False))
+        reduced = parse("x^2-(y^2+z^3)*(y-z^2)", BASE)
+        self.assertEqual(list(translations(reduced, BASE, ramification=True)), [])
+
     def test_completed_square_keeps_original_projection_on_replay(self):
         from engine.atlas import from_json, to_json
         from engine.resolution_complex import dual_complex
@@ -96,6 +130,36 @@ class ToricAtlas(unittest.TestCase):
         self.assertEqual(list(translations(parse(equation, names, bounded=False), names)),
                          [({"coordinate": "x", "offset": f"y*t^{n}"}, parse("x^2+y^3+z^4+t^7", names))])
 
+    def test_relative_translated_centres_and_archive_metadata(self):
+        from engine.resolution_complex import dual_complex
+        from engine.strata import InvalidChart
+
+        source = "(x-z^2)^2-y^2*(z^3+t^5)"
+        for mode in ("intrinsic", "embedded"):
+            result = resolve(dict(variables=list("xyzt"), polynomial=source, mode=mode, search="quick", compute="cpu"))
+            proof = result["certificate"]
+            self.assertEqual(proof["fan_coordinate_frame"], "adapted")
+            self.assertIn(["x", "y"], proof["adapted_boundary_image_coordinate_ideals"])
+            self.assertIn(["-z^2+x", "y"], proof["boundary_image_ideals"])
+            for omitted in ("charts", "atlas"):
+                saved = {k:v for k,v in result.items() if k not in (omitted, "dual_complex")}
+                for missing in ((), ("fan", "root_families")):
+                    self.assertEqual(dual_complex({k:v for k,v in saved.items() if k not in missing}),
+                                     result["dual_complex"])
+                legacy = deepcopy(saved)
+                lp = legacy["certificate"]
+                lp["boundary_image_coordinate_ideals"] = lp.pop("adapted_boundary_image_coordinate_ideals")
+                del lp["fan_coordinate_frame"], lp["boundary_image_ideals"]
+                self.assertEqual(dual_complex(legacy), result["dual_complex"])
+                for section, key, value in (
+                        ("fan", "boundary_rays", []), (None, "root_families", {"alpha1": {"power_value": "0"}}),
+                        ("certificate", "boundary_image_ideals", [["x", "y"]]),
+                        ("certificate", "fan_coordinate_frame", "input")):
+                    tampered = deepcopy(saved)
+                    (tampered[section] if section else tampered)[key] = value
+                    with self.assertRaises(InvalidChart):
+                        dual_complex(tampered)
+
     def test_translated_threefold_fibre_and_sections_replay(self):
         from engine.resolution_complex import dual_complex
         from engine.resolution_zetas import replay_zetas
@@ -131,6 +195,14 @@ class ToricAtlas(unittest.TestCase):
                 broken["atlas"][0]["map"]["x"] += "+1"
                 with self.assertRaisesRegex(InvalidChart, "projection"):
                     dual_complex(broken)
+                broken = deepcopy(archived)
+                for chart in broken["atlas"]:
+                    for component in chart["components"]:
+                        if component["id"] == "E1":
+                            component["id"] = "E999"
+                for omit in ((), ("charts",)):
+                    with self.assertRaisesRegex(InvalidChart, "divisor labels"):
+                        dual_complex({k:v for k,v in broken.items() if k not in omit})
 
     def test_intrinsic_archive_preserves_diagonal_root_names(self):
         from engine.resolution_complex import dual_complex

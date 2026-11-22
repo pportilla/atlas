@@ -50,6 +50,18 @@ class ComponentTests(unittest.TestCase):
             self.assertIs(_absolute_factor(section,1), expected)
             self.assertIs(_factor_equations(section,1), expected)
 
+    def test_primitive_quadratic_sections_over_split_and_nonsplit_fields(self):
+        from engine.field_factors import factors
+        x, y, z = self.v
+        for ext in (sp.I, sp.sqrt(2)):
+            field = sp.QQ.algebraic_field(ext)
+            for f in ((x*(z**2-y))**2 + 1, (z**2-y)**2 + x**2,
+                      9*x**2+4*(z-y**2)**2, x**2 + (z-y)**2 + y):
+                poly = sp.Poly(f, x, y, z, domain=field)
+                actual = {(v.monic().as_expr(), m) for v, m in factors(poly)}
+                reference = {(v.monic().as_expr(), m) for v, m in poly.factor_list()[1]}
+                self.assertEqual(actual, reference)
+
     def test_translated_norm_preserves_multiplicities_and_skips_a_bad_shift(self):
         from engine.field_factors import factors
         x,y,_ = self.v

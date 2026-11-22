@@ -243,8 +243,12 @@ Value plan(const Value& request) {
     // or equals a toric prime divisor V(F+r) contained in the section.
     // The extra ray r must be nonexceptional by normal crossings. Higher
     // codimension orbits cannot supply an additional divisor component.
-    const bool closed_sections = request.get("closed_sections", false).asBool();
-    if (closed_sections && (!intrinsic || !common || relative)) return {};
+    // For relative fans an exceptional divisor can miss the origin fibre.
+    // Use every orbit to witness visibility, including when the caller
+    // needs chart-local ideals from an embedded SNC certificate.
+    const bool closed_request = request.get("closed_sections", false).asBool();
+    if (closed_request && (!intrinsic || !common)) return {};
+    const bool closed_sections = closed_request && !relative;
     std::map<Face, Face> coordinate_components;
     Sections ambient;
     std::set<Face> seen;
@@ -374,7 +378,11 @@ Value chart_sections(const Value& request, const Sections& sections, const Value
         for (const auto& pair : chart["boundary"]) {
             const auto axis = pair[0].asUInt();
             const auto label = pair[1].asString();
-            const auto& section = sections.at({by_name.at(label)});
+            const auto found = sections.find({by_name.at(label)});
+            // A relative exceptional section whose closure misses the
+            // origin fibre was removed by the orbit visibility test.
+            if (found == sections.end()) continue;
+            const auto& section = found->second;
             const auto& coords = section.coordinates;
             const Z total = section.count + coords.size();
             auto append = [&](const Z& index, std::string equation) {

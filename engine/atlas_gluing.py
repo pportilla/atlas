@@ -170,7 +170,8 @@ def _ordinary_overlaps(charts, boundaries):
     return overlap
 
 
-def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended=False, global_boundary_labels=False):
+def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended=False, global_boundary_labels=False,
+                  canonical_cover=False):
     """Return the full complex when local geometric primes can be identified.
 
     On charts over marked fields, use the diagonal of the common coefficient
@@ -184,7 +185,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
                        dimension=dimension, intrinsic=intrinsic)
     if not plan["valid"]:
         return None
-    if not _descended and (intrinsic or any(c.repair_projection for c in charts)):
+    if not _descended and not canonical_cover and (intrinsic or any(c.repair_projection for c in charts)):
         from .repair_replay import restore_repair_maps
         charts = restore_repair_maps(charts)
         if charts is None:
@@ -296,7 +297,7 @@ def glued_complex(charts, dimension, intrinsic=False, *, counts=None, _descended
         if enlarged is None:
             return None
         return glued_complex(enlarged, dimension, intrinsic=intrinsic, _descended=_descended,
-                             global_boundary_labels=global_boundary_labels)
+                             global_boundary_labels=global_boundary_labels, canonical_cover=canonical_cover)
 
     if plan["restricted"]:
         try:

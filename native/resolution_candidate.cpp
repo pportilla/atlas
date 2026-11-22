@@ -371,11 +371,78 @@ Json::Value quadratic_translations(const Terms& f, size_t n) {
     return candidates;
 }
 
+// Straighten a repeated graph branch of the ramification polynomial of a
+// cyclic surface cover. Only the search for a useful frame is bounded.
+// Every chosen frame is an exact triangular polynomial automorphism.
+Json::Value ramification_translations(const Terms& f, size_t n) {
+    Json::Value result(Json::arrayValue);
+    if (n!=3 || f.size()>64) return result;
+    for (size_t cover=0;cover<n;++cover) {
+        Terms branch;
+        unsigned pure=0;
+        for (const auto& [e,c] : f) {
+            const Z degree=std::accumulate(e.begin(),e.end(),Z(0));
+            if (e[cover]==0 && degree<=64 && mpz_sizeinbase(c.get_num_mpz_t(),2)<=4096 &&
+                mpz_sizeinbase(c.get_den_mpz_t(),2)<=4096) branch.emplace(e,c);
+            else if (e[cover]<2 || e[cover]!=degree || ++pure>1) break;
+        }
+        if (pure!=1 || branch.size()+1!=f.size() || branch.empty()) continue;
+        atlas::local::SparseLexRing ring(n);
+        atlas::PolyValue source(ring.ctx);
+        ring.write(source.p,branch);
+        // Square-free products alone often expose a repeated graph; handle
+        // only those, so this optional probe never needs complete factoring.
+        fmpq_mpoly_factor_t squarefree;
+        fmpq_mpoly_factor_init(squarefree,ring.ctx);
+        std::vector<Terms> repeated;
+        if (fmpq_mpoly_factor_squarefree(squarefree,source.p,ring.ctx))
+            for (slong i=0;i<squarefree->num;++i)
+                if (fmpz_cmp_ui(squarefree->exp+i,2)>=0)
+                    repeated.push_back(ring.read(squarefree->poly+i));
+        fmpq_mpoly_factor_clear(squarefree,ring.ctx);
+        ring.write(source.p,f);
+        for (const auto& factor : repeated) {
+            if (factor.size()!=2) continue;
+            for (size_t axis=0;axis<n;++axis) {
+                Powers unit(n);unit[axis]=1;
+                const auto leading=factor.find(unit);
+                if (leading==factor.end()) continue;
+                const auto other=leading==factor.begin() ? std::next(leading) : factor.begin();
+                if (other->first[axis]!=0 || std::accumulate(other->first.begin(),other->first.end(),Z(0))<2)
+                    continue;
+                Terms shift{{other->first,-other->second/leading->second}};
+                Terms image=shift;image[unit]=1;
+                atlas::PolyValue adapted(ring.ctx);
+                std::vector<atlas::PolyValue> coordinates;
+                std::vector<fmpq_mpoly_struct*> images;
+                coordinates.reserve(n);
+                for (size_t i=0;i<n;++i) {
+                    coordinates.emplace_back(ring.ctx);
+                    auto p=coordinates.back().p;
+                    if (i==axis) ring.write(p,image);
+                    else fmpq_mpoly_gen(p,i,ring.ctx);
+                    images.push_back(p);
+                }
+                if (!fmpq_mpoly_compose_fmpq_mpoly(adapted.p,source.p,images.data(),ring.ctx,ring.ctx))
+                    continue;
+                Json::Value choice;
+                choice["axis"]=Json::UInt64(axis);
+                choice["shift"]=atlas::local::encode_row(shift);
+                choice["adapted"]=atlas::local::encode_row(ring.read(adapted.p));
+                result.append(std::move(choice));
+            }
+        }
+    }
+    return result;
+}
+
 Json::Value decode(const Json::Value& request) {
     const auto n = request["width"].asUInt64();
     const auto op = request["operation"].asString();
     if (op == "quadratic_translations")
         return quadratic_translations(atlas::local::decode_row(request["row"].asString(), n), n);
+    if (op == "ramification_translations")
+        return ramification_translations(atlas::local::decode_row(request["row"].asString(), n), n);
     if (op=="jacobian_support" || op=="two_blowups") {
         if (!n) throw std::invalid_argument("Expected a positive number of coordinates.");
         const auto f=atlas::local::decode_row(request["row"].asString(),n);

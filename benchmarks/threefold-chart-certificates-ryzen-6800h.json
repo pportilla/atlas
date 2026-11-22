@@ -1,0 +1,236 @@
+{
+  "conditions": "Fresh processes, exact QQ at zero. Atlas embedded quick CPU includes chart verification, dual complex and both zetas. Singular resolve.lib checks and retains all charts (1,L,A). Independent Singular Jacobian lengths / projective arrangement complement verify Milnor fibre Euler characteristics. Separate marked-field trials time exact factorization with startup.",
+  "cpu_affinity": [
+    0
+  ],
+  "timeout_s": 15.0,
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "marked_factors": {
+    "(x*(z^2-y))^2+1 over a^2=-1": {
+      "expected_factors": 2,
+      "wall_s": {
+        "atlas": [
+          0.09376962902024388,
+          0.1674412910360843,
+          0.06736378301866353
+        ],
+        "singular": [
+          0.03797505499096587,
+          0.03413903102045879,
+          0.01913364400388673
+        ]
+      }
+    },
+    "(x*(z^2-y))^2+1 over a^2=2": {
+      "expected_factors": 1,
+      "wall_s": {
+        "atlas": [
+          0.08456967101665214,
+          0.05896624200977385,
+          0.05011585500324145
+        ],
+        "singular": [
+          0.010149503010325134,
+          0.010566132026724517,
+          0.008726984029635787
+        ]
+      }
+    },
+    "x^2+(z^2-y)^2 over a^2=-1": {
+      "expected_factors": 2,
+      "wall_s": {
+        "atlas": [
+          0.05932032101554796,
+          0.05894663499202579,
+          0.06486293399939314
+        ],
+        "singular": [
+          0.013764730014372617,
+          0.015366751002147794,
+          0.014621310983784497
+        ]
+      }
+    },
+    "x^2+(z^2-y)^2 over a^2=2": {
+      "expected_factors": 1,
+      "wall_s": {
+        "atlas": [
+          0.0653374110115692,
+          0.05172179196961224,
+          0.05288266798015684
+        ],
+        "singular": [
+          0.008750979031901807,
+          0.007816521974746138,
+          0.008613720012363046
+        ]
+      }
+    }
+  },
+  "resolutions": {
+    "triple-flat": {
+      "equation": "x*y*z*t*(x+2*y)",
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        0
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.11548302200390026,
+            "charts": 2
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.07611995103070512,
+            "charts": 2
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.0797289059846662,
+            "charts": 2
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.003205512999557
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.003729222982656
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.003653130028397
+          }
+        ]
+      }
+    },
+    "five-general": {
+      "equation": "x*y*z*t*(x+y+z+t)",
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        -5
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.23159516300074756,
+            "charts": 4
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.19737312500365078,
+            "charts": 4
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1975204640184529,
+            "charts": 4
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.002721678989474
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.005447213014122
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.006899810046889
+          }
+        ]
+      }
+    },
+    "two-pencils": {
+      "equation": "x*y*z*t*(x+y)*(z+t)",
+      "mu_tau_fibre_euler": [
+        -1,
+        -1,
+        0
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.10308541601989418,
+            "charts": 4
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.10635044099763036,
+            "charts": 4
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.10187232197495177,
+            "charts": 4
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.00754290597979
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.006876636005472
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.00632562401006
+          }
+        ]
+      }
+    },
+    "doubled-quadric": {
+      "equation": "x^2+(y*z-t^2)^2+y^5+z^5",
+      "mu_tau_fibre_euler": [
+        43,
+        39,
+        -42
+      ],
+      "trials": {
+        "atlas_embedded": [
+          {
+            "status": "complete",
+            "wall_s": 0.17289906198857352,
+            "charts": 24
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.174076198018156,
+            "charts": 24
+          },
+          {
+            "status": "complete",
+            "wall_s": 0.1755968439974822,
+            "charts": 24
+          }
+        ],
+        "singular": [
+          {
+            "status": "timeout",
+            "wall_s": 15.153639791999012
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.155124900047667
+          },
+          {
+            "status": "timeout",
+            "wall_s": 15.171521738986485
+          }
+        ]
+      }
+    }
+  }
+}

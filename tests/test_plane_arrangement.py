@@ -13,6 +13,68 @@ from engine.strata import InvalidChart
 
 
 class PlaneArrangementTests(unittest.TestCase):
+    def test_four_variable_coordinate_sheets_survive_saved_fan_replay(self):
+        import sympy as sp
+
+        names = list("xyzt")
+        base = dict(zip(names, sp.symbols(names)))
+        for equation, chi in (("x*y*z*t*(x+y+z+t)", -5), ("x*y*z*t*(x+y)*(z+t)", 0),
+                              (f"(-3/7)*x*y*z*t*(x+{2**131}*y)", 0)):
+            record = resolve(dict(polynomial=equation, variables=names, mode="embedded",
+                                  search="quick", compute="cpu", monodromy=True))
+            self.assertEqual(record["engine"], "hyperplane-arrangement-fan")
+            self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], chi)
+            original = sp.sympify(equation, locals=base)
+            for c in record["charts"]:
+                ring = dict(zip(c["coordinates"], sp.symbols(c["coordinates"])))
+                read = lambda x: sp.sympify(x, locals=ring)
+                projection = {v: read(c["map"][k]) for k, v in base.items()}
+                self.assertEqual(sp.expand(original.xreplace(projection) - read(c["strict_transform"])
+                                           * read(c["pullback_factor"])), 0)
+            self.assertEqual(dual_complex(record), record["dual_complex"])
+            self.assertEqual(replay_zetas(dict(record=record, zetas=["topological"]))["topological_zeta"],
+                             record["topological_zeta"])
+            for key in ("charts", "atlas", "fan"):
+                partial = {k: v for k, v in record.items() if k != key}
+                self.assertEqual(dual_complex(partial), record["dual_complex"])
+                self.assertEqual(replay_zetas(dict(record=partial, zetas=["monodromy"]))["monodromy_zeta"],
+                                 record["monodromy_zeta"])
+            for key, value in (("factors", list(reversed(record["input_divisor"]["factors"]))),
+                               ("unit_at_origin", "11"), ("reduced_equation", "1")):
+                broken = dict(record, input_divisor=dict(record["input_divisor"], **{key: value}))
+                with self.assertRaises(InvalidChart):
+                    dual_complex(broken)
+                with self.assertRaises(InvalidChart):
+                    replay_zetas(dict(record=broken, zetas=["topological"]))
+            for missing in ("charts", "atlas"):
+                broken = deepcopy(record)
+                row = broken[missing][0]
+                if missing == "charts":
+                    row["strict_transform_components"].pop()
+                else:
+                    row["components"].pop()
+                with self.assertRaises(InvalidChart):
+                    dual_complex(broken)
+
+    def test_four_variable_nonreduced_weights_and_named_chart_provenance(self):
+        for polynomial, exceptional_order, strict_orders in (
+                ("(-3/5)*x*y*z*t*(x+y)^2", 4, [1, 1, 1, 1, 2]),
+                ("(x*y*z*t*(x+y))^2", 6, [2, 2, 2, 2, 2])):
+            record = resolve(dict(polynomial=polynomial, variables=list("xyzt"), mode="embedded",
+                                  search="quick", compute="cpu", monodromy=True))
+            self.assertEqual(record["status"], "resolved")
+            rows = record["topological_zeta"]["numerical_data"]
+            self.assertEqual([r["multiplicity"] for r in rows if r["component"] == "E1"], [exceptional_order])
+            self.assertEqual(sorted(r["multiplicity"] for r in rows if r["component"].startswith("S")), strict_orders)
+            self.assertEqual(replay_zetas(dict(record=record, zetas=["topological"]))["topological_zeta"],
+                             record["topological_zeta"])
+            broken = deepcopy(record)
+            broken["charts"][0]["strict_transform"] = "1"
+            for claimed in ("verified-monomial-modification", None):
+                broken["engine"] = claimed
+                with self.assertRaises(InvalidChart):
+                    dual_complex(broken)
+
     def test_chart_verifier_recovers_arrangement_strata(self):
         for equation, expected_steps, expected_chi in (
             ("x*y*z*(x+y+z)", 1, 4),

@@ -124,11 +124,12 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     # exactly this common face, including strata over the origin with some
     # original coordinate rays as generators.
     valuations = _valuations(rays, exponents)
-    rows = _newton("faces", n, (len(rays), len(cones), len(exponents)), *valuations, *cones)
-    orders, minima, face_masks = [], [], {}
+    rows = _newton("face_orders", n, (len(rays), len(cones), len(exponents)), *valuations, *cones)
+    orders, exceptional_orders, minima, face_masks = [], [], [], {}
     for row in rows[:len(rays)]:
-        order, *mask = map(integer_from_decimal, row.split())
+        order, exceptional_order, *mask = map(integer_from_decimal, row.split())
         orders.append(order)
+        exceptional_orders.append(exceptional_order)
         minima.append(frozenset(mask))
     for row in rows[len(rays):]:
         count, *fields = map(int, row.split())
@@ -183,7 +184,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
             vertex.update(ray=rays[i], ambient_order=orders[i])
             by_ray.setdefault(i, []).append(vertex)
 
-    equations, batch = transform_atlas(exponents, rays, cones, orders, valuations, compute,
+    equations, batch = transform_atlas(exponents, rays, cones, exceptional_orders, valuations, compute,
                                        equations=(coords, [poly[e] for e in exponents]))
     directions = list(dict.fromkeys(tuple(proof["edge"]["direction"]) for proof in faces.values()
                       if not degenerate and mode == "intrinsic" and proof["face_dimension"] == 1))
@@ -191,7 +192,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     charts=[]
     for index, (cone, strict) in enumerate(zip(cones, equations, strict=True), 1):
         rr=[rays[i] for i in cone]
-        minimum=[orders[i] for i in cone]
+        minimum=[exceptional_orders[i] for i in cone]
         torus_map=[monomial(coords,[ray[j] for ray in rr]) for j in range(n)]
         maps={name:'+'.join(word if c==1 else f'{c}*{word}' for c,word in zip(row,torus_map) if c)
               for name,row in zip(variables,matrix)}
@@ -286,6 +287,11 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         # in the square of each corresponding ideal certifies that inclusion.
         try:
             fan = build_fan(poly, exhaustive=exhaustive_faces())
+            if len(variables) == 4:
+                from .newton_trials import hyperplane_fan
+                trial = hyperplane_fan(poly, variables, fan, verified, integrals)
+                if trial is not None:
+                    return trial
             if fan['boundary_rays']:
                 centres = _boundary_centres(poly, variables, fan)
                 if centres is None:
@@ -340,6 +346,11 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         if not defer_outputs:
             _repaired_boundary(repaired, poly)
         return repaired
+    if len(variables) == 3:
+        from .quadratic_fan import resolve_translated
+        result = resolve_translated(poly, variables, mode, compute, ramification=True)
+        if result is not None:
+            return result
     if last_limit is not None:
         raise last_limit
     return None

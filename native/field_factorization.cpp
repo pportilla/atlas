@@ -121,6 +121,52 @@ struct FieldRing {
         return ring.read(rem.p);
     }
 
+    // Primitive quadratics (x_i P)^2+c or P^2+c x_i^2 with P independent
+    // of x_i, c nonzero in Q. Over K(other variables) they split exactly
+    // when W^2+c splits over K. Gauss's lemma applies since one of the two
+    // coefficients in x_i is a unit.
+    std::optional<Factors> quadratic_composition(const Polynomial& f) {
+        if (width <= 2 || f.size() < 2 ||
+            std::any_of(f.begin(),f.end(),[](const auto& t){ return t.first.back() != 0; }))
+            return std::nullopt;
+        for (size_t axis = 0; axis+1 < width; ++axis) {
+            const bool constant = f.count(Powers(width)) && std::all_of(f.begin(),f.end(),[&](const auto& term) {
+                return term.first == Powers(width) || term.first[axis] == 2;
+            });
+            Powers separated(width);
+            if (!constant) {
+                separated[axis] = 2;
+                if (!f.count(separated) || !std::all_of(f.begin(),f.end(),[&](const auto& term) {
+                    return term.first == separated || term.first[axis] == 0;
+                })) continue;
+            }
+            auto square = f;
+            const auto scalar = square.at(separated);
+            square.erase(separated);
+            const auto leading = square.rbegin()->second;
+            for (auto& [e,c] : square) c /= leading;
+            PolyValue value(ring.ctx), root(ring.ctx);
+            ring.write(value.p,square);
+            if (!fmpq_mpoly_sqrt(root.p,value.p,ring.ctx)) continue;
+            Polynomial small_modulus;
+            for (const auto& [e,a] : modulus) small_modulus[{0,e.back()}] = a;
+            auto roots = FieldRing(2,std::move(small_modulus)).factor({{{2,0},1},{{0,0},scalar/leading}},0);
+            if (roots.size() == 1) return Factors{{f,1}};
+            Factors out;
+            separated[axis] /= 2;
+            for (const auto& [linear,m] : roots) {
+                auto branch = ring.read(root.p);
+                for (const auto& [e,a] : linear) if (e[0] == 0) {
+                    separated.back() = e.back();
+                    branch[separated] += a;
+                }
+                out.emplace_back(monic(branch),m);
+            }
+            return out;
+        }
+        return std::nullopt;
+    }
+
     Factors factor(Polynomial f, std::optional<size_t> section_axis = std::nullopt) {
         Factors factors;
         if (f.empty() || degree(f) == 0) return factors;
@@ -147,6 +193,10 @@ struct FieldRing {
         f = monic(f);
         if (f.empty() || f == one) return factors;
         if (degree(f) == 1) { factors.emplace_back(std::move(f),1); return factors; }
+        if (auto split = quadratic_composition(f)) {
+            factors.insert(factors.end(),split->begin(),split->end());
+            return factors;
+        }
 
         PolyValue original(ring.ctx), derivative(ring.ctx);
         ring.write(original.p,f);

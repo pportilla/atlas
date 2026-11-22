@@ -444,7 +444,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     base_header = " ".join((*base, *marked))
     direct_jet = not named
     # The surface fallback can require the full strict equation off its boundary.
-    boundary_terms = complex and intrinsic and not internal_surface and hasattr(
+    boundary_terms = complex and intrinsic and n != 3 and hasattr(
         native_library._library(), "atlas_fan_boundary_terms_abi")
     if (not split and not saved and not intrinsic and not integrals and direct_jet and reduced is None
             and all(hasattr(native_library._library(), abi) for abi in
@@ -623,7 +623,7 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
             terms = tuple(sorted((e[:n], c) for e,c in strict.items()))
             details = cone, dict(zip(exceptional, here)), terms
             sections.append(details)
-            if internal_surface:
+            if n == 3:
                 # After removing the marked parameter these equations are
                 # defined over Q, on each of the identical geometric sheets.
                 fibre = [encode_sparse_row({e: 1}) for e in monomials]
@@ -724,6 +724,11 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
 
 def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True, bounded=False,
                 local_sections=False):
+    if record.get("engine") == "hyperplane-arrangement-fan" or any(
+            "ray_indices" in c and any("ideal" in v for v in c.get("strict_transform_components", ()))
+            for c in record.get("charts", ())):
+        from .newton_trials import restore_hyperplane_model
+        record = restore_hyperplane_model(record, polynomial)
     n = len(record["variables"])
     if not 2 <= n <= 8 or (record.get("input_divisor") and not record.get("atlas")):
         return None

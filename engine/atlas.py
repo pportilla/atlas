@@ -442,7 +442,7 @@ def _field_relation(t, relation, degree):
 
 
 def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False,
-            allow_partial_complex=False, global_boundary_labels=False):
+            allow_partial_complex=False, canonical_cover=False):
     """What the atlas determines, by the same computations for every engine.
 
     Returns numerical data, strata, and, if requested, the full dual complex
@@ -461,7 +461,9 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
     from .local_blowups import _is_strict, _present
     if not charts:
         raise GiveUp("The resolution needs charts covering the origin fibre.")
-    verified = _checked_repair_maps(charts)
+    # The canonical builder and its saved-record replay already cover every
+    # projective pivot. Their removed centres can have positive dimension.
+    verified = charts if canonical_cover else _checked_repair_maps(charts)
     if verified is not None:
         charts = verified
     elif integrals or not (complex and allow_partial_complex):
@@ -491,7 +493,7 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
         answer.update(numerical_data=rows, strata=listed)
     found, reason = None, None
     if complex:
-        boundary = boundary_complex(charts, dimension, intrinsic, global_boundary_labels=global_boundary_labels,
+        boundary = boundary_complex(charts, dimension, intrinsic, canonical_cover=canonical_cover,
                                     verified_embedded=not intrinsic)
         answer["dual_complex"] = boundary
         found, reason = boundary["cells"], boundary.get("reason")
@@ -567,25 +569,25 @@ def _product_charts(charts, dimension):
     return reduced, len(factors)
 
 
-def _intrinsic_product(charts, dimension):
+def _intrinsic_product(charts, dimension, canonical_cover=False):
     product = _product_charts(charts, dimension)
     if product is None:
         return None
     reduced, free = product
     base_dimension = stratum_dimension(dimension, free)
-    boundary = boundary_complex(reduced, base_dimension, intrinsic=True)
+    boundary = boundary_complex(reduced, base_dimension, intrinsic=True, canonical_cover=canonical_cover)
     if boundary["status"] != "complete":
         return None
     dimensions = incidence("product_dimensions", base=[v["dimension"] for v in boundary["vertices"]], free=free)
     return {**boundary, "vertices": [{**v, "dimension": d} for v,d in zip(boundary["vertices"], dimensions)]}
 
 
-def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labels=False, verified_embedded=False):
+def boundary_complex(charts, dimension, intrinsic=False, *, canonical_cover=False, verified_embedded=False):
     """The exceptional intersections meeting the origin. Restriction to each
     smooth strict component computes its boundary in intrinsic mode."""
     from dataclasses import replace
     from .local_blowups import _is_strict
-    verified = _checked_repair_maps(charts)
+    verified = charts if canonical_cover else _checked_repair_maps(charts)
     incomplete_repair = verified is None
     if verified is not None:
         charts = verified
@@ -595,7 +597,7 @@ def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labe
         if toric is not None:
             return toric
     if intrinsic and not incomplete_repair:
-        product = _intrinsic_product(charts, dimension)
+        product = _intrinsic_product(charts, dimension, canonical_cover)
         if product is not None:
             return product
     ambient_charts = charts
@@ -608,7 +610,7 @@ def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labe
     orbits = {}
     counts = cells(charts, dimension, rational_counts=orbits)
     marked = any(c.coefficient_field for c in charts)
-    certify_relative = (global_boundary_labels and verified_embedded and not marked and
+    certify_relative = (canonical_cover and verified_embedded and not marked and
                         not incomplete_repair and None in counts.values())
     incidence_data = counted_boundary(counts, orbits, ambient_dimension, intrinsic, marked,
                                       charts=charts if certify_relative else ())
@@ -632,7 +634,8 @@ def boundary_complex(charts, dimension, intrinsic=False, *, global_boundary_labe
     elif reason:
         from .atlas_gluing import glued_complex
         glued = glued_complex(ambient_charts, ambient_dimension, intrinsic,
-                              counts=None if intrinsic else counts, global_boundary_labels=global_boundary_labels)
+                              counts=None if intrinsic else counts, global_boundary_labels=canonical_cover,
+                              canonical_cover=canonical_cover)
         if glued is not None:
             return glued
     return {"status": "partial" if reason else "complete", "convention": convention, "vertices": vertices,
