@@ -34,6 +34,9 @@ class ResolutionZooTests(unittest.TestCase):
         Draft202012Validator.check_schema(schema)
         validator = Draft202012Validator(schema)
         validator.validate(self.index)
+        for label in ({}, {"name": ""}):
+            unnamed = {key: value for key, value in self.records["plane-cusp"].items() if key != "name"}
+            validator.validate({**unnamed, **label})
         for record in self.records.values():
             with self.subTest(record=record["id"]):
                 validator.validate(record)

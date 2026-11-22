@@ -23,11 +23,26 @@ class ZooSearchTests(unittest.TestCase):
                                 row("sign-mismatch", "1/2", 2, "1"), row("separate-renamings", "1/2", 1, "-1"),
                                 row("scale", "3/2", 2, "-3")])
         for query in ("1/2*x*y^3, -x^2", "x y**3 / 2 − x^2", ["2/4*u*v^3", "-u*u"]):
-            self.assertEqual(catalogue.search(query)["ids"], ["yes", "opposite"])
+            self.assertEqual(catalogue.search(query)["ids"], ["opposite", "yes"])
         self.assertEqual(catalogue.search("2/4*x*y^3")["ids"],
-                         ["yes", "opposite", "sign-mismatch", "separate-renamings"])
+                         ["opposite", "yes", "sign-mismatch", "separate-renamings"])
         self.assertEqual(catalogue.search("")["ids"], catalogue.search([])["ids"])
         self.assertEqual(catalogue.search("xy^3")["ids"], [])
+
+    def test_equation_order_is_exact_across_rings_and_legacy_term_orders(self):
+        exponent = 10 ** 150
+        denominator = 2 ** 300
+        rows = [
+            entry("later-power", ("1", (exponent + 1, 0))),
+            entry("larger-fraction", (f"-1/{denominator + 1}", (exponent, 0))),
+            entry("tie-b", ("1", (0, 1)), (f"-1/{denominator}", (exponent, 0))),
+            entry("prefix", (f"-1/{denominator}", (exponent, 0, 0))),
+            entry("tie-a", (f"-1/{denominator}", (exponent, 0, 0)), ("1", (0, 1, 0))),
+        ]
+        index = _Catalogue(rows)
+        self.assertEqual(index.search("")["ids"],
+                         ["prefix", "tie-a", "tie-b", "larger-fraction", "later-power"])
+        self.assertEqual(index.search("x")["ids"], ["tie-a", "tie-b"])
 
     def test_wide_exponents_and_rationals(self):
         exponent = 2 ** 260
@@ -58,6 +73,10 @@ class ZooSearchTests(unittest.TestCase):
             data = {tuple(rng.randrange(3) for _ in range(n)): rng.choice([-2, -1, 1, 2]) for _ in range(9)}
             rows.append(data)
         catalogue = _Catalogue([entry(str(i), *((c, e) for e, c in row.items())) for i, row in enumerate(rows)])
+        def equation_key(i):
+            terms = [(powers + (0,) * (5 - len(powers)), c) for powers, c in rows[i].items()]
+            return sorted(terms, reverse=True), str(i)
+        catalogue_order = sorted(range(len(rows)), key=equation_key)
         for _ in range(50):
             source = rng.choice(rows)
             terms = rng.sample(list(source.items()), rng.randint(1, min(3, len(source))))
@@ -65,7 +84,8 @@ class ZooSearchTests(unittest.TestCase):
             axes = [j for j in range(len(terms[0][0])) if any(e[j] for e, _ in terms)]
             query = ",".join("*".join([str(c)] + [f"u{j}^{e[j]}" for j in axes if e[j]]) for e, c in terms)
             expected = []
-            for i, row in enumerate(rows):
+            for i in catalogue_order:
+                row = rows[i]
                 width = len(next(iter(row)))
                 for images in itertools.permutations(range(width), len(axes)):
                     coefficients = []

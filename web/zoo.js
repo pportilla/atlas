@@ -20,6 +20,41 @@
   let recordRequest;
   let debounce;
 
+  // The native parser serializes the exact sparse terms in descending lex order.
+  // Presentation uses their coordinate positions, even when the input used other names.
+  function equationView(entry) {
+    const axes = ["x", "y", "z", "w", "u", "v"];
+    const variables = entry.variables.map((_, i) => axes[i] || `x${i + 1}`);
+    function format(style) {
+      return entry.terms.map(({coefficient, exponents}, index) => {
+        const negative = coefficient.startsWith("-");
+        const [num, den] = (negative ? coefficient.slice(1) : coefficient).split("/");
+        const factors = [];
+        for (const [i, exponent] of exponents.entries()) {
+          if (exponent === "0") continue;
+          let name = variables[i];
+          if (style === "latex" && i >= axes.length) name = `x_{${i + 1}}`;
+          if (exponent !== "1") {
+            if (style === "latex") name += `^{${exponent}}`;
+            else name += (style === "python" ? "**" : "^") + exponent;
+          }
+          factors.push(name);
+        }
+        let scalar = num;
+        if (den && style !== "python") {
+          scalar = style === "latex" ? `\\frac{${num}}{${den}}` : `${num}/${den}`;
+        }
+        if (scalar !== "1" || !factors.length) factors.unshift(scalar);
+        let term = factors.join(style === "latex" ? "" : "*");
+        // Dividing after the symbolic product retains exact rationals in Python CASes.
+        if (den && style === "python") term += "/" + den;
+        const sign = index === 0 ? (negative ? "-" : "") : (negative ? " - " : " + ");
+        return sign + term;
+      }).join("");
+    }
+    return {display: format("display"), python: format("python"), latex: format("latex"), variables};
+  }
+
   function groupOf(entry) {
     return entry.dimension > 4 ? "higher" : String(entry.dimension);
   }
@@ -31,6 +66,15 @@
       throw new Error(data.error || `Could not load the catalogue data (HTTP ${response.status}).`);
     }
     return readRecord(await response.text());
+  }
+
+  async function queryCatalogue(query, sourceEntries, signal) {
+    const result = typeof window.atlasZooSearch === "function"
+      ? await window.atlasZooSearch(query, sourceEntries, {signal})
+      : await getJSON("../api/zoo/search", {signal, method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({query})});
+    if (!Array.isArray(result.ids)) throw new Error("The search returned an invalid response.");
+    return result.ids;
   }
 
   function action(text, handler) {
@@ -247,33 +291,89 @@
       for (const key of ["strata", "numerical_data", "poles", "contributions", "factors"]) {
         if (key in data) body.append(fieldFold(key, data[key]));
       }
-      const other = remainingFields(data, ["expression", "status", "strata", "nearby_strata", "numerical_data",
-        "poles", "contributions", "factors", ...fields]);
-      if (other.length) body.append(fold("Computation details", () => fieldList(other)));
       return body;
     }, {main: true, state: data?.status || "Unavailable"});
   }
 
-  function renderRecord(record) {
-    if (record.schema_version !== 1) throw new Error("This record uses an unsupported catalogue format.");
-    const header = el("header", "zoo-record-head");
+  function equationNode(source) {
+    const node = typeset(source, " = 0");
+    node.setAttribute("role", "math");
+    node.setAttribute("aria-label", source + " = 0");
+    return node;
+  }
+
+  function recordActions(record, equation) {
+    const tools = el("div", "zoo-record-actions");
+    const buttons = el("div", "zoo-record-buttons");
+    const status = el("p", "zoo-copy-status");
+    status.setAttribute("role", "status");
+    const source = el("textarea");
+    source.hidden = true;
+    source.readOnly = true;
+    source.rows = 2;
+    for (const [format, text] of [["LaTeX", equation.latex], ["Python", equation.python]]) {
+      const button = action("Copy " + format, async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          if (!tools.isConnected) return;
+          source.value = text;
+          source.setAttribute("aria-label", format + " expression");
+          source.hidden = false;
+          source.focus();
+          source.select();
+          let copied = false;
+          try {
+            copied = document.execCommand("copy");
+          } catch { /* The browser can also block selection-based copying. */ }
+          if (!copied) {
+            status.textContent = "Use your device’s copy command on the selected expression.";
+            return;
+          }
+          button.focus();
+        }
+        source.hidden = true;
+        status.textContent = format + " copied.";
+      });
+      buttons.append(button);
+    }
     const download = el("a", "", "Download JSON");
     download.href = recordURL(record.id);
     download.download = record.id + ".json";
-    header.append(el("h2", "", record.name), download);
+    buttons.append(download);
+    tools.append(buttons, status, source);
+    return tools;
+  }
+
+  function renderRecord(record) {
+    if (record.schema_version !== 1) throw new Error("This record uses an unsupported catalogue format.");
+    const equation = equationView(record);
+    const header = el("header", "zoo-record-head");
+    const title = el("h2");
+    title.append(equationNode(equation.display));
+    header.append(title);
+    if (record.name?.trim()) header.append(el("p", "zoo-record-name", record.name));
     const tags = el("ul", "zoo-tags");
     tags.setAttribute("aria-label", "Labels");
     for (const tag of record.labels) tags.append(el("li", "zoo-tag", tag));
-    const eq = el("div", "zoo-equation");
-    eq.append(typeset(record.equation, " = 0"));
+    header.append(tags, recordActions(record, equation));
     const location = el("p", "zoo-location");
-    location.append(`In ${record.base_field}[${record.variables.join(", ")}] at (${record.origin.join(", ")}).`);
+    location.append(`In ${record.base_field}[${equation.variables.join(", ")}] at (${record.origin.join(", ")}).`);
     if (record.geometric_field) {
       const field = record.geometric_field === "algebraic closure of Q" ? "the algebraic closure of Q" : record.geometric_field;
       location.append(" Geometry over " + field + ".");
     }
+    equation.variables.forEach((name, i) => {
+      if (name !== record.variables[i]) location.append(" ", typeset(name), " is ", typeset(record.variables[i]), " in the resolution data.");
+    });
     const fragment = document.createDocumentFragment();
-    fragment.append(header, tags, eq, location);
+    fragment.append(header, location);
+    const engine = record.zeta?.monodromy?.resolution_engine || record.embedded?.engine;
+    if (engine) {
+      const engineRow = el("dl", "zoo-record-engine");
+      engineRow.append(el("dt", "", "Resolution engine"), el("dd", "", engine));
+      fragment.append(engineRow);
+    }
     if (record.invariants) {
       const invariants = el("dl", "zoo-invariants");
       for (const [key, value] of Object.entries(record.invariants)) {
@@ -316,7 +416,7 @@
     selected = entry.id;
     updateSelection();
     detail.setAttribute("aria-busy", "true");
-    detail.replaceChildren(el("p", "helper", "Loading " + entry.name + "…"));
+    detail.replaceChildren(el("p", "helper", "Loading resolution…"));
     try {
       let record = recordCache.get(entry.id);
       if (!record) {
@@ -353,7 +453,9 @@
       const link = el("a");
       link.href = entryURL(entry.id);
       link.dataset.id = entry.id;
-      link.append(el("span", "zoo-entry-name", entry.name), typeset(entry.equation));
+      const equation = equationView(entry);
+      link.title = equation.display + " = 0";
+      link.append(equationNode(equation.display));
       link.addEventListener("click", event => {
         if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -447,14 +549,9 @@
     searchRequest = controller;
     debounce = setTimeout(async () => {
       try {
-        const options = {signal: controller.signal};
-        const result = typeof window.atlasZooSearch === "function"
-          ? await window.atlasZooSearch(query, entries, options)
-          : await getJSON("../api/zoo/search", {...options, method: "POST", headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({query})});
+        const ids = await queryCatalogue(query, entries, controller.signal);
         if (controller.signal.aborted) return;
-        if (!Array.isArray(result.ids)) throw new Error("The search returned an invalid response.");
-        matches = new Set(result.ids);
+        matches = new Set(ids);
         filter();
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -516,7 +613,12 @@
       if (index.schema_version !== 1 || !Array.isArray(index.entries)) {
         throw new Error("This index uses an unsupported catalogue format.");
       }
-      entries = index.entries;
+      const ids = await queryCatalogue("", index.entries, new AbortController().signal);
+      const byId = new Map(index.entries.map(entry => [entry.id, entry]));
+      entries = ids.map(id => byId.get(id));
+      if (entries.length !== byId.size || entries.includes(undefined)) {
+        throw new Error("The catalogue changed while loading. Reload it to see the updated records.");
+      }
       for (const tag of [...new Set(entries.flatMap(entry => entry.labels))].sort((a, b) => a.localeCompare(b))) {
         get("zoo-label").add(new Option(tag, tag));
       }

@@ -90,7 +90,7 @@ def build_record(seed, dimension, variables):
         raise ValueError("A Zoo seed must be singular at the origin")
     mu = local_number("milnor-number", equation, variables)
     tau = local_number("tjurina-number", equation, variables)
-    entry = {"id": seed["id"], "name": seed["name"], "dimension": dimension,
+    entry = {"id": seed["id"], "name": seed.get("name", ""), "dimension": dimension,
              "labels": [*seed["labels"], "Isolated" if mu["finite"] else "Non-isolated"],
              "equation": equation, "variables": variables, "terms": terms}
     detail = {"schema_version": 1, **entry,

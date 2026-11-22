@@ -5,7 +5,6 @@
 #include <map>
 #include <numeric>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -28,6 +27,11 @@ string natural(string_view digits) {
         throw std::invalid_argument("Expected a nonnegative integer.");
     size_t i = digits.find_first_not_of('0');
     return i == string_view::npos ? "0" : string(digits.substr(i));
+}
+
+int compare_natural(string_view a, string_view b) {
+    if (a.size() != b.size()) return a.size() < b.size() ? -1 : 1;
+    return a.compare(b);
 }
 
 string add(const string& a, const string& b) {
@@ -71,6 +75,15 @@ struct Rational {
         if (denominator == b.denominator) return numerator == b.numerator;
         if (numerator == b.numerator) return false; // Both numerators are nonzero.
         return multiply(numerator, b.denominator) == multiply(b.numerator, denominator);
+    }
+
+    int compare(const Rational& b) const {
+        if (negative != b.negative) return negative ? -1 : 1;
+        int result = denominator == b.denominator
+            ? compare_natural(numerator, b.numerator)
+            : compare_natural(multiply(numerator, b.denominator), multiply(b.numerator, denominator));
+        if (!negative || result == 0) return result;
+        return result < 0 ? 1 : -1;
     }
 };
 
@@ -206,6 +219,27 @@ struct Entry {
     Terms terms;
 };
 
+// All dimensions use the same display axes. Missing trailing exponents are zero.
+int compare_powers(const vector<string>& a, const vector<string>& b) {
+    for (size_t i = 0; i < std::max(a.size(), b.size()); ++i) {
+        string_view x = i < a.size() ? string_view(a[i]) : "0";
+        string_view y = i < b.size() ? string_view(b[i]) : "0";
+        if (int result = compare_natural(x, y)) return result;
+    }
+    return 0;
+}
+
+bool equation_less(const Entry& a, const Entry& b) {
+    for (size_t i = 0; i < std::min(a.terms.size(), b.terms.size()); ++i) {
+        const auto& left = a.terms[i];
+        const auto& right = b.terms[i];
+        if (int result = compare_powers(left.powers, right.powers)) return result < 0;
+        if (int result = left.coefficient.compare(right.coefficient)) return result < 0;
+    }
+    if (a.terms.size() != b.terms.size()) return a.terms.size() < b.terms.size();
+    return a.id < b.id;
+}
+
 using Options = vector<vector<const Term*>>;
 
 // All term matches share the same injection from query to catalogue coordinates.
@@ -268,7 +302,6 @@ public:
             size_t tab = row.find('\t');
             if (tab == 0 || tab == string_view::npos) throw std::invalid_argument("Invalid Resolution Zoo index row.");
             Entry entry{string(row.substr(0, tab)), {}};
-            std::set<vector<string>> shapes;
             while (tab != string_view::npos) {
                 row.remove_prefix(tab + 1);
                 tab = row.find('\t');
@@ -276,13 +309,21 @@ public:
                 if (!entry.terms.empty() && term.powers.size() != entry.terms.front().powers.size())
                     throw std::invalid_argument("Inconsistent exponent widths in the Resolution Zoo index.");
                 max_width = std::max(max_width, term.powers.size());
-                shapes.insert(term.shape);
                 entry.terms.push_back(std::move(term));
             }
-            for (const auto& shape : shapes) postings[shape].push_back(entries.size());
+            std::sort(entry.terms.begin(), entry.terms.end(), [](const Term& a, const Term& b) {
+                return compare_powers(a.powers, b.powers) > 0;
+            });
             entries.push_back(std::move(entry));
             if (newline == string_view::npos) break;
             wire.remove_prefix(newline + 1);
+        }
+        std::sort(entries.begin(), entries.end(), equation_less);
+        for (size_t i = 0; i < entries.size(); ++i) {
+            for (const Term& term : entries[i].terms) {
+                auto& rows = postings[term.shape];
+                if (rows.empty() || rows.back() != i) rows.push_back(i);
+            }
         }
     }
 
