@@ -1,70 +1,87 @@
 {
-  "conditions": "One warmup per query, same rational surface equations in both systems, in-memory catalogues. Atlas timings include ctypes transport, parsing and the returned list of IDs. Singular times exclude parsing the equations, preparation of all six variable permutations, and printing the result bit vector. Its loop checks the term counts after adding and subtracting each remapped query. Ordered row IDs are compared for equality.",
+  "conditions": "One warmup per operation, same rational surface equations and string row IDs in both systems. Catalogue ordering in Atlas includes encoding, native parsing, sorting, building the search index and retrieving all IDs. Singular merge-sorts the parsed polynomials using successive lp leading monomials, exact QQ coefficients and the string row ID. Searches use the resident catalogues. Atlas query timings include ctypes transport, query parsing and the returned list of IDs. Singular times exclude parsing the equations, preparation of all six variable permutations, and printing the result bit vector. Its loop checks the term counts after adding and subtracting each remapped query. Every sorted ID is compared between systems. Each query's matching IDs are then checked in that independently verified order.",
   "cpu": "AMD Ryzen 7 6800H with Radeon Graphics",
   "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
-  "corpus_sha256": "075201cf305822058a87b0457c65910422fe5e50fb13aaf0ad05efcc34580e7b",
-  "surface_equations": 50,
-  "copies": 100,
-  "rows": 5000,
+  "corpus_sha256": "6bec9b66c67547a1e8d0ff0e03256d0fa052f62388e7f2d4b320f9dc127efb0f",
+  "surface_equations": 246,
+  "copies": 20,
+  "rows": 4920,
   "trials": 5,
-  "atlas_load_ms": 11.480625,
+  "ordering": {
+    "atlas_ms": [
+      122.881546,
+      83.963634,
+      123.0847,
+      70.225808,
+      40.073804
+    ],
+    "singular_ms": [
+      4388.885,
+      3940.553,
+      3854.917,
+      3473.737,
+      4169.248
+    ],
+    "atlas_median_ms": 83.963634,
+    "singular_median_ms": 3940.553
+  },
   "queries": {
     "x*y^2": {
-      "matches": 700,
+      "matches": 1020,
       "atlas_ms": [
-        0.145826,
-        0.109247,
-        0.089379,
-        0.082145,
-        0.071124
+        0.473955,
+        0.368646,
+        0.276201,
+        0.215647,
+        0.187134
       ],
       "singular_ms": [
-        165.347,
-        168.771,
-        166.822,
-        173.58,
-        167.218
+        369.022,
+        372.292,
+        447.777,
+        777.723,
+        436.575
       ],
-      "atlas_median_ms": 0.089379,
-      "singular_median_ms": 167.218
+      "atlas_median_ms": 0.276201,
+      "singular_median_ms": 436.575
     },
     "1/2*x*y^3 - x^4": {
-      "matches": 100,
+      "matches": 20,
       "atlas_ms": [
-        0.088256,
-        0.059061,
-        0.051076,
-        0.045075,
-        0.04271
+        0.266042,
+        0.177916,
+        0.165472,
+        0.135376,
+        0.133883
       ],
       "singular_ms": [
-        176.248,
-        176.807,
-        177.897,
-        176.105,
-        176.05
+        364.167,
+        461.48,
+        627.957,
+        601.814,
+        720.941
       ],
-      "atlas_median_ms": 0.051076,
-      "singular_median_ms": 176.248
+      "atlas_median_ms": 0.165472,
+      "singular_median_ms": 601.814
     },
     "x^2 + y^3 + z^5": {
-      "matches": 100,
+      "matches": 40,
       "atlas_ms": [
-        0.215928,
-        0.167326,
-        0.139393,
-        0.122421,
-        0.109928
+        0.493772,
+        0.433779,
+        0.421506,
+        0.325424,
+        0.269479
       ],
       "singular_ms": [
-        174.618,
-        174.013,
-        178.91,
-        184.789,
-        215.063
+        583.55,
+        465.295,
+        522.036,
+        427.097,
+        401.19
       ],
-      "atlas_median_ms": 0.139393,
-      "singular_median_ms": 178.91
+      "atlas_median_ms": 0.421506,
+      "singular_median_ms": 465.295
     }
   }
 }
