@@ -6,7 +6,7 @@ import sys
 from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text, saved_polynomial_input
 from .native_backend import resolve_native
 from .resolution_progress import recorded_blowups, report
-from .resolution_zetas import attach_companion, selected_zetas, zetas_from_strata
+from .resolution_zetas import attach_companion, finish_requested_check, selected_zetas, zetas_from_strata
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'native' / 'build'
@@ -52,8 +52,11 @@ def resolve(request):
     from .native_library import replay_scope
     from .newton_faces import face_search
     with replay_scope(compute) as replay, face_search(request.get('search', 'exhaustive') == 'exhaustive'):
+        start = perf_counter()
         proofs = []
         result = _resolve(request, proofs)
+        finish_requested_check(result, result, request.get("search", "exhaustive"))
+        result["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
         result['execution'] = _execution(compute, proofs, replay.report())
         return result
 

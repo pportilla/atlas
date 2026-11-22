@@ -307,7 +307,9 @@ _GROUPS = {
         "monodromy_check": Entry(
             (native("Pole orders and monodromy witnesses", "monodromy", "Json::Value pole_data("),
              native("Transverse compositions on critical components", "monodromy",
-                    "Json::Value transverse_compositions(")),
+                    "Json::Value transverse_compositions("),
+             native("Decide a nearby eigenvalue using local Bernstein–Sato roots", "monodromy_local_b",
+                    "Json::Value local_eigenvalues(")),
             (example("Compare pole orders and nearby witnesses", "session_monodromy",
                      "signed_orders_h0_and_nearby_witnesses_at_both_entry_points"),
              example("Witness an eigenvalue on singular lines without rational points", "session_monodromy",

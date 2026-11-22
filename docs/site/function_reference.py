@@ -272,11 +272,12 @@ FUNCTIONS = {
     'dual_complex': entry('A dictionary with rebuilt vertices, cells and status. For linked divisor objects '
                           'use `recompute_dual_complex`.', resolution='A saved resolution returned by `resolve`.'),
     'monodromy_check': entry('A record with `.status`, `.reason` and the witnesses for actual `.poles`. '
-                             'A verified status means every pole has an eigenvalue witness.',
+                             'Exhaustive search returns verified when every predicted eigenvalue occurs '
+                             'at or near the origin, or refuted when one is absent.',
                              polynomial='Equation of a hypersurface germ at the origin, a formula string, or '
                                         'a saved Atlas resolution carrying the equation and ordered coordinates.',
-                             check_isolation='With `True`, try the local Milnor number when an eigenvalue '
-                                             'witness is unresolved, to check for an isolated candidate.',
+                             check_isolation='With `True`, also try the local Milnor number for an '
+                                             'unresolved quick check or a refuted exhaustive check.',
                              **RESOLUTION_INPUT),
     'print': entry('Writes text and returns `None`.',
                    args='Zero or more values in display order.', sep='Text placed between values.',

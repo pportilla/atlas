@@ -448,6 +448,7 @@ function showZeta(data) {
       } else if (stratum.model === "sum of squares") model.append("Transverse Morse singularity");
       else if (stratum.model === "nearby transverse node") model.append("Transverse node");
       else if (stratum.model === "constant transverse type") model.append("Constant transverse type");
+      else if (stratum.model === "two smooth branches") model.append("Two smooth branches with contact order " + stratum.contact_order);
       else if (stratum.model === "transverse composition") {
         const names = stratum.transverse_coordinates;
         model.append("Transverse germ ", typeset(stratum.transverse_germ), " at the origin, with ",
@@ -534,6 +535,7 @@ function showMonodromyCheck(section, data) {
   const verified = check.status === "verified";
   const verdict = el("p", "monodromy-verdict");
   verdict.append(el("strong", "", verified ? "Verified for this germ." :
+    check.status === "refuted" ? "Refuted for this germ." :
     check.status === "unresolved" ? "Unresolved for this germ." : "Check unavailable."));
   if (verified) verdict.append(" Each pole gives a monodromy eigenvalue at or near the origin.");
   else if (check.reason) verdict.append(" " + check.reason);
@@ -559,7 +561,8 @@ function showMonodromyCheck(section, data) {
       const locations = el("ul", "witness-loci");
       const matches = (pole.nearby_matches || []).filter(match => strata[match.stratum_index]);
       if (pole.witness === "origin zeta" || pole.witness === "origin H^0" || !matches.length) {
-        const witness = witnesses[pole.witness] || pole.witness || "Undetermined";
+        const witness = pole.bernstein_root ? "Local Bernstein–Sato root " + minus(pole.bernstein_root) :
+          witnesses[pole.witness] || pole.witness || (check.status === "refuted" ? "Absent near the origin" : "Undetermined");
         const component = pole.witness_component ? " (" + pole.witness_component + ")" : "";
         locations.append(el("li", "", witness + component + zetaRole(pole.cyclotomic_exponent)));
       }

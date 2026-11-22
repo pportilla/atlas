@@ -151,7 +151,8 @@ class ResolutionZooTests(unittest.TestCase):
     def test_native_recomputation_across_families(self):
         fixtures = {"plane-cusp", "a3", "whitney-umbrella", "cusp-4-4-4", "mixed-quartic", "fivefold-cubic",
                     "chain-3-2-4", "cone-braid-arrangement", "hidden-bp-2-5-5-quadric", "laufer-1",
-                    "cone-d4-quartic", "quartic-face-plus", "hesse-triangle-quartic"}
+                    "cone-d4-quartic", "quartic-face-plus", "hesse-triangle-quartic",
+                    "audit-hyperplane-e7-cylinder", "m-s-varying-cusp-slope"}
         for seed, dimension, variables in seeds(DEFAULT_SEEDS):
             if seed["id"] in fixtures:
                 with self.subTest(record=seed["id"]):

@@ -3,7 +3,8 @@
 from copy import deepcopy
 
 from .monodromy import _request, factor_rows, numerical_rows, stratum_rows
-from .polynomial import integer_from_decimal, integer_text, kernel_fraction
+from .point_geometry import encode_terms
+from .polynomial import integer_from_decimal, integer_text, kernel_fraction, parse, saved_polynomial_input
 
 
 def inconclusive_check(reason, resolution=None, topological=None, monodromy=None):
@@ -28,6 +29,9 @@ def _nearby_witness(stratum, exponent):
     if model == "constant transverse type":
         transverse["parameters"] = tuple(stratum["parameters"])
         return {"witness": "nearby constant transverse type", "transverse": transverse}
+    if model == "two smooth branches":
+        transverse.update(parameters=tuple(stratum["parameters"]), contact_order=stratum["contact_order"])
+        return {"witness": "nearby tangent branches", "transverse": transverse}
     if model == "transverse composition":
         transverse.update(transverse_coordinates=tuple(stratum["transverse_coordinates"]),
                           transverse_germ=stratum["transverse_germ"])
@@ -70,9 +74,32 @@ def check_zetas(topological, monodromy):
     result = {"status": "verified", "reason": "Every actual pole has a local monodromy eigenvalue witness.",
               "poles": poles, "candidate_poles": evidence["candidates"]}
     if any(pole["witness"] is None for pole in poles):
-        result.update(status="unresolved", reason="A nontrivial order is invisible in the origin zeta "
-                      "and its nearby monodromy is undetermined.")
+        result.update(status="unresolved", reason="The bounded witness search left at least one pole undecided.")
     return result
+
+
+@saved_polynomial_input()
+def finish_pole_check(check, record, *, cached=None):
+    """Complete a bounded witness check from the defining germ using exact local root tests."""
+    if check["status"] != "unresolved":
+        return check
+    if cached is None:
+        from .resolution_progress import report
+        report("Testing missing eigenvalues with the local Bernstein–Sato polynomial")
+        names = record["variables"]
+        polynomial = parse(record["polynomial"], names, bounded=False)
+        values = [pole["value"] for pole in check["poles"] if pole["witness"] is None]
+        cached = _request("local_eigenvalues", terms=encode_terms(polynomial), width=len(names), values=values)
+    for pole in check["poles"]:
+        if pole["witness"] is None:
+            root = cached["by_pole"][pole["value"]]["root"]
+            if root is not None:
+                pole.update(witness="local Bernstein–Sato root", bernstein_root=root)
+    check.update(status=cached["status"], local_bernstein_sato=cached,
+                 reason=("Every actual pole has a local monodromy eigenvalue witness."
+                         if cached["status"] == "verified" else
+                         "An actual pole predicts an eigenvalue absent from every sufficiently nearby Milnor fibre."))
+    return check
 
 
 def check_resolution(resolution, *, check_isolation, compute, search="exhaustive", zetas=None):
@@ -85,9 +112,9 @@ def check_resolution(resolution, *, check_isolation, compute, search="exhaustive
                 return inconclusive_check(reason, resolution, topological, monodromy)
             raise RuntimeError(f"The exhaustive zeta calculation ended without a certificate. {reason}")
 
-    result = check_zetas(topological, monodromy)
+    result = resolution._pole_check(topological, monodromy, search=search)
     result.update(resolution=resolution, topological_zeta=topological, monodromy_zeta=monodromy, milnor_number=None)
-    if check_isolation and result["status"] == "unresolved":
+    if check_isolation and result["status"] in ("unresolved", "refuted"):
         from .session_algebra import milnor_number, polynomial
         try:
             f = polynomial(record["polynomial"], variables=resolution.coordinates)
@@ -102,9 +129,13 @@ def check_resolution(resolution, *, check_isolation, compute, search="exhaustive
             # cannot cancel there, and nearby smooth fibres only give 1.
             expected_chi = integer_from_decimal(_request("isolated_euler", dimension=len(record["variables"]),
                                                          mu=integer_text(mu.value)))
-            if expected_chi == monodromy["milnor_fiber_euler_characteristic"]:
+            if expected_chi != monodromy["milnor_fiber_euler_characteristic"]:
+                reason = "The finite local Milnor number disagrees with the zeta's fibre Euler characteristic."
+                if search == "exhaustive":
+                    from .strata import InvalidZetaCertificate
+                    raise InvalidZetaCertificate(reason)
+                result["reason"] = reason
+            elif search == "quick":
                 result.update(status="isolated_candidate", reason="A nontrivial order is missing for a "
                               "finite local Milnor number. Independently check the resolution and zetas.")
-            else:
-                result["reason"] = "The finite local Milnor number disagrees with the zeta's fibre Euler characteristic."
     return result

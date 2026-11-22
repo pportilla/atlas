@@ -53,6 +53,15 @@ def with_pole_check(results):
     return results
 
 
+def finish_requested_check(results, record, search):
+    check = results.get("monodromy_check")
+    if search == "exhaustive" and check and check["status"] == "unresolved":
+        from .exact_json import sorted_record
+        from .session_monodromy import finish_pole_check
+        results["monodromy_check"] = sorted_record(finish_pole_check(check, record))
+    return results
+
+
 def _selected_outputs(record, kinds, *, companion=False):
     results = {kind + "_zeta": record[kind + "_zeta"] for kind in kinds}
     if companion:
@@ -73,6 +82,11 @@ def attach_companion(record, embedded, kinds):
 @saved_polynomial_input()
 def replay_zetas(request):
     """Verify saved evidence or recompute missing embedded data from the defining germ."""
+    results = _replay_zetas(request)
+    return finish_requested_check(results, request["record"], request.get("search", "exhaustive"))
+
+
+def _replay_zetas(request):
     from .strata import resolution_strata
     record = request.get("record")
     if not isinstance(record, dict) or record.get("status") not in ("resolved", "inconclusive", "zetas_computed"):

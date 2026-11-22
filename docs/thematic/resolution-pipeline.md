@@ -387,10 +387,15 @@ $$
 A nonzero value on a stratum whose closure contains the origin witnesses
 the required eigenvalue nearby. A zero at the origin leaves open the
 possibility of cancellation there or a witness on another stratum. Atlas
-checks the origin and selected nearby strata. A general test using this
-formula would have to determine its values as $a$ varies over the germ.
-When the implemented tests leave a pole without a witness, both zetas can
-have status `computed` while the conjecture check has status `unresolved`.
+checks the origin and selected nearby strata for geometric witnesses. In
+quick mode, both zetas can have status `computed` while the conjecture
+check has status `unresolved`. In exhaustive mode each outstanding pole
+passes to the local Bernstein–Sato root test. Given the certified poles,
+this finite algebraic test decides the weak local monodromy conjecture
+for the input germ, including eigenvalues on strata omitted by the geometric
+search. The resolution termination qualification above concerns the earlier
+step of obtaining those poles.
+[Local eigenvalue decision](../../native/resolution-algorithms.md#deciding-nearby-monodromy-eigenvalues-for-a-pole) ·
 [Nearby witnesses](resolution-records.md#monodromy-on-nearby-strata) · [Denef, Lemma 4.6](https://www.numdam.org/item/CM_1993__89_2_207_0.pdf#page=9)
 
 ## Replaying a saved resolution

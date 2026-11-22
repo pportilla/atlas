@@ -1,5 +1,7 @@
 // Exact arithmetic for A'Campo's formula and nearby monodromy witnesses.
 #include "rational_sparse_json.hpp"
+#include "monodromy_local_b.hpp"
+#include "monodromy_transverse.hpp"
 #include "primary_decomposition.hpp"
 #include <flint/fmpq.h>
 #include <flint/fmpq_mat.h>
@@ -745,10 +747,29 @@ Json::Value compute(const Json::Value& r) {
     }
     const size_t width = r["width"].asUInt64();
     const auto terms = read_terms(r["terms"], width);
+    if (op == "local_eigenvalues") {
+        Json::Value result;
+        const auto tests = atlas::monodromy::local_eigenvalues(terms, width, r["values"]);
+        bool verified = true;
+        for (const auto& test : tests) if (test["root"].isNull()) verified = false;
+        result["status"] = verified ? "verified" : "refuted";
+        result["by_pole"] = tests;
+        return result;
+    }
+    if (op == "transverse_contacts") return atlas::monodromy::transverse_contacts(terms, width);
     if (op == "nearby_strata") {
         auto strata = nearby_strata(terms, width, r);
         if (width == 3) {
             for (const auto& row : atlas::arrangement_nearby_strata(terms)) strata.append(row);
+        }
+        for (const auto& contact : atlas::monodromy::transverse_contacts(terms, width)) {
+            const auto& axes = contact["axes"];
+            const bool recorded = std::any_of(strata.begin(), strata.end(), [&](const auto& stratum) {
+                const auto& previous = stratum["axes"];
+                return previous.size() == 2 && (axes == previous ||
+                       (axes[0] == previous[1] && axes[1] == previous[0]));
+            });
+            if (!recorded) strata.append(contact);
         }
         return strata;
     }

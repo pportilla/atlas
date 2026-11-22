@@ -72,6 +72,8 @@ def _nearby_strata(polynomial, variables, data, strata, origin_factors):
             stratum["parameters"] = [name for i, name in enumerate(variables) if i not in axes]
         if "powers" in row:
             stratum["powers"] = list(map(integer_from_decimal, row["powers"]))
+        if "contact_order" in row:
+            stratum["contact_order"] = integer_from_decimal(row["contact_order"])
         if "determinant" in row:
             stratum["transverse_hessian_determinant"] = row["determinant"]
             stratum["parameter_values"] = [1] * len(stratum["parameters"])

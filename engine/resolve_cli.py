@@ -21,6 +21,8 @@ def needs_exhaustive_search(request, status, result):
         return False
     if not request.get("zetas_only") and result.get("status") == "inconclusive":
         return True
+    if result.get("monodromy_check", {}).get("status") == "unresolved":
+        return True
     return any(result.get(kind + "_zeta", {}).get("status") != "computed" for kind in selected_zetas(request))
 
 
@@ -61,8 +63,10 @@ def show(r, *, zetas_only=False):
         if check:
             print("Local monodromy conjecture:", check["status"])
             for pole in check["poles"]:
+                witness = pole["witness"] or ("absent near the origin" if check["status"] == "refuted"
+                                               else "witness undetermined")
                 print(f"  {pole['value']} (pole order {pole['order']}): eigenvalue order {pole['eigenvalue_order']}, "
-                      f"{pole['witness'] or 'witness undetermined'}")
+                      f"{witness}")
         return
     dual=r['dual_complex'];print(f"\nDual complex ({dual['status']}): {dual['convention']}")
     print("  Vertices:", ', '.join(v['id'] for v in dual['vertices']) or 'none')

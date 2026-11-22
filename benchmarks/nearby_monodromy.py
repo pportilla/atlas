@@ -32,6 +32,13 @@ CASES = [
     ("Quadric composition", "(x^2+y^2+z^2)^2+x^5", "xyz", None, True),
 ]
 
+CONTACT_CASES = [
+    ("Two osculating conics", "(x*z-y^2)*(x*z+y*z-y^2)", "xyz", "yz", False),
+    ("E7 hyperplane cylinder", "y*(x^2+y^3+y*z^3)", "xyzt", "xy", False),
+    ("Cubic parameters", "y*(x^2+y^3+y*z^3+y*t^3)", "xyzt", "xy", False),
+    ("Mixed parameters", "y*(x^2+y^3+y*z^3+y*z*t)", "xyzt", "xy", False),
+]
+
 MEASURE = '''proc measure(poly f) {
     list blocks=monodromy(f);
     string result="";
@@ -144,10 +151,11 @@ def measure(case, executable, trials):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trials", type=int, default=7)
+    parser.add_argument("--contacts-only", action="store_true", help="compare the two-smooth-branch cases")
     args = parser.parse_args()
     singular = shutil.which("Singular")
     if not singular or args.trials < 2:
         parser.error("Install Singular and select at least two trials.")
     print(subprocess.check_output([singular, "--version"], text=True).splitlines()[0])
-    for case in CASES:
+    for case in CONTACT_CASES if args.contacts_only else CASES + CONTACT_CASES:
         measure(case, singular, args.trials)

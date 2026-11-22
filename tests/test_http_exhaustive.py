@@ -66,6 +66,24 @@ class ExhaustiveHTTPTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertEqual(calculate.call_args.kwargs["timeout"], timeout)
 
+    def test_automatic_solve_finishes_a_missing_nearby_witness(self):
+        request = {"polynomial": "z^3+x^4*y+x^5", "variables": list("xyz"), "monodromy": True}
+        status, job = post(self.base + "/api/resolve", request)
+        self.assertEqual(status, 202)
+        end = time.monotonic() + 10
+        while job["state"] in ("queued", "running") and time.monotonic() < end:
+            time.sleep(0.02)
+            with urlopen(self.base + "/api/searches/" + job["id"], timeout=3) as response:
+                job = json.load(response)
+        self.assertEqual(job["state"], "completed", job.get("error"))
+        check = job["result"]["monodromy_check"]
+        self.assertEqual(check["status"], "verified")
+        self.assertEqual(check["local_bernstein_sato"]["by_pole"]["-7/12"]["root"], "-7/12")
+        command = [str(ROOT / "atlas"), "resolve", request["polynomial"], "--vars", "x,y,z",
+                   "--exhaustive", "--zetas-only", "--json"]
+        cli = subprocess.run(command, capture_output=True, text=True, timeout=15, check=True)
+        self.assertEqual(json.loads(cli.stdout)["monodromy_check"], check)
+
     def test_server_close_reaps_long_running_algebra(self):
         started = threading.Event()
         children = []

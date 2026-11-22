@@ -213,7 +213,7 @@ function stratumLocus(stratum) {
     });
     return locus;
   }
-  if (stratum.model === "sum of squares" || stratum.model === "transverse composition") locus.append("Generic points of ");
+  if (["sum of squares", "transverse composition", "two smooth branches"].includes(stratum.model)) locus.append("Generic points of ");
   if (!Array.isArray(stratum.coordinates)) return el("span", "", stratum.model || "Recorded stratum");
   const equations = stratum.coordinates.join(" = ") + " = 0";
   locus.append(typeset(equations));

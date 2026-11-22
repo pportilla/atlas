@@ -202,18 +202,60 @@ class SessionMonodromyTests(unittest.TestCase):
         self.assertEqual(status, 200)
         record["topological_zeta"]["poles"] = [{"value": "-2/5", "order": 1, "components": []}]
         session = new_session(Mock(return_value=(200, record)))
-        list(session.run('x,y=coordinates("x","y")\nR=resolve(y^2-x^3, monodromy=True)\nC=monodromy_check(R)'))
+        list(session.run('x,y=coordinates("x","y")\nR=resolve(y^2-x^3, monodromy=True)\nC=monodromy_check(R,search="quick")'))
         result = session.variables["C"]
         self.assertEqual((result["status"], result["milnor_number"], result["poles"][0]["witness"]),
                          ("unresolved", None, None))
-        list(session.run('C=monodromy_check(R, check_isolation=True)'))
+        list(session.run('C=monodromy_check(R, search="quick", check_isolation=True)'))
         result = session.variables["C"]
         self.assertEqual((result["status"], result["milnor_number"].value), ("isolated_candidate", 2))
+        list(session.run('C=monodromy_check(R, check_isolation=True)'))
+        result = session.variables["C"]
+        self.assertEqual(result["status"], "refuted")
+        self.assertEqual(result["local_bernstein_sato"]["by_pole"]["-2/5"],
+                         {"root": None, "tested_roots": ["-2/5", "-7/5"]})
         record["monodromy_zeta"]["milnor_fiber_euler_characteristic"] += 1
-        list(session.run('R=resolve(y^2-x^3, monodromy=True)\nC=monodromy_check(R, check_isolation=True)'))
+        list(session.run('R=resolve(y^2-x^3, monodromy=True)\nC=monodromy_check(R, search="quick", check_isolation=True)'))
         self.assertEqual(session.variables["C"]["status"], "unresolved")
         record["polynomial"] = "x^2*y^2"
-        list(session.run('R=resolve(x^2*y^2, monodromy=True)\nC=monodromy_check(R, check_isolation=True)'))
+        list(session.run('R=resolve(x^2*y^2, monodromy=True)\nC=monodromy_check(R, search="quick", check_isolation=True)'))
         result = session.variables["C"]
         self.assertFalse(result["milnor_number"].finite)
         self.assertEqual(result["status"], "unresolved")
+
+    def test_exact_nearby_eigenvalues_at_both_entry_points_and_replay(self):
+        source = dedent("""
+            x, y, z = coordinates("x", "y", "z", coeffs=QQ)
+            f = z^3 + x^4*y + x^5
+            R = resolve(f, search="quick", monodromy=True)
+            C = monodromy_check(R)
+            print(C.status, R.monodromy_check.status, monodromy_check(f).status)
+            print(C.local_bernstein_sato.by_pole["-7/12"].root)
+        """).lstrip()
+        expected = ["verified verified verified", "-7/12"]
+        done = run_script(source)
+        self.assertEqual((done.returncode, done.stderr, done.stdout.splitlines()), (0, "", expected))
+        code, out, err = run_prompt(source + "quit\n")
+        self.assertEqual((code, err, out.replace("atlas> ", "").strip().splitlines()), (0, "", expected))
+        from engine.resolve_cli import needs_exhaustive_search
+        from engine.resolution_zetas import replay_zetas
+        _, record = calculate_resolution("z^3+x^4*y+x^5", list("xyz"), mode="embedded", search="quick", monodromy=True)
+        self.assertTrue(needs_exhaustive_search({"monodromy": True}, 200, record))
+        record["monodromy_check"] = {"status": "refuted", "local_bernstein_sato": {"by_pole": {}}}
+        replay = replay_zetas({"record": record, "zetas": ["monodromy", "topological"]})
+        self.assertEqual(replay["monodromy_check"]["local_bernstein_sato"]["by_pole"]["-7/12"]["root"], "-7/12")
+
+    def test_local_roots_exclude_distant_points_and_allow_integer_shifts(self):
+        from engine.monodromy import _request
+        from engine.point_geometry import encode_terms
+        from engine.polynomial import parse
+        def roots(f, names, values):
+            terms = encode_terms(parse(f, list(names), bounded=False))
+            return _request("local_eigenvalues", terms=terms, width=len(names), values=values)["by_pole"]
+        cases = roots("(x+y)^2*y*(x-1)^3", "xy", ["-1/3", "-2/3", "-1/2"])
+        self.assertEqual([v["root"] for v in (cases["-1/3"], cases["-2/3"], cases["-1/2"])], [None, None, "-1/2"])
+        self.assertEqual(roots("x^2+y^2+z^2", "xyz", ["-1/2"])["-1/2"],
+                         {"tested_roots": ["-1/2", "-3/2"], "root": "-3/2"})
+        power = 2**65 + 1
+        slope = f"-1/{power}"
+        self.assertEqual(roots(f"{2**127}*x^{power}*(1+x)", "x", [slope])[slope]["root"], slope)

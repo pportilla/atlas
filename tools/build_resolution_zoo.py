@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from engine.polynomial import integer_from_decimal, parse_expression
 from engine.quotient_monomials import degree_bounds
+from engine.resolution_zetas import replay_zetas
 
 DEFAULT_SEEDS = ROOT / "examples" / "resolution-zoo-seeds.json"
 DEFAULT_OUT = ROOT / "web" / "zoo-data"
@@ -79,6 +80,15 @@ def build_record(seed, dimension, variables):
     if any(output["status"] != "computed" for output in zeta.values()):
         raise ValueError("The embedded certificate did not produce both zeta functions")
     zeta["pole_check"] = embedded["monodromy_check"]
+    source = {"solver": "Atlas", "record_version": embedded["schema_version"], "search": policy,
+              "compute": "cpu", "method": "auto"}
+    if zeta["pole_check"]["status"] == "unresolved":
+        replay = replay_zetas(dict(record=embedded, zetas=["monodromy", "topological"],
+                                   compute="cpu", search="exhaustive"))
+        if any(replay[name + "_zeta"] != zeta[name] for name in ("monodromy", "topological")):
+            raise ValueError("Replaying the embedded certificate changed a computed zeta function")
+        zeta["pole_check"] = replay["monodromy_check"]
+        source["pole_check_search"] = "exhaustive"
     # The sparse row and degree bounds are native operations. Transfer their
     # exact decimal strings directly into the searchable representation.
     terms = []
@@ -98,8 +108,7 @@ def build_record(seed, dimension, variables):
               **select(embedded, ("origin", "base_field", "geometric_field")),
               "invariants": {"multiplicity": order, "degree": degree, "milnor_number": mu, "tjurina_number": tau},
               "intrinsic": resolution_summary(intrinsic), "embedded": resolution_summary(embedded), "zeta": zeta,
-              "source": {"solver": "Atlas", "record_version": embedded["schema_version"], "search": policy,
-                         "compute": "cpu", "method": "auto"}}
+              "source": source}
     return entry, detail
 
 

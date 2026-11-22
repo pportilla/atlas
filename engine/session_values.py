@@ -240,9 +240,11 @@ class Resolution(_RecordView):
         self._divisors = self.dual_complex._vertices
         self._branches = [Branch(self, b) for b in record.get("branches", ())]
         self._computed_zetas = None
+        self._local_bernstein_sato = None
         if _from_solver and all(record.get(k, {}).get("status") == "computed"
                                 for k in ("topological_zeta", "monodromy_zeta")):
             self._computed_zetas = deepcopy((record["topological_zeta"], record["monodromy_zeta"]))
+            self._local_bernstein_sato = deepcopy(record.get("monodromy_check", {}).get("local_bernstein_sato"))
 
     def _zeta_pair(self, search="exhaustive", compute=None):
         # Replay a saved certificate before using any zetas imported with it.
@@ -255,6 +257,7 @@ class Resolution(_RecordView):
             if any(z.get("status") != "computed" for z in pair):
                 return pair
             self._computed_zetas = pair
+            self._local_bernstein_sato = deepcopy(outputs.get("monodromy_check", {}).get("local_bernstein_sato"))
         return self._computed_zetas
 
     @property
@@ -267,8 +270,15 @@ class Resolution(_RecordView):
 
     @property
     def monodromy_check(self):
-        from .session_monodromy import check_zetas
-        return deepcopy(check_zetas(*self._zeta_pair()))
+        return deepcopy(self._pole_check(*self._zeta_pair(), search="exhaustive"))
+
+    def _pole_check(self, topological, monodromy, *, search):
+        from .session_monodromy import check_zetas, finish_pole_check
+        check = check_zetas(topological, monodromy)
+        if search == "exhaustive" and check["status"] == "unresolved":
+            finish_pole_check(check, self._record, cached=self._local_bernstein_sato)
+            self._local_bernstein_sato = deepcopy(check["local_bernstein_sato"])
+        return check
 
     def __repr__(self):
         record = self._record
