@@ -187,6 +187,12 @@ available to an undecided candidate and retries it. On eligible singular
 inputs in three to eight variables it can search for a Newton modification,
 point blowups and an ideal blowup concurrently. In the usual schedule Newton
 has a two-second head start. Its verified chart data can be reused directly.
+At an isolated singular point the point blowups start with the complete rule,
+and a separate worker runs the maximal order rule alone. The complete rule
+keeps its answer when it arrives in time. A record from the order worker
+waits until the complete rule's worker has run three times as long as the
+order worker took, and at least five seconds. Answers from the other
+methods are taken as before. [Smooth-centre rules](#where-the-resolution-decisions-run)
 Outside the parallel case, eligible inputs try Newton before general ideal
 enumeration. HTTP requests that omit a policy first try quick search and may
 return a background exhaustive job. [Search schedule](../../engine/resolution_search.py) · [HTTP policy](../../engine/app.py)
@@ -283,8 +289,14 @@ why the intrinsic record has one blowup and the embedded record has three.
 
 Some germs have a curve or surface of singular points through the origin,
 and on these the invariant can be slow or find no hypersurface of maximal
-contact. The complete rule therefore keeps half of the remaining time, and
-then a **maximal order rule** starts again from the original germ. While
+contact. Under a deadline the complete rule therefore keeps 60% of the
+remaining time, and then a **maximal order rule** starts again from the
+original germ. An exhaustive search has no deadline to share, so there the
+maximal order rule races in a worker of its own. It can also be the faster
+rule at an isolated point: for
+`x^9+x^4*y*z+1/8*x^3*y^3-3/2*x^3*z^2-1/32*x*y^4+1/2*x*y*z^2+y^2*z^2-z^3`
+the complete rule stalls in its first centre choice, while the maximal order
+rule resolves the germ with 13 blowups. [Order worker](#exhaustive-search) While
 the strict transform is singular at a point where crossings fail, it blows
 up the reduced locus where the order of the strict transform is largest.
 This locus is taken in the whole chart, so a singular curve that leaves the

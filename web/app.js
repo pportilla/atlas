@@ -1269,7 +1269,8 @@ function updateProgress(run) {
   run.progress.hidden = !run.id || !activeStates.has(run.state);
   if (run.progress.hidden) return;
   const stage = run.progressData?.stage;
-  const method = {origin: "Smooth-centre search", certificates: "Certificate search", newton: "Newton search"}[run.progressData?.method];
+  const method = {origin: "Smooth-centre search", order: "Maximal-order search", certificates: "Certificate search",
+    newton: "Newton search"}[run.progressData?.method];
   run.stage.textContent = stage && method ? method + " · " + stage : stage || "";
   run.stage.hidden = !stage || run.state === "queued";
   const count = run.progressData?.blowups;

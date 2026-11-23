@@ -131,6 +131,8 @@ if method=='origin':
 elif method=='certificates':
     assert bool(args.get('defer_spare')) == (outcome=='slow')
     (p/'racing').touch()
+elif method=='order':
+    print(json.dumps({'record':None,'replay':{}})); sys.exit(0)
 else:
     raise AssertionError('proven Newton failure should never start')
 record = None if outcome=='decline' and method=='origin' else {'engine':method}
@@ -174,7 +176,7 @@ print(json.dumps({'record':record, 'certified':bundle, 'replay':{'winner':method
                         replay.merge.assert_called_once_with({"winner":expected})
                 self.assertTrue(all(p.poll() is not None for p in processes.values()))
                 self.assertEqual(set(elapsed), {"origin"} if outcome in ("win","zeta_only_partial","nonreduced")
-                                 else {"origin","certificates"})
+                                 else {"origin","order","certificates"})
                 if "certificates" in elapsed:
                     wait=elapsed["certificates"]-elapsed["origin"]
                     self.assertLess(wait,3)
@@ -237,7 +239,7 @@ print(result_json({'record': {'engine': method, 'exponent': exponent},
                 self.assertEqual(result, {"engine": expected, "exponent": exponent})
                 self.assertEqual(sys.get_int_max_str_digits(), host_limit)
                 scope.merge.assert_called_once_with({"winner": expected})
-                self.assertEqual(set(workers), {"newton"} if winner == "fast" else {"newton", "origin", "certificates"})
+                self.assertEqual(set(workers), {"newton"} if winner == "fast" else {"newton", "origin", "order", "certificates"})
                 self.assertTrue(all(child.poll() is not None for child in workers.values()))
 
     def test_lane_reaps_native_descendant_on_success_and_outer_cancellation(self):
@@ -318,7 +320,10 @@ class SpeculativeLanes(unittest.TestCase):
     """Forked lanes start together; the first lane keeps its priority."""
 
     def test_first_lane_keeps_priority_over_earlier_answers(self):
+        import os
         from subprocess import Popen
+        if len(os.sched_getaffinity(0)) < 4:
+            self.skipTest("Speculative lanes need a processor for each lane.")
         script = """
 import json, sys, time
 from pathlib import Path
@@ -332,10 +337,10 @@ print(json.dumps({'record': {'engine': method} if wins else None,
 """
         # Each lane's (delay in seconds, whether it finds a record).
         plans = {
-            "newton wins after origin": ({"newton": (.6, True), "origin": (.05, True), "certificates": (5, False)},
-                                         "newton"),
-            "origin waits for newton": ({"newton": (.6, False), "origin": (.05, True), "certificates": (5, False)},
-                                        "origin"),
+            "newton wins after origin": ({"newton": (.6, True), "origin": (.05, True), "order": (5, False),
+                                          "certificates": (5, False)}, "newton"),
+            "origin waits for newton": ({"newton": (.6, False), "origin": (.05, True), "order": (5, False),
+                                         "certificates": (5, False)}, "origin"),
         }
         for name, (plan, expected) in plans.items():
             with self.subTest(name), tempfile.TemporaryDirectory() as root:
@@ -356,7 +361,7 @@ print(json.dumps({'record': {'engine': method} if wins else None,
                     result = exhaustive.search({(2, 0, 0): 1}, list("xyz"), "embedded", compute="cpu")
                     elapsed = time.monotonic() - begin
                 self.assertEqual(result, {"engine": expected})
-                self.assertEqual(set(started), {"newton", "origin", "certificates"})
+                self.assertEqual(set(started), {"newton", "origin", "order", "certificates"})
                 self.assertLess(max(started.values()) - min(started.values()), .5)
                 # No answer is taken before the first lane's own answer.
                 self.assertGreaterEqual(elapsed, .6)
@@ -455,19 +460,19 @@ class ForkedLanes(unittest.TestCase):
 
     def test_lanes_start_together_and_the_first_keeps_priority(self):
         import os
-        if len(os.sched_getaffinity(0)) < 3:
+        if len(os.sched_getaffinity(0)) < 4:
             self.skipTest("Speculative lanes need a processor for each lane.")
         plans = {
-            "newton wins after origin": ({"newton": (.6, "record"), "origin": (.05, "record"),
+            "newton wins after origin": ({"newton": (.6, "record"), "origin": (.05, "record"), "order": (5, "none"),
                                           "certificates": (5, "none")}, {"record": {"engine": "newton"}}),
-            "origin waits for newton": ({"newton": (.6, "none"), "origin": (.05, "record"),
+            "origin waits for newton": ({"newton": (.6, "none"), "origin": (.05, "record"), "order": (5, "none"),
                                          "certificates": (5, "none")}, {"record": {"engine": "origin"}}),
-            "newton crashes": ({"newton": (.3, "crash"), "origin": (.05, "none"),
+            "newton crashes": ({"newton": (.3, "crash"), "origin": (.05, "none"), "order": (.05, "none"),
                                 "certificates": (.1, "record")}, {"record": {"engine": "certificates"}}),
-            "nonreduced": ({"newton": (.3, "none"), "origin": (.05, "nonreduced"),
+            "nonreduced": ({"newton": (.3, "none"), "origin": (.05, "nonreduced"), "order": (5, "none"),
                             "certificates": (5, "none")}, {"error": "NonReducedError"}),
-            "all fail": ({"newton": (.05, "crash"), "origin": (.05, "none"), "certificates": (.05, "none")},
-                         {"error": "RuntimeError"}),
+            "all fail": ({"newton": (.05, "crash"), "origin": (.05, "none"), "order": (.05, "none"),
+                          "certificates": (.05, "none")}, {"error": "RuntimeError"}),
         }
         for name, (plan, expected) in plans.items():
             with self.subTest(name):
@@ -487,15 +492,15 @@ class ForkedLanes(unittest.TestCase):
         import os
         cpu = min(os.sched_getaffinity(0))
         for name, plan, grace, winner in (
-                ("newton declines", {"newton": (.4, "none"), "origin": (.05, "record"),
+                ("newton declines", {"newton": (.4, "none"), "origin": (.05, "record"), "order": (5, "none"),
                                      "certificates": (5, "none")}, 3, "origin"),
-                ("head start expires", {"newton": (10, "none"), "origin": (5, "none"),
+                ("head start expires", {"newton": (10, "none"), "origin": (5, "none"), "order": (5, "none"),
                                         "certificates": (.05, "record")}, .3, "certificates")):
             with self.subTest(name):
                 result, lanes = self.coordinate(plan, cpu=cpu, grace=grace)
                 self.assertEqual(result["record"], {"engine": winner})
                 newton = lanes["newton"]
-                for method in ("origin", "certificates"):
+                for method in ("origin", "order", "certificates"):
                     # Forked with Newton, they wait for their request.
                     self.assertLess(abs(lanes[method]["started"] - newton["started"]), .1)
                     self.assertGreaterEqual(lanes[method]["begin"] - newton["begin"], min(plan["newton"][0], grace) - .05)
@@ -612,7 +617,7 @@ print(json.dumps(dict(lanes=lanes, forks=len(forks), same=list(strip(list(forked
         out = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120)
         self.assertEqual(out.returncode, 0, out.stderr)
         result = json.loads(out.stdout)
-        self.assertEqual(result["lanes"], ["newton", "origin", "certificates"])
-        self.assertEqual(result["forks"], 3)
+        self.assertEqual(result["lanes"], ["newton", "origin", "certificates", "order"])
+        self.assertEqual(result["forks"], 4)
         self.assertEqual((result["status"], result["engine"]), (200, "newton-polyhedron"))
         self.assertTrue(result["same"])

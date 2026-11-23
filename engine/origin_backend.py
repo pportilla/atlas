@@ -79,8 +79,14 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
 
 
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False,
-             full_boundary=False):
-    """The computation of `resolve_origin`, in this process."""
+             full_boundary=False, order_only=False):
+    """The computation of `resolve_origin`, in this process.
+
+    With `order_only`, only the maximal order rule runs, and only at an
+    isolated singular point, where the other rules come first. An
+    exhaustive search runs it in a lane of its own, because there the
+    complete rule has no deadline that would pass the time on.
+    """
     names = list(variables)
     from .local_blowups import GiveUp, acampo_over
     from . import native_polynomial
@@ -102,8 +108,14 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     # curve or surface of singular points the maximal order rule comes
     # first: it blows up that locus whole and needs no hypersurface of
     # maximal contact. Each keeps a share of the time for the other.
-    rules = ("complete", "order", "direct") if _isolated(symbols, equation) else ("order", "complete", "direct")
-    if len(symbols) >= 4 and not skip_tangent:
+    isolated = _isolated(symbols, equation)
+    if order_only:
+        if not isolated:
+            return None
+        rules = ("order",)
+    else:
+        rules = ("complete", "order", "direct") if isolated else ("order", "complete", "direct")
+    if len(symbols) >= 4 and not (skip_tangent or order_only):
         rules = ("tangent",) if tangent_only else ("tangent", *rules)
     intrinsic = mode == "intrinsic"
     try:

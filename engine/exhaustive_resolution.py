@@ -25,6 +25,15 @@ SPECULATIVE_LANES = True
 # A short wall-clock prefix for the canonical rule only when the native
 # proof excludes Newton and the early identity/origin/coordinate graphs.
 ORIGIN_GRACE_SECONDS = 0.25
+# At an isolated singular point the canonical lane tries the complete rule
+# first, without a time limit, so a slow invariant could keep the maximal
+# order rule from ever running. That rule races in an "order" lane of its own.
+# Its record waits while the canonical lane runs, so that lane keeps its
+# answer whenever it arrives in time: until the canonical lane has run
+# ORDER_PATIENCE times as long as the order lane took, and at least
+# ORDER_PATIENCE_SECONDS. An answer from any other lane is taken as before.
+ORDER_PATIENCE = 3
+ORDER_PATIENCE_SECONDS = 5
 
 
 def _canonical_head_start(poly, variables, mode):
@@ -289,6 +298,9 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         children.append((child, write_fd))
         return child
 
+    # When each racing lane received its request, and the lanes that answered.
+    began, answered = {}, set()
+
     def start(method):
         """Send a lane its request, starting it unless it is waiting. Return whether it races."""
         child = waiting.pop(method) if method in waiting else spawn(method, False)
@@ -297,6 +309,7 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         message = payload
         if method == "certificates" and any(peer.poll() is None for peer in started):
             message = result_json(dict(request, defer_spare=True))
+        began[method] = time.monotonic()
         started.append(child)
         reader = threading.Thread(target=collect, args=(method, child, message), daemon=True)
         reader.start()
@@ -304,31 +317,54 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         return True
 
     try:
+        # The order lane starts last, so the certificate lane sees the same peers as without it.
         if _canonical_head_start(poly, variables, mode):
-            first, others, grace = "origin", ("certificates",), ORIGIN_GRACE_SECONDS
+            first, others, grace = "origin", ("certificates", "order"), ORIGIN_GRACE_SECONDS
         else:
-            first, others, grace = "newton", ("origin", "certificates"), NEWTON_GRACE_SECONDS
+            first, others, grace = "newton", ("origin", "certificates", "order"), NEWTON_GRACE_SECONDS
+
+        def usable(reply):
+            """Whether the reply holds a record with the requested outputs."""
+            if reply.get("record") is None:
+                return False
+            bundle = reply.get("certified")
+            if not (isinstance(bundle, list) and len(bundle) == 2 and isinstance(bundle[1], dict)):
+                return False
+            output = bundle[1]
+            if not zetas_only and output.get("dual_complex", {}).get("status") != "complete":
+                return False
+            return not (integrals and mode == "embedded" and not ("strata" in output and "numerical_data" in output))
+
         def answer(method, reply):
             """The winning record, or None to keep waiting."""
             if "nonreduced" in reply:
                 raise NonReducedError(reply["nonreduced"])
-            if reply.get("record") is not None:
-                bundle = reply.get("certified")
-                if not (isinstance(bundle, list) and len(bundle) == 2 and isinstance(bundle[1], dict)):
-                    return None
-                output = bundle[1]
-                if not zetas_only and output.get("dual_complex", {}).get("status") != "complete":
-                    return None
-                if integrals and mode == "embedded" and not ("strata" in output and "numerical_data" in output):
-                    return None
+            if usable(reply):
                 if scope is not None:
                     scope.merge(reply.get("replay"))
                 if verified is not None:
-                    verified.append((reply["record"], _restored(bundle)))
+                    verified.append((reply["record"], _restored(reply["certified"])))
                 return reply["record"]
             if "error" in reply:
                 errors.append(f"{method}: {reply['error']}")
             return None
+
+        # An order lane record waiting for the canonical lane, and when it is taken.
+        deferred = None
+
+        def consider(method, reply):
+            """Like `answer`, holding a record of the order lane while the canonical lane may still answer."""
+            nonlocal deferred
+            answered.add(method)
+            if method == "order" and usable(reply) and "origin" in began and "origin" not in answered:
+                took = time.monotonic() - began["order"]
+                deferred = reply, began["origin"] + max(ORDER_PATIENCE_SECONDS, ORDER_PATIENCE * took)
+                return None
+            record = answer(method, reply)
+            if record is None and method == "origin" and deferred is not None:
+                (reply, _), deferred = deferred, None
+                record = answer("order", reply)
+            return record
 
         forked = _forkable(scope, compute)
         if forked:
@@ -345,16 +381,21 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         received = 0
         end = time.monotonic() + grace
         while received < len(started):
+            waits = ([end] if head_start else []) + ([deferred[1]] if deferred is not None else [])
             try:
-                method, reply = replies.get(timeout=max(0, end - time.monotonic()) if head_start else None)
+                method, reply = replies.get(timeout=max(0, min(waits) - time.monotonic()) if waits else None)
             except queue.Empty:
-                pass
+                if deferred is not None and time.monotonic() >= deferred[1]:
+                    (reply, _), deferred = deferred, None
+                    record = answer("order", reply)
+                    if record is not None:
+                        return record
             else:
                 received += 1
                 if head_start and speculative and method != first:
                     held.append((method, reply))
                     continue
-                record = answer(method, reply)
+                record = consider(method, reply)
                 if record is not None:
                     return record
             if head_start:
@@ -364,7 +405,7 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
                         start(method)
                 # The later lanes now race as if they had started here.
                 for method, reply in held:
-                    record = answer(method, reply)
+                    record = consider(method, reply)
                     if record is not None:
                         return record
                 held.clear()
@@ -411,18 +452,20 @@ def _run(method, payload):
                 except (LimitError, subprocess.TimeoutExpired):
                     record = None
                 certified = next((value for producer, value in verified if producer is record), None)
-            elif method == "origin":
+            elif method in ("origin", "order"):
                 from .origin_backend import _resolve, certified_outputs
-                report("Searching for smooth blow-up centres over the origin")
+                report("Searching for smooth blow-up centres over the origin" if method == "origin" else
+                       "Blowing up loci of maximal order over the origin")
                 full_boundary = payload.get("full_boundary", False)
                 record = _resolve(terms, payload["variables"], payload["mode"], payload.get("seconds"),
-                                  defer_outputs=True, full_boundary=full_boundary)
+                                  defer_outputs=True, full_boundary=full_boundary, order_only=method == "order")
                 if record is not None:
                     certified = certified_outputs(record, payload["variables"], payload["mode"],
                                                   payload.get("integrals", False))
                     if payload["mode"] == "intrinsic" and not full_boundary:
                         record, certified = refine_intrinsic_boundary(terms, payload["variables"], record, certified,
-                                                                      None, payload.get("integrals", False))
+                                                                      None, payload.get("integrals", False),
+                                                                      method=method)
             elif method == "certificates":
                 from .general_resolution import search as certificates
                 report("Searching for a certified blow-up centre")
@@ -450,8 +493,11 @@ def _run(method, payload):
         return {"record": None, "replay": replay.report()}
 
 
-def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals):
-    """Keep the smooth model unless continuing to total normal crossings certifies its boundary."""
+def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals, method="origin"):
+    """Keep the smooth model unless continuing to total normal crossings certifies its boundary.
+
+    `method` is the lane whose rules continue: "origin", or "order" for the maximal order rule alone.
+    """
     from .centres import GiveUp
     if checked[1]["dual_complex"]["status"] == "complete":
         return record, checked
@@ -464,14 +510,14 @@ def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals)
                    replay=scope.settings() if scope else {"compute": "cpu"})
     if remaining is None:
         try:
-            reply = _run("origin", payload)
+            reply = _run(method, payload)
         except (GiveUp, LimitError):
             return record, checked
     else:
         # The existing canonical worker also verifies its geometry inside
         # the remaining time. Keep the earlier smooth model if it times out.
         try:
-            worker = fork_server.run([sys.executable, "-m", "engine.exhaustive_resolution", "origin"],
+            worker = fork_server.run([sys.executable, "-m", "engine.exhaustive_resolution", method],
                                      input=result_json(payload), text=True, capture_output=True, cwd=_ROOT,
                                      timeout=remaining)
         except subprocess.TimeoutExpired:
