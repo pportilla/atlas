@@ -80,7 +80,7 @@ from .polynomial import integer_from_decimal, integer_text, rational_text
 from .rational_point import coordinate_fraction
 
 from .affine_kernel import frame_function, frame_linear, frame_minor
-from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate
+from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate, saturate_grevlex
 
 INFINITE = float("inf")
 
@@ -374,9 +374,11 @@ def _groups(st):
             return None if points is None else [frame.point_order(f, p) for p in points]
         if operation == "live":
             return pack(w for w in work if not frame.empty(*st.locus, *w))
-        support = saturate(frame.variables, frame.rows, f)
+        # Only the zero sets of these pieces matter, so the cheaper grevlex
+        # bases serve (native/centre_maximum.cpp does the same).
+        support = saturate_grevlex(frame.variables, frame.rows, f)
         on = distinct(((*w, *support) for w in work), check_empty=True)
-        off = distinct((tuple(saturate(frame.variables, (*frame.rows, *st.locus, *w), g))
+        off = distinct((tuple(saturate_grevlex(frame.variables, (*frame.rows, *st.locus, *w), g))
                         for w in work for g in support), check_empty=True)
         return dict(on=pack(on), off=pack(off),
                     overlap=any(not frame.empty(*st.locus, *w, *support) for w in off))

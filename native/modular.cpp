@@ -115,6 +115,7 @@ public:
         size_t next = 0;
         long screened_degree = -1;
         while (!unit) {
+            check_deadline();
             if (code.size() + pool.size() > budget) { too_long = true; return false; }
             const bool input_ready = next < order.size();
             if (!input_ready && B.empty()) break;
@@ -429,11 +430,19 @@ bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::ve
         fmpz_mul_ui(&modulus.v, &modulus.v, primes[used]);
     }
     std::atomic<bool> stable{true};
+    // The workers stop once the caller's deadline passes; see check_deadline.
+    const Deadline limit = thread_deadline();
+    std::atomic<bool> stop{false};
+    auto halt = [&](size_t i) {
+        if (limit.active && (i & 255) == 0 && passed(limit)) stop.store(true, std::memory_order_relaxed);
+        return stop.load(std::memory_order_relaxed);
+    };
     auto lift = [&](size_t begin, size_t end) {
         for (size_t k = first_prime; k < used; ++k) {
             const uint32_t p = primes[k], inverse = inverses[k - first_prime];
             const fmpz* product = &prefix_moduli[k - first_prime].v;
             for (size_t i = begin; i < end; ++i) {
+                if (halt(i)) return;
                 const uint32_t old = fmpz_fdiv_ui(&lifted[i].v, p);
                 const uint32_t difference = images[k][i] + p - old;
                 const u64 correction = static_cast<u64>(difference) * inverse % p;
@@ -441,6 +450,7 @@ bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::ve
             }
         }
         for (size_t i = begin; i < end && stable.load(std::memory_order_relaxed); ++i) {
+            if (halt(i)) return;
             if (!fmpq_reconstruct_fmpz(&rational[i].value, &lifted[i].v, &modulus.v)) {
                 stable.store(false, std::memory_order_relaxed);
                 break;
@@ -477,6 +487,7 @@ bool reconstruct_coefficients(const std::vector<uint32_t>& primes, const std::ve
     }
     worker();
     for (auto& t : crew) t.join();
+    if (stop.load()) expire();
     return stable;
 }
 
@@ -582,6 +593,7 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
         u64 next_prime = trace_prime;
         size_t rejected = 0;
         for (size_t batch = 2;; batch *= 2) {
+            check_deadline();
             if (primes.size() > 4096) return false;
             // Replay for a batch of new primes.
             clock = std::chrono::steady_clock::now();
@@ -675,6 +687,7 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
                 check.R = H;
                 proved = check.is_basis(basis);
                 for (size_t k = 0; k < generators.size() && *proved; ++k) {
+                    check_deadline();
                     Poly f = generators[k];
                     check.reduce(f, 0, nullptr, nullptr);
                     proved = f.empty();

@@ -410,7 +410,7 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
     The kernel computes the whole step in one call (native/centre_maximum.cpp,
     "surface_step"); the steps below answer for rings beyond its packed range.
     """
-    found = _native_step(variables, ambient, strict, divisors, working, away)
+    found = _native_step(variables, ambient, strict, divisors, working, away, deadline)
     if found is not _DECLINED:
         return found
     return _step_stepwise(variables, ambient, strict, divisors, working, deadline, away)
@@ -419,8 +419,11 @@ def step(variables, ambient, strict, divisors, working, deadline=None, away=()):
 _DECLINED = object()
 
 
-def _native_step(variables, ambient, strict, divisors, working, away):
-    """One call of native/centre_maximum.cpp, or _DECLINED for the step-by-step route."""
+def _native_step(variables, ambient, strict, divisors, working, away, deadline=None):
+    """One call of native/centre_maximum.cpp, or _DECLINED for the step-by-step route.
+
+    The kernel stops at `deadline` (of time.monotonic) and raises GiveUp.
+    """
     from . import native_library
     from .kernel import exprs
     from .kernel_json import kernel_json
@@ -438,7 +441,7 @@ def _native_step(variables, ambient, strict, divisors, working, away):
         "atlas_centre_maximum", "surface_step", names=[v.name for v in variables],
         identities=[v._coords[0].identity for v in variables], ambient=rows(ambient), strict=rows(strict),
         divisors=[[label, rows(ideal)] for label, ideal in divisors], working=[rows(w) for w in working],
-        away=[rows(z) for z in away], seconds=None,
+        away=[rows(z) for z in away], seconds=None if deadline is None else max(0.0, deadline - monotonic()),
         packed_present=current_execution() is None and (scope is None or scope.compute == "cpu"))
     if "declined" in answer:
         return _DECLINED

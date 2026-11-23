@@ -6,6 +6,7 @@
 #include <flint/fmpz.h>
 
 #include <algorithm>
+#include <chrono>
 #include <climits>
 #include <cstdint>
 #include <stdexcept>
@@ -25,6 +26,54 @@ struct Limit : std::runtime_error {
 };
 // The current selection strategy is swelling; another one should try.
 struct Swell {};
+
+// A time limit for the exact computations of the calling thread. A caller
+// that can give up, such as a resolution rule with a deadline, opens a
+// DeadlineScope. The engines check it before each round, generator and
+// S-polynomial, and between modular batches, on this thread only: the
+// workers of a parallel step never see it and so never stop half way.
+struct Expired : std::runtime_error {
+    Expired() : std::runtime_error("The time allowed for the computation is over.") {}
+};
+struct Deadline {
+    bool active = false;
+    bool expired = false;  // a computation of this scope stopped for it
+    std::chrono::steady_clock::time_point at{};
+};
+Deadline& thread_deadline();
+inline void check_deadline() {
+    Deadline& d = thread_deadline();
+    if (d.active && std::chrono::steady_clock::now() > d.at) {
+        d.expired = true;
+        throw Expired();
+    }
+}
+// Whether the deadline `d`, copied from the calling thread, has passed. The
+// workers of a parallel step test such a copy and stop early; the calling
+// thread then joins them and calls `expire`.
+inline bool passed(const Deadline& d) { return d.active && std::chrono::steady_clock::now() > d.at; }
+[[noreturn]] inline void expire() {
+    thread_deadline().expired = true;
+    throw Expired();
+}
+class DeadlineScope {
+public:
+    explicit DeadlineScope(std::chrono::steady_clock::time_point at) : saved_(thread_deadline()) {
+        Deadline& d = thread_deadline();
+        if (!d.active || at < d.at) d.at = at;
+        d.active = true;
+        d.expired = false;
+    }
+    ~DeadlineScope() { thread_deadline() = saved_; }
+    DeadlineScope(const DeadlineScope&) = delete;
+    DeadlineScope& operator=(const DeadlineScope&) = delete;
+    // Whether a computation inside this scope stopped for the deadline, even
+    // if a caller caught the exception and went on.
+    bool expired() const { return thread_deadline().expired; }
+
+private:
+    Deadline saved_;
+};
 
 // An owned FLINT integer. Small values live in the word itself.
 struct Z {

@@ -230,6 +230,12 @@ changes to startup-only settings, or multithreading can require a fresh
 interpreter. Helper programs for plane curves, fans and graph charts use the
 same deadlines in forked mode. [Fork server](../../engine/fork_server.py) · [Native helper processes](../../engine/native_process.py)
 
+A rule's deadline also reaches the exact computations inside a native centre
+choice. A Gröbner basis, its modular lifting and its verification stop within
+milliseconds of the deadline, and the rule gives up so that the next rule can
+start. Before, one such computation could overrun a 7-second share by
+14 seconds. [Kernel deadlines](../../native/KERNEL.md#deadlines)
+
 When enough processors are available the other workers may start alongside
 Newton, holding their answers until its head start ends. Otherwise a forked
 worker receives its candidate when its turn begins. A parallel certificate

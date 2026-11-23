@@ -10,6 +10,7 @@
 // a ring outside the packed kernel, declines the call; the caller then runs
 // the arbitrary-width route.
 #include "chart_expr.hpp"
+#include "groebner.hpp"
 
 #include <chrono>
 #include <functional>
@@ -239,6 +240,20 @@ Ideal saturate(const Variables& variables, const Ideal& ideal, const Expr& by) {
     try {
         auto lines = rows(variables, joined(ideal, {by}));
         return decode_all(variables, ideal_request("saturate " + std::to_string(variables.size()) + " " +
+                                                   std::to_string(lines.size() - 1), lines));
+    } catch (const Unavailable& error) {
+        throw Declined{error.message};
+    }
+}
+
+// The reduced grevlex basis of ideal : by^infinity, for decisions that depend
+// only on the ideal and not on its generators.
+Ideal saturate_grevlex(const Variables& variables, const Ideal& ideal, const Expr& by) {
+    require(variables);
+    if (variables.size() + 1 > MAX_VARIABLES) throw Declined{"The saturation exceeds the packed variable range."};
+    try {
+        auto lines = rows(variables, joined(ideal, {by}));
+        return decode_all(variables, ideal_request("saturate_grevlex " + std::to_string(variables.size()) + " " +
                                                    std::to_string(lines.size() - 1), lines));
     } catch (const Unavailable& error) {
         throw Declined{error.message};
@@ -1259,12 +1274,14 @@ std::vector<std::pair<std::vector<Ideal>, std::vector<Element>>> groups(const St
             for (const auto& w : work) if (!frame.empty(joined(st.locus, w))) live.push_back(w);
             return pack(live);
         }
-        const Ideal support = saturate(frame.variables, frame.rows, f);
+        // Only the zero sets of these pieces matter, so the cheaper grevlex
+        // bases serve: a lexicographic basis of a curve can be enormous.
+        const Ideal support = saturate_grevlex(frame.variables, frame.rows, f);
         std::vector<Ideal> on_pieces, off_pieces;
         for (const auto& w : work) on_pieces.push_back(joined(w, support));
         for (const auto& w : work)
             for (const auto& g : support)
-                off_pieces.push_back(saturate(frame.variables, joined(joined(frame.rows, st.locus), w), g));
+                off_pieces.push_back(saturate_grevlex(frame.variables, joined(joined(frame.rows, st.locus), w), g));
         const auto on = distinct_pieces(on_pieces, true), off = distinct_pieces(off_pieces, true);
         V answer;
         answer["on"] = pack(on);
@@ -2226,37 +2243,51 @@ V execute(const V& request) {
         Settings* value;
         ~Restore() { settings = value; }
     } restore{outer};
+    // The Groebner computations of this call stop at the same deadline. Once
+    // one has stopped, whatever the call answers is a timeout: a step that
+    // caught the exception may have gone on with a default.
+    std::optional<atlas::DeadlineScope> limit;
+    if (local.deadline) limit.emplace(*local.deadline);
     auto failure = [](const std::string& kind, const std::string& message) {
         V out;
         out["raise"] = kind;
         out["message"] = message;
         return out;
     };
+    auto out_of_time = [&] { return failure("GiveUp", "The time allowed for the blowups is over."); };
+    auto timed_out = [&] {
+        return limit && (limit->expired() || std::chrono::steady_clock::now() > *local.deadline);
+    };
+    V out;
     try {
-        if (request["operation"].asString() == "maximum") {
-            V out;
+        if (request["operation"].asString() == "maximum")
             out["maximum"] = maximum(request);
-            return out;
-        }
-        if (request["operation"].asString() == "surface_step") {
-            V out;
+        else if (request["operation"].asString() == "surface_step")
             out["step"] = surface(request);
-            return out;
-        }
+        else
+            throw std::invalid_argument("Unknown centre maximum operation.");
+    } catch (const atlas::Expired&) {
+        return out_of_time();
     } catch (const NoModel& error) {
-        return failure("NoModel", error.message);
+        return timed_out() ? out_of_time() : failure("NoModel", error.message);
     } catch (const NoContact& error) {
-        return failure("NoContact", error.message);
+        return timed_out() ? out_of_time() : failure("NoContact", error.message);
     } catch (const Raise& error) {
-        return failure(error.kind, error.message);
+        return timed_out() ? out_of_time() : failure(error.kind, error.message);
     } catch (const Unavailable& error) {
-        return failure("Unavailable", error.message);
+        return timed_out() ? out_of_time() : failure("Unavailable", error.message);
     } catch (const Declined& error) {
-        V out;
-        out["declined"] = error.reason;
-        return out;
+        // Past the deadline the stepwise route in Python must not start over.
+        if (timed_out()) return out_of_time();
+        V declined;
+        declined["declined"] = error.reason;
+        return declined;
+    } catch (const std::exception&) {
+        if (timed_out()) return out_of_time();
+        throw;
     }
-    throw std::invalid_argument("Unknown centre maximum operation.");
+    if (limit && limit->expired()) return out_of_time();
+    return out;
 }
 }  // namespace
 

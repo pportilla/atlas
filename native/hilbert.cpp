@@ -197,6 +197,7 @@ bool Engine::compute_homogeneous(const std::vector<Poly>& generators, const std:
     GrowingNumerator found(R.n);
     long head[MAX_VARIABLES];
     while (!unit) {
+        check_deadline();
         const long of_input = next < order.size() ? static_cast<long>(input[order[next]].m[0]) : LONG_MAX;
         const long of_pair = B.empty() ? LONG_MAX : B.back().sugar;
         const long d = std::min(of_input, of_pair);

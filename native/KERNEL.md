@@ -72,6 +72,12 @@ Atlas uses the Gebauer–Möller criteria to discard pairs whose reductions alre
 
 The engine starts with the eager strategy for the graded order and with the lazy one otherwise. If coefficients or work exceed a limit it first tries two routes that do not depend on the strategy: for an order that does not compare degrees first, the [Hilbert-driven route](#the-hilbert-driven-route), then the [modular route](#the-modular-route), which does not suffer from swelling coefficients. After that it restarts with the next strategy; after a full cycle the limits widen, and from the seventh cycle on there is none. A restart discards everything, so correctness is that of the route that finishes. Since the reduced basis is unique, every route returns the same polynomials.
 
+<a id="deadlines"></a>
+
+### Deadlines
+
+A caller that can give up, such as a resolution rule with a time limit, sets a deadline for the computations of its thread (`DeadlineScope` in [groebner.hpp](groebner.hpp)). The engine checks it before each round of strategies, each generator and S-polynomial, each degree of the Hilbert-driven route, and each step of a modular trace and each batch of primes, and raises `Expired` when it has passed. Parallel steps (lifting and reconstructing modular coefficients, replaying primes, verifying a candidate) give their workers a copy of the deadline: the workers stop at the next item, and the calling thread raises `Expired` only after joining them, so no worker is abandoned. A computation that stops returns nothing, so a deadline changes when an answer arrives, never which answer. A scope also records that a computation inside it expired, so that a caller can treat any later answer as a timeout even if a step caught the exception and went on.
+
 <a id="22-proofs-for-the-lazy-strategy"></a>
 
 ### Proofs for the lazy strategy

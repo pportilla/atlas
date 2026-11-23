@@ -162,11 +162,19 @@ class HomogeneousCertificate : private Engine {
         std::atomic<bool> failed{false};
         std::mutex lock;
         std::exception_ptr error;
+        // The workers stop once the caller's deadline passes; see check_deadline.
+        const Deadline limit = thread_deadline();
+        std::atomic<bool> late{false};
         auto worker = [&] {
             try {
                 while (!failed.load(std::memory_order_relaxed)) {
                     const size_t k = cursor.fetch_add(1, std::memory_order_relaxed);
                     if (k >= count) return;
+                    if (passed(limit)) {
+                        late.store(true, std::memory_order_relaxed);
+                        failed.store(true, std::memory_order_relaxed);
+                        return;
+                    }
                     if (!run(k)) failed.store(true, std::memory_order_relaxed);
                 }
             } catch (...) {
@@ -189,6 +197,7 @@ class HomogeneousCertificate : private Engine {
         }
         worker();
         for (std::thread& thread : crew) thread.join();
+        if (late.load()) expire();
         if (error) std::rethrow_exception(error);
         return !failed;
     }

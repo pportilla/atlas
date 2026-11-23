@@ -532,6 +532,7 @@ void Engine::compute(const std::vector<Poly>& input, size_t known) {
     }
 #endif
     for (int round = 0;; ++round) {
+        check_deadline();
         std::vector<Poly> copy = input;
         G.clear(); B.clear(); waiting_.clear();
         unit = false;
@@ -608,8 +609,17 @@ bool Engine::is_basis(const std::vector<Poly>& candidate) {
     // of one another. Without limits a reduction only reads the basis.
     std::atomic<size_t> cursor{0};
     std::atomic<bool> failed{false};
+    // The workers stop once the caller's deadline passes; see check_deadline.
+    check_deadline();
+    const Deadline limit = thread_deadline();
+    std::atomic<bool> late{false};
     auto worker = [&] {
         for (size_t k; !failed && (k = cursor.fetch_add(1)) < B.size();) {
+            if (passed(limit)) {
+                late = true;
+                failed = true;
+                break;
+            }
             Poly h = spoly(B[k]);
             reduce(h, 0, nullptr, nullptr);
             if (!h.empty()) failed = true;
@@ -621,6 +631,7 @@ bool Engine::is_basis(const std::vector<Poly>& candidate) {
         for (size_t t = 1; t < threads; ++t) crew.emplace_back(worker);
         worker();
         for (std::thread& t : crew) t.join();
+        if (late) expire();
         if (failed) return false;
         reductions += static_cast<long>(B.size());
         zero_reductions += static_cast<long>(B.size());
@@ -690,6 +701,7 @@ void Engine::attempt(std::vector<Poly>& input, size_t known) {
     });
     for (size_t k : rest) {
         if (unit) break;
+        check_deadline();
         Poly& f = input[k];
         long sugar = degree(f);
         if (strategy_ == LAZY) {  // the generators enter in the order of their degrees
@@ -703,6 +715,7 @@ void Engine::attempt(std::vector<Poly>& input, size_t known) {
         insert(std::move(f), sugar);
     }
     while (!unit) {
+        check_deadline();
         // Next: the lowest sugar, then the smallest lcm or head; a pair before a waiting polynomial.
         int chosen = -1;
         for (size_t k = 0; k < waiting_.size(); ++k) {
@@ -897,6 +910,11 @@ thread_local std::string last_error;
 }
 
 void set_error(const char* message) { last_error = message; }
+
+Deadline& thread_deadline() {
+    static thread_local Deadline state;
+    return state;
+}
 
 char* copy_text(const std::string& s) {
     char* out = static_cast<char*>(std::malloc(s.size() + 1));

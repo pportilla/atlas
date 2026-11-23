@@ -168,6 +168,16 @@ def saturate(variables, ideal, by, *, domain=QQ):
     return _native(kernel.saturate, _saturate, domain, variables, tuple(ideal), by)
 
 
+def saturate_grevlex(variables, ideal, by, *, domain=QQ):
+    """Return generators of I : by^infinity, the reduced grevlex basis in the packed range.
+
+    For callers that use only the ideal: its lexicographic basis can be far
+    larger. Outside the packed range the generators are those of `saturate`.
+    """
+    variables = _ring(variables, domain)
+    return _native(kernel.saturate_grevlex, _saturate, domain, variables, tuple(ideal), by)
+
+
 def _saturate(variables, ideal, by, domain):
     from .component_ring import ComponentRing
     if isinstance(by, str):

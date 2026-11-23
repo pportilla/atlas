@@ -1286,6 +1286,19 @@ std::string op_saturate(Reader& in) {
     return out;
 }
 
+// "saturate_grevlex n s": as "saturate", but always the reduced grevlex basis
+// of I : by^infinity. The lexicographic basis that "saturate" returns can be
+// far larger than the ideal needs, so callers that use only the ideal ask
+// for this one.
+std::string op_saturate_grevlex(Reader& in) {
+    const Ring R = grevlex(in.number(0));
+    const Ideal ideal = in.ideal(R, in.count(1));
+    const Gen by = in.gen(R);
+    std::string out;
+    put(R, out, saturate(R, ideal, by, false));
+    return out;
+}
+
 // The closure of the graph of the identification of two ordinary affine
 // charts off their exceptional divisors. Embed their projections in the
 // two independent coordinate blocks before clearing denominators in each
@@ -3521,6 +3534,7 @@ char* atlas_ideal(const char* input, size_t length) noexcept {
         else if (in.op == "graph_orders") out = op_graph_orders(in);
         else if (in.op == "dimension") out = op_dimension(in);
         else if (in.op == "saturate") out = op_saturate(in);
+        else if (in.op == "saturate_grevlex") out = op_saturate_grevlex(in);
         else if (in.op == "saturation_regular") out = saturation_regular(in) ? "yes\n" : "unknown\n";
         else if (in.op == "smooth_reduced_centre" || in.op == "smooth_reduced_graph") out = op_smooth_reduced_centre(in);
         else if (in.op == "affine_overlap") out = op_affine_overlap(in);

@@ -1,4 +1,5 @@
 #include "modular_replay.hpp"
+#include "groebner.hpp"
 #include <flint/ulong_extras.h>
 
 #include <algorithm>
@@ -96,10 +97,14 @@ void replay_on_host(const std::vector<uint32_t>& code, size_t pool_size, size_t 
     const size_t lanes = std::min<size_t>(primes.size(), std::max(1u, std::thread::hardware_concurrency()));
     std::vector<uint64_t> scratch(lanes * work_size);
     std::atomic<size_t> cursor{0};
+    // The workers stop once the caller's deadline passes; see check_deadline.
+    const Deadline limit = thread_deadline();
+    std::atomic<bool> stop{false};
     auto worker = [&](size_t lane) {
         uint64_t* work = scratch.data() + lane * work_size;
-        for (size_t b; (b = cursor.fetch_add(1)) < primes.size();)
-            if (status[b] && !execute_replay_block(code.data(), 0, code.size(), primes[b],
+        for (size_t b; !stop.load(std::memory_order_relaxed) && (b = cursor.fetch_add(1)) < primes.size();)
+            if (passed(limit)) stop.store(true, std::memory_order_relaxed);
+            else if (status[b] && !execute_replay_block(code.data(), 0, code.size(), primes[b],
                                                    pools.data() + b * pool_size, work))
                 status[b] = 0;
     };
@@ -113,6 +118,7 @@ void replay_on_host(const std::vector<uint32_t>& code, size_t pool_size, size_t 
     }
     worker(0);
     for (std::thread& thread : crew) thread.join();
+    if (stop.load()) expire();
 }
 
 }  // namespace atlas

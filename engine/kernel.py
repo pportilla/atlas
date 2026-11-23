@@ -230,6 +230,14 @@ def saturate(variables, ideal, by):
 
 
 @_optional
+def saturate_grevlex(variables, ideal, by):
+    """Generators of I : by^infinity: its reduced grevlex basis."""
+    _require(len(variables) + 1)
+    lines = _lines(variables, (*ideal, by))
+    return _exprs(variables, _ask(f"saturate_grevlex {len(variables)} {len(lines) - 1}", lines))
+
+
+@_optional
 def finite_radical(variables, ideal):
     """Reduced grevlex basis of the radical of a finite rational ideal."""
     _require(len(variables))
