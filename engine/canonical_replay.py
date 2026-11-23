@@ -1,7 +1,7 @@
 """Replay stored smooth-centre resolutions from their original hypersurface."""
 from . import atlas, native_polynomial as np
 from .exact_json import sorted_record
-from .local_blowups import GiveUp, _Canonical, _Direct, _run
+from .local_blowups import GiveUp, _Canonical, _Direct, _Order, _run
 from .origin_backend import _record
 from .repeated_tangent import RepeatedTangent
 from .strata import InvalidChart
@@ -18,7 +18,10 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
 
     def reconstruct(support):
         components = [("strict", 1, 1, (np.from_terms(axes, support),))]
-        if rules <= {"invariant", "surface", "complete", "shared boundary curve"}:
+        if "maximal order" in rules and rules <= {"maximal order", "invariant", "surface", "complete",
+                                                  "shared boundary curve"}:
+            rule = _Order(components)
+        elif rules <= {"invariant", "surface", "complete", "shared boundary curve"}:
             rule = _Canonical(components, shared_curves="shared boundary curve" in rules)
         elif rules == {"direct"}:
             rule = _Direct()

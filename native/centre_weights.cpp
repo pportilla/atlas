@@ -1,6 +1,7 @@
 // Exact weights of a Bierstone–Milman coefficient presentation on one stratum.
 #include "groebner.hpp"
 #include <flint/fmpq.h>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -478,6 +479,48 @@ Json::Value level_weights(const Json::Value& request) {
         const auto& parts = request["parts"];
         const bool present = std::any_of(parts.begin(),parts.end(),[](const auto& p){ return p.asBool(); });
         return present && (op == "direct_locus" || request["outside"].asBool());
+    }
+    if (op == "largest_divisor_data") {
+        // Each prime part of a centre gives its new divisor one pair
+        // (N, nu); conjugate points and the generic point of a curve have
+        // the same orders. Blowing up disjoint parts one after another gives
+        // the same space as blowing them up together. Select the parts with
+        // the largest pair, lexicographically, in every chart, so that the
+        // choice depends only on the geometry. A part with no pair does not
+        // meet an owned point and is left out.
+        auto pair_of = [](const Json::Value& values) -> std::optional<std::pair<Q, Q>> {
+            if (!values.isArray() || values.size() != 1) return std::nullopt;
+            const auto pair = read_row(values[0]);
+            if (pair.size() != 2) throw std::invalid_argument("Expected numerical data (N, nu).");
+            return std::make_pair(pair[0], pair[1]);
+        };
+        std::optional<std::pair<Q, Q>> best;
+        for (const auto& chart : request["charts"])
+            for (const auto& values : chart)
+                if (auto pair = pair_of(values); pair && (!best || *best < *pair)) best = pair;
+        if (!best) return Json::Value();
+        Json::Value selected(Json::arrayValue);
+        for (const auto& chart : request["charts"]) {
+            Json::Value indices(Json::arrayValue);
+            for (Json::ArrayIndex i = 0; i < chart.size(); ++i)
+                if (auto pair = pair_of(chart[i]); pair && *pair == *best) indices.append(i);
+            selected.append(std::move(indices));
+        }
+        return selected;
+    }
+    if (op == "split_curve_owned") {
+        // A split curve centre is blown up one side at a time. The side in
+        // the divisor goes first. A side that meets no chart's owned fibre
+        // is not blown up: its blowup would change no owned point, and the
+        // same centre would be chosen again at the next stage.
+        auto any = [&](const char* key) {
+            const auto& flags = request[key];
+            return std::any_of(flags.begin(), flags.end(), [](const auto& p){ return p.asBool(); });
+        };
+        if (!request["outside"].asBool() || !any("parts")) return Json::Value(false);
+        if (any("inside_owned")) return Json::Value("inside");
+        if (any("outside_owned")) return Json::Value("outside");
+        return Json::Value(false);
     }
     if (op == "present_outside") {
         // The complement of V(H) is covered by D(h) for all h in H.

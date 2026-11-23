@@ -90,10 +90,16 @@ class SavedRepairCoverTests(unittest.TestCase):
                 damaged = deepcopy(self.record)
                 damaged["mode"] = mode
                 damaged["atlas"] = [c for c in damaged["atlas"] if not c.get("repair_projection")]
-                with patch("engine.resolve._resolve_polynomial", return_value=damaged):
+                with patch("engine.resolve._resolve_polynomial", return_value=damaged), \
+                     patch("engine.resolve.canonical_record", return_value=None):
                     quick = resolve(dict(request, search="quick"))
                 self.assertEqual(quick["status"], "inconclusive")
                 self.assertIn("complete cover", quick["diagnostic"]["description"])
+                # Without that stub the quick search verifies its own smooth-centre charts instead.
+                with patch("engine.resolve._resolve_polynomial", return_value=damaged):
+                    quick = resolve(dict(request, search="quick"))
+                self.assertEqual(quick["status"], "resolved")
+                self.assertNotEqual(quick.get("atlas"), damaged["atlas"])
 
                 replacement = resolve(dict(request, search="quick"))
                 self.assertEqual(replacement["status"], "resolved")

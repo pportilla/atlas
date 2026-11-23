@@ -95,10 +95,17 @@ class ResolutionComplexTests(unittest.TestCase):
                 bad = dict(record, polynomial="x^2+y^3+z^7")
                 with self.assertRaisesRegex(InputError, "strict transform differs"):
                     replay_zetas(dict(record=bad, zetas=["topological"]))
-                with patch("engine.resolve._resolve_polynomial", return_value=bad):
-                    result = resolve(dict(mode=mode, polynomial=bad["polynomial"], variables=list("xyz"), search="quick"))
+                request = dict(mode=mode, polynomial=bad["polynomial"], variables=list("xyz"), search="quick")
+                with patch("engine.resolve._resolve_polynomial", return_value=bad), \
+                     patch("engine.resolve.canonical_record", return_value=None):
+                    result = resolve(request)
                 self.assertEqual(result["status"], "inconclusive")
                 self.assertIn("strict transform differs", result["diagnostic"]["description"])
+                # The quick search replaces the rejected proposal with its own smooth-centre charts.
+                with patch("engine.resolve._resolve_polynomial", return_value=bad):
+                    result = resolve(request)
+                self.assertEqual(result["status"], "resolved")
+                self.assertNotEqual(result.get("atlas"), bad["atlas"])
 
     def test_saved_polynomial_graph_certifies_its_exceptional_bundle(self):
         from engine.graph_record import graph_outputs

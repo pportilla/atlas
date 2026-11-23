@@ -45,8 +45,10 @@ class ExhaustiveFallback(unittest.TestCase):
              patch("engine.exhaustive_resolution.search") as exhaustive:
             result = resolve(request)
         self.assertFalse(quick.call_args.kwargs["exhaustive"])
-        self.assertTrue(origin.call_args.kwargs["tangent_only"])
-        self.assertGreater(origin.call_args.kwargs["seconds"], 0)
+        # The repeated-tangent rule, then the smooth-centre rules, each with a deadline.
+        calls = [call.kwargs for call in origin.call_args_list]
+        self.assertTrue(calls[0]["tangent_only"])
+        self.assertTrue(all(call["seconds"] > 0 for call in calls))
         exhaustive.assert_not_called()
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["monodromy_zeta"]["status"], "inconclusive")

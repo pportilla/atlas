@@ -1701,7 +1701,8 @@ V maximum(const V& request) {
     std::vector<Ideal> working, away;
     for (const auto& w : request["working"]) working.push_back(ideal_of(w));
     for (const auto& z : request["away"]) away.push_back(ideal_of(z));
-    if (!settings->deadline || std::chrono::steady_clock::now() <= *settings->deadline) {
+    if (!request["order_only"].asBool() &&
+        (!settings->deadline || std::chrono::steady_clock::now() <= *settings->deadline)) {
         if (auto direct = affine_maximum(request, original, chart, dimension, strict, divisors, working, away)) {
             check_time();
             return *direct;
@@ -1813,6 +1814,14 @@ V maximum(const V& request) {
         state.locus = locus;
         state.working = live_pieces;
         state.prefix = {{false, Q(long(order))}};
+        if (request["order_only"].asBool()) {
+            // The maximal order of the strict transform over the working
+            // set and the locus where its order is at least that much:
+            // the first entry of the invariant, without maximal contact.
+            if (live_pieces.empty()) continue;
+            found.push_back({state.prefix, V(Json::arrayValue), locus, state});
+            continue;
+        }
         for (auto& item : level_(state, ctx)) found.push_back(std::move(item));
     }
     if (found.empty()) return V();

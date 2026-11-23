@@ -385,7 +385,8 @@ def _fan_orbit_strata(polynomial, base, linear, charts, cones, axes, saved):
 
 
 def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integrals, bounded=False,
-                   *, pullbacks_only=False, local_sections=False, verified_parent_partition=False):
+                   *, pullbacks_only=False, local_sections=False, verified_parent_partition=False,
+                   split_branches=False):
     from .point_atlas import _field, _invertible, _same_ideal, monomial_matrix
     base = record["variables"]
     n = len(base)
@@ -446,22 +447,41 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
     # The surface fallback can require the full strict equation off its boundary.
     boundary_terms = complex and intrinsic and n != 3 and hasattr(
         native_library._library(), "atlas_fan_boundary_terms_abi")
+    # The rational prime factors through the origin are separate strict
+    # branches of an embedded divisor. A fan chart can make them cross
+    # normally where their union is singular. A coordinate factor x_i is the
+    # toric boundary coordinate of the axis ray e_i, or a unit off that ray.
+    fresh_branches = None
+    if (split_branches and not saved and not split and not intrinsic and not named and reduced is None and direct_jet
+            and hasattr(native_library._library(), "atlas_fan_charts_abi")):
+        from .weighted_record import _factor
+        factors, _ = _factor(f, tuple(base))
+        if len(factors) > 1:
+            fresh_branches = [(f"S{k}", g, m) for k, (g, m) in enumerate(factors, 1)]
     if (not split and not saved and not intrinsic and not integrals and direct_jet and reduced is None
+            and fresh_branches is None
             and all(hasattr(native_library._library(), abi) for abi in
                     ("atlas_fan_charts_abi", "atlas_fan_projection_abi", "atlas_fan_verification_abi"))):
         native = _verify_fan_natively(charts, regions, f, len(polynomial), base, linear, axes, complex, bounded)
         if native is not _PER_CHART:
             return native
     parts = _chart_parts(charts, regions, () if saved else marked, dimension)
+    branch_rows = None
+    if fresh_branches is not None:
+        parts = list(parts)
+        branch_rows = [[rows for _, rows in _fan_chart_rows(parts, g, len(parse_expression(g, tuple(base))),
+                                                            base, linear)]
+                       for _, g, _ in fresh_branches]
     if not split and direct_jet and reduced is None and hasattr(native_library._library(), "atlas_fan_charts_abi"):
         verified = _fan_chart_rows(parts, f, len(polynomial), base, linear, boundary_terms=boundary_terms)
     else:
         verified = ((part, None) for part in parts)
     orbit_strata = None
     try_chart_orbits = (integrals and not intrinsic and not split and not named and not weighted and
+                        fresh_branches is None and
                         record.get("engine") == "verified-monomial-modification" and
                         linear == tuple(_unit(j, n) for j in range(n)))
-    for (chart, cone, excluded, coords), fan_rows in verified:
+    for index, ((chart, cone, excluded, coords), fan_rows) in enumerate(verified):
         monomials = tuple(zip(*cone))
         if set(chart["map"]) != set(base):
             raise InvalidChart("The projection map differs from its monomial chart.")
@@ -631,7 +651,15 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
                 surface_charts.append((*details, tuple(dict.fromkeys([*fibre, *partition]))))
         elif complex:
             sections.append((cone, dict(zip(exceptional, here)), ()))
-        if has_strict and not named:
+        branch_jets = []
+        if fresh_branches is not None:
+            # The header flag marks a nonconstant strict transform of the branch.
+            for (label, _, power), rows in zip(fresh_branches, branch_rows):
+                branch_header, branch_text, _, branch_jet = rows[index][:4]
+                if branch_header.split()[0] == "1":
+                    components.append(dict(id=label, multiplicity=power, nu=1, ideal=[branch_text]))
+                    branch_jets.append(branch_jet)
+        elif has_strict and not named:
             components.append(dict(id="strict", multiplicity=weight, nu=1, ideal=[strict_text]))
         ideals = [(strict_row if v["id"] == "strict" else _row(v["ideal"][0], coords),) for v in components]
         # Invertibility of the verified constant matrix gives (L*m)=(m).
@@ -640,7 +668,9 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         owned = list(dict.fromkeys([*(encode_sparse_row({e + (0,)*len(marked): 1}) for e in monomials),
                                     *(_row(g, coords) for g in region)]))
         crossing_ideals = ideals
-        if has_strict and not named:
+        if branch_jets:
+            crossing_ideals = [*ideals[:-len(branch_jets)], *((row,) for row in branch_jets)]
+        elif has_strict and not named and fresh_branches is None:
             crossing_ideals = [*ideals[:-1], (jet,)]
         defects = crossings_rows(dimension, n, ambient_rows, crossing_ideals, owned, (), bounded=bounded)
         if defects is None:
@@ -692,6 +722,8 @@ def _verify_charts(record, polynomial, charts, linear, complex, intrinsic, integ
         numbers = {name: value[:2] for name, value in data.items()}
         if named:
             numbers.update({k:(m,1) for k,(_,m) in branch_equations.items()})
+        elif fresh_branches is not None:
+            numbers.update({label: (power, 1) for label, _, power in fresh_branches})
         else:
             numbers["strict"] = (weight, 1)
         try:
@@ -773,8 +805,20 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
                     output.pop("dual_complex")
                     output["cells"] = None
                 return record.get("atlas", atlas), output
-        result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded,
-                                local_sections=local_sections)
+        try:
+            result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded,
+                                    local_sections=local_sections)
+        except InvalidChart as error:
+            # The union of several rational branches can be singular where
+            # each branch is smooth and they cross normally. Verify the
+            # branches as separate components of the divisor.
+            if intrinsic or "atlas" in record or str(error) != "Normal crossings fail on the owned origin fibre.":
+                raise
+            from .weighted_record import _factor
+            if len(_factor(format_poly(polynomial, record["variables"]), tuple(record["variables"]))[0]) < 2:
+                raise
+            result = _verify_charts(record, polynomial, *charts, complex, intrinsic, integrals, bounded,
+                                    local_sections=local_sections, split_branches=True)
     except native_library.Unavailable:
         return None
     return result

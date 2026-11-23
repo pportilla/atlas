@@ -229,8 +229,34 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             return zetas_from_strata(result, kinds, found, polynomial=p)
         return None
 
+    proposed = {}
+
+    def primary(poly):
+        record = _resolve_polynomial(poly, request, start, verified=verified)
+        proposed["engine"] = record.get("engine")
+        return record
+
+    def quick_fallback(error):
+        # A fast engine can propose charts that their verifier rejects. The
+        # canonical smooth-centre rule makes no assumption about the Newton
+        # polyhedron or the rejected proposal, and its charts are verified
+        # in the same way. It does not run twice.
+        reasons = [str(error)]
+        if proposed.get("engine") != "canonical-blowups" and canonical_applicable(p, variables):
+            try:
+                record = canonical_record(p, variables, mode, start, verified=verified, integrals=wants_zetas)
+                if record is None:
+                    raise GiveUp("The canonical smooth-centre rule returned no certified atlas.")
+                return record, finish(record)
+            except NonReducedError:
+                raise
+            except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as second:
+                reasons.append(f"After that proposal was rejected: {second}")
+        return inconclusive(request, {"description": " ".join(reasons)}, (perf_counter()-start)*1000,
+                            format_poly(p, variables)), None
+
     try:
-        result = resolve_with_multiplicities(lambda poly: _resolve_polynomial(poly, request, start, verified=verified))
+        result = resolve_with_multiplicities(primary)
         outputs = finish(result)
     except NonReducedError:
         raise  # Intrinsic resolution requires a reduced source.
@@ -241,9 +267,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             result = general_certificate()
             outputs = finish(result)
         else:
-            result = inconclusive(request, {"description": str(error)}, (perf_counter()-start)*1000,
-                                  format_poly(p, variables))
-            outputs = None
+            result, outputs = quick_fallback(error)
     proofs.append(('primary', result.get('certificate', {})))
     if wants_zetas:
         if outputs is None and mode == "intrinsic" and result["status"] == "resolved":
@@ -293,6 +317,31 @@ def _resolve_weighted(p, request, kinds, start, proofs):
         _complete_companion(record, request, kinds, proofs)
     record['elapsed_ms'] = round((perf_counter() - start) * 1000, 3)
     return record
+
+
+# Seconds that a quick request gives the canonical smooth-centre rule.
+QUICK_CANONICAL_SECONDS = 20
+
+
+def canonical_applicable(p, variables):
+    """Whether the canonical smooth-centre rule accepts this singular germ."""
+    from .quotient_monomials import degree_bounds
+    order, degree = degree_bounds(len(variables), p)
+    return order > 1 and 3 <= len(variables) <= 8 and len(p) <= 4096 and degree <= 128
+
+
+def canonical_record(p, variables, mode, start, *, verified=None, integrals=False,
+                     seconds=QUICK_CANONICAL_SECONDS):
+    """The canonical smooth-centre resolution as a solver record, or None."""
+    from .origin_backend import resolve_origin
+    report("Resolving by blowups with smooth centres chosen by the canonical rule")
+    r = resolve_origin(p, variables, mode, seconds=seconds, defer_outputs=True, verified=verified,
+                       integrals=integrals)
+    if r is not None:
+        r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
+                 mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
+                 origin=[0]*len(variables), elapsed_ms=round((perf_counter()-start)*1000,3))
+    return r
 
 
 def _resolve_polynomial(p, request, start, *, verified=None):
@@ -430,13 +479,18 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         if r is None:
             fallback_details.append("The successive blowup search returned no certified atlas.")
     elif r is None and native_range and singular and len(variables) >= 4:
-        # The repeated tangent rule has five specified centres. Let a quick
-        # request try those without entering the open-ended invariant search.
+        # The repeated tangent rule has five specified centres. When it does
+        # not apply, the canonical rule chooses the centres from the
+        # invariant, in a bounded time.
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
                            verified=verified, integrals=bool(selected_zetas(request)))
         if r is None:
             fallback_details.append("The repeated-tangent search returned no certified atlas.")
+            r = resolve_origin(p, variables, mode, seconds=QUICK_CANONICAL_SECONDS, defer_outputs=True,
+                               verified=verified, integrals=bool(selected_zetas(request)), skip_tangent=True)
+            if r is None:
+                fallback_details.append("The canonical smooth-centre rule returned no certified atlas.")
     if r is None:
         from .general_resolution import search
         report("Searching for a blow-up centre")

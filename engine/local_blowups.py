@@ -35,6 +35,7 @@ where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
 from dataclasses import dataclass, field, replace
+from fractions import Fraction
 from itertools import count, islice
 from time import monotonic
 from .resolution_progress import report
@@ -694,6 +695,133 @@ class _Canonical:
         self.births.append(label)
 
 
+def _radical(chart, ideal):
+    """The radical of an ideal on the chart, from the native decomposition kernel."""
+    from .native_library import affine_request
+    from .native_polynomial import from_terms, row
+    from .polynomial import sparse_row
+    names = " ".join(v.name for v in chart.variables)
+    rows = affine_request(["ideal_radical", names, "grevlex", *(row(chart.variables, g) for g in ideal)])
+    return tuple(ideal_basis(chart.variables, [from_terms(chart.variables, sparse_row(r)) for r in rows]))
+
+
+class _Order(_Canonical):
+    """The maximal order rule. While the strict transform X is singular at a
+    point where normal crossings fail, the centre is the locus near the fibre
+    where the order of X is largest among those points: the first entry of
+    the invariant (native/centre_maximum.cpp with order_only), which needs no
+    hypersurface of maximal contact. The locus is taken in the whole chart,
+    so a curve or surface of singular points that leaves the fibre is blown
+    up whole. When the locus is singular in some chart, its singular locus
+    is the centre in every chart. Blowing up a smooth centre inside the
+    locus of maximal order does not raise the order. The rule depends only
+    on the geometry, so the charts glue; it need not terminate and is given
+    few stages. Once X is smooth at the points, the complete rule continues,
+    with the divisors present as given ones."""
+    name, stages, retains = "order", 60, True
+
+    # Stages in a row at the same order with strictly more charts selected
+    # each time: the rule is not converging, and the next rule gets the time.
+    RUNAWAY = 6
+
+    def __init__(self, components):
+        super().__init__(components)
+        self.order_phase = True
+        self._trend = (None, 0, 0)  # (order, charts selected, stages in a row)
+
+    def _order_locus(self, chart, bad, dimension, deadline):
+        key = ("order", id(chart))
+        if key not in self._loci:
+            exceptional = [(label, ideal) for label, _, _, ideal in chart.components if not _is_strict(label)]
+            item = maximum(chart.variables, chart.ambient, dimension, _hypersurface(chart), exceptional, list(bad),
+                           self.records, self.births, deadline, away=chart.removed, order_only=True)
+            self._loci[key] = chart, item
+        return self._loci[key][1]
+
+    @staticmethod
+    def _owned_parts(current, loci):
+        """The reduced components of the loci that meet an owned point over
+        the fibre, of the largest dimension among all charts. Components far
+        from the fibre play no part, and a chart that does not own a
+        component's points does not blow it up."""
+        kept = {}
+        for i, locus in loci.items():
+            chart = current[i]
+            parts = []
+            for part in _prime_parts(chart, _radical(chart, (*chart.ambient, *locus)), None):
+                if _present(chart.variables, (*chart.ambient, *chart.fibre, *chart.region, *part), chart.removed):
+                    parts.append((_dimension(chart.variables, (*chart.ambient, *part)), part))
+            kept[i] = parts
+        sizes = [size for parts in kept.values() for size, _ in parts]
+        centres = [None] * len(current)
+        if not sizes:
+            return centres
+        # The native comparison of invariant rows selects the largest dimension.
+        top = sizes[maximum_indices([((Fraction(size),), ()) for size in sizes])[0]]
+        for i, parts in kept.items():
+            chart = current[i]
+            for size, part in parts:
+                if size == top:
+                    centres[i] = part if centres[i] is None else _union(chart.variables, centres[i], part)
+        return centres
+
+    def _smooth_centres(self, current, centres):
+        for _ in range(4):
+            singular = []
+            for chart, centre in zip(current, centres):
+                if centre is None:
+                    singular.append(None)
+                    continue
+                size = _dimension(chart.variables, (*chart.ambient, *centre))
+                proof = smooth_locus(chart.variables, (*chart.ambient, *centre), size) if size >= 0 else None
+                if proof is None:
+                    raise GiveUp("A centre is not smooth.")
+                # Off the centres removed from the chart, as `_run` checks it.
+                smooth = proof["smooth"] or chart.removed and not _present(
+                    chart.variables, (*chart.ambient, *proof["bad_ideal"]), chart.removed)
+                singular.append(None if smooth else proof["bad_ideal"])
+            if all(bad is None for bad in singular):
+                return centres
+            # A chart where the locus is smooth contains none of its singular points.
+            following = []
+            for chart, centre, bad in zip(current, centres, singular):
+                if centre is None or bad is None:
+                    following.append(None)
+                    continue
+                locus = _radical(chart, (*chart.ambient, *centre, *bad))
+                following.append(None if locus == (1,) else locus)
+            centres = following
+            if all(centre is None for centre in centres):
+                break
+        raise GiveUp("The singular locus of the maximal order locus did not become smooth.")
+
+    def choose(self, current, failures, dimension, deadline):
+        if self.order_phase:
+            found = [None] * len(current)
+            for i, (over, _) in enumerate(failures):
+                if over:
+                    found[i] = self._order_locus(current[i], list(over.values()), dimension, deadline)
+            selected = maximum_indices(found, birth_width=0)
+            # A maximal order above one: the strict transform is singular at some point.
+            if selected and maximum_indices([found[selected[0]][:2], ((Fraction(1),), ())]) == [0]:
+                value = found[selected[0]][0]
+                order, count, streak = self._trend
+                growing = order == value and len(selected) > count
+                self._trend = (value, len(selected), streak + 1 if growing else 0)
+                if self._trend[2] >= self.RUNAWAY:
+                    raise GiveUp("The maximal order rule selects more charts at the same order at every stage.")
+                centres = self._owned_parts(current, {i: found[i][2] for i in selected})
+                return self._smooth_centres(current, centres), {
+                    "invariant": [str(entry) for entry in value], "value": value, "rule": "maximal order"}
+            # X is smooth at every point where normal crossings fail.
+            self.order_phase = False
+            self._loci = {}
+            labels = dict.fromkeys(label for chart in current for label, *_ in chart.components
+                                   if not _is_strict(label))
+            self.records, self.births = dict.fromkeys(labels), list(labels)
+        return super().choose(current, failures, dimension, deadline)
+
+
 def _native_stage(operation, **fields):
     """One call of native/canonical_blowup.cpp; None when a packed operation
     is out of range and the arbitrary-width route has to answer."""
@@ -855,22 +983,29 @@ def _apart(current, chosen):
     from .centres import _principal
     labels = level_weights("label_order", (), labels=[name for chart in current for name, *_ in chart.components
                                                     if not _is_strict(name)])
+    def owned(chart, part):
+        return part is not None and _present(chart.variables, (*chart.ambient, *chart.fibre, *chart.region, *part),
+                                             chart.removed)
+
     for label in labels:
-        inside, outside = [], False
+        inside, rests, outside = [], [], False
         for chart, centre in zip(current, chosen):
             ideal = next((i for name, _, _, i in chart.components if name == label), None)
             if centre is None:
                 inside.append(None)
+                rests.append(None)
                 continue
             whole = tuple(ideal_basis(chart.variables, (*chart.ambient, *centre)))
             if ideal is None:
                 inside.append(None)
+                rests.append(whole)
                 outside = True
                 continue
             rest = tuple(ideal_basis(chart.variables,
                                      saturate(chart.variables, whole, _principal(chart.variables, chart.ambient, ideal))))
             if rest == (1,):
                 inside.append(whole)
+                rests.append(None)
                 continue
             outside = True
             part = colon(whole, rest, chart.variables)
@@ -878,9 +1013,72 @@ def _apart(current, chosen):
                 raise GiveUp("An ideal quotient is not available.")
             part = tuple(ideal_basis(chart.variables, part))
             inside.append(None if part == (1,) else part)
-        if level_weights("split_curve", (), outside=outside, parts=[part is not None for part in inside]):
+            rests.append(rest)
+        side = level_weights("split_curve_owned", (), outside=outside, parts=[part is not None for part in inside],
+                             inside_owned=[owned(chart, part) for chart, part in zip(current, inside)],
+                             outside_owned=[owned(chart, rest) for chart, rest in zip(current, rests)])
+        if side == "inside":
             return inside
+        if side == "outside":
+            return rests
     raise Uneven("A divisor has different orders along curves that no divisor separates.")
+
+
+def _prime_parts(chart, centre, size):
+    """The prime components over Q of a smooth centre on the chart."""
+    ideal = ideal_basis(chart.variables, (*chart.ambient, *centre))
+    if ideal == (1,):
+        return []
+    if size == 0:
+        return _point_components(chart.variables, ideal)
+    from .native_library import affine_request
+    from .native_polynomial import from_terms, row
+    from .polynomial import sparse_row
+    names = " ".join(v.name for v in chart.variables)
+    rows = iter(affine_request(["primary_decomposition", names, "grevlex",
+                                *(row(chart.variables, g) for g in ideal)]))
+    parts = []
+    for _ in range(int(next(rows))):
+        primary, prime = map(int, next(rows).split())
+        for _ in range(primary):
+            next(rows)
+        generators = [from_terms(chart.variables, sparse_row(next(rows))) for _ in range(prime)]
+        parts.append(tuple(ideal_basis(chart.variables, (*chart.ambient, *generators))))
+    return parts
+
+
+def _by_numerical_data(current, chosen, label, stage, dimension, size, deadline, retains):
+    """Of a centre whose parts give the new divisor different numerical data,
+    the prime parts with the largest data (native/centre_weights.cpp,
+    "largest_divisor_data"). The others are blown up at later stages."""
+    parts, data = [], []
+    for i, (chart, centre) in enumerate(zip(current, chosen)):
+        pieces = [] if centre is None else _prime_parts(chart, centre, size)
+        found = []
+        for piece in pieces:
+            trial = [None] * len(current)
+            trial[i] = piece
+            try:
+                following = _blown_up(current, trial, label, stage, dimension, size, deadline, retains)
+            except Uneven:
+                found.append(None)
+                continue
+            found.append(sorted({(str(n), str(nu)) for child in following
+                                 for name, n, nu, _ in child.components if name == label}))
+        parts.append(pieces)
+        data.append(found)
+    selected = level_weights("largest_divisor_data", (), charts=[[None if values is None else
+                                                                   [list(pair) for pair in values]
+                                                                   for values in found] for found in data])
+    if not selected or not any(selected):
+        raise Uneven("No prime part of the centre gives its new divisor one set of numerical data.")
+    out = []
+    for chart, pieces, indices in zip(current, parts, selected):
+        centre = None
+        for k in indices:
+            centre = pieces[k] if centre is None else _union(chart.variables, centre, pieces[k])
+        out.append(centre)
+    return out
 
 
 def _union(variables, first, second):
@@ -998,7 +1196,8 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
     current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
                      tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
     centres, known, seen = [], {}, {}
-    stages = count(1) if budget is None and isinstance(rule, _Canonical) else range(1, rule.stages + 1)
+    stages = (count(1) if budget is None and type(rule) is _Canonical else
+              range(1, rule.stages + (_Canonical.stages if type(rule) is _Order else 0) + 1))
     for stage in stages:
         report(f"Checking charts for normal crossings ({rule.name} method)", len(centres))
         if deadline is not None and monotonic() > deadline:
@@ -1069,15 +1268,24 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             # Unlike parts: for curves, those inside a divisor that does not contain the
             # others; for points, those on the largest set of divisors. The rest
             # comes at later stages.
-            if size > 1:
-                raise
-            chosen = _apart(current, chosen) if size else _alike(current, chosen)
-            try:
-                following = blown(chosen)
-            except Uneven:
-                if size:
-                    raise  # The remaining centre is a curve, outside the finite-point splitter.
-                chosen = _alike(current, chosen, single=True)
+            whole, following = chosen, None
+            if size <= 1:
+                try:
+                    chosen = _apart(current, whole) if size else _alike(current, whole)
+                    try:
+                        following = blown(chosen)
+                    except Uneven:
+                        if size:
+                            raise  # The remaining centre is a curve, outside the finite-point splitter.
+                        chosen = _alike(current, chosen, single=True)
+                        following = blown(chosen)
+                except Uneven:
+                    following = None
+            if following is None:
+                # Any centre: its prime parts with the largest numerical data first.
+                keep_complement = retains or getattr(rule, "keep_complement", False)
+                chosen = _by_numerical_data(current, whole, label, stage, dimension, size, deadline,
+                                            keep_complement)
                 following = blown(chosen)
         rule.created(label, detail)
         # Keep the ideals of the accepted blowup, in its actual local coordinates.
@@ -1119,20 +1327,33 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     """
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
-    for name in rules:
+    rules = tuple(rules)
+    for index, name in enumerate(rules):
         if name == "tangent":
             from .repeated_tangent import RepeatedTangent
             rule = RepeatedTangent()
+        elif name == "order":
+            rule = _Order(components)
         else:
             rule = _Direct() if name == "direct" else _Canonical(components)
+        # Each rule is fast when it succeeds and can be slow when it fails. A
+        # rule followed by another keeps the share of the remaining time in
+        # RULE_SHARES, so that the next one also runs.
+        limit = deadline
+        if deadline is not None and index + 1 < len(rules) and name in RULE_SHARES:
+            limit = min(deadline, monotonic() + RULE_SHARES[name] * max(0.0, deadline - monotonic()))
         try:
-            return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata,
+            return _run(rule, variables, components, fibre, budget, limit, ambient, dimension, count_strata,
                         intrinsic=intrinsic)
         except GiveUp as error:
             reason = error
             if deadline is not None and monotonic() > deadline:
                 break
     raise reason
+
+
+# The share of the remaining time that a rule keeps when another rule follows.
+RULE_SHARES = {"complete": 0.6, "order": 0.5}
 
 
 def _strata(charts, domain=None):

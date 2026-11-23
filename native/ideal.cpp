@@ -3306,6 +3306,55 @@ std::string op_graph_orders(Reader& in) {
 }
 
 }  // namespace
+// (z) : u^infinity for one nonzero generator z. Polynomials over Q factor
+// uniquely, so the saturation removes from z every prime factor of u,
+// with its full multiplicity in z. Repeated gcds remove them without the
+// basis in one more variable that `saturation` needs.
+static Poly principal_saturation(const Ring& R, const Poly& z, const Poly& u) {
+    struct Flint {
+        fmpz_mpoly_ctx_t ctx;
+        fmpz_mpoly_t f, g, d, q;
+        explicit Flint(int n) {
+            fmpz_mpoly_ctx_init(ctx, n, ORD_DEGREVLEX);
+            for (auto* p : {f, g, d, q}) fmpz_mpoly_init(p, ctx);
+        }
+        ~Flint() {
+            for (auto* p : {f, g, d, q}) fmpz_mpoly_clear(p, ctx);
+            fmpz_mpoly_ctx_clear(ctx);
+        }
+    } work(R.n);
+    long powers[MAX_VARIABLES];
+    ulong exponents[MAX_VARIABLES];
+    auto load = [&](fmpz_mpoly_t target, const Poly& p) {
+        for (size_t i = 0; i < p.size(); ++i) {
+            R.unpack(p.m.data()+i*R.stride, powers);
+            for (int j = 0; j < R.n; ++j) exponents[j] = powers[j];
+            fmpz_mpoly_push_term_fmpz_ui(target, &p.c[i].v, exponents, work.ctx);
+        }
+        fmpz_mpoly_sort_terms(target, work.ctx);
+        fmpz_mpoly_combine_like_terms(target, work.ctx);
+    };
+    load(work.f, z);
+    load(work.g, u);
+    while (true) {
+        if (!fmpz_mpoly_gcd(work.d, work.f, work.g, work.ctx))
+            throw std::runtime_error("The principal saturation gcd failed.");
+        if (fmpz_mpoly_total_degree_si(work.d, work.ctx) <= 0) break;
+        if (!fmpz_mpoly_divides(work.q, work.f, work.d, work.ctx))
+            throw std::logic_error("Inexact division in a principal saturation.");
+        fmpz_mpoly_swap(work.f, work.q, work.ctx);
+    }
+    Poly out;
+    for (slong j = 0; j < fmpz_mpoly_length(work.f, work.ctx); ++j) {
+        fmpz_mpoly_get_term_exp_si(powers, work.f, j, work.ctx);
+        fmpz_mpoly_get_term_coeff_fmpz(&out.c.emplace_back().v, work.f, j, work.ctx);
+        out.m.resize(out.c.size()*R.stride);
+        R.pack(out.m.data()+(out.c.size()-1)*R.stride, powers);
+    }
+    const auto identity = shifted(R.n, 0);
+    return convert(R, R, out, identity.data());
+}
+
 // Work with a frame on the open set where every specified unit is nonzero.
 static std::string frame_locus_grevlex(const Ring& R, const std::vector<Poly>& generators,
                                        const std::vector<Poly>& units, bool closure) {
@@ -3322,7 +3371,12 @@ static std::string frame_locus_grevlex(const Ring& R, const std::vector<Poly>& g
     std::string out;
     if (unit.empty() || basis.unit()) put(R, out, unit_ideal(R));
     else if (constant(unit) || generators.empty()) put(R, out, basis.monic());
-    else put(R, out, monic(saturation(R, basis.elements(), unit)));
+    else if (basis.elements().size() == 1) {
+        // A principal ideal saturates by gcds. Its reduced basis is the
+        // remaining generator, or the unit ideal when no factor remains.
+        const Poly rest = principal_saturation(R, basis.elements()[0], unit);
+        put(R, out, constant(rest) ? unit_ideal(R) : monic({rest}));
+    } else put(R, out, monic(saturation(R, basis.elements(), unit)));
     return out;
 }
 

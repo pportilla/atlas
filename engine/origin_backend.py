@@ -1,16 +1,20 @@
 """Resolution of a hypersurface germ by blowups with smooth centres,
 started at the origin itself.
 
-The centres are those of the complete rule of engine/local_blowups.py: the
-maximum locus of the invariant of Bierstone and Milman while the strict
-transform is singular at a point where the total transform fails normal
-crossings, and afterwards, in dimension three, the centres of the procedure
-of engine/surface.py. Every centre is checked to be smooth. The Jacobian
-criterion certifies smoothness of the strict transform for intrinsic
-resolution and normal crossings of the total transform for embedded
-resolution. The relevant failure locus is closed. By properness of the
-blowup map, its image misses a neighbourhood of the origin when all
-charts pass over the origin fibre.
+At an isolated singular point the centres are first those of the complete
+rule of engine/local_blowups.py: the maximum locus of the invariant of
+Bierstone and Milman while the strict transform is singular at a point
+where the total transform fails normal crossings, and afterwards, in
+dimension three, the centres of the procedure of engine/surface.py. When
+that rule gives up or uses its share of the time, the maximal order rule
+starts again: while the strict transform is singular at such a point, the
+locus near the fibre where its order is largest, or the singular locus of
+that locus. Along a curve or surface of singular points the two rules are
+tried in the other order. Every centre is checked to be smooth. The Jacobian criterion certifies smoothness of the strict
+transform for intrinsic resolution and normal crossings of the total
+transform for embedded resolution. The relevant failure locus is closed.
+By properness of the blowup map, its image misses a neighbourhood of the
+origin when all charts pass over the origin fibre.
 
 This engine needs no hypothesis on the Newton polyhedron. It is used when
 the engines that read a resolution off the polyhedron give no answer.
@@ -37,7 +41,7 @@ def certified_outputs(record, names, mode, integrals):
 
 
 def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, tangent_only=False,
-                   verified=None, integrals=False):
+                   verified=None, integrals=False, skip_tangent=False):
     """The record of the resolution, or None when the rule gives no answer in
     the time allowed. `poly` maps exponents to rational coefficients of the
     reduced equation.
@@ -48,7 +52,8 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     from .polynomial import rational_text
     request = json.dumps({"terms": [[list(exponents), rational_text(c)] for exponents, c in poly.items()],
                           "variables": list(variables), "mode": mode, "seconds": seconds,
-                          "defer_outputs": defer_outputs, "tangent_only": tangent_only})
+                          "defer_outputs": defer_outputs, "tangent_only": tangent_only,
+                          "skip_tangent": skip_tangent})
     try:
         from . import fork_server
         done = fork_server.run([sys.executable, "-m", "engine.origin_backend"], input=request, text=True,
@@ -64,7 +69,7 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     return record
 
 
-def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False):
+def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False):
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
     from .local_blowups import GiveUp, acampo_over
@@ -83,8 +88,12 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     from .affine_kernel import rational_factor_rows
     if any(power > 1 for _, power, _ in rational_factor_rows(symbols, equation)[1]):
         return None
-    rules = ("complete", "direct")
-    if len(symbols) >= 4:
+    # At an isolated singular point the complete rule comes first. Along a
+    # curve or surface of singular points the maximal order rule comes
+    # first: it blows up that locus whole and needs no hypersurface of
+    # maximal contact. Each keeps a share of the time for the other.
+    rules = ("complete", "order", "direct") if _isolated(symbols, equation) else ("order", "complete", "direct")
+    if len(symbols) >= 4 and not skip_tangent:
         rules = ("tangent",) if tangent_only else ("tangent", *rules)
     intrinsic = mode == "intrinsic"
     try:
@@ -101,6 +110,17 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
         _, output = certified_outputs(record, names, mode, False)
         record["dual_complex"] = output["dual_complex"]
     return record
+
+
+def _isolated(symbols, equation):
+    """Whether the singular point is isolated: its Tjurina number is finite (native local algebra)."""
+    from .local_kernel import local_request
+    try:
+        length, *_ = local_request("local_tjurina_number", symbols, "grevlex", (equation,),
+                                   point=(0,) * len(symbols))
+    except (ArithmeticError, ValueError):
+        return True  # The established order when the length is not available.
+    return length != "infinite"
 
 
 def _record(names, charts, centres, data, strata, *, defer_outputs, intrinsic=False):
@@ -180,5 +200,5 @@ if __name__ == "__main__":
     asked = json.load(sys.stdin)
     answer = _resolve({tuple(exponents): kernel_fraction(c) for exponents, c in asked["terms"]}, asked["variables"],
                       asked["mode"], asked["seconds"], defer_outputs=asked.get("defer_outputs", False),
-                      tangent_only=asked.get("tangent_only", False))
+                      tangent_only=asked.get("tangent_only", False), skip_tangent=asked.get("skip_tangent", False))
     print(json.dumps(answer))

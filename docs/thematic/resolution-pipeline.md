@@ -163,11 +163,15 @@ centres in order. The shortcut succeeds when only the third centre works.
 
 Use `--quick` for a bounded attempt. The search tries an eligible regular
 Newton modification, including available coordinate changes and repairs of
-failed crossings. For unresolved singularities in three variables it can
-start blowups from the origin. In four to eight variables that attempt is
-limited to the repeated-tangent rule. The final attempt tests priority ideals.
-The CLI worker has 55 seconds. If it exhausts its budget, its diagnostic
-reports an inconclusive calculation. [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Ideal search](../../engine/general_resolution.py)
+failed crossings. For unresolved singularities in three to eight variables
+it can start blowups from the origin. In four to eight variables the
+repeated-tangent rule comes first, then the smooth-centre rules described
+below, for 20 seconds. The final attempt tests priority ideals. When the
+verifier rejects the charts that a faster method proposed, the quick search
+does not stop there. The smooth-centre rules make their own proposal, whose
+charts are verified in the same way. The CLI worker has 55 seconds. If it
+exhausts its budget, its diagnostic reports an inconclusive calculation and
+the reasons for each rejection. [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
 
 ### Exhaustive search
 
@@ -215,6 +219,16 @@ affine chart. The rays specify a monomial substitution. Removing the
 exceptional monomial from the pullback gives the strict-transform equation.
 [Newton chart construction](../../engine/newton_backend.py)
 
+An embedded divisor with several rational factors through the origin can
+have normal crossings although the union of their strict transforms is
+singular. Take `y*(x^2+x*z+y^3)`. The plane $y=0$ meets the $A_2$ surface
+in two lines. On a chart whose cone contains the axis ray $e_y$, the factor
+$y$ becomes the toric boundary coordinate of that ray. When the verifier
+finds crossings failing for the strict transform as a single component, it
+checks each rational factor as a separate branch S1, S2, … with its own
+multiplicity. The saved-record verifier accepts the same branches.
+[Branch verification](../../engine/monomial_atlas.py)
+
 For a **smooth blowup**, each chart uses one generator of the centre as a
 pivot. The new coordinates include the ratios of the remaining generators
 to this one, as in the line example above. For a general **ideal blowup**,
@@ -248,6 +262,34 @@ blowup gives strict equations $v^2-B=0$ and $1-Au^3=0$, both smooth.
 The former is tangent to the exceptional divisor at $B=v=0$. This explains
 why the intrinsic record has one blowup and the embedded record has three.
 [Canonical construction](../../engine/origin_backend.py) · [Incidence replay](../../engine/canonical_replay.py)
+
+Some germs have a curve or surface of singular points through the origin,
+and on these the invariant can be slow or find no hypersurface of maximal
+contact. The complete rule therefore keeps half of the remaining time, and
+then a **maximal order rule** starts again from the original germ. While
+the strict transform is singular at a point where crossings fail, it blows
+up the reduced locus where the order of the strict transform is largest.
+This locus is taken in the whole chart, so a singular curve that leaves the
+fibre is blown up whole. Only components that meet a point owned by the
+chart are kept, and only those of the largest dimension across the charts.
+If the locus is singular in some chart, its singular locus becomes the
+centre in every chart. A smooth centre inside the locus of maximal order
+does not raise the order. Once the strict transform is smooth at those
+points, the invariant continues, with the existing divisors treated as
+given ones. For `x*y^4+z^2+t^2` the rule blows up the singular $x$-axis
+twice. The first entry of the invariant comes from the same native
+calculation. [Order locus](../../native/centre_maximum.cpp) · [Maximal order rule](../../engine/local_blowups.py)
+
+The components of a smooth centre can lie on different earlier divisors, so
+that the new exceptional divisor gets different data $(N,\nu)$ on them. A
+curve centre is first divided by the divisor that contains part of it. The
+side that meets a point owned by some chart is blown up first: blowing up a
+side that meets no owned point changes nothing, and the same centre would
+return. When no divisor separates the parts, each prime component over
+$\mathbb Q$ gives its new divisor one value of $(N,\nu)$. Conjugate points
+and the generic point of a curve have the same orders. The components with
+the largest value are blown up first. Disjoint centres blown up at
+successive stages give the same space. [Split rules](../../native/centre_weights.cpp)
 
 When a finite centre must be split, the exceptional divisors through a
 point can identify its class across charts. If several points have the

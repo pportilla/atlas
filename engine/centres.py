@@ -598,7 +598,8 @@ def _affine_maximum(variables, ambient, dimension, strict, divisors, working, re
     return tuple(map(value, result["value"])), (), exprs(variables, result["ideal"])
 
 
-def maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline=None, away=()):
+def maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline=None, away=(),
+            order_only=False):
     """The maximum of the invariant of the hypersurface `strict` over a closed
     set of the chart, and the locus where it is attained.
 
@@ -619,10 +620,12 @@ def maximum(variables, ambient, dimension, strict, divisors, working, records, b
     (native/centre_maximum.cpp); this file's steps answer for rings beyond
     its packed range.
     """
-    found = _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away)
+    found = _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away,
+                            order_only)
     if found is not _DECLINED:
         return found
-    return _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away)
+    return _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away,
+                             order_only=order_only)
 
 
 _DECLINED = object()
@@ -637,7 +640,8 @@ def native_failure(answer, **kinds):
     return known.get(answer["raise"], ArithmeticError)(answer["message"])
 
 
-def _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away):
+def _native_maximum(variables, ambient, dimension, strict, divisors, working, records, births, deadline, away,
+                    order_only=False):
     """One call of native/centre_maximum.cpp, or _DECLINED for the step-by-step route."""
     from . import native_library
     from .kernel import exprs
@@ -657,7 +661,7 @@ def _native_maximum(variables, ambient, dimension, strict, divisors, working, re
         "atlas_centre_maximum", "maximum", names=[v.name for v in variables],
         identities=[v._coords[0].identity for v in variables], ambient=rows(ambient), dimension=dimension,
         strict=rows(strict), divisors=[[label, rows(ideal)] for label, ideal in divisors],
-        working=[rows(w) for w in working], away=[rows(z) for z in away], births=list(births),
+        working=[rows(w) for w in working], away=[rows(z) for z in away], births=list(births), order_only=order_only,
         records={label: None if record is None else invariant_row(record) for label, record in records.items()},
         seconds=None if deadline is None else deadline - monotonic(),
         packed_present=current_execution() is None and (scope is None or scope.compute == "cpu"),
@@ -674,10 +678,10 @@ def _native_maximum(variables, ambient, dimension, strict, divisors, working, re
 
 
 def _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, records, births, deadline=None,
-                      away=()):
+                      away=(), order_only=False):
     """The arbitrary-width route of `maximum`: each native operation called in turn."""
     original, chart = tuple(variables), tuple(ambient)
-    if deadline is None or monotonic() <= deadline:
+    if not order_only and (deadline is None or monotonic() <= deadline):
         direct = _affine_maximum(original, chart, dimension, strict, divisors, working, records, away)
         if direct is not None:
             if deadline is not None and monotonic() > deadline:
@@ -728,7 +732,13 @@ def _maximum_stepwise(variables, ambient, dimension, strict, divisors, working, 
         locus = tuple(d for g in own for d in frame.jet(g, order))
         live = tuple(w for w in live if not frame.empty(*locus, *w))
         coll = tuple(({}, g, Fraction(order)) for g in own)
-        found.extend(_level(State(frame, coll, (), present, locus, live, (Fraction(order),), ()), ctx))
+        state = State(frame, coll, (), present, locus, live, (Fraction(order),), ())
+        if order_only:
+            # The first entry of the invariant and its locus, as the native route gives them.
+            if live:
+                found.append(Found((Fraction(order),), (), locus, state))
+            continue
+        found.extend(_level(state, ctx))
     if not found:
         return None
     indices = maximum_indices((item.value,item.key) for item in found)

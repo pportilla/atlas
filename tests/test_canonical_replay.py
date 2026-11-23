@@ -44,8 +44,10 @@ class CanonicalReplayTests(unittest.TestCase):
         request = dict(self.request, polynomial="(x+y+z)^2-(x-y)^3", zetas=["monodromy", "topological"])
         intrinsic = json.loads(json.dumps(resolve(dict(request, mode="intrinsic"))))
         embedded = json.loads(json.dumps(resolve(dict(request, mode="embedded"))))
-        self.assertEqual([s["rule"] for s in intrinsic["steps"]], ["invariant"])
-        self.assertEqual([s["rule"] for s in embedded["steps"]], ["invariant", "surface", "surface"])
+        # The singular line A=B=0 is the locus of maximal order, which the
+        # maximal order rule blows up first along a non-isolated locus.
+        self.assertEqual([s["rule"] for s in intrinsic["steps"]], ["maximal order"])
+        self.assertEqual([s["rule"] for s in embedded["steps"]], ["maximal order", "surface", "surface"])
         self.assertEqual(intrinsic["steps"][0], embedded["steps"][0])
         self.assertEqual(len(intrinsic["charts"]), 2)
         self.assertIn("the strict transform is smooth", intrinsic["certificate"]["description"])
