@@ -25,3 +25,16 @@ Run from the repository root after building the native kernel, selecting a logic
 ```sh
 taskset -c 13 python3 benchmarks/local_monodromy_roots.py --trials 3 --output /tmp/local-monodromy-roots.json
 ```
+
+## Repeated branches in a coordinate section
+
+For the reported cover `z^2-(y^2-x^3)*(y+x^2)^4`, the full Zoo builder reached the 40-second limit in the local root test on revision `8e90ce1`. With the transverse plane-curve certificate it completed both resolutions, their dual complexes, both zetas and the pole check in 0.42 s. Along a dense open part of `z=y+x^2=0`, the transverse equation is analytically equivalent to `u^2+v^4`, giving the local root −3/4. Singular's direct local elimination on the same cover reached the 39.5 s limit.
+
+On two smaller inputs, three trials of Atlas, Singular's local elimination and Singular's full polynomial all found −3/4. The same driver, CPU, warmup and timing conventions above gave these medians.
+
+| Polynomial | Atlas local (ms) | Singular local (ms) | Singular full (ms) |
+|---|---:|---:|---:|
+| `z^2-x*y^4` | 0.094 | 1.978 | 18.075 |
+| `z^2-x*(x+y)^4` | 0.167 | 3.769 | 34.327 |
+
+The seven earlier inputs also agreed in this run. The Atlas local medians ranged from 0.398 to 36.453 ms and were below Singular's local medians on all seven.

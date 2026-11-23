@@ -70,6 +70,22 @@ The kernel builds this ideal one set $F$ at a time. It may reduce each minor mod
 
 ## Charts of a blowup and the verification of a centre
 
+For a proposed smooth maximal-order centre $C$ and each exceptional divisor
+$E$, set $J_E=(I_C:I_E^\infty)+I_E$. The saturation retains precisely the
+components of $C$ on which $E$ cuts a divisor. The components of a smooth
+scheme are locally disjoint, so $V(J_E)$ is the appropriate boundary trace
+also on disconnected centres. The traces have normal crossings precisely
+where every intersection is smooth of the expected codimension in $C$.
+The kernel returns the union of their smoothness defects. [Native computation](graph_wide.cpp)
+
+For $C=V(z(z-1),y-zx^e)$ and $E=V(y)$ the defect has ideal
+$(z-1,y,x^{e-1})$. Five CPU trials of 20 calls on a Ryzen 7 6800H gave
+median times of 112, 131 and 130 microseconds in Atlas and 52, 52 and 53
+microseconds in Singular 4.4.1 for $e=1,2,4$. Atlas timings include native
+JSON transport. Singular times in-process saturation and Jacobian minors.
+Both compare the exact ideals outside the timed batch.
+[Repeatable comparison](../benchmarks/order_centre_boundary.py)
+
 Let $J=(f_1,\dots,f_k)\subset\mathbf Q[x_1,\dots,x_n]$ and $f_i\ne0$. The $i$-th chart of the blowup of $J$ has coordinate ring $\mathbf Q[x][f_j/f_i]\subset\mathbf Q(x)$. Its ideal in $\mathbf Q[x,r_j]_{j\ne i}$ is the kernel $P$ of $r_j\mapsto f_j/f_i$, and
 
 $$P=(f_j-f_ir_j)_{j\ne i}:f_i^\infty,$$
@@ -355,6 +371,8 @@ Write $D$ for the Weyl algebra over $\mathbf Q$. The Briançon–Maisonobe const
 The cyclic module $M=D[s]/(A+D[s]f)$ becomes the local Bernstein module when its coefficients are localized at the origin. The minimal polynomial of the central operator $s$ on this local module is $b_{f,0}$. For a rational candidate $\alpha$, the quotient by $s-\alpha$ survives precisely when the generalized $\alpha$-eigensummand is nonzero. On that summand $s-\alpha$ is nilpotent, so it can be surjective only on the zero module. It is invertible on the other summands. We may therefore specialize the generators of $A$ at $s=\alpha$, keeping $f$, before eliminating the derivatives. The specialized left ideal $L$ localizes to the unit ideal exactly when $g\in L\cap\mathbf Q[x]$ for some $g$ with $g(0)\ne0$, by clearing denominators in a relation for $1$. A derivative-elimination basis generates this contraction, so checking its polynomial generators at the origin suffices. This local test excludes roots supported solely at distant singular points. Algebraic localization at the rational point and extension to the complex analytic germ give the same local $b$-function. [Levandovskyy and Martín-Morales, §§2, 5](https://arxiv.org/abs/1003.3478) · [Bahloul and Oaku, Proposition 3, Corollary 8 and Lemma 10](https://arxiv.org/abs/0806.4869)
 
 For a coordinate monomial times a unit, with positive coordinate multiplicities $a_i$, the local roots are $-j/a_i$ for $1\le j\le a_i$. A smooth germ has the single root $-1$. The decision reuses these formulas and shares the annihilator and results across poles of the same input. For example, $(x+y)^2 y(x-1)^3$ has local roots $-1/2$ and $-1$ at the origin. Its additional global roots $-1/3$ and $-2/3$ come from the distant triple component $x=1$. [Native pole decision](monodromy_local_b.cpp) · [Normal crossings formula, §3.1](https://arxiv.org/abs/1003.3478)
+
+Before Weyl elimination, Atlas also looks at transverse plane curves. Write $f=F+w^a U$, where $F=f|_{w=0}$ and $a$ is the lowest positive power of the coordinate $w$. If $g^b$ exactly divides $F$ for an irreducible factor $g$ through the origin, and $g$ does not divide $U|_{w=0}$, then the smooth generic points of $w=g=0$ have transverse type $u^a+v^b$. There $dg$ is nonzero, and both $U$ and $F/g^b$ have local analytic roots of the required orders. Rescaling $w$ and $g$ by these roots gives the stated coordinates. For $a,b\ge2$, the roots $-(i/a+j/b)$ with $0<i<a$, $0<j<b$ occur in the transverse Bernstein–Sato polynomial. They also occur at the origin since a local Bernstein equation at the origin restricts to a neighbourhood meeting that stratum. Any candidate left undecided still passes to the Weyl test. [Weighted homogeneous isolated singularities and their Bernstein–Sato roots](https://arxiv.org/abs/1609.04801) · [Local root implementation](monodromy_local_b.cpp)
 
 ### Restricting equations to a graph
 

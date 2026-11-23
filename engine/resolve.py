@@ -140,7 +140,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             contact["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
             return contact
     from .local_blowups import GiveUp
-    from .strata import annotate_complex, rational_chart_outputs, resolution_strata
+    from .strata import annotate_complex, proposal_chart_outputs, resolution_strata
     verified = []
 
     def general_certificate():
@@ -180,30 +180,9 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         intrinsic = record["mode"] == "intrinsic"
         certified = next((value for producer, value in verified if producer is record), None)
         if certified is None:
-            certified = rational_chart_outputs(record, p, intrinsic=intrinsic, integrals=wants_zetas,
-                                               replay_canonical=True)
-            if certified is None and record.get("engine") == "canonical-blowups":
-                raise GiveUp("The proposal lacks the canonical centre rule needed to reconstruct its chart cover.")
-        if certified is not None:
-            record["atlas"], output = certified
-            record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
-        else:
-            from . import atlas
-            charts, reason = atlas.verified_modification_charts(record, p)
-            if charts is None:
-                raise GiveUp(reason)
-            factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
-            try:
-                output = atlas.outputs(charts, len(variables), intrinsic=intrinsic, integrals=wants_zetas,
-                                       factor_fibre=factor_fibre)
-            except GiveUp:
-                if not intrinsic or not wants_zetas:
-                    raise
-                # A smooth strict transform can need a further embedded resolution.
-                output = atlas.outputs(charts, len(variables), intrinsic=True, integrals=False,
-                                       factor_fibre=factor_fibre)
-            record["atlas"] = atlas.to_json(charts)
-            record["dual_complex"] = atlas.record_complex(record, charts, output["dual_complex"])
+            certified = proposal_chart_outputs(record, p, integrals=wants_zetas)
+        record["atlas"], output = certified
+        record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
         if "chart_sections" in record["dual_complex"].get("finite_sheet_certificate", {}):
             from .atlas_finite import geometric_chart_records
             record["charts"] = geometric_chart_records(record)
@@ -222,6 +201,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     def finish(result):
         found = attach(result)
         if exhaustive and (result["status"] != "resolved" or
+                           (not request.get("zetas_only") and result["dual_complex"]["status"] != "complete") or
                            (wants_zetas and mode == "embedded" and found is None)):
             raise GiveUp("The proposed charts did not certify all the requested outputs.")
         if found is not None and wants_zetas:
@@ -471,7 +451,7 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         from .exhaustive_resolution import search as exhaustive_search
         report("Searching for a verified resolution with independent methods")
         r = exhaustive_search(p, variables, mode, compute=compute, integrals=bool(selected_zetas(request)),
-                              verified=verified)
+                              verified=verified, zetas_only=request.get("zetas_only", False))
     elif r is None and native_range and singular and len(variables) == 3:
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True,

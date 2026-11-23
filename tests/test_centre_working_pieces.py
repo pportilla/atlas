@@ -18,6 +18,32 @@ def grouped(frame, working, locus=(), functions=()):
 
 
 class CentreWorkingPieces(unittest.TestCase):
+    def test_partial_smooth_boundary_is_refined_and_replayable(self):
+        from engine.resolution_complex import dual_complex
+        names = list("xyz")
+        source = "x^4+x*y^4+z^2*x*y^3"
+        record = resolve_origin(parse(source, names), names, "intrinsic", seconds=10)
+        boundary = record["dual_complex"]
+        self.assertEqual((boundary["status"], len(boundary["vertices"]), len(boundary["cells"])),
+                         ("complete", 10, 8))
+        record.update(variables=names, polynomial=source, mode="intrinsic")
+        self.assertEqual(dual_complex(record), boundary)
+        del record["atlas"]
+        self.assertEqual(dual_complex(record), boundary)
+
+    def test_boundary_retry_preserves_partial_on_timeout(self):
+        from subprocess import TimeoutExpired
+        from time import monotonic
+        from engine.exhaustive_resolution import refine_intrinsic_boundary
+        checked = [], {"dual_complex": {"status": "partial"}}
+        record = {"status": "resolved"}
+        deadline = monotonic() + 5
+        with patch("engine.fork_server.run", side_effect=TimeoutExpired("origin", 5)) as worker:
+            self.assertEqual(refine_intrinsic_boundary({}, ["x"], record, checked, deadline, False),
+                             (record, checked))
+        self.assertGreater(worker.call_args.kwargs["timeout"], 0)
+        self.assertLessEqual(worker.call_args.kwargs["timeout"], 5)
+
     def test_equivalent_presentations_on_the_locus_keep_the_original_representative(self):
         x, y, z = symbols("x y z")
         frame = Frame((x, y, z), (x, y), (z-x,))

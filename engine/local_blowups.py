@@ -712,8 +712,10 @@ class _Order(_Canonical):
     the invariant (native/centre_maximum.cpp with order_only), which needs no
     hypersurface of maximal contact. The locus is taken in the whole chart,
     so a curve or surface of singular points that leaves the fibre is blown
-    up whole. When the locus is singular in some chart, its singular locus
-    is the centre in every chart. Blowing up a smooth centre inside the
+    up whole. A singular union may have smooth parts distinguished by an
+    exceptional divisor. Otherwise descend to its singular locus. A smooth
+    centre meeting the boundary improperly is treated first along that
+    defect. Blowing up a smooth centre inside the
     locus of maximal order does not raise the order. The rule depends only
     on the geometry, so the charts glue; it need not terminate and is given
     few stages. Once X is smooth at the points, the complete rule continues,
@@ -724,8 +726,9 @@ class _Order(_Canonical):
     # each time: the rule is not converging, and the next rule gets the time.
     RUNAWAY = 6
 
-    def __init__(self, components):
+    def __init__(self, components, *, boundary_centres=True):
         super().__init__(components)
+        self.boundary_centres = boundary_centres
         self.order_phase = True
         self._trend = (None, 0, 0)  # (order, charts selected, stages in a row)
 
@@ -765,23 +768,68 @@ class _Order(_Canonical):
                     centres[i] = part if centres[i] is None else _union(chart.variables, centres[i], part)
         return centres
 
+    @staticmethod
+    def _singular_centres(current, centres):
+        singular = []
+        for chart, centre in zip(current, centres):
+            if centre is None:
+                singular.append(None)
+                continue
+            ideal = (*chart.ambient, *centre)
+            size = _dimension(chart.variables, ideal)
+            if size < 0:
+                raise GiveUp("A centre is not smooth.")
+            proof = smooth_locus(chart.variables, ideal, size)
+            smooth = proof["smooth"] or chart.removed and not _present(
+                chart.variables, (*chart.ambient, *proof["bad_ideal"]), chart.removed)
+            singular.append(None if smooth else proof["bad_ideal"])
+        return singular
+
+    @staticmethod
+    def _boundary_defects(current, centres):
+        from .kernel import exprs
+        from .kernel_json import kernel_json
+        defects = {}
+        for i, (chart, centre) in enumerate(zip(current, centres)):
+            if centre is None:
+                continue
+            variables = chart.variables
+            divisors = [ideal for label, _, _, ideal in chart.components if not _is_strict(label)]
+            if not divisors:
+                continue
+            ideal = (*chart.ambient, *centre)
+            rows = kernel_json("atlas_graph_wide", "centre_boundary_defect", width=len(variables),
+                               dimension=str(_dimension(variables, ideal)), ideal=centre_rows(variables, ideal),
+                               divisors=[centre_rows(variables, divisor) for divisor in divisors])
+            if rows is not None:
+                defect = exprs(variables, rows)
+                if _present(variables, (*defect, *chart.fibre, *chart.region), chart.removed):
+                    defects[i] = defect
+        return defects
+
     def _smooth_centres(self, current, centres):
-        for _ in range(4):
-            singular = []
-            for chart, centre in zip(current, centres):
-                if centre is None:
-                    singular.append(None)
-                    continue
-                size = _dimension(chart.variables, (*chart.ambient, *centre))
-                proof = smooth_locus(chart.variables, (*chart.ambient, *centre), size) if size >= 0 else None
-                if proof is None:
-                    raise GiveUp("A centre is not smooth.")
-                # Off the centres removed from the chart, as `_run` checks it.
-                smooth = proof["smooth"] or chart.removed and not _present(
-                    chart.variables, (*chart.ambient, *proof["bad_ideal"]), chart.removed)
-                singular.append(None if smooth else proof["bad_ideal"])
+        from .native_library import Unavailable
+        used_boundary = False
+        for depth in range(4):
+            singular = self._singular_centres(current, centres)
+            if self.boundary_centres and depth == 0 and any(bad is not None for bad in singular):
+                try:
+                    parts = _apart(current, centres)
+                    parts_singular = self._singular_centres(current, parts)
+                except (GiveUp, Unavailable):
+                    # Distinguishing a branch is optional. A divisor need
+                    # only be locally principal on this chart.
+                    pass
+                else:
+                    if all(bad is None for bad in parts_singular):
+                        centres, singular, used_boundary = parts, parts_singular, True
             if all(bad is None for bad in singular):
-                return centres
+                defects = self._boundary_defects(current, centres) if self.boundary_centres else {}
+                if not defects:
+                    return centres, used_boundary
+                centres = self._owned_parts(current, defects)
+                used_boundary = True
+                continue
             # A chart where the locus is smooth contains none of its singular points.
             following = []
             for chart, centre, bad in zip(current, centres, singular):
@@ -811,8 +859,9 @@ class _Order(_Canonical):
                 if self._trend[2] >= self.RUNAWAY:
                     raise GiveUp("The maximal order rule selects more charts at the same order at every stage.")
                 centres = self._owned_parts(current, {i: found[i][2] for i in selected})
-                return self._smooth_centres(current, centres), {
-                    "invariant": [str(entry) for entry in value], "value": value, "rule": "maximal order"}
+                centres, used_boundary = self._smooth_centres(current, centres)
+                return centres, {"invariant": [str(entry) for entry in value], "value": value,
+                                 "rule": "maximal order with boundary" if used_boundary else "maximal order"}
             # X is smooth at every point where normal crossings fail.
             self.order_phase = False
             self._loci = {}

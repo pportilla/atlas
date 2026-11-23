@@ -185,6 +185,24 @@ class TorusChartCertification(unittest.TestCase):
         _, replay = fan_outputs(record, parse(f, names), intrinsic=True, integrals=False)
         self.assertEqual(replay["dual_complex"], record["dual_complex"])
 
+    def test_nonprimitive_simplex_on_a_relative_threefold_fan(self):
+        from engine.resolution_complex import dual_complex
+        names = list("xyzt")
+        equation = "x^2+y^2+z^3+t^2*z^2"
+        record = resolve(dict(variables=names, polynomial=equation, mode="intrinsic", search="quick"))
+        complex_ = record["dual_complex"]
+        self.assertEqual(complex_["status"], "complete")
+        # E1 has face x²+y²+z²t², irreducible over the whole torus.
+        # E3 and E5 have face x²+y², with the same two geometric sheets.
+        self.assertEqual({v["id"] for v in complex_["vertices"]},
+                         {"E1", "E2", "E3.1", "E3.2", "E5.1", "E5.2"})
+        self.assertEqual(Counter(c["dimension"] for c in complex_["cells"]), {1: 7, 2: 2})
+        self.assertEqual({tuple(c["vertices"]) for c in complex_["cells"] if c["dimension"] == 2},
+                         {("E2", "E3.1", "E5.1"), ("E2", "E3.2", "E5.2")})
+        self.assertEqual(dual_complex(record), complex_)
+        del record["atlas"]
+        self.assertEqual(dual_complex(record), complex_)
+
     def test_fan_uses_original_equation_across_differently_named_charts(self):
         from engine.monomial_atlas import fan_outputs
         from engine.strata import InvalidChart

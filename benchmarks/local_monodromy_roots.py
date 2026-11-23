@@ -18,7 +18,7 @@ from engine.polynomial import parse
 
 # Expected first local b-root in each residue class; None certifies absence.
 # Positive weights let Singular's global bfct also compute the origin's
-# entire local b-function. The last input has a distant repeated component.
+# entire local b-function.
 CASES = [
     ("tangent-conics", "xyz", "(x*z-y^2)*(x*z+y*z-y^2)", {"-2/3": "-2/3"}, (1, 1, 1)),
     ("e7-cylinder", "xyzw", "y*x^2+y^2*(y^2+z^3)", {"-3/4": "-3/4"}, (9, 6, 4, 1)),
@@ -27,6 +27,8 @@ CASES = [
     ("cusp", "xy", "x^2+y^3", {"1/6": "-5/6", "-1/6": "-7/6", "-1/2": None}, (3, 2)),
     ("five-square-suspension", "xyzvw", "x^2+y^2+z^2+v^2+w^2", {"-1/2": "-5/2"}, (1,)*5),
     ("distant-double-line", "xy", "(x^2+y^3)*(x-1)^2", {"-1/2": None}, None),
+    ("transverse-line", "xyz", "z^2-x*y^4", {"-3/4": "-3/4"}, (2, 1, 3)),
+    ("transverse-tilted-line", "xyz", "z^2-x*(x+y)^4", {"-3/4": "-3/4"}, (2, 2, 5)),
 ]
 
 

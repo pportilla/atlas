@@ -67,6 +67,17 @@ class ExhaustiveFallback(unittest.TestCase):
         self.assertEqual(newton.call_args.kwargs, {"compute": "cpu", "seconds": 1200, "defer_outputs": True,
                                                    "verified": [], "integrals": False, "construct": False})
 
+    def test_newton_worker_verifies_geometry_before_reporting_a_proposal(self):
+        payload = dict(terms=[[[2, 0, 0], "1"]], variables=list("xyz"), mode="intrinsic",
+                       compute="cpu", replay={"compute": "cpu"})
+        record = {"status": "resolved"}
+        bundle = [], {"dual_complex": {"status": "complete"}}
+        with patch("engine.newton_backend.resolve_newton", return_value=record), \
+             patch("engine.strata.proposal_chart_outputs", return_value=bundle) as verify:
+            reply = exhaustive._run("newton", payload)
+        self.assertEqual(reply["certified"], list(bundle))
+        verify.assert_called_once_with(record, parse("x^2", list("xyz")), integrals=False)
+
     def test_canonical_head_start_covers_only_certified_newton_failures(self):
         from engine.newton_backend import coordinate_choices, resolve_newton
         from engine.newton_faces import face_search
@@ -123,9 +134,14 @@ elif method=='certificates':
 else:
     raise AssertionError('proven Newton failure should never start')
 record = None if outcome=='decline' and method=='origin' else {'engine':method}
-print(json.dumps({'record':record, 'replay':{'winner':method}}))
+bundle = [[], {'dual_complex': {'status': 'complete'}}]
+if method == 'origin' and outcome in ('partial', 'zeta_only_partial'):
+    bundle[1]['dual_complex']['status'] = 'partial'
+if method == 'origin' and outcome == 'missing':
+    bundle = None
+print(json.dumps({'record':record, 'certified':bundle, 'replay':{'winner':method}}))
 """
-        for outcome in ("win","decline","error","slow","failed_start","nonreduced"):
+        for outcome in ("win","decline","missing","partial","zeta_only_partial","error","slow","failed_start","nonreduced"):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as path:
                 processes={}; elapsed={}
                 def launch(argv, **kwargs):
@@ -151,12 +167,14 @@ print(json.dumps({'record':record, 'replay':{'winner':method}}))
                             exhaustive.search({(2,0,0):1},list("xyz"),"embedded",compute="cpu")
                         replay.merge.assert_not_called()
                     else:
-                        expected = "origin" if outcome=="win" else "certificates"
-                        result=exhaustive.search({(2,0,0):1},list("xyz"),"embedded",compute="cpu")
+                        expected = "origin" if outcome in ("win", "zeta_only_partial") else "certificates"
+                        result=exhaustive.search({(2,0,0):1},list("xyz"),"embedded",compute="cpu",
+                                                 zetas_only=outcome=="zeta_only_partial")
                         self.assertEqual(result,{"engine":expected})
                         replay.merge.assert_called_once_with({"winner":expected})
                 self.assertTrue(all(p.poll() is not None for p in processes.values()))
-                self.assertEqual(set(elapsed), {"origin"} if outcome in ("win","nonreduced") else {"origin","certificates"})
+                self.assertEqual(set(elapsed), {"origin"} if outcome in ("win","zeta_only_partial","nonreduced")
+                                 else {"origin","certificates"})
                 if "certificates" in elapsed:
                     wait=elapsed["certificates"]-elapsed["origin"]
                     self.assertLess(wait,3)
@@ -196,7 +214,8 @@ elif method == winner:
 else:
     time.sleep(6)
     sys.exit(4)
-print(result_json({'record': {'engine': method, 'exponent': exponent}, 'replay': {'winner': method}}))
+print(result_json({'record': {'engine': method, 'exponent': exponent},
+                   'certified': [[], {'dual_complex': {'status':'complete'}}], 'replay': {'winner': method}}))
 """
         for winner in ("fast", "origin", "newton", "certificates"):
             with self.subTest(winner=winner), tempfile.TemporaryDirectory() as root:
@@ -245,7 +264,7 @@ if method == 'newton':
     native.wait()
 else:
     if os.read(int(let_win), 1):
-        print(json.dumps({'record': {'engine': method}}))
+        print(json.dumps({'record': {'engine': method}, 'certified': [[], {'dual_complex': {'status':'complete'}}]}))
 """
         coordinator_script = """
 from engine import exhaustive_resolution as e
@@ -308,7 +327,8 @@ args = json.load(sys.stdin)
 (Path(root) / method).write_text("started")
 delay, wins = json.loads(plan)[method]
 time.sleep(delay)
-print(json.dumps({'record': {'engine': method} if wins else None}))
+print(json.dumps({'record': {'engine': method} if wins else None,
+                  'certified': [[], {'dual_complex': {'status':'complete'}}]}))
 """
         # Each lane's (delay in seconds, whether it finds a record).
         plans = {
@@ -382,7 +402,8 @@ def scripted(method, payload):
         raise RuntimeError("scripted failure")
     if outcome == "nonreduced":
         return {"nonreduced": "repeated factor"}
-    return {"record": {"engine": method} if outcome == "record" else None, "replay": {}}
+    return {"record": {"engine": method} if outcome == "record" else None,
+            "certified": [[], {"dual_complex": {"status":"complete"}}], "replay": {}}
 
 e.fork_server.popen = interpreter
 e._run = scripted
@@ -503,7 +524,7 @@ def scripted(method, payload):
         time.sleep(30)
     while not Path(go).exists():
         time.sleep(.01)
-    return {"record": {"engine": method}, "replay": {}}
+    return {"record": {"engine": method}, "certified": [[], {"dual_complex": {"status":"complete"}}], "replay": {}}
 e._run = scripted
 e._canonical_head_start = lambda *args: False
 e.NEWTON_GRACE_SECONDS = .05

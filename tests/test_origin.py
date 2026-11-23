@@ -25,17 +25,34 @@ def default(text):
 
 class BlowupsFromTheOrigin(unittest.TestCase):
     def test_shared_curve_ends_the_repeated_surface_point_choice(self):
+        from engine.resolution_zetas import replay_zetas
         record = resolve(dict(polynomial="x^5+(y^2-z^3)^2", variables=NAMES, mode="embedded",
                               search="quick", compute="cpu", monodromy=True))
         self.assertEqual(record["dual_complex"]["status"], "complete")
-        shared = [s for s in record["steps"] if s["rule"] == "shared boundary curve"]
-        self.assertEqual(len(shared), 1)
-        self.assertEqual(shared[0]["center"], "curve")
-        self.assertEqual(set(shared[0]["components"]), {"strict", "B1", "B11"})
-        self.assertEqual(len(record["steps"]), 34)
+        steps = record["steps"]
+        shared_indices = [i for i, s in enumerate(steps) if s["rule"] == "shared boundary curve"]
+        self.assertEqual(len(shared_indices), 1)
+        i = shared_indices[0]
+        self.assertEqual(steps[i]["center"], "curve")
+        components = set(steps[i]["components"])
+        self.assertIn("strict", components)
+        self.assertEqual(len(components - {"strict"}), 2)
+        self.assertLessEqual(components - {"strict"}, {s["id"] for s in steps[:i]})
+        # Once the common curve is blown up, no later point centre repeats
+        # the same intersection. Earlier choices can change the stage count.
+        self.assertFalse(any(s["center"] == "points" and components <= set(s["components"])
+                             for s in steps[i + 1:]))
         # The squared cusp has two disjoint cusp Milnor fibres (chi=-1 each).
         # Joining with the five-point x^5 fibre gives reduced Euler number 12.
         self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], 13)
+        # The older invariant-centre resolution gives these same functions.
+        replay = replay_zetas(dict(record=record, zetas=["monodromy", "topological"], search="quick"))
+        for key, expected in (
+            ("monodromy_zeta", "(1-T^12)*(1-T^20)*(1-T^30)/((1-T^4)*(1-T^5)*(1-T^6)*(1-T^60))"),
+            ("topological_zeta", "7*(40*s^2 + 78*s + 37)/((s + 1)*(10*s + 7)*(60*s + 37))"),
+        ):
+            self.assertEqual(record[key]["expression"], expected)
+            self.assertEqual(replay[key]["expression"], expected)
 
     def test_same_zeta_functions_as_the_newton_resolutions(self):
         # Two resolutions of the same germ, by different centres.

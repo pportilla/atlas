@@ -229,7 +229,7 @@ def _lane(method, request, reply, coordinator, ready, reset, streams):
         os._exit(code & 0xff)
 
 
-def search(poly, variables, mode, *, compute=None, integrals=False, verified=None):
+def search(poly, variables, mode, *, compute=None, integrals=False, verified=None, zetas_only=False):
     """Give the first eligible method a short head start, then race the remaining workers.
 
     Each method has its own process group. Its inherited pipe closes if
@@ -314,12 +314,16 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
                 raise NonReducedError(reply["nonreduced"])
             if reply.get("record") is not None:
                 bundle = reply.get("certified")
-                if integrals and mode == "embedded" and not (isinstance(bundle, list) and len(bundle) == 2
-                        and isinstance(bundle[1], dict) and "strata" in bundle[1] and "numerical_data" in bundle[1]):
+                if not (isinstance(bundle, list) and len(bundle) == 2 and isinstance(bundle[1], dict)):
+                    return None
+                output = bundle[1]
+                if not zetas_only and output.get("dual_complex", {}).get("status") != "complete":
+                    return None
+                if integrals and mode == "embedded" and not ("strata" in output and "numerical_data" in output):
                     return None
                 if scope is not None:
                     scope.merge(reply.get("replay"))
-                if verified is not None and isinstance(bundle, list) and len(bundle) == 2:
+                if verified is not None:
                     verified.append((reply["record"], _restored(bundle)))
                 return reply["record"]
             if "error" in reply:
@@ -410,10 +414,15 @@ def _run(method, payload):
             elif method == "origin":
                 from .origin_backend import _resolve, certified_outputs
                 report("Searching for smooth blow-up centres over the origin")
-                record = _resolve(terms, payload["variables"], payload["mode"], None, defer_outputs=True)
+                full_boundary = payload.get("full_boundary", False)
+                record = _resolve(terms, payload["variables"], payload["mode"], payload.get("seconds"),
+                                  defer_outputs=True, full_boundary=full_boundary)
                 if record is not None:
                     certified = certified_outputs(record, payload["variables"], payload["mode"],
                                                   payload.get("integrals", False))
+                    if payload["mode"] == "intrinsic" and not full_boundary:
+                        record, certified = refine_intrinsic_boundary(terms, payload["variables"], record, certified,
+                                                                      None, payload.get("integrals", False))
             elif method == "certificates":
                 from .general_resolution import search as certificates
                 report("Searching for a certified blow-up centre")
@@ -427,16 +436,54 @@ def _run(method, payload):
                 raise ValueError("Unknown resolution method.")
         except NonReducedError as error:
             return {"nonreduced": str(error)}
-        if need_strata and record is not None and method != "certificates":
-            from .general_resolution import integral_certificate
+        if record is not None and method != "certificates" and (need_strata or certified is None):
             names = payload["variables"]
-            record.update(variables=names, mode="embedded", polynomial=format_poly(terms,names), origin=[0]*len(names))
-            certified = integral_certificate(record, terms, certified)
-            if certified is None:
-                record = None
+            record.update(variables=names, mode=payload["mode"], polynomial=format_poly(terms,names), origin=[0]*len(names))
+            if need_strata:
+                from .general_resolution import integral_certificate
+                certified = integral_certificate(record, terms, certified)
+            else:
+                from .strata import proposal_chart_outputs
+                certified = proposal_chart_outputs(record, terms, integrals=payload.get("integrals", False))
         if record is not None and certified is not None:
             return {"record":record, "certified":list(certified), "replay":replay.report()}
-        return {"record": record, "replay": replay.report()}
+        return {"record": None, "replay": replay.report()}
+
+
+def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals):
+    """Keep the smooth model unless continuing to total normal crossings certifies its boundary."""
+    from .centres import GiveUp
+    if checked[1]["dual_complex"]["status"] == "complete":
+        return record, checked
+    scope = current_replay_scope()
+    remaining = None if deadline is None else deadline - time.monotonic()
+    if remaining is not None and remaining <= 0:
+        return record, checked
+    payload = dict(terms=[[list(e), rational_text(c)] for e, c in poly.items()], variables=names, mode="intrinsic",
+                   full_boundary=True, seconds=remaining, integrals=integrals,
+                   replay=scope.settings() if scope else {"compute": "cpu"})
+    if remaining is None:
+        try:
+            reply = _run("origin", payload)
+        except (GiveUp, LimitError):
+            return record, checked
+    else:
+        # The existing canonical worker also verifies its geometry inside
+        # the remaining time. Keep the earlier smooth model if it times out.
+        try:
+            worker = fork_server.run([sys.executable, "-m", "engine.exhaustive_resolution", "origin"],
+                                     input=result_json(payload), text=True, capture_output=True, cwd=_ROOT,
+                                     timeout=remaining)
+        except subprocess.TimeoutExpired:
+            return record, checked
+        if worker.returncode:
+            return record, checked
+        reply = json.loads(worker.stdout, parse_int=integer_from_decimal)
+    if scope:
+        scope.merge(reply.get("replay"))
+    if reply.get("certified") and reply["certified"][1]["dual_complex"]["status"] == "complete":
+        return reply["record"], tuple(reply["certified"])
+    return record, checked
 
 
 def _watch_coordinator(read_fd):

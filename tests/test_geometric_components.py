@@ -202,6 +202,18 @@ class ComponentTests(unittest.TestCase):
         norm = (x+y)**2 + z**2
         self.assertIsNone(geometric_components(self.v, (norm,), 2))
 
+    def test_simplex_support_and_its_affine_hypotheses(self):
+        from engine.native_library import affine_request
+        cases = (("x^2+y^2+z^2*t^2", "1"),
+                 ("(2^80+3)*x^18446744073709551618+y^4+z^2*t^2", "1"),
+                 ("(1+x+y)^2", "0"),
+                 ("(x+y)^2+z^2*t^2", "0"),
+                 ("x^2+y^2", "0"),
+                 ("t*(x^2+y^2+z^2*t^2)", "0"))
+        for equation, expected in cases:
+            with self.subTest(equation=equation):
+                self.assertEqual(affine_request(["primitive_support", "x y z t", equation]), [expected])
+
     def test_sparse_rational_factor_metadata(self):
         from engine.affine_kernel import _sparse_expression, rational_factor_rows
         x, y, z = self.v

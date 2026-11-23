@@ -50,6 +50,7 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     time is over: a single step of it can take long, and the time is only
     looked at between steps."""
     from .polynomial import rational_text
+    deadline = None if seconds is None else monotonic() + seconds
     request = json.dumps({"terms": [[list(exponents), rational_text(c)] for exponents, c in poly.items()],
                           "variables": list(variables), "mode": mode, "seconds": seconds,
                           "defer_outputs": defer_outputs, "tangent_only": tangent_only,
@@ -64,12 +65,21 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     if done.returncode != 0 or not done.stdout.strip():
         return None
     record = json.loads(done.stdout)
-    if record is not None and verified is not None:
-        verified.append((record, certified_outputs(record, variables, mode, integrals)))
+    if record is not None and (verified is not None or mode == "intrinsic" and not defer_outputs):
+        checked = (certified_outputs(record, variables, mode, integrals) if verified is not None else
+                   (record["atlas"], {"dual_complex": record["dual_complex"]}))
+        if mode == "intrinsic":
+            from .exhaustive_resolution import refine_intrinsic_boundary
+            record, checked = refine_intrinsic_boundary(poly, variables, record, checked, deadline, integrals)
+            if not defer_outputs:
+                record["dual_complex"] = checked[1]["dual_complex"]
+        if verified is not None:
+            verified.append((record, checked))
     return record
 
 
-def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False):
+def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False,
+             full_boundary=False):
     """The computation of `resolve_origin`, in this process."""
     names = list(variables)
     from .local_blowups import GiveUp, acampo_over
@@ -101,7 +111,8 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
                                                     dimension=len(symbols), rules=rules,
                                                     deadline=None if seconds is None else monotonic() + seconds,
                                                     budget=None if seconds is None else 400,
-                                                    count_strata=not (defer_outputs or intrinsic), intrinsic=intrinsic)
+                                                    count_strata=not (defer_outputs or intrinsic),
+                                                    intrinsic=intrinsic and not full_boundary)
     except GiveUp:
         return None
     record = _record(names, charts, centres, data, strata, defer_outputs=defer_outputs or intrinsic,

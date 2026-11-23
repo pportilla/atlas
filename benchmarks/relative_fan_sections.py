@@ -21,7 +21,8 @@ PINCH = "x^2-(y^2+z^3)*(y-z^2)^2"
 POLYNOMIAL_GRAPH = "x^2-(y^2+z^3)*(y-z^2-z^3)^2"
 CASES = ("x^4+y^5+z*x^2*y^2", "z^4+x^2*y^2*(x^3+y^4)", "y*(x^2+y^3+y*z^3)", PINCH,
          "(x-y*z)^2+y^2*(y^3+z^5)")
-THREEFOLDS = ("y*(x^2+y^3+y*z^3)", "y*(x^2+y^3+y*z^3+y*t^3)", "y*(x^2+y^3+y*z^3+y*z*t)")
+THREEFOLDS = ("y*(x^2+y^3+y*z^3)", "y*(x^2+y^3+y*z^3+y*t^3)", "y*(x^2+y^3+y*z^3+y*z*t)",
+              "x^2+y^2+z^3+t^2*z^2", "x^2+y^2+z^6+t^2*z^4")
 
 
 def ramification_timings(equation, trials):

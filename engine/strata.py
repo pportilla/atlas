@@ -60,6 +60,32 @@ def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False,
     return fan_outputs(record, polynomial, **options)
 
 
+def proposal_chart_outputs(record, polynomial, *, integrals):
+    """Verify the owned chart bundle of an ordinary solver proposal."""
+    from .local_blowups import GiveUp
+    intrinsic = record["mode"] == "intrinsic"
+    certified = rational_chart_outputs(record, polynomial, intrinsic=intrinsic, integrals=integrals,
+                                       replay_canonical=True)
+    if certified is not None:
+        return certified
+    if record.get("engine") == "canonical-blowups":
+        raise GiveUp("The proposal lacks the canonical centre rule needed to reconstruct its chart cover.")
+    from . import atlas
+    charts, reason = atlas.verified_modification_charts(record, polynomial)
+    if charts is None:
+        raise GiveUp(reason)
+    factor_fibre = any(step.get("rule") == "repeated tangent" for step in record.get("steps", ()))
+    width = len(record["variables"])
+    try:
+        output = atlas.outputs(charts, width, intrinsic=intrinsic, integrals=integrals, factor_fibre=factor_fibre)
+    except GiveUp:
+        if not intrinsic or not integrals:
+            raise
+        # A smooth strict transform can need a further embedded resolution.
+        output = atlas.outputs(charts, width, intrinsic=True, integrals=False, factor_fibre=factor_fibre)
+    return atlas.to_json(charts), output
+
+
 def resolution_strata(record, polynomial=None, *, computed=None, strict=False):
     """Read embedded strata; strict replay distinguishes invalid proof from missing evidence."""
     if not isinstance(record, dict) or record.get("status") != "resolved":

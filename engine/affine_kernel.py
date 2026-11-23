@@ -349,12 +349,13 @@ def archived_factor_order(parts, dimension):
 
 @lru_cache(maxsize=512)
 def rational_factor_rows(variables, expression):
-    """Scalar and (sparse row, multiplicity, primitive-vertex certificate) factors over Q.
+    """Scalar and (sparse row, multiplicity, geometric irreducibility certificate) factors over Q.
 
     The certificate applies to rationally irreducible factors. The geometric
     factors are Galois conjugate, so every vertex of the Newton polytope of
     their product is divisible by their number. A gcd of one proves that
-    there is just one. The order of the rows is the archived QQ factor order.
+    there is just one. Support on affinely independent monomials of dimension
+    at least two also certifies irreducibility. The row order is the archived QQ factor order.
     """
     def native():
         ring = _ring(variables)
@@ -363,8 +364,7 @@ def rational_factor_rows(variables, expression):
         parts = []
         for info, row in zip(lines[1::2], lines[2::2]):
             fields = tuple(map(integer_from_decimal, info.split()))
-            primitive = bool(fields[1])
-            parts.append((row, fields[0], primitive))
+            parts.append((row, fields[0], bool(fields[1])))
         if len(parts) > 1:
             order = archived_factor_order(((dict(_sparse_terms(row)), m) for row, m, _ in parts), len(variables))
             parts = [parts[i] for i in order]

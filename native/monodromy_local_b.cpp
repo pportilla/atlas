@@ -2,8 +2,10 @@
 #include "monodromy_local_b.hpp"
 #include "monodromy_weyl.hpp"
 #include "local_monomial.hpp"
+#include "primary_decomposition.hpp"
 #include <algorithm>
 #include <optional>
+#include <set>
 
 namespace atlas::monodromy {
 namespace {
@@ -29,6 +31,55 @@ bool monomial_root(const Powers& powers, const Q& alpha) {
                return e > 0 && mpz_divisible_p(e.get_mpz_t(), alpha.get_den_mpz_t());
            });
 }
+
+using PlanePowers = std::set<std::pair<Z, Z>>;
+
+// Write f = F + w^a U for each coordinate w, with F independent of w.
+// If g^b exactly divides F and g does not divide U|_{w=0}, then on a
+// dense open of w=g=0 the two units can be absorbed into w and g.
+// The local b-function there divides the one at the origin when g(0)=0.
+PlanePowers transverse_plane_powers(const Terms& f, size_t width) {
+    PlanePowers models;
+    if (width < 2 || width > 8 || f.size() > 256) return models;
+    for (size_t w = 0; w < width; ++w) {
+        Z a = 0;
+        for (const auto& [e, c] : f)
+            if (e[w] > 0 && (a == 0 || e[w] < a)) a = e[w];
+        if (a < 2) continue;
+        Terms slice, leading;
+        for (const auto& [e, c] : f) {
+            if (e[w] == 0) slice.emplace(e, c);
+            if (e[w] == a) {
+                Powers base = e;
+                base[w] = 0;
+                leading.emplace(std::move(base), c);
+            }
+        }
+        if (slice.empty()) continue;
+        try {
+            primary::CertificateBudget budget(16000);
+            for (const auto& [g, b] : primary::factors(slice, width)) {
+                if (b >= 2 && !g.count(Powers(width)) && !primary::member_lex(leading, {g}))
+                    models.emplace(a, b);
+            }
+        } catch (const std::runtime_error&) {
+            // A declined factorization leaves the Weyl test available.
+        }
+    }
+    return models;
+}
+
+bool transverse_plane_root(const PlanePowers& models, const Q& alpha) {
+    // The reduced b-roots of u^a+v^b are -(i/a+j/b), 0<i<a, 0<j<b.
+    for (const auto& [a, b] : models) {
+        const Q scaled = -alpha * b;
+        for (Z j = 1; j < b; ++j) {
+            const Q i = (scaled - j) * a / b;
+            if (i.get_den() == 1 && i > 0 && i < a) return true;
+        }
+    }
+    return false;
+}
 }  // namespace
 
 Json::Value local_eigenvalues(const sparse_json::Terms& terms, std::size_t width,
@@ -42,6 +93,7 @@ Json::Value local_eigenvalues(const sparse_json::Terms& terms, std::size_t width
     }
     if (f.empty()) throw std::invalid_argument("Monodromy requires a nonzero polynomial.");
     const auto model = coordinate_model(f);
+    const auto transverse = model ? PlanePowers{} : transverse_plane_powers(f, width);
     std::optional<Annihilator> annihilator;
     std::map<Q, Json::Value> by_residue;
     Json::Value result(Json::objectValue);
@@ -65,8 +117,12 @@ Json::Value local_eigenvalues(const sparse_json::Terms& terms, std::size_t width
             Q alpha = residue - 1;
             for (std::size_t shift = 0; shift < width; ++shift, --alpha) {
                 decision["tested_roots"].append(alpha.get_str());
-                if (!model && !annihilator) annihilator.emplace(f, width);
-                if (model ? monomial_root(*model, alpha) : annihilator->local_root(alpha)) {
+                bool present = model ? monomial_root(*model, alpha) : transverse_plane_root(transverse, alpha);
+                if (!model && !present) {
+                    if (!annihilator) annihilator.emplace(f, width);
+                    present = annihilator->local_root(alpha);
+                }
+                if (present) {
                     decision["root"] = alpha.get_str();
                     break;
                 }

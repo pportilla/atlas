@@ -27,7 +27,7 @@ if 'ATLAS_PROGRESS_FILE' in os.environ:
 if d['polynomial']=='x^2': signal.pause()
 if d['polynomial']=='x^3' and d['search']=='quick':
     print(json.dumps([200,{'status':'inconclusive'}])); sys.exit(0)
-print(json.dumps([200,{'status':'resolved','search':d['search']}]))
+print(json.dumps([200,{'status':'resolved','search':d['search'],'dual_complex':{'status':'complete'}}]))
 """
         self.server.search_jobs = SearchJobs(command=[sys.executable,"-c",command],retention=60)
         self.thread = threading.Thread(target=self.server.serve_forever,kwargs={"poll_interval":0.015},daemon=True)
@@ -60,7 +60,7 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         code, job=self.post("x+y")
         self.assertEqual(code,202)
         done=self.wait(job["id"])
-        self.assertEqual(done["result"],{"status":"resolved","search":"exhaustive"})
+        self.assertEqual(done["result"],{"status":"resolved","search":"exhaustive","dual_complex":{"status":"complete"}})
         _,current=self.request("GET","/api/searches/current")
         self.assertEqual(current["job"]["id"],job["id"])
 
@@ -249,11 +249,15 @@ print(json.dumps([200,{'status':'resolved','search':d['search']}]))
         self.assertEqual(code,202)
         self.assertEqual(self.wait(job["id"])["result"]["search"],"exhaustive")
 
-    def test_default_retries_a_limit_during_verification_and_an_incomplete_zeta(self):
+    def test_default_retries_limits_and_incomplete_requested_outputs(self):
         body = {"variables":["x","y"], "polynomial":"x+y", "monodromy":True}
         for reply in ((422, {"code":"computation_limit", "error":"Euler budget"}),
                       (200, {"status":"resolved", "monodromy_zeta":{"status":"computed"},
-                             "topological_zeta":{"status":"unavailable"}})):
+                             "topological_zeta":{"status":"unavailable"}}),
+                      (200, {"status":"resolved", "monodromy_zeta":{"status":"computed"},
+                             "topological_zeta":{"status":"computed"}, "dual_complex":{"status":"partial"}}),
+                      (200, {"status":"resolved", "monodromy_zeta":{"status":"computed"},
+                             "topological_zeta":{"status":"computed"}})):
             with self.subTest(reply=reply), patch("engine.app.run_job", return_value=reply):
                 code, job = self.request("POST", "/api/resolve", body)
                 self.assertEqual(code, 202)

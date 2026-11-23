@@ -85,6 +85,31 @@ class ResolutionCompletionTests(unittest.TestCase):
         replay = replay_zetas(dict(record=record, zetas=["monodromy", "topological"]))
         self.assertEqual(replay["topological_zeta"]["expression"], record["topological_zeta"]["expression"])
 
+    def test_partial_chart_incidence_retries_only_for_requested_geometry(self):
+        from engine.general_resolution import search
+        from engine.resolve_cli import needs_exhaustive_search
+        from engine.strata import annotate_complex
+
+        request = dict(variables=list("xyz"), polynomial="(1+z)*(x^2-y^2*z)", mode="embedded",
+                       search="exhaustive", monodromy=True)
+        partial = dict(status="partial", vertices=[], cells=[], reason="Undetermined geometric components.")
+        for policy in ({}, {"zetas_only": True}, {"search": "quick"}):
+            with self.subTest(policy=policy):
+                options = {**request, **policy}
+                def attach(old, found):
+                    if checked.call_count == 1:
+                        return partial
+                    return annotate_complex(old, found)
+                with patch("engine.strata.annotate_complex", side_effect=attach) as checked, \
+                     patch("engine.general_resolution.search", wraps=search) as complete:
+                    result = resolve(options)
+                self.assertEqual(result["monodromy_check"]["status"], "verified")
+                self.assertEqual(result["dual_complex"]["status"], "partial" if policy else "complete")
+                if not policy:
+                    self.assertEqual(result["engine"], "verified-ideal-blowup")
+                    self.assertTrue(complete.call_args.kwargs["exhaustive"])
+                self.assertEqual(needs_exhaustive_search(options, 200, result), policy == {"search": "quick"})
+
     def test_intrinsic_geometry_and_its_companion_survive_separate_replay(self):
         request = dict(variables=["x", "y"], polynomial="y^2-x^3", mode="intrinsic")
         geometry = resolve(request)

@@ -259,3 +259,22 @@ class SessionMonodromyTests(unittest.TestCase):
         power = 2**65 + 1
         slope = f"-1/{power}"
         self.assertEqual(roots(f"{2**127}*x^{power}*(1+x)", "x", [slope])[slope]["root"], slope)
+
+        # The repeated factor has to pass through the origin, and the
+        # first nonzero coefficient in the other coordinate must be a unit
+        # at its generic point. Either mistake would certify a spurious root.
+        for f, value in (("z^2+(x-1)^4*y^2", "-3/4"), ("y*z^2+y^3", "-5/6")):
+            self.assertIsNone(roots(f, "xyz", [value])[value]["root"])
+        value = str(-Fraction(1, power) - Fraction(1, 4))
+        self.assertEqual(roots(f"{2**127}*z^{power}+x*y^4", "xyz", [value])[value]["root"], value)
+
+    def test_local_root_on_a_curved_branch_of_a_cover(self):
+        source = """
+            x, y, z = coordinates("x", "y", "z")
+            R = resolve(z^2-(y^2-x^3)*(y+x^2)^4, monodromy=True, search="quick")
+            C = monodromy_check(R)
+            print(C.status, C.local_bernstein_sato.by_pole["-3/4"].root)
+        """
+        completed = run_script(source)
+        self.assertEqual((completed.returncode, completed.stderr, completed.stdout.strip()),
+                         (0, "", "verified -3/4"))

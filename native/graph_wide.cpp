@@ -194,6 +194,43 @@ struct Chart {
         if (pivot.size()==1 && pivot.begin()->first==Powers(width)) return reduced(g);
         return strip(primary::saturate_lex(lift(g),pivot,width));
     }
+    // On a smooth centre C its irreducible components are disjoint. A
+    // boundary component E contributes a trace only on the components of C
+    // it does not contain. Their union is V(I_C : I_E^infinity). Thus this
+    // applies even when E contains just one component of a disconnected C.
+    J boundary_defect(const J& q, const mpz_class& dimension) const {
+        if (dimension==0 || q["divisors"].empty()) return {};
+        const auto centre=rows(q["ideal"]);
+        const auto source=primary::reduced(lift(centre),width,true);
+        const Basis unit{one};
+        std::vector<Basis> traces;
+        for (const auto& boundary:q["divisors"]) {
+            const auto divisor=rows(boundary);
+            Basis outside=unit;
+            for (const auto& g:divisor) {
+                if (primary::member_lex(g,source)) continue;
+                const auto part=primary::saturate_lex(source,g,width);
+                outside=primary::intersection_lex(outside,part,width);
+                if (outside==source) break;
+            }
+            if (outside!=unit) traces.push_back(join(strip(std::move(outside)),divisor));
+        }
+        if (traces.empty()) return {};
+        J subset(Json::arrayValue),report;
+        // The caller already tested C for smoothness. Each trace ideal
+        // includes the equations of its own components of C.
+        for (size_t i=0;i<traces.size();++i) {
+            subset.append(Json::UInt64(i));
+            descend(report,traces,traces[i],dimension-1,subset,i+1);
+            subset.clear();
+        }
+        Basis bad=unit;
+        for (const auto& index:report["bad"]) {
+            const auto defect=rows(report["strata"][index.asUInt()]["bad_ideal"]);
+            bad=primary::intersection_lex(bad,lift(defect),width);
+        }
+        return bad==unit ? J{} : encoded(strip(std::move(bad)));
+    }
     J standard_open(const J& q) const {
         auto ambient=rows(q["ambient"]);
         const auto& centre=q["centre"];
@@ -239,6 +276,7 @@ J run(const J& q) {
         return std::all_of(smaller.begin(),smaller.end(),[&](const auto& f){return primary::member_lex(f,radical);});
     }
     const auto dim=mpz_class(q["dimension"].asString(),10);
+    if (op=="centre_boundary_defect") return chart.boundary_defect(q,dim);
     if (op=="smooth") return chart.smooth(chart.rows(q["ideal"]),dim);
     if (op!="snc") throw std::invalid_argument("Unknown chart verification operation.");
     std::vector<Basis> divisors;

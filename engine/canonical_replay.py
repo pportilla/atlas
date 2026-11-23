@@ -18,9 +18,9 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
 
     def reconstruct(support):
         components = [("strict", 1, 1, (np.from_terms(axes, support),))]
-        if "maximal order" in rules and rules <= {"maximal order", "invariant", "surface", "complete",
-                                                  "shared boundary curve"}:
-            rule = _Order(components)
+        order_rules = {"maximal order", "maximal order with boundary"}
+        if rules & order_rules and rules <= order_rules | {"invariant", "surface", "complete", "shared boundary curve"}:
+            rule = _Order(components, boundary_centres="maximal order with boundary" in rules)
         elif rules <= {"invariant", "surface", "complete", "shared boundary curve"}:
             rule = _Canonical(components, shared_curves="shared boundary curve" in rules)
         elif rules == {"direct"}:

@@ -939,11 +939,11 @@ std::string affine_frame_locus(std::istream& in, Variables& chart, bool closure)
 
 // For an irreducible factor over Q with r geometric components, its Newton
 // polytope is r times their common Newton polytope (Galois conjugacy).
-// Thus r divides every vertex coordinate. Cyclic lex extrema are vertices;
-// affinely independent supports consist entirely of vertices.
-bool primitive_vertices(const Polynomial& f) {
+// Thus r divides every vertex coordinate. Cyclic lex extrema are vertices.
+bool irreducible_support(const Polynomial& f) {
     const auto n = f.ring.n;
     const auto count = fmpq_mpoly_length(f.p, f.ring.ctx);
+    if (!count) return false;
     std::vector<std::vector<Z>> terms(count, std::vector<Z>(n));
     std::vector<fmpz*> pointers(n);
     for (slong i = 0; i < count; ++i) {
@@ -964,13 +964,20 @@ bool primitive_vertices(const Polynomial& f) {
             return false;
         };
         auto extrema = std::minmax_element(terms.begin(), terms.end(), less);
+        if (count > 1 && !fmpz_is_zero(&(*extrema.first)[j].v)) return false;
         accumulate(*extrema.first);
         accumulate(*extrema.second);
-        if (fmpz_is_one(&divisor.v)) return true;
     }
-    if (count > n+1) return false;
-    for (const auto& term : terms) accumulate(term);
-    if (!fmpz_is_one(&divisor.v)) return false;
+    if (fmpz_is_one(&divisor.v)) return true;
+    if (count < 3 || count > n+1) return false;
+    // A simplex supported only at its r+1 vertices, r >= 2, is irreducible
+    // on the torus even when its edge differences span a nonprimitive
+    // lattice. Extend the differences to a rational basis and clear the
+    // denominators of its inverse. The resulting torus isogeny pulls the
+    // equation back, up to a unit, to c0 + sum ci*Xi^m. Its projective
+    // Fermat closure is smooth and irreducible (two hypersurfaces in P^r
+    // meet). The open section, times the spare torus, maps onto the given
+    // section. The coordinate minima above have excluded coordinate factors.
     IntegerMatrix differences(count-1, n);
     for (slong i = 1; i < count; ++i)
         for (int j = 0; j < n; ++j)
@@ -1012,7 +1019,7 @@ std::string factorization(const Polynomial& f, const std::string& operation) {
         char* multiplicity = fmpz_get_str(nullptr, 10, factors.value->exp + i);
         result += multiplicity;
         flint_free(multiplicity);
-        if (operation == "geometric_factors") result += primitive_vertices(factor) ? " 1" : " 0";
+        if (operation == "geometric_factors") result += irreducible_support(factor) ? " 1" : " 0";
         result += '\n';
         emit(result, factor);
     }
@@ -1610,7 +1617,7 @@ std::string affine(std::istream& in) {
         emit(result, squarefree_part(read(in, chart)));
         return result;
     }
-    if (operation == "primitive_support") return primitive_vertices(read(in, chart)) ? "1\n" : "0\n";
+    if (operation == "primitive_support") return irreducible_support(read(in, chart)) ? "1\n" : "0\n";
     if (operation == "support_profile") return support_profile(read(in, chart).p, chart.ctx);
     if (operation == "singular_subspaces") {
         const auto f = read(in, chart);

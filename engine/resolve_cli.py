@@ -19,8 +19,12 @@ def needs_exhaustive_search(request, status, result):
         return result.get("code") == "computation_limit"
     if status != 200:
         return False
-    if not request.get("zetas_only") and result.get("status") == "inconclusive":
-        return True
+    if not request.get("zetas_only"):
+        if result.get("status") == "inconclusive":
+            return True
+        complex_status = result.get("dual_complex", {}).get("status")
+        if result.get("engine") != "weighted" and complex_status != "complete":
+            return True
     if result.get("monodromy_check", {}).get("status") == "unresolved":
         return True
     return any(result.get(kind + "_zeta", {}).get("status") != "computed" for kind in selected_zetas(request))

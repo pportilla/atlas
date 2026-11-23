@@ -184,6 +184,17 @@ Outside the parallel case, eligible inputs try Newton before general ideal
 enumeration. HTTP requests that omit a policy first try quick search and may
 return a background exhaustive job. [Search schedule](../../engine/resolution_search.py) · [HTTP policy](../../engine/app.py)
 
+For an unattended ordinary resolution, run for example
+`./atlas resolve 'x^2+y^2+z^3+t^2*z^2' --vars x,y,z,t --mode intrinsic --exhaustive --json`.
+The whole search has no wall-clock deadline. It continues until it certifies
+the requested outputs, you interrupt it with Ctrl-C, or an unrecoverable
+execution error stops the search.
+A smooth strict transform can still have a partially determined exceptional
+dual complex. An ordinary exhaustive geometry request continues searching
+in that case. A zetas-only request can finish once it has the requested
+zeta data. Replaying a saved dual complex checks the particular modification
+in that record. [Termination conditions](#what-the-exhaustive-search-can-certify)
+
 One tangent-cone test changes this order. Suppose an embedded ternary input
 has a higher-order term and initial form $cL^d$, with $d\ge2$ and all three
 coefficients of $L$ nonzero. Its axial intercepts all have degree $d$. In
@@ -272,8 +283,13 @@ up the reduced locus where the order of the strict transform is largest.
 This locus is taken in the whole chart, so a singular curve that leaves the
 fibre is blown up whole. Only components that meet a point owned by the
 chart are kept, and only those of the largest dimension across the charts.
-If the locus is singular in some chart, its singular locus becomes the
-centre in every chart. A smooth centre inside the locus of maximal order
+If the locus is singular, a previous exceptional divisor can distinguish
+a smooth union of its components across all charts. Otherwise the rule
+descends to the singular locus. On a smooth proposed centre, the rule
+restricts each exceptional divisor to the components of the centre it does
+not contain and tests those traces for normal crossings. A tangency or an
+intersection of excessive dimension gives a smaller locus to treat first.
+A smooth centre inside the locus of maximal order
 does not raise the order. Once the strict transform is smooth at those
 points, the invariant continues, with the existing divisors treated as
 given ones. For `x*y^4+z^2+t^2` the rule blows up the singular $x$-axis
