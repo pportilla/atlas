@@ -36,7 +36,7 @@ atlas> tangent_cone(ideal(f)).generators
 
 ## Resolve the cusp
 
-Three point blowups resolve the cusp. The exceptional curves `E1` and `E2` each meet `E3`, and the branch of the curve passes through `E3`.
+Three point blowups resolve the cusp. The exceptional curves `E1` and `E2` each meet `E3`, and the branch of the curve passes through `E3`. The local topological and monodromy zeta functions of the cusp are read from the same resolution.
 
 ```text
 atlas> K = resolve(f)
@@ -45,6 +45,10 @@ Dual complex (embedded, complete): 3 vertices, 2 edges
   E1 — E3, E2 — E3
 atlas> K.branches[0].meets
 [E3]
+atlas> K.topological_zeta.expression
+(4*s + 5)/((s + 1)*(6*s + 5))
+atlas> K.monodromy_zeta.expression
+(1-T^6)/((1-T^2)*(1-T^3))
 ```
 
 ## Keep the calculation
@@ -53,4 +57,4 @@ Type `:save "tour.atlas"` to write the statements you have entered to a file. Th
 
 ## Where to go next
 
-The [tutorial](tutorial/index.md) explains each of these calculations and many more, chapter by chapter. [Constructions](constructions.md) answer short questions of the form “How do I compute … in Atlas?” The [reference manual](reference/index.md) documents every function, and the [thematic tutorials](thematic/index.md) treat resolution and zeta functions in depth.
+The [tutorial](tutorial/index.md) explains each of these calculations and many more, chapter by chapter. [Constructions](constructions.md) answer short questions of the form “How do I compute … in Atlas?” The [reference manual](reference/index.md) documents every function and every field of its results, and the [thematic tutorials](thematic/index.md) treat zeta functions and the monodromy conjecture in depth.

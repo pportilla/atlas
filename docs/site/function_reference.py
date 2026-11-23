@@ -59,12 +59,13 @@ SCHEME_POINT_INPUT = dict(CONE_INPUT, point=CONE_POINT + ' All ideal generators 
 HYPERSURFACE = dict(polynomial='Polynomial over `QQ` defining the hypersurface germ.',
                     point=POINT + ' The polynomial must vanish there.', **POLYNOMIAL_OPTIONS)
 RESOLUTION_INPUT = dict(
-    variables='For a formula string, give the coordinate names or the generators of a ring, in order. '
-              'Choose either `variables` or `ring`.',
-    ring='For a formula string, supply its polynomial ring over `QQ`. '
-         'If both options are omitted, a string uses the active ring. A polynomial already knows its ring.',
-    search='Use `"quick"` for a bounded attempt or `"exhaustive"` to continue the search.',
-    compute=COMPUTE + ' With `None`, resolution uses the configured backend (normally CPU).',
+    variables='For a formula string, the coordinate names or the generators of a ring, in order, such as '
+              '`["x", "y"]`. Give either `variables` or `ring`, not both.',
+    ring='For a formula string, the polynomial ring over `QQ` in which to read it. Without `variables` or `ring`, '
+         'a string is read in the ring selected with `use_ring`. A polynomial already knows its ring.',
+    search='`"exhaustive"` (default) continues until the result is certified or you interrupt it. '
+           '`"quick"` stops at a bound and reports an inconclusive result instead.',
+    compute=COMPUTE + ' With `None`, resolution uses the configured backend, normally the CPU.',
 )
 
 FUNCTIONS = {
@@ -251,33 +252,52 @@ FUNCTIONS = {
                                        'Use one source ring over `QQ` with at least one coordinate. Pass the '
                                        'components separately or as one list or tuple.',
                             **POLYNOMIAL_OPTIONS),
-    'zoo_search': entry('A dictionary whose `ids` field lists matching Zoo record IDs in catalogue order.',
-                        query='A signed monomial query as text, a rational polynomial or a list or tuple of either kind. '
-                              'Polynomial inputs must share one live coordinate space.'),
-    'resolve': entry('A resolution with `.status`, `.charts`, `.divisors`, `.branches` and `.dual_complex`. '
-                     'Read the status to see whether the search certified the resolution.',
-                     polynomial='Hypersurface equation vanishing at the origin, as a polynomial over `QQ` '
-                                'or as a formula string.',
-                     mode='Use `"embedded"` for normal crossings of the total transform, including multiplicities, '
-                          'or `"intrinsic"` to resolve the strict transform of a reduced germ.',
-                     method='Use `"auto"` for the standard resolution search. Choose `"weighted"` for embedded '
-                            'weighted blowups in 1–16 variables. Atlas computes requested zetas using an '
-                            'embedded companion. If the weighted engine declines, exhaustive search continues '
-                            'with ordinary embedded resolution and records the reason in `.record["weighted_attempt"]`.',
-                     monodromy='Set to `True` to request both the monodromy and local topological zeta functions.',
+    'zoo_search': entry('A dictionary whose `ids` field lists the IDs of the matching Resolution Zoo records '
+                        'in catalogue order. A blank query returns every ID.',
+                        query='The monomials to look for, as text such as `"x^2, -y^2*z"` or `"x*y^2 - y^3"`, '
+                              'as a rational polynomial, or as a list or tuple of either kind. Each monomial must occur '
+                              'with exactly this coefficient, up to one renaming of the variables and one overall sign. '
+                              'Polynomial inputs must belong to one ring.'),
+    'resolve': entry('A resolution `Z`. Read the zeta functions as `Z.topological_zeta.expression` and '
+                     '`Z.monodromy_zeta.expression`, the poles as `Z.topological_zeta.poles` and the pole check as '
+                     '`Z.monodromy_check`. The geometry is in `Z.charts`, `Z.divisors`, `Z.branches` and '
+                     '`Z.dual_complex`, and the input in `Z.polynomial` and `Z.coordinates`. `Z.status` is '
+                     '`"resolved"` once the resolution is certified and `"inconclusive"` when a quick search stopped '
+                     'first. `Z.record` is the complete record. '
+                     '[Every field of a resolution](resolution-values.md#the-resolution)',
+                     polynomial='The equation of the hypersurface, vanishing at the origin: a polynomial over `QQ`, '
+                                'or a formula string together with `variables` or `ring`. Move another rational point '
+                                'to the origin with a ring map first.',
+                     mode='`"embedded"` (default) makes the total transform a divisor with simple normal crossings and '
+                          'records the multiplicity of every component. `"intrinsic"` resolves the reduced hypersurface '
+                          'itself.',
+                     method='`"auto"` (default) chooses the construction. `"weighted"` uses embedded weighted blowups '
+                            'in 1–16 variables. If the weighted engine declines, an exhaustive search continues with '
+                            'ordinary embedded resolution and records the reason in `Z.record["weighted_attempt"]`.',
+                     monodromy='`True` computes the topological and monodromy zeta functions during the call. With '
+                               '`False` (default) they are computed the first time you read `Z.topological_zeta`, '
+                               '`Z.monodromy_zeta` or `Z.monodromy_check`.',
                      **RESOLUTION_INPUT),
-    'recompute_dual_complex': entry('A dual complex with `.vertices` linked to divisors on the supplied '
-                                    'resolution, `.cells` describing incidences, and a completeness `.status`.',
-                                    resolution='A saved resolution returned by `resolve`. Its charts supply the incidence data.'),
-    'dual_complex': entry('A dictionary with rebuilt vertices, cells and status. For linked divisor objects '
-                          'use `recompute_dual_complex`.', resolution='A saved resolution returned by `resolve`.'),
-    'monodromy_check': entry('A record with `.status`, `.reason` and the witnesses for actual `.poles`. '
-                             'Exhaustive search returns verified when every predicted eigenvalue occurs '
-                             'at or near the origin, or refuted when one is absent.',
-                             polynomial='Equation of a hypersurface germ at the origin, a formula string, or '
-                                        'a saved Atlas resolution carrying the equation and ordered coordinates.',
-                             check_isolation='With `True`, also try the local Milnor number for an '
-                                             'unresolved quick check or a refuted exhaustive check.',
+    'recompute_dual_complex': entry('A dual complex rebuilt from the charts alone. Its `.vertices` are the '
+                                    'divisors of the supplied resolution, `.cells` lists the components of their '
+                                    'intersections and `.status` is `"complete"` when every incidence is certified. '
+                                    '[Dual complex](resolution-values.md#dual-complex)',
+                                    resolution='A resolution returned by `resolve`. Its charts supply the incidences.'),
+    'dual_complex': entry('The same complex as `recompute_dual_complex`, as a plain dictionary with `vertices`, '
+                          '`cells` and `status`. Use `recompute_dual_complex` for vertices linked to the divisors.',
+                          resolution='A resolution returned by `resolve`.'),
+    'monodromy_check': entry('A pole check `P`. `P.status` is `"verified"` when every pole of the topological '
+                             'zeta function has a monodromy eigenvalue witness at or near the origin, `"refuted"` '
+                             'when an exhaustive check finds a pole whose eigenvalue is absent, and `"unresolved"` or '
+                             '`"inconclusive"` when a quick check stops early. `P.poles` gives each pole with its '
+                             '`eigenvalue_order` and `witness`. `P.topological_zeta`, `P.monodromy_zeta` and '
+                             '`P.resolution` hold the zeta functions and the resolution used. '
+                             '[Every field of a pole check](resolution-values.md#pole-check)',
+                             polynomial='The equation of a hypersurface germ at the origin, as a polynomial over '
+                                        '`QQ` or a formula string, or a resolution returned by `resolve`.',
+                             check_isolation='`True` also computes the local Milnor number when a quick check is '
+                                             'unresolved or an exhaustive check is refuted, and reports it in '
+                                             '`P.milnor_number`.',
                              **RESOLUTION_INPUT),
     'print': entry('Writes text and returns `None`.',
                    args='Zero or more values in display order.', sep='Text placed between values.',

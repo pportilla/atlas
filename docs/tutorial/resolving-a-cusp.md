@@ -1,7 +1,9 @@
 # Resolving a plane cusp
 
 Where does the cusp $y^2=x^3$ meet the exceptional divisor after resolution?
-We can read the answer from the resolution graph, then check it in local coordinates.
+We can read the answer from the resolution graph, check it in local coordinates,
+and finally compute the zeta functions of the cusp from the same resolution.
+Each section starts by resolving the cusp again, so you can begin with any of them.
 
 ## Follow the branch to the exceptional divisor
 
@@ -54,6 +56,9 @@ The names `B3.u` and `B3.v` denote the two charts of the third blowup.
 We can look up the first by name or reach it directly from the branch.
 
 ```text
+atlas> x, y = coordinates("x", "y")
+atlas> K = resolve(y^2 - x^3)
+atlas> b = K.branches[0]
 atlas> K.charts
 [B1.u, B1.v, B2.u, B2.v, B3.u, B3.v]
 atlas> K.charts[0].id
@@ -77,9 +82,16 @@ They meet transversely at $(0,1)$, precisely the point in the branch record.
 
 ## Check the multiplicity in the pullback
 
+How often does `E3` occur in the total transform of the cusp? Pull the
+equation back to the chart `B3.u` and divide by the local equation of `E3`.
+
 ```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> K = resolve(f)
+atlas> C = K.chart("B3.u")
 atlas> u, v = C.coordinates
-atlas> E = b.meets[0]
+atlas> E = K.divisor("E3")
 atlas> E.equation_in(C)
 u
 atlas> total = C.pullback(f)
@@ -105,4 +117,32 @@ with relations, `C.ambient_ideal` gives those relations in the ambient ring
 To reconstruct the incidence from the charts, use `recompute_dual_complex(K)`.
 The cusp script also follows `E3` through both charts. The chart elimination
 example computes the ideal of the branch point and reduces $v^2+v+1$ there
-to $3$. [Reading a resolution record](../thematic/resolution-records.md) · [Cusp script](../../examples/cusp.atlas) · [Chart elimination script](../../examples/chart-elimination.atlas)
+to $3$. [Resolution records](../thematic/resolution-records.md) · [Cusp script](../../examples/cusp.atlas) · [Chart elimination script](../../examples/chart-elimination.atlas)
+
+## Compute the zeta functions of the cusp
+
+The local topological zeta function and the local monodromy zeta function
+are fields of the resolution. Atlas computes them the first time you read one.
+
+```text
+atlas> x, y = coordinates("x", "y")
+atlas> f = y^2 - x^3
+atlas> K = resolve(f)
+atlas> K.topological_zeta.expression
+(4*s + 5)/((s + 1)*(6*s + 5))
+atlas> K.topological_zeta.numerical_data[2]
+{'component': 'E3', 'multiplicity': 6, 'nu': 5}
+atlas> K.monodromy_zeta.expression
+(1-T^6)/((1-T^2)*(1-T^3))
+atlas> monodromy_check(f).status
+verified
+```
+
+The pole $-5/6$ is $-\nu/N$ for `E3`. We found $N=6$ in the previous
+section. For $\nu$, take the chart map $x=u^2v$, $y=u^3v^2$ of `B3.u`.
+Its Jacobian determinant is $u^4v^2$, so the form $dx\wedge dy$ vanishes to
+order $4=\nu-1$ along `E3`. The monodromy zeta function says that the
+monodromy of the Milnor fibre has the primitive sixth roots of unity among its
+eigenvalues, and $e^{2\pi i(-5/6)}$ is one of them. That is what
+`monodromy_check` verifies for every pole.
+[Zeta functions and the monodromy conjecture](../thematic/zeta-functions.md) · [Fields of the zeta functions](../reference/resolution-values.md#topological-zeta-function)

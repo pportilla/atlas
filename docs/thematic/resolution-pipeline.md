@@ -1,5 +1,12 @@
 # How Atlas resolves a hypersurface germ
 
+This chapter explains what happens inside `resolve`: how Atlas chooses a
+modification, how it builds and checks the charts, and what a saved record
+certifies. You do not need it to compute a resolution or its zeta functions.
+For that, start with [Resolution, zeta functions and monodromy](../reference/resolution.md).
+Read on when you want to know why a resolution has the form it has, why a quick
+search ended inconclusive, or exactly what a record proves.
+
 An embedded resolution gives a map under which the hypersurface and the
 exceptional divisors have normal crossings over the origin. There are often
 several ways to obtain such a map. For example, the plane cusp takes three
@@ -24,7 +31,7 @@ on the command line and over HTTP. Its `charts` field describes the maps, and
 its `atlas` field describes the regions used to check them and count
 intersections. For a resolution by weighted blowups on quotient charts, use
 `method="weighted"`. That method has its own certificate and output fields.
-[Reading a resolution record](resolution-records.md) · [Weighted resolution](weighted-resolution.md)
+[Resolution records](resolution-records.md) · [Weighted resolution](weighted-resolution.md)
 
 ## How Atlas chooses a modification
 
@@ -364,7 +371,7 @@ To compare divisor pieces on affine charts, Atlas equates their original coordin
 
 Embedded mode verifies normal crossings of the total transform on the owned fibre and computes incidence for ambient exceptional divisors. Intrinsic mode verifies the smooth strict transform and computes incidence on that transform. If an intrinsic atlas cannot supply embedded strata for the requested zetas, Atlas resolves the same polynomial in embedded mode and can store the verified `embedded_companion.atlas`. [Mode and companion handling](../../engine/resolve.py) · [Chart conventions](resolution-records.md#chart-and-complex-conventions)
 
-Both zetas use the same compactly supported Euler characteristics of disjoint strata. A’Campo’s formula uses the open strata on individual components and their multiplicities. The topological zeta function uses all strata, their multiplicities and the orders of the pulled-back volume form. [Native monodromy](../../native/monodromy.cpp) · [Native topological zeta](../../native/zeta.cpp) · [Formulas and cusp values](resolution-records.md#local-monodromy-zeta-function)
+Both zetas use the same compactly supported Euler characteristics of disjoint strata. A’Campo’s formula uses the open strata on individual components and their multiplicities. The topological zeta function uses all strata, their multiplicities and the orders of the pulled-back volume form. [Native monodromy](../../native/monodromy.cpp) · [Native topological zeta](../../native/zeta.cpp) · [Formulas and cusp values](zeta-functions.md#the-monodromy-zeta-function)
 
 ### What the exhaustive search can certify
 
@@ -454,7 +461,7 @@ for the input germ, including eigenvalues on strata omitted by the geometric
 search. The resolution termination qualification above concerns the earlier
 step of obtaining those poles.
 [Local eigenvalue decision](../../native/resolution-algorithms.md#deciding-nearby-monodromy-eigenvalues-for-a-pole) ·
-[Nearby witnesses](resolution-records.md#monodromy-on-nearby-strata) · [Denef, Lemma 4.6](https://www.numdam.org/item/CM_1993__89_2_207_0.pdf#page=9)
+[Nearby witnesses](zeta-functions.md#monodromy-near-the-origin) · [Denef, Lemma 4.6](https://www.numdam.org/item/CM_1993__89_2_207_0.pdf#page=9)
 
 ## Replaying a saved resolution
 

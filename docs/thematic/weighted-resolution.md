@@ -30,7 +30,7 @@ order $N$ of the input along $E_1$. The pulled-back volume form
 $dx\wedge dy\wedge dz$ has order $15+10+6-1=30$, so the numerical datum $\nu$ is $30+1=31$.
 
 ```text
-atlas> E = R.divisors[0]
+atlas> E = R.divisor("E1")
 atlas> E.total_multiplicity
 30
 atlas> E.nu
@@ -54,8 +54,8 @@ search, include `"method": "weighted"` in the request object. [HTTP requests](..
 
 ## How a centre is chosen
 
-In the first example the invariant $(2,3,5)$ records the exponents in the
-centre $(x^2,y^3,z^5)$. Its Newton polyhedron has a face whose primitive
+For $x^2+y^3+z^5$, the invariant $(2,3,5)$ in `R.steps[0].invariant` records
+the exponents in the centre $(x^2,y^3,z^5)$. Its Newton polyhedron has a face whose primitive
 inward normal is $(15,10,6)$. In general the engine chooses local
 coordinates adapted to the centre. It computes successive coefficient
 collections in Tschirnhausen coordinates on a jet of the equation and
@@ -78,6 +78,7 @@ the conic $x=v-w^2=0$ the surface is smooth and tangent to the exceptional
 plane. The next step therefore needs a centre of positive dimension.
 
 ```text
+atlas> x, y, z = coordinates("x", "y", "z")
 atlas> S = resolve((x*y - z^2)^2 + x^5 + y^5, method="weighted")
 atlas> S.steps[0].locus
 point
@@ -114,9 +115,14 @@ invariant governs their common points.
 Each maximal cone gives a chart. For a regular cone the map is a chart of
 the blowup itself. For a nonregular cone Atlas writes the monomial map on a
 finite cover. `orbifold_order` gives its degree, the absolute determinant
-of the ray matrix. For example, the first chart above has degree 15.
+of the ray matrix. For example, the first chart of $x^2+y^3+z^5$ has degree 15.
 
 ```text
+atlas> x, y, z = coordinates("x", "y", "z")
+atlas> R = resolve(x^2 + y^3 + z^5, method="weighted")
+atlas> C = R.chart("W1.c0")
+atlas> C.map
+{'x': t1^15, 'y': t1^10*t2, 'z': t1^6*t3}
 atlas> C.orbifold_order
 15
 ```

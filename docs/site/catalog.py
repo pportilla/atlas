@@ -290,10 +290,6 @@ _GROUPS = {
                      "ae_codimension_interface", "inconclusive_record_preserves_last_proved_lower_bound"))),
     },
     "docs/reference/resolution.md": {
-        "zoo_search": Entry(
-            (native("Match monomials under a shared coordinate injection", "zoo_search", "bool assign_axes("),),
-            (example("Find the same catalogue records at the prompt and in a script", "zoo_search",
-                     "prompt_and_script"),)),
         "resolve": Entry(
             (native("Point blowups of plane curve germs", "plane", "void visit(Task&"),
              native("Weighted blowups along points and bad curves", "weighted_resolution",
@@ -302,8 +298,6 @@ _GROUPS = {
             (resolve_example,
              example("Blow up a double conic along its curve with method weighted", "weighted_resolution",
                      "a_double_conic_is_blown_up_along_its_curve"))),
-        "recompute_dual_complex": Entry(complex_sources, (complex_example,)),
-        "dual_complex": Entry(complex_sources, (complex_example,)),
         "monodromy_check": Entry(
             (native("Pole orders and monodromy witnesses", "monodromy", "Json::Value pole_data("),
              native("Transverse compositions on critical components", "monodromy",
@@ -314,6 +308,12 @@ _GROUPS = {
                      "signed_orders_h0_and_nearby_witnesses_at_both_entry_points"),
              example("Witness an eigenvalue on singular lines without rational points", "session_monodromy",
                      "transverse_composition_witnesses_at_prompt_and_in_scripts"))),
+        "recompute_dual_complex": Entry(complex_sources, (complex_example,)),
+        "dual_complex": Entry(complex_sources, (complex_example,)),
+        "zoo_search": Entry(
+            (native("Match monomials under a shared coordinate injection", "zoo_search", "bool assign_axes("),),
+            (example("Find the same catalogue records at the prompt and in a script", "zoo_search",
+                     "prompt_and_script"),)),
     },
     "docs/reference/output.md": {
         "print": Entry((builtin_registration,), (resolve_example,)),

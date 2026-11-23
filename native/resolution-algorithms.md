@@ -356,7 +356,7 @@ On a smooth chart with exceptional Cartier divisors of ideals $P_i$, let $J$ be 
 
 ## Strata, incidence and invariants
 
-The dual complex counts geometric irreducible components of intersections. The zeta functions use compactly supported Euler characteristics of the disjoint strata lying on exactly specified divisors. Replay must recover the relevant quantities from the saved charts. [The two computations for a cusp](../docs/thematic/resolution-records.md#local-monodromy-zeta-function)
+The dual complex counts geometric irreducible components of intersections. The zeta functions use compactly supported Euler characteristics of the disjoint strata lying on exactly specified divisors. Replay must recover the relevant quantities from the saved charts. [The two computations for a cusp](../docs/thematic/zeta-functions.md#the-monodromy-zeta-function)
 
 ### Local topological zeta reduction
 

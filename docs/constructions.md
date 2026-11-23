@@ -300,38 +300,128 @@ print(hilbert_samuel_multiplicity(I).value)                # 2
 
 ### Resolve a hypersurface germ
 
+`resolve` computes an embedded resolution of $f=0$ at the origin. Its exceptional divisors, charts and dual complex are fields of the result.
+
 ```atlas
 R = ring("x", "y")
-K = resolve(y^2 - x^3)
-print(K.divisors)                                          # [E1, E2, E3]
-print(K.branches[0].meets)                                 # [E3]
+Z = resolve(y^2 - x^3)
+print(Z.status)                                            # resolved
+print(Z.divisors)                                          # [E1, E2, E3]
+print(Z.dual_complex.status, len(Z.dual_complex.cells))    # complete 2
+print(Z.branches[0].meets)                                 # [E3]
 ```
 
-Use `K.dual_complex` to display the intersection graph of the exceptional curves. For a resolution of the curve itself, pass `mode="intrinsic"`. [Follow the branch to the exceptional divisor](tutorial/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor) · [Resolution modes](thematic/resolution-records.md#resolution-modes)
+At the prompt, `Z.dual_complex` on a line by itself shows the edges `E1 — E3, E2 — E3`. [Follow the branch to the exceptional divisor](tutorial/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor) · [The resolution](reference/resolution-values.md#the-resolution)
+
+### Resolve the hypersurface itself
+
+Pass `mode="intrinsic"` to resolve the singularities of the reduced hypersurface instead of making its total transform a normal crossings divisor.
+
+```atlas
+R = ring("x", "y", "z")
+f = x^2 - y^2*z
+print(resolve(f, mode="intrinsic").dual_complex.status)    # complete
+print(resolve(f, mode="intrinsic").divisors)               # [E1]
+```
+
+[Resolution modes](thematic/resolution-records.md#resolution-modes)
+
+### Resolve a germ at another point
+
+`resolve` works at the origin. Move the point there with a ring map first.
+
+```atlas
+R = ring("x", "y")
+f = (x - 1)^2 - (y + 2)^3                                  # a cusp at (1, -2)
+move = hom(R, R, images=(x + 1, y - 2))                    # send the origin to (1, -2)
+g = move(f)
+print(g)                                                   # -y^3+x^2
+print(resolve(g).divisors)                                 # [E1, E2, E3]
+```
+
+[Give the equation](reference/resolution.md#give-the-equation)
+
+### Read the charts of a resolution
+
+Each chart expresses the original coordinates in its own coordinates. Pulling back the equation gives the total transform.
+
+```atlas
+R = ring("x", "y")
+f = y^2 - x^3
+Z = resolve(f)
+C = Z.chart("B3.u")
+print(C.map)                                               # {'x': u^2*v, 'y': u^3*v^2}
+print(C.pullback(f))                                       # u^6*v^4-u^6*v^3
+print(C.strict_transform, C.divisors)                      # v-1 [E3, E2]
+```
+
+[Look inside a chart](tutorial/resolving-a-cusp.md#look-inside-a-chart) · [Charts](reference/resolution-values.md#charts)
 
 ### Find the multiplicity of an exceptional divisor
 
 ```atlas
 R = ring("x", "y")
 f = y^2 - x^3
-K = resolve(f)
-C = K.chart("B3.u")
-E = K.divisor("E3")
-print(C.pullback(f).multiplicity(E.equation_in(C)))        # 6
+Z = resolve(f)
+print(Z.divisor("E3").total_multiplicity)                  # 6
+C = Z.chart("B3.u")
+print(C.pullback(f).multiplicity(Z.divisor("E3").equation_in(C)))  # 6
 ```
 
-[Check the multiplicity in the pullback](tutorial/resolving-a-cusp.md#check-the-multiplicity-in-the-pullback)
+The second line checks the recorded multiplicity in local coordinates. [Check the multiplicity in the pullback](tutorial/resolving-a-cusp.md#check-the-multiplicity-in-the-pullback)
 
-### Compute the zeta functions of a germ
+### List the numerical data of a resolution
+
+The pairs $(N_i,\nu_i)$ of all components, the strict transform included, are recorded with the topological zeta function.
 
 ```atlas
 R = ring("x", "y")
-K = resolve(y^2 - x^3, monodromy=True)
-print(K.monodromy_zeta.expression)                         # (1-T^6)/((1-T^2)*(1-T^3))
-print(K.topological_zeta.expression)                       # (4*s + 5)/((s + 1)*(6*s + 5))
+T = resolve(y^2 - x^3).topological_zeta
+print(T.numerical_data[0])                                 # {'component': 'E1', 'multiplicity': 2, 'nu': 2}
+print(T.numerical_data[2])                                 # {'component': 'E3', 'multiplicity': 6, 'nu': 5}
+print(len(T.numerical_data))                               # 4
 ```
 
-[Local monodromy zeta function](thematic/resolution-records.md#local-monodromy-zeta-function) · [Topological zeta function](thematic/resolution-records.md#topological-zeta-function)
+[The topological zeta function](thematic/zeta-functions.md#the-topological-zeta-function)
+
+### Compute the topological zeta function
+
+Resolve the germ and read `topological_zeta`. Atlas computes it the first time you ask.
+
+```atlas
+R = ring("x", "y")
+Z = resolve(y^2 - x^3)
+T = Z.topological_zeta
+print(T.expression)                                        # (4*s + 5)/((s + 1)*(6*s + 5))
+print(T.poles[0].value, T.poles[1].value)                  # -1 -5/6
+```
+
+Each pole has its `order` and the `components` it comes from. To compute the zeta functions during the resolution, write `resolve(f, monodromy=True)`. [Topological zeta function](reference/resolution-values.md#topological-zeta-function)
+
+### Compute the monodromy zeta function
+
+```atlas
+R = ring("x", "y")
+M = resolve(y^2 - x^3).monodromy_zeta
+print(M.expression)                                        # (1-T^6)/((1-T^2)*(1-T^3))
+print(M.milnor_fiber_euler_characteristic)                 # -1
+```
+
+`M.contributions` gives A’Campo's term for each divisor. [The monodromy zeta function](thematic/zeta-functions.md#the-monodromy-zeta-function) · [Monodromy zeta function](reference/resolution-values.md#monodromy-zeta-function)
+
+### Check the monodromy conjecture for a germ
+
+`monodromy_check` looks for a monodromy eigenvalue $e^{2\pi i s_0}$ near the origin for every pole $s_0$ of the topological zeta function.
+
+```atlas
+R = ring("x", "y", "z")
+P = monodromy_check(x*y*z*(x + y))
+print(P.status)                                            # verified
+print(P.monodromy_zeta.expression)                         # 1
+print(P.poles[1].value, P.poles[1].witness)                # -2/3 nearby ordinary multiple point
+```
+
+The origin zeta is $1$, so the eigenvalue of order three for the pole $-2/3$ comes from the triple line along the $z$-axis. [Check the monodromy conjecture](thematic/zeta-functions.md#check-the-monodromy-conjecture) · [Pole check](reference/resolution-values.md#pole-check)
 
 ### Resolve with weighted blowups
 
@@ -342,6 +432,27 @@ print(K.divisors, K.charts)                                # [E1] [W1.c0, W1.c1,
 ```
 
 [Resolve with method weighted](thematic/weighted-resolution.md#resolve-with-method-weighted)
+
+### Save a resolution and compute from it later
+
+From the shell, save the record with `--json` and read it back with the replay commands.
+
+```sh
+./atlas resolve 'y^2-x^3' --vars x,y --monodromy --json > cusp.json
+./atlas monodromy cusp.json
+./atlas recompute-dual-complex cusp.json
+```
+
+In a script, `print_json(record=Z.record)` writes the same record. [Save and replay the cusp](thematic/resolution-records.md#save-and-replay-the-cusp) · [Command line](reference/command-line.md#read-a-saved-record)
+
+### Search the Resolution Zoo
+
+```atlas
+hits = zoo_search("x^2, -y^2*z")
+print(len(hits.ids) > 0)                                   # True
+```
+
+The query lists monomials that must all occur in the equation, up to renaming the variables and an overall sign. Browse the catalogue with `./atlas serve` at `/zoo/`. [Search the Resolution Zoo](reference/resolution.md#search-the-resolution-zoo)
 
 ## Interface issues
 

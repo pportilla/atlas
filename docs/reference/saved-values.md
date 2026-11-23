@@ -1,6 +1,28 @@
 # Methods on saved values
 
-Once you have named a ring, a map or a resolution, you can use its methods in later calculations. For example, `K(f)` takes a residue class in the particular ring `K`, and `phi(f)` applies the particular map `phi`. At the prompt, `help K` or `help phi` describes the saved value and its available fields.
+Once you have saved a polynomial, a ring or a map under a name, you can use its fields and methods in later calculations. For example, `K(f)` takes a residue class in the quotient ring `K`, and `phi(f)` applies the ring map `phi`. At the prompt, `help K` or `help phi` describes the saved value and the fields available on it.
+
+This page covers polynomials, quotient rings, local fractions and ring homomorphisms. A resolution, its charts and divisors, and its zeta functions are described in [Resolution objects and zeta functions](resolution-values.md). Each section is a complete script whose output appears in the comments.
+
+## Polynomials
+
+Every polynomial remembers its ring. Compare polynomials with `==` and combine them with `+`, `-`, `*` and `^`, provided they belong to the same ring or one of them is a rational number.
+
+```atlas
+R = ring("x", "y")
+f = (x - y)^3 * (x + y)
+print(f.parent == R)                                    # True
+print(f.variables)                                      # ('x', 'y')
+print(f.multiplicity(x - y))                            # 3
+print(f.multiplicity(x + y), f.multiplicity(x))         # 1 0
+```
+
+| Field or method | Value |
+| --- | --- |
+| `f.parent` | The ring of `f`. Use it as `ring=f.parent` to read a formula in the same ring. |
+| `f.variables` | The names of the coordinates of that ring, in order. |
+| `f.coeffs` | The coefficient field, `QQ` unless the ring was declared over an algebraic extension. |
+| `f.multiplicity(g)` | The largest $n$ such that $g^n$ divides the nonzero polynomial `f`. The factor `g` must be a nonconstant polynomial of the same ring, and the ring must have no relations. On a resolution chart, `C.pullback(f).multiplicity(u)` gives the order of a divisor $u=0$. [Exceptional divisors](resolution-values.md#exceptional-divisors) |
 
 ## Quotient rings and residue classes
 
@@ -64,30 +86,3 @@ print(phi(y^2-x^3))                                     # 0
 ```
 
 The second output verifies that the image lies on the cusp. `phi(value)` takes one argument, an element of `phi.domain` or a rational scalar, and returns its image in `phi.codomain`. Use the same syntax for a quotient projection, an inclusion from elimination, a normalization map or a chart pullback map. [Defining and applying a ring map](../tutorial/rings.md#move-a-polynomial-between-rings)
-
-## Resolution charts, divisors and polynomial multiplicity
-
-How many times does the third exceptional divisor occur in the total transform of the cusp? Work in one chart that meets it, read its local equation and pull back the cusp polynomial.
-
-```atlas
-R = ring("x", "y")
-f = y^2-x^3
-Z = resolve(f)
-C = Z.chart("B3.u")
-E = Z.divisor("E3")
-g = E.equation_in(C)
-total = C.pullback(f)
-print(g)                                                # u
-print(total)                                            # u^6*v^4-u^6*v^3
-print(total.multiplicity(g))                            # 6
-```
-
-In this chart the divisor is $u=0$. The pullback factors as $u^6v^3(v-1)$, so the divisor occurs six times. For the other charts and the strict transform of the curve, follow the full resolution example. [Resolve a plane cusp](../tutorial/resolving-a-cusp.md#look-inside-a-chart)
-
-| Method | Inputs and result |
-| --- | --- |
-| `Z.chart(id)`, `Z.divisor(id)` | Give a string ID from this resolution, such as `"B3.u"` or `"E3"`. Returns the corresponding chart or exceptional divisor. The fields `Z.charts` and `Z.divisors` list the choices. |
-| `C.pullback(polynomial)` | Give a polynomial from the original ring of the resolution. Returns its pullback expressed in the chart ring. |
-| `E.ideal_in(chart)` | Give a chart of the same resolution with local equations for this divisor. Returns their polynomial generators as a list in the chart ring. |
-| `E.equation_in(chart)` | Give a chart on which the recorded divisor ideal has one generator. Returns that generator. Use `ideal_in` for a list of generators. |
-| `f.multiplicity(factor)` | Give a nonconstant factor in the same polynomial ring as the nonzero polynomial `f`. Returns the largest integer $n$ such that `factor` raised to $n$ divides `f`. The ring must have no ambient relations. |

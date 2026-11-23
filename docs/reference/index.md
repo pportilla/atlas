@@ -1,8 +1,10 @@
 # Reference manual
 
-This manual documents every function of the Atlas session, with an example for each that the test suite runs. An entry gives the signature, the inputs and options, the return value and an example. It also links to the guide sections that use the function, to its C++ implementation and to its tests. The card printed by `help NAME` at the prompt is the same entry in short form. To look up a name, use the [function index](genindex.md).
+This manual documents every function of the Atlas session and the values they return. The same functions, arguments and fields work at the prompt and in scripts. To look up a name, use the [function index](genindex.md). At the prompt, `help NAME` prints the short form of an entry, and `help Z` describes a value you saved as `Z`.
 
-In a signature, arguments after `*` or after a variable-length argument such as `*generators` are passed by name, as in `ideal(x, order="lex")`.
+Each subject page opens with a short introduction and a complete example, followed by one entry per function. An entry gives the signature, what each input and option means, what the function returns and which fields to read from the result, and an example that the test suite runs. It links to the guide sections that use the function, to its C++ implementation and to its tests.
+
+In a signature, the arguments after `*` or after a variable-length argument such as `*generators` are passed by name, as in `ideal(x, order="lex")` or `resolve(f, mode="intrinsic")`.
 
 ## Session functions
 
@@ -24,7 +26,8 @@ In a signature, arguments after `*` or after a variable-length argument such as 
 
 ### Resolution of singularities
 
-- [Resolution, exceptional divisors and monodromy](resolution.md). Resolve a germ, rebuild the dual complex of the exceptional divisor and check the poles of the topological zeta function.
+- [Resolution, zeta functions and monodromy](resolution.md). Resolve a germ, read its topological and monodromy zeta functions, check the monodromy conjecture and search the Resolution Zoo.
+- [Resolution objects and zeta functions](resolution-values.md). Every field of a resolution, its charts, divisors, branches and dual complex, its two zeta functions and a pole check.
 
 ### Scripts
 
@@ -32,10 +35,11 @@ In a signature, arguments after `*` or after a variable-length argument such as 
 
 ## Saved values
 
-- [Methods on saved values](saved-values.md). Residue classes, local fractions, ring homomorphisms, resolution charts and exceptional divisors.
+- [Methods on saved values](saved-values.md). Residue classes in a quotient ring, fractions in a local ring and ring homomorphisms.
 
 ## Interfaces
 
+- [Command line](command-line.md). Run scripts, resolve a germ, compute from a saved record and run algebra operations from the shell.
 - [HTTP API and compute options](http-and-compute.md). Run the server, request a resolution, follow a background search, replay zeta functions and choose a device.
 - [Algebra requests and replay](algebra-requests.md). Describe a ring and its operands in JSON, with the operations and the fields of their results.
 

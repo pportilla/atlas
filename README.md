@@ -9,11 +9,11 @@ Run `./atlas serve` and open the **Resolution Zoo** in the resolution workspace 
 - **[A tour of Atlas](docs/tour.md).** A one-page introduction: reduce a polynomial modulo an ideal, compute an invariant of a cusp and resolve it.
 - **[Tutorial](docs/tutorial/index.md).** The best way to become familiar with Atlas in a few hours. Each chapter works through mathematical questions at the prompt, from rings and ideals to local algebra and a first resolution.
 - **[Constructions](docs/constructions.md).** Short answers to questions of the form “How do I compute … in Atlas?”, each a complete script with its output.
-- **[Thematic tutorials](docs/thematic/index.md).** In-depth treatments of one subject, such as the zeta functions of a resolution and how Atlas chooses and certifies its blowups.
+- **[Thematic tutorials](docs/thematic/index.md).** In-depth treatments of one subject, such as the zeta functions of a germ and the monodromy conjecture, saved resolution records, and how Atlas chooses and certifies its blowups.
 
 ## Reference manual
 
-- **[Reference manual](docs/reference/index.md).** Every session function by subject, with its inputs, return value and a tested example, and links to its implementation, its tests and the guides that use it. It also documents the methods of saved values, the HTTP interface and the algorithms behind the results.
+- **[Reference manual](docs/reference/index.md).** Every session function by subject, with its inputs, return value and a tested example, and links to its implementation, its tests and the guides that use it. It also lists every field of a resolution and its zeta functions, the methods of other saved values, the command line, the HTTP interface and the algorithms behind the results.
 - **[Function index](docs/reference/genindex.md).** Every session function and alias in alphabetical order.
 
 ## Installation and development

@@ -39,7 +39,12 @@ class DocumentedExamplesTests(unittest.TestCase):
 
     def test_worked_guides(self):
         for guide in ("docs/tutorial/polynomials-and-ideals.md", "docs/tutorial/quotient-rings.md",
-                      "docs/tutorial/local-algebra.md", "docs/tutorial/local-geometry.md", "docs/reference/saved-values.md"):
+                      "docs/tutorial/local-algebra.md", "docs/tutorial/local-geometry.md", "docs/reference/saved-values.md",
+                      "docs/reference/rings.md", "docs/reference/ideals.md", "docs/reference/components.md",
+                      "docs/reference/dimension.md", "docs/reference/local-algebra.md",
+                      "docs/reference/tangent-geometry.md", "docs/reference/germ-invariants.md",
+                      "docs/reference/resolution.md", "docs/reference/resolution-values.md",
+                      "docs/reference/output.md", "docs/thematic/zeta-functions.md"):
             contents = (ROOT / guide).read_text(encoding="utf-8")
             for section in contents.split("\n## ")[1:]:
                 heading, _, body = section.partition("\n")

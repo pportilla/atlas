@@ -13,7 +13,8 @@ _COORDINATES = 'x, y = coordinates("x", "y")'
 # Algebra examples share their setup. A trailing "  # " gives the exact prompt output
 # for that statement, also displayed in the function reference and checked by the docs tests.
 _RING_EXAMPLES = {
-    "resolve": "f = y^2 - x^3\nR = resolve(f)\nR.dual_complex.vertices  # [E1, E2, E3]",
+    "resolve": ("f = y^2 - x^3\nR = resolve(f)\nR.divisors  # [E1, E2, E3]\n"
+                "R.topological_zeta.expression  # (4*s + 5)/((s + 1)*(6*s + 5))"),
     "recompute_dual_complex": "R = resolve(y^2 - x^3)\nD = recompute_dual_complex(R)\nD.vertices  # [E1, E2, E3]",
     "dual_complex": "R = resolve(y^2 - x^3)\nlen(dual_complex(R).vertices)  # 3",
     "monodromy_check": "monodromy_check(y^2 - x^3).status  # verified",
@@ -100,7 +101,7 @@ _GUIDES = {
     "docs/tutorial/resolving-a-cusp.md#follow-the-branch-to-the-exceptional-divisor": ("resolve",),
     _PROMPT + "run-or-save-a-calculation": ("len", "print", "print_json"),
     _RECORDS + "chart-and-complex-conventions": ("dual_complex", "recompute_dual_complex"),
-    _RECORDS + "topological-zeta-function": ("monodromy_check",),
+    "docs/thematic/zeta-functions.md#check-the-monodromy-conjecture": ("monodromy_check",),
     _IDEALS + "reduce-a-polynomial-modulo-an-ideal": ("groebner", "normal_form", "membership"),
     _IDEALS + "eliminate-a-coordinate": ("eliminate", "resultant"),
     _IDEALS + "factor-and-reconstruct-a-polynomial": ("factor",),

@@ -33,9 +33,9 @@ curl -sS http://127.0.0.1:8765/api/resolve \
   }'
 ```
 
-For the cusp the response is HTTP 200 and `status` is `"resolved"`. In the record, `monodromy_zeta.expression` gives `(1-T^6)/((1-T^2)*(1-T^3))`. The topological zeta function has poles $-1$ and $-5/6$. Their entries in `monodromy_check.poles` report monodromy eigenvalues of order one and six respectively. [Reading the exceptional divisors and zeta functions](../thematic/resolution-records.md)
+For the cusp the response is HTTP 200 and `status` is `"resolved"`. In the record, `monodromy_zeta.expression` gives `(1-T^6)/((1-T^2)*(1-T^3))`. The topological zeta function has poles $-1$ and $-5/6$. Their entries in `monodromy_check.poles` report monodromy eigenvalues of order one and six respectively. The record has the same fields as `Z.record` at the prompt. [Resolution objects and zeta functions](resolution-values.md) · [Zeta functions and the monodromy conjecture](../thematic/zeta-functions.md)
 
-For zeta functions alone, send `"zetas_only": true` in embedded mode. Atlas can then return `"status": "zetas_computed"` with a replayable plane contact certificate. The default selection includes both functions. An explicit `zetas` list selects individual functions. [Three-graph example](../thematic/resolution-records.md#verify-three-polynomial-graphs) · [Four-graph example](../thematic/resolution-records.md#verify-four-polynomial-graphs) · [Three quadratic translates](../thematic/resolution-records.md#verify-three-quadratic-translates)
+For zeta functions alone, send `"zetas_only": true` in embedded mode. Atlas can then return `"status": "zetas_computed"` with a replayable plane contact certificate. The default selection includes both functions. An explicit `zetas` list selects individual functions. [Three-graph example](../thematic/zeta-functions.md#germs-made-of-polynomial-graphs) · [Four-graph example](../thematic/zeta-functions.md#four-graphs) · [Three quadratic translates](../thematic/zeta-functions.md#three-quadratic-translates)
 
 Choose `search` according to how your client will receive the result.
 
@@ -82,7 +82,7 @@ curl -sS "http://127.0.0.1:8765/api/searches/$job_id/zetas" \
 
 The updated job contains `result.topological_zeta`. For the cusp its expression is $(4s+5)/((s+1)(6s+5))$. To request both functions together, give `["monodromy", "topological"]`. If one was already computed, Atlas recomputes the pair using the same strata.
 
-Once the job has expired, use `POST /api/zetas`. Its JSON body takes the saved resolution object as `record` and the names as `zetas`. This endpoint returns the zeta outputs directly. Replay checks a saved embedded or contact certificate against the polynomial. For an intrinsic record without embedded data or an inconclusive quick record, Atlas can start a fresh embedded calculation from the recorded equation and ordered coordinates. [Local monodromy zeta function](../thematic/resolution-records.md#local-monodromy-zeta-function) · [Topological zeta function](../thematic/resolution-records.md#topological-zeta-function)
+Once the job has expired, use `POST /api/zetas`. Its JSON body takes the saved resolution object as `record` and the names as `zetas`. This endpoint returns the zeta outputs directly. Replay checks a saved embedded or contact certificate against the polynomial. For an intrinsic record without embedded data or an inconclusive quick record, Atlas can start a fresh embedded calculation from the recorded equation and ordered coordinates. [Local monodromy zeta function](../thematic/zeta-functions.md#the-monodromy-zeta-function) · [Topological zeta function](../thematic/zeta-functions.md#the-topological-zeta-function)
 
 ## Submit an algebra request
 
