@@ -87,12 +87,12 @@ A singular direction of the tangent cone rules out the ordinary-point criterion.
 For example, $xyz(x+y+z)$ has a singular tangent direction $[1:0:0]$.
 One blowup gives an embedded resolution. The four projective lines have
 only transverse double intersections, and the exceptional plane supplies the
-third transverse component there. [Four-line resolution](../../web/zoo-data/records/cone-four-lines.json)
+third transverse component there. [Four-line resolution](https://github.com/pportilla/resolution-zoo/blob/main/records/cone-four-lines.json)
 
 For $xyz(x+y)$, three planes meet along the $z$-axis. After blowing up the
 origin, the solver blows up the strict transform of that axis. The three
 planes then meet its exceptional divisor at distinct directions.
-[Four planes with a triple line](../../web/zoo-data/records/cone-d4-quartic.json)
+[Four planes with a triple line](https://github.com/pportilla/resolution-zoo/blob/main/records/cone-d4-quartic.json)
 
 Before committing to point blowups, Atlas classifies the defects on all
 orbits of the candidate fan. A curve of defects rules out isolated point
@@ -112,7 +112,7 @@ of exceptional divisors over each of their two points of tangency.
 When several components have no independent root name, their numbering
 uses the verified chart maps, divisor ideals and parent charts. Permuting
 the saved affine charts preserves those labels.
-[Hesse triangle](../../web/zoo-data/records/hesse-triangle-quartic.json) · [Two tangent conics](../../web/zoo-data/records/quartic-face-plus.json)
+[Hesse triangle](https://github.com/pportilla/resolution-zoo/blob/main/records/hesse-triangle-quartic.json) · [Two tangent conics](https://github.com/pportilla/resolution-zoo/blob/main/records/quartic-face-plus.json)
 
 The fast ordinary-point engine accepts two to eight variables, at most 4,096
 expanded terms and total degree at most 128. Outside that range a nonzero

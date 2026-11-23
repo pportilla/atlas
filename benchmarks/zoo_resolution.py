@@ -8,9 +8,13 @@ import platform
 import re
 from statistics import median
 import subprocess
+import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from engine.zoo_data import catalogue_file
+
 CASES = """chain-3-3-4 chain-3-2-4 loop2-2-4-4 loop-2-3-3 loop-2-3-4
 cone-four-lines cone-braid-arrangement hidden-e12 hidden-bp-2-5-5 hidden-bp-2-5-5-quadric
 threefold-e7 laufer-1 laufer-2 threefold-chain-2-3-2-2 threefold-loop2-loop2 threefold-chain-loop
@@ -204,7 +208,7 @@ def main():
         "cases": [],
     }
     for ident in args.only:
-        record = json.loads((ROOT / "web/zoo-data/records" / (ident + ".json")).read_text())
+        record = json.loads(catalogue_file(f"records/{ident}.json").read_text())
         row = compare(record, args.trials, args.timeout)
         report["cases"].append(row)
         print(ident, row["median_wall_s"], flush=True)

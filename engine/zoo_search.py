@@ -6,9 +6,9 @@ from pathlib import Path
 import sys
 
 from .session_polynomial import Polynomial, QQ
+from .zoo_data import catalogue_file
 
 ROOT = Path(__file__).resolve().parents[1]
-_INDEX = ROOT / "web" / "zoo-data" / "index.json"
 
 
 @lru_cache(maxsize=1)
@@ -63,7 +63,7 @@ class _Catalogue:
 
 
 @lru_cache(maxsize=1)
-def _installed_index(path, mtime_ns, size):
+def _installed_index(path, inode, mtime_ns, size):
     # File identity is part of the cache key so a regenerated index is visible.
     return _Catalogue(json.loads(path.read_bytes())["entries"])
 
@@ -86,5 +86,6 @@ def zoo_search(query):
         if any(term.parent is not parent for term in terms):
             raise ValueError("Query polynomials belong to different coordinate spaces.")
         query = [str(term) for term in terms]
-    info = _INDEX.stat()
-    return _installed_index(_INDEX, info.st_mtime_ns, info.st_size).search(query)
+    index = catalogue_file("index.json")
+    info = index.stat()
+    return _installed_index(index, info.st_ino, info.st_mtime_ns, info.st_size).search(query)

@@ -1,19 +1,24 @@
 import itertools
 import json
+import os
+from pathlib import Path
 import random
+import tempfile
 import unittest
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from fractions import Fraction
 
 from engine.zoo_search import _Catalogue, zoo_search
 from tests.cli_support import run_prompt, run_script
+from tests.zoo_support import TestZooMixin
 
 
 def entry(name, *terms):
     return {"id": name, "terms": [{"coefficient": str(c), "exponents": [str(x) for x in e]} for c, e in terms]}
 
 
-class ZooSearchTests(unittest.TestCase):
+class ZooSearchTests(TestZooMixin, unittest.TestCase):
     def test_exact_coefficients_sign_and_consistent_renaming(self):
         def row(name, a, index, b):
             powers = [0, 0, 0]
@@ -110,6 +115,25 @@ class ZooSearchTests(unittest.TestCase):
                 return str(error)
         with ThreadPoolExecutor(max_workers=8) as pool:
             self.assertEqual(list(pool.map(run, queries)), [["a"], ["b"], [], "Expected a nonnegative integer."] * 20)
+
+    def test_replaced_index_and_different_checkout(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            index = Path(scratch) / "index.json"
+            def write_record(path, name):
+                records = [entry(name, ("1", (2,)))]
+                path.write_text(json.dumps({"schema_version": 1, "entries": records}))
+
+            write_record(index, "first")
+            original = zoo_search("")["ids"]
+            with patch.dict(os.environ, ATLAS_ZOO_DIR=scratch):
+                self.assertEqual(zoo_search("")["ids"], ["first"])
+                replacement = index.with_suffix(".new")
+                write_record(replacement, "other")
+                stamp = index.stat().st_mtime_ns
+                os.utime(replacement, ns=(stamp, stamp))
+                replacement.replace(index)
+                self.assertEqual(zoo_search("")["ids"], ["other"])
+            self.assertEqual(zoo_search("")["ids"], original)
 
     def test_prompt_and_script(self):
         query = f"123456789012345678901234567890*x^{2 ** 200}"

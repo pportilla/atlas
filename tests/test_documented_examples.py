@@ -3,6 +3,7 @@ import re
 import unittest
 
 from tests.cli_support import ROOT, run_prompt, run_script
+from tests.zoo_support import TestZooMixin
 
 
 def expected_output(section, source):
@@ -15,7 +16,7 @@ def expected_output(section, source):
     return [line.split("#", 1)[1].strip() for line in source.splitlines() if line.lstrip().startswith("print(")]
 
 
-class DocumentedExamplesTests(unittest.TestCase):
+class DocumentedExamplesTests(TestZooMixin, unittest.TestCase):
     def test_prompt_transcripts(self):
         guides = ("docs/tour.md", "docs/tutorial/prompt-and-scripts.md", "docs/tutorial/rings.md",
                   "docs/tutorial/resolving-a-cusp.md", "docs/thematic/resolution-records.md",

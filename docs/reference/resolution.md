@@ -80,7 +80,7 @@ The zeta functions are always computed on an embedded resolution. For an intrins
 
 ## Search the Resolution Zoo
 
-The Resolution Zoo is a catalogue of germs that Atlas has resolved, with both resolutions, both zeta functions and the pole check. Open it in a browser with `./atlas serve`. `zoo_search` finds the records whose equation contains all the monomials you give, up to renaming the variables and changing the overall sign.
+The Resolution Zoo is a catalogue of germs that Atlas has resolved, with both resolutions, both zeta functions and the pole check. Install the catalogue beside Atlas and open it in a browser with `./atlas serve`. `zoo_search` finds the records whose equation contains all the monomials you give, up to renaming the variables and changing the overall sign. [Install the Resolution Zoo](../installation.md#install-the-resolution-zoo)
 
 ```atlas
 hits = zoo_search("x^2, -y^2*z")               # records containing x^2 and -y^2*z

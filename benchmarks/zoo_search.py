@@ -17,6 +17,7 @@ from time import perf_counter_ns
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from engine.zoo_data import catalogue_file
 from engine.zoo_search import _Catalogue
 
 QUERIES = ("x*y^2", "1/2*x*y^3 - x^4", "x^2 + y^3 + z^5")
@@ -128,7 +129,7 @@ def main():
     args = parser.parse_args()
     if args.copies < 1 or args.trials < 2 or (args.limit_surfaces is not None and args.limit_surfaces < 1):
         parser.error("Use at least one surface, one copy and two trials.")
-    index_path = ROOT / "web/zoo-data/index.json"
+    index_path = catalogue_file("index.json")
     entries = [e for e in json.loads(index_path.read_bytes())["entries"] if e["dimension"] == 2]
     entries = entries[:args.limit_surfaces]
     if not all(e["variables"] == ["x", "y", "z"] for e in entries):

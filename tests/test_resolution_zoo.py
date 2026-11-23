@@ -1,4 +1,4 @@
-"""Cross-check the checked-in Resolution Zoo against its native sources."""
+"""Cross-check an installed Resolution Zoo checkout against its native sources."""
 from collections import Counter
 import contextlib
 from fractions import Fraction
@@ -13,18 +13,35 @@ import unittest
 from jsonschema import Draft202012Validator
 
 from engine.polynomial import parse_expression
-from tools.build_resolution_zoo import DEFAULT_SEEDS, build_record, generate, seeds
+from engine.zoo_data import catalogue_directory
+from tools.build_resolution_zoo import build_record, generate, seeds
 
-DATA = Path(__file__).resolve().parents[1] / "web" / "zoo-data"
+DATA = catalogue_directory()
+SEEDS = DATA / "seeds.json"
 
 
 def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+class ZooGenerationTests(unittest.TestCase):
+    def test_custom_seed_file_cannot_replace_the_installed_index(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "seeds.json").write_text("[]")
+            (root / "index.json").write_text("previous index")
+            custom = root / "custom.json"
+            custom.write_text("[]")
+            with self.assertRaisesRegex(ValueError, "separate --out"):
+                generate(custom, root)
+            self.assertEqual((root / "index.json").read_text(), "previous index")
+
+
 class ResolutionZooTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if not (DATA / "index.json").is_file():
+            raise unittest.SkipTest("Install the separate Resolution Zoo to validate its full catalogue")
         cls.index = read_json(DATA / "index.json")
         cls.records = {e["id"]: read_json(DATA / "records" / (e["id"] + ".json"))
                        for e in cls.index["entries"]}
@@ -54,7 +71,7 @@ class ResolutionZooTests(unittest.TestCase):
         self.assertGreaterEqual(Counter(e["dimension"] for e in entries)[2], 50)
         self.assertTrue({1, 2, 3, 4, 5} <= {e["dimension"] for e in entries})
         self.assertEqual({f.stem for f in (DATA / "records").glob("*.json")}, set(self.records))
-        self.assertEqual(set(self.records), {s["id"] for s, _, _ in seeds(DEFAULT_SEEDS)})
+        self.assertEqual(set(self.records), {s["id"] for s, _, _ in seeds(SEEDS)})
         for entry in entries:
             with self.subTest(entry=entry["id"]):
                 record = self.records[entry["id"]]
@@ -134,7 +151,7 @@ class ResolutionZooTests(unittest.TestCase):
     def test_parallel_generation_keeps_seed_order(self):
         chosen = ("a2", "plane-cusp", "whitney-umbrella")
         groups = [{**group, "entries": [s for s in group["entries"] if s["id"] in chosen][::-1]}
-                  for group in read_json(DEFAULT_SEEDS)]
+                  for group in read_json(SEEDS)]
         groups = [group for group in groups if group["entries"]]
         with tempfile.TemporaryDirectory() as scratch:
             source, target = Path(scratch) / "seeds.json", Path(scratch) / "zoo"
@@ -153,7 +170,7 @@ class ResolutionZooTests(unittest.TestCase):
                     "chain-3-2-4", "cone-braid-arrangement", "hidden-bp-2-5-5-quadric", "laufer-1",
                     "cone-d4-quartic", "quartic-face-plus", "hesse-triangle-quartic",
                     "audit-hyperplane-e7-cylinder", "m-s-varying-cusp-slope"}
-        for seed, dimension, variables in seeds(DEFAULT_SEEDS):
+        for seed, dimension, variables in seeds(SEEDS):
             if seed["id"] in fixtures:
                 with self.subTest(record=seed["id"]):
                     _, detail = build_record(seed, dimension, variables)

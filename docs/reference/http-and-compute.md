@@ -6,7 +6,9 @@ When Atlas runs on a remote machine, forward the port from the machine with your
 
 ## Browse the Resolution Zoo
 
-Open `/zoo/` on the Atlas server to browse the catalogue. The page fetches the searchable index from `/zoo/zoo-data/index.json` and a selected record from `/zoo/zoo-data/records/<id>.json`.
+Install the catalogue beside Atlas or set `ATLAS_ZOO_DIR` to its checkout. Open `/zoo/` on the Atlas server to browse the same records as the prompt and scripts. [Install the Resolution Zoo](../installation.md#install-the-resolution-zoo)
+
+The page fetches the searchable index from `/zoo/zoo-data/index.json` and a selected record from `/zoo/zoo-data/records/<id>.json`.
 
 To find records containing a particular monomial pattern, send the same query accepted by the Atlas session.
 

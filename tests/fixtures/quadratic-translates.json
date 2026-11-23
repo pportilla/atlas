@@ -1,0 +1,135 @@
+{
+  "polynomial": "(z^2-y^3+x^5)*((z-y^2+x^3)^2-y^3+x^5)*((z-y^2+x^3-x^4-y^3)^2-y^3+x^5)",
+  "topological_zeta": "(2723709118500*s^8 + 11417037073380*s^7 + 21809764138311*s^6 + 23253946798233*s^5 + 14900025964961*s^4 + 5880617053854*s^3 + 1403077047676*s^2 + 186009240056*s + 10538482240)/((s + 1)^2*(50*s + 19)*(60*s + 23)*(63*s + 22)*(71*s + 26)*(90*s + 31)*(99*s + 34)*(111*s + 40))",
+  "pole_witnesses": [
+    {
+      "value": "-1",
+      "order": 2,
+      "eigenvalue_order": 1,
+      "cyclotomic_exponent": -4,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-23/60",
+      "order": 1,
+      "eigenvalue_order": 60,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-19/50",
+      "order": 1,
+      "eigenvalue_order": 50,
+      "cyclotomic_exponent": -2,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-26/71",
+      "order": 1,
+      "eigenvalue_order": 71,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-40/111",
+      "order": 1,
+      "eigenvalue_order": 111,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-22/63",
+      "order": 1,
+      "eigenvalue_order": 63,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-31/90",
+      "order": 1,
+      "eigenvalue_order": 90,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    },
+    {
+      "value": "-34/99",
+      "order": 1,
+      "eigenvalue_order": 99,
+      "cyclotomic_exponent": -1,
+      "witness": "origin zeta"
+    }
+  ],
+  "monodromy_zeta": {
+    "expression": "(1-T^18)*(1-T^21)*(1-T^25)*(1-T^30)*(1-T^33)*(1-T^37)*(1-T^45)/((1-T^6)*(1-T^9)*(1-T^15)*(1-T^50)^2*(1-T^60)*(1-T^63)*(1-T^71)*(1-T^90)*(1-T^99)*(1-T^111))",
+    "factors": [
+      {
+        "multiplicity": 6,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 9,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 15,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 18,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 21,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 25,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 30,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 33,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 37,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 45,
+        "exponent": 1
+      },
+      {
+        "multiplicity": 50,
+        "exponent": -2
+      },
+      {
+        "multiplicity": 60,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 63,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 71,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 90,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 99,
+        "exponent": -1
+      },
+      {
+        "multiplicity": 111,
+        "exponent": -1
+      }
+    ]
+  }
+}

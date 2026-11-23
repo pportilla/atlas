@@ -15,9 +15,7 @@ sys.path.insert(0, str(ROOT))
 from engine.polynomial import integer_from_decimal, parse_expression
 from engine.quotient_monomials import degree_bounds
 from engine.resolution_zetas import replay_zetas
-
-DEFAULT_SEEDS = ROOT / "examples" / "resolution-zoo-seeds.json"
-DEFAULT_OUT = ROOT / "web" / "zoo-data"
+from engine.zoo_data import catalogue_directory
 
 
 def atlas(*arguments):
@@ -139,6 +137,8 @@ def compute(item):
 def generate(source, destination, jobs=1):
     if jobs < 1:
         raise ValueError("Use at least one job.")
+    if (destination / "seeds.json").is_file() and source.resolve() != (destination / "seeds.json").resolve():
+        raise ValueError("Use the checkout's seeds.json to regenerate it. For custom seeds choose a separate --out.")
     work = list(seeds(source))
     destination.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -170,10 +170,13 @@ def generate(source, destination, jobs=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seeds", type=Path, default=DEFAULT_SEEDS)
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--seeds", type=Path, help="seed file (default: seeds.json in the catalogue checkout)")
+    parser.add_argument("--out", type=Path, help="output directory (default: the catalogue checkout)")
     parser.add_argument("--jobs", type=int, default=1, help="number of records to compute at once")
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
-    generate(args.seeds, args.out, args.jobs)
+    directory = catalogue_directory()
+    if args.seeds and not args.out and args.seeds.resolve() != (directory / "seeds.json").resolve():
+        parser.error("For a separate seed file, pass --out to choose the output directory.")
+    generate(args.seeds or directory / "seeds.json", args.out or directory, args.jobs)

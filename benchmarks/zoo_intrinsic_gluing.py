@@ -13,6 +13,7 @@ from time import perf_counter
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from engine.zoo_data import catalogue_file
 from engine.general_atlas import native_general_outputs
 
 
@@ -23,7 +24,7 @@ def main():
     args = parser.parse_args()
     if args.trials < 2:
         parser.error("Use at least two trials.")
-    case = json.loads((ROOT / "web/zoo-data/records/double-quadric-contact.json").read_text())
+    case = json.loads(catalogue_file("records/double-quadric-contact.json").read_text())
     start = perf_counter()
     record = json.loads(subprocess.check_output([
         ROOT / "atlas", "resolve", case["equation"], "--vars", ",".join(case["variables"]),

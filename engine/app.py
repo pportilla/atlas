@@ -86,10 +86,15 @@ class Handler(BaseHTTPRequestHandler):
         if path in WEB_FONTS:
             return self.send(200, (WEB / path[1:]).read_bytes(), 'font/woff2')
         if path in ('/zoo-data/index.json', '/zoo-data/schema.json') or ZOO_RECORD.fullmatch(path):
-            resource = WEB / path[1:]
-            if resource.is_file():
-                return self.send(200, resource.read_bytes(), 'application/json; charset=utf-8')
-            return self.obj(404, {'error': 'Unknown catalogue record.'})
+            from .zoo_data import catalogue_file
+            try:
+                resource = catalogue_file(path.removeprefix('/zoo-data/'))
+                contents = resource.read_bytes()
+            except FileNotFoundError:
+                return self.obj(404, {'error': 'Unknown catalogue record.'})
+            except (RuntimeError, OSError) as exc:
+                return self.obj(503, {'error': str(exc)})
+            return self.send(200, contents, 'application/json; charset=utf-8')
         if path=='/api/health': return self.obj(200,{'status':'ok'})
         if path=='/api/searches':
             return self.obj(200,{'jobs':self.server.search_jobs.list()})

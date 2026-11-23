@@ -3,9 +3,12 @@ import json
 from fractions import Fraction
 
 from tests.browser_support import BrowserCase, expect
+from tests.zoo_support import TestZooMixin
 
 
-class ZooBrowserTests(BrowserCase):
+class ZooBrowserTests(TestZooMixin, BrowserCase):
+    zoo_records = True
+
     def test_equation_order_across_pages_and_dimension_filter(self):
         page = self.page
         page.goto(self.url + "/zoo/")

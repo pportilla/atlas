@@ -23,6 +23,22 @@ Use `--atlas-root /path/to/built/candidate --baseline /path/to/built/baseline` t
 
 ### Measurements on the headless host
 
+The November 21, 2026 resolution audit repeated the comparison on logical
+CPU 5 of the same Ryzen 7 6800H with Python 3.14.4 and Singular 4.4.1.
+Both exact zetas agreed on every trial. Median wall times in milliseconds
+from three repetitions were as follows. Repeat with
+`taskset -c 5 python3 benchmarks/resolution_zeta.py --repeats 3`.
+
+| Germ | Atlas fresh | Singular fresh | Atlas warm | Singular warm |
+| --- | ---: | ---: | ---: | ---: |
+| Ordinary double point | 58.53 | 167.57 | 2.68 | 142.87 |
+| Cubic cone | 83.24 | 171.71 | 2.96 | 135.28 |
+| A₆ surface | 60.55 | 1346.40 | 5.37 | 1324.72 |
+
+For intrinsic resolution without zetas, a separate comparison measures the
+one-blowup cusp cylinders and verifies both affine charts independently.
+[Intrinsic resolution timings](intrinsic-binomial.md)
+
 Median wall times in milliseconds from five runs per case and scope on 2026-11-14. The AMD Ryzen 7 6800H ran Linux x86-64, Python 3.14.4 and Singular 4.4.1. The driver and its children were pinned to logical CPU 5 with `taskset -c 5`. Other host activity continued. The Atlas source-and-binary fingerprint prefixes were `a67f9d3d2d08` for the candidate and `694c612747fc` for the pre-migration baseline.
 
 | Input | Candidate fresh | Baseline fresh | Singular fresh | Candidate warm | Baseline warm | Singular warm |
@@ -33,31 +49,105 @@ Median wall times in milliseconds from five runs per case and scope on 2026-11-1
 
 The ordinary double point and the cubic cone use the sparse point-chart verifier without importing SymPy. Their fresh baseline-to-candidate speedups were 7.93× and 7.69×. For the longer A₆ chain, fresh wall time improved 8.05× and warm wall time improved 5.07×. Across all three inputs the candidate was 2.55–5.07× faster than the warm baseline and 4.46–33.80× faster than fresh Singular. All 90 timed requests passed both exact invariant checks.
 
+### Embedded identity charts for conjugate plane branches
+
+The native recognizer starts over $\mathbb Q$, computes the quadratic
+splitting field of the tangent lines, and returns equations and multiplicities
+for the branches through the origin. For a quadratic support it constructs
+the two lines directly. For curved branches it factors the reduced equation
+over that field. The public solver verifies the original input on one marked
+identity chart before returning it. When the equation uses two coordinates
+of a larger ambient space, the recognizer factors in those two variables and
+the solver verifies the chart in every original coordinate. [Native recognizer](../native/conjugate_plane_crossing.cpp)
+
+The Singular comparison starts with $\mathbb Q(i)$, which splits the tangents
+in all five positive examples. It factors the same full input, checks that
+the powered factors multiply back to it, and evaluates the two-by-two gradient
+minor in the active coordinates at the origin. Each trial checks agreement on whether
+the identity works and the multiplicity of both branches. The controls are
+an irreducible quartic node and a cusp. [Equations and driver](conjugate_plane_crossing.py)
+
+Run `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 taskset -c 5 python3 benchmarks/conjugate_plane_crossing.py --trials 9`.
+The table shows median wall milliseconds for nine trials after one warm-up
+per case, with alternating order on logical CPU 5 of an AMD Ryzen 7 6800H,
+Python 3.14.4 and Singular 4.4.1. All columns include parsing. The two
+resolution columns include complete embedded geometry with zetas disabled.
+The second bypasses the conjugate identity trial and uses point blowups on
+the plane or a blowup along the singular line on the cylinder. The last two columns time the recognition test alone, including
+transport to the native kernel or the warm Singular process.
+
+| Input | Atlas resolution | Atlas without identity trial | Atlas criterion | Singular criterion |
+| --- | ---: | ---: | ---: | ---: |
+| $x^2+y^2$ | 1.349 | 5.424 | 0.141 | 0.395 |
+| Two lines with rational coefficients | 1.518 | 5.614 | 0.163 | 0.483 |
+| $(y-x^2)^2+x^2$ | 2.014 | 5.384 | 0.752 | 0.751 |
+| Curved branches of order three times a unit | 9.516 | 12.551 | 0.959 | 0.979 |
+| Irreducible node $y^2+x^2(1+x^2)$ | 5.544 | 5.309 | 0.417 | 0.522 |
+| Cusp $y^2-x^3$ | 6.126 | 6.082 | 0.089 | 0.278 |
+| Cylinder $x^2+y^2$ in coordinates $(x,z,y)$ | 1.351 | 0.973 | 0.127 | 0.267 |
+
+The identity reduced the blowup count from one to zero in all five positive
+cases. The complete three-dimensional identity chart took 0.378 ms longer
+than the binomial blowup. The extra trial cost 0.235 ms on the irreducible
+node and 0.044 ms on the cusp. The two systems' curved-branch criteria were
+within 0.020 ms of one another in this run.
+
 ### Local monodromy on nearby strata
 
-The table gives median wall times in milliseconds on an AMD Ryzen 7 6800H
-with Python 3.14.4 and Singular 4.4.1. Run
+The table gives median wall times in milliseconds on a 13th Gen Intel Core
+i7-1355U with Python 3.14.7 and Singular 4.4.1. Run
 `taskset -c 5 python3 benchmarks/nearby_monodromy.py --trials 9` to repeat
 the comparison. Each case has one warm-up and nine measured pairs on one
 logical CPU, with alternating solver order. [Benchmark driver](nearby_monodromy.py)
 
 Both systems use the same rational polynomial. Atlas starts after the origin
 resolution and times the additional call that identifies the nearby loci and
-returns their factored zetas. Singular receives the indicated normal coordinates,
-sets the remaining coordinates to one, and runs `gmssing.lib`'s `monodromy` on
-the resulting isolated transverse germ. Its timing includes the request to a
-warm Singular process and delivery of the Jordan data. Outside the timed
-interval the driver converts that data to the unreduced Lefschetz convention
-and checks the multiplicity of every root against Atlas on the indicated locus.
+returns their factored zetas. This call includes the search for transverse
+compositions, which decomposes the critical locus. Singular receives the
+indicated normal coordinates, sets the remaining coordinates to one, and runs
+`gmssing.lib`'s `monodromy` on the resulting isolated transverse germ. Its
+timing includes the request to a warm Singular process and delivery of the
+Jordan data. Outside the timed interval the driver converts that data to the
+unreduced Lefschetz convention and checks the multiplicity of every root
+against Atlas on the indicated locus.
+
+The locus $x^2+y^2+z^2=x=0$ has no rational point except the origin, so no
+rational slice exists. For that row Singular receives Atlas's certified
+transverse germ $u_1^2+u_2^5$ in the ring `ds` and computes its monodromy.
+Atlas still finds the factorization $f=G(h)$ inside the timed call.
 
 | Polynomial | Normal coordinates | Atlas (ms) | Singular (ms) |
 |---|---|---:|---:|
-| $x^4y^3$ | $x$ | 0.124 | 2.831 |
-| $x^3+y^4z$ | $x,y$ | 0.155 | 3.593 |
-| $x^2+y^2z+y^3$ | $x,y$ | 0.162 | 2.634 |
-| $xy+z^5t$ | $x,y,z$ | 0.155 | 3.521 |
-| $x^2+y^2+tz^2+z^3$ | $x,y,z$ | 0.151 | 2.997 |
-| $x^2+y^3+y^4$ in $x,y,z$ | $x,y$ | 0.159 | 2.951 |
+| $x^4y^3$ | $x$ | 0.216 | 4.057 |
+| $x^3+y^4z$ | $x,y$ | 0.635 | 5.147 |
+| $x^2+y^2z+y^3$ | $x,y$ | 0.831 | 3.765 |
+| $xy+z^5t$ | $x,y,z$ | 0.769 | 4.985 |
+| $x^2+y^2+tz^2+z^3$ | $x,y,z$ | 1.043 | 4.216 |
+| $x^2+y^3+y^4$ in $x,y,z$ | $x,y$ | 0.594 | 4.125 |
+| $(x+yz)^2+x^3$ | $x,y$ | 1.587 | 4.196 |
+| $(x^2+y^2+z^2)^2+x^5$ | germ $u_1^2+u_2^5$ | 2.550 | 4.693 |
+
+The first six rows took 0.12–0.16 ms on the earlier AMD Ryzen 7 6800H
+measurement, before the composition search was added. Every median remains
+below Singular's on this machine.
+
+The two-smooth-branch cases were measured on an AMD Ryzen 7 6800H, Python
+3.14.4 and Singular 4.4.1, with nine warm alternating pairs pinned to CPU 6.
+Run `taskset -c 6 python3 benchmarks/nearby_monodromy.py --contacts-only --trials 9`.
+The remaining coordinates take value one in each Singular slice. Atlas keeps
+them symbolic and determines the generic transverse contact. All cyclotomic
+multiplicities agreed.
+
+| Polynomial | Normal coordinates | Contact order | Atlas (ms) | Singular (ms) |
+|---|---|---:|---:|---:|
+| $(xz-y^2)(xz+yz-y^2)$ | $y,z$ | 3 | 4.654 | 3.448 |
+| $y(x^2+y^3+yz^3)$ in four variables | $x,y$ | 2 | 1.667 | 2.426 |
+| $y(x^2+y^3+yz^3+yt^3)$ | $x,y$ | 2 | 1.596 | 2.352 |
+| $y(x^2+y^3+yz^3+yzt)$ | $x,y$ | 2 | 1.926 | 2.333 |
+
+The full Atlas search for the conics took 1.206 ms longer than Singular's
+supplied slice. A separate eleven-call profile measured 0.127 ms for the contact
+certificate and 4.468 ms for the search for transverse compositions.
 
 ### Topological zeta reduction from certified strata
 
@@ -235,3 +325,186 @@ These runs isolate a session operation on a prepared chart. In the graph ring wi
 | coefficient division | 207.59 | 9.46 |
 
 The recorded Atlas medians are slower on both operations. To repeat with the same batch size, run `python3 benchmarks/session_chart_arithmetic.py --trials 5 --batch 256` on one logical CPU.
+
+## Three graph branches with cuspidal contacts
+
+For `z*(z-y^2+x^3)*(z-y^2+x^3-x^4-y^3)`, run
+`python3 benchmarks/three_graph_contact.py --timeout 10 --repeats 3`.
+Each trial starts a new process, includes startup and output, and checks
+both returned rational functions exactly outside the timed interval. On
+2026-11-19 the host ran Linux x86-64 on an AMD Ryzen 7 6800H and Singular
+4.4.1. The jobs ran serially in alternating order without CPU pinning.
+
+| Input to solver | Three wall times (ms) | Median (ms) |
+|---|---|---:|
+| Atlas from the polynomial, `--zetas-only --quick --compute cpu` | 67.839, 46.110, 45.996 | 46.110 |
+| Singular from the polynomial, `resolve` with all charts followed by `zetaDL` | >10000, >10000, >10000 | >10000 |
+| Singular supplied with the six plane charts and their incidence | 7.848, 7.715, 7.591 | 7.715 |
+
+The direct Singular resolution also exceeded 100 seconds on a separate
+attempt. With the plane charts supplied, Singular computes the exact
+root differences, contact orders, discrepancies and both rational functions.
+It reproduces the Atlas results and runs faster on this smaller task.
+[Timing driver](three_graph_contact.py) · [Prescribed-chart calculation](three_graph_contact.sing)
+
+## Four graph branches with cuspidal contacts
+
+Adding the factor `z-y` gives six pairwise contact differences and eight
+exceptional curves in their plane resolution. On the same host and software
+versions as above, the quartic comparison used fresh processes in alternating
+order, with startup and JSON output included. Both completed calculations
+agreed exactly on the topological and monodromy zeta functions.
+
+| Input to solver | Three wall times (ms) | Median (ms) |
+|---|---|---:|
+| Atlas from the polynomial, `--zetas-only --quick --compute cpu` | 51.390, 53.084, 52.093 | 52.093 |
+| Singular from the polynomial, `resolve` followed by `zetaDL` | >5000, >5000, >5000 | >5000 |
+| Singular supplied with the eight plane charts and incidence | 43.153, 43.324, 44.123 | 43.324 |
+
+The prescribed-chart Singular calculation was faster on its smaller input
+task. It computes the six root-difference orders, Jacobian discrepancies,
+cluster splittings and local contributions in the supplied charts. Repeat
+with `python3 benchmarks/three_graph_contact.py --four --timeout 5 --repeats 3`.
+[Timing driver](three_graph_contact.py) · [Prescribed-chart calculation](four_graph_contact.sing)
+
+## Three translates with a common quadratic radicand
+
+The cuspidal case uses $D=y^3-x^5$ with centres $0,y^2-x^3,y^2-x^3+x^4+y^3$.
+The control uses $D=xy$ with centres $0,x+2y,3x+5y$. On the same Ryzen
+6800H host, both Atlas and Singular received the original polynomial over
+QQ. Each trial includes fresh process startup, calculation and output. The
+driver alternated solver order and checked both returned rational functions
+exactly outside the timed interval. Atlas ran `--compute cpu --zetas-only
+--quick --json`; Singular 4.4.1 used `resolve` and `zetaDL`.
+
+| Case and solver | Wall times (ms) | Median (ms) |
+|---|---|---:|
+| Cuspidal, Atlas | 153.136, 107.517, 105.004 | 107.517 |
+| Cuspidal, Singular general resolution | >5000, >5000, >5000 | >5000 |
+| Conics, Atlas | 75.513, 50.113, 47.434 | 50.113 |
+| Conics, Singular general resolution | >5000, >5000, >5000 | >5000 |
+| Conics, Singular using one blowup | 16.777, 16.337, 16.903 | 16.777 |
+
+The cuspidal results agree with the expected zeta functions in the [regression fixture](../tests/fixtures/quadratic-translates.json).
+For the conic control, Singular's specialized calculation verifies smoothness,
+transversality, absence of triple intersections, and the projective
+intersection degrees before applying the resolution formula. It is faster
+than Atlas on this input and agrees exactly on both functions. [Conic calculation](quadratic_contact_conics.sing)
+
+Repeat with `python3 benchmarks/three_graph_contact.py --quadratic cuspidal --timeout 5 --repeats 3`
+and then `--quadratic conics` with the same timing options.
+
+## Exhaustive zeta calculation and weighted companions
+
+The cusp $y^2-x^3$ and pinch point $(1+z)(x^2-y^2z)$ ran through the public
+`./atlas resolve --exhaustive --compute cpu --zetas-only --json` command. For the
+quadric $x^2+y^2+z^2$ and the $E_8$ surface $x^2+y^3+z^5$ the command also
+specified `--method weighted`. These Atlas runs include the weighted charts,
+the ordinary embedded companion, the two zetas, and the pole check.
+
+Each solver received the same polynomial over the rationals. Three fresh
+processes per method ran serially in alternating solver order on Linux x86-64
+on an AMD Ryzen 7 6800H. Timings include startup and output. The driver checked
+the complete topological and alternating monodromy rational functions exactly
+after each completed trial, outside the timer. Repeat with
+`python3 benchmarks/zeta_completion.py --repeats 3 --timeout 100`. [Driver](zeta_completion.py)
+
+| Case | Method | Wall times (ms) | Median (ms) |
+|---|---|---|---:|
+| Cusp | Atlas | 66.565, 65.189, 70.314 | 66.565 |
+| Cusp | Singular, supplied blowup maps | 6.361, 5.807, 6.598 | 6.361 |
+| Pinch point | Atlas | 98.104, 97.323, 96.591 | 97.323 |
+| Pinch point | Singular, supplied blowup maps | 5.869, 6.848, 6.233 | 6.233 |
+| Weighted quadric | Atlas with companion | 68.679, 73.142, 70.962 | 70.962 |
+| Quadric | Singular, general resolution | 157.080, 157.486, 159.657 | 157.486 |
+| Weighted $E_8$ | Atlas with companion | 81.138, 80.511, 82.386 | 81.138 |
+| $E_8$ | Singular, general resolution | 88,727.950, 86,137.737, 88,013.801 | 88,013.801 |
+| $E_8$ | Singular, diagonal formula | 5.977, 6.824, 5.888 | 5.977 |
+
+Singular 4.4.1 used its general `resolve` and `reszeta.lib::zetaDL` for
+the isolated surfaces. The library documents `zetaDL` for hypersurfaces
+of dimension two. Its local Euler routine reported an error on the pinch
+point. The separate Singular controls for the cusp and pinch point compute
+pullbacks and Jacobians on specified blowup charts, check the strict
+intersections with the exceptional fibre, and sum their contributions.
+Supplying the maps makes these two controls faster than Atlas. In a separate
+diagnostic run the Atlas records reported 24 ms inside the cusp solver and
+55 ms inside the pinch-point solver. Roughly 45 ms of each CLI call went
+to startup and output. [Singular calculations](zeta_completion_charts.sing)
+
+The diagonal Singular control for $E_8$ checks that the input is the sum of
+three pure powers with pairwise coprime exponents. It uses the compact
+Newton facet and the strict transform for the two simple candidate
+denominators. The Sebastiani–Thom product gives the monodromy zeta.
+The identity $Z(0)=1$ and the coefficient of $1/s$ at infinity determine
+the linear numerator. A'Campo's signed exponents $\chi_i$ give this
+coefficient as $\sum_i \chi_i/N_i$. This formula also outperformed
+Atlas on its specified family. Both general Singular surface calculations
+finished in all three trials and agreed with the complete Atlas outputs.
+
+After adding native word-range checks and ordinary continuation for weighted
+declines, three further Atlas CLI trials on the same cases gave medians
+of 66.351 ms (cusp), 97.123 ms (pinch point), 68.278 ms (weighted quadric)
+and 79.153 ms (weighted $E_8$). Both zetas matched exactly in all 12 reruns.
+
+## Factorization and gcd before certificate search
+
+For each exponent $e$, both public sessions factor
+$(x+1)(y^e+z)$ and compute the monic gcd of $h(x+y)$ and $h(x+z)$, where
+$h=x^e+xy^2+z^2$. The comparison checks the two distinct factors, their
+product with multiplicities and unit, and exact equality of the gcd to $h$.
+Both rings use rational coefficients and lexicographic order.
+
+Each trial starts a fresh public process, checks the answer, and exits.
+Solver order alternates across five trials. On 2026-11-19, on a Ryzen 7
+6800H pinned to logical CPU 5, the following wall times included startup.
+Repeat with `taskset -c 5 python3 benchmarks/resolution_preprocessing.py`.
+[Comparison driver](resolution_preprocessing.py)
+
+| Exponent | Solver | Five wall times (ms) | Median (ms) |
+|---|---|---|---:|
+| $47$ | Atlas | 214.256, 215.777, 217.581, 213.270, 216.604 | 215.777 |
+| $47$ | Singular 4.4.1 | 6.969, 6.005, 7.182, 6.374, 7.273 | 6.969 |
+| $2^{64}+1$ | Atlas | 260.648, 259.102, 259.812, 260.901, 258.577 | 259.812 |
+| $2^{64}+1$ | Singular 4.4.1 | Polynomial exponent rejected in all five trials | — |
+
+Singular was faster on the degree-47 control and agreed on all the checks.
+The larger example exercises Atlas's sparse factor search and elimination
+gcd following a FLINT decline. Singular rejected the exponent before
+factorization.
+
+### Powers in a marked coefficient field
+
+For $t^2+t+1=0$, both systems computed $(1+t)^n$ and returned $-t$ at
+$n=47$ and $n=2^{64}+1$. Since $1+t=-t^2$, the exact check follows from
+$n\equiv5\pmod 6$. The Atlas chart parser reduces after each binary
+powering step. Singular uses its algebraic number field with a `bigint`
+exponent and binary powering.
+
+Both timings include a fresh process for each trial. Atlas invokes its
+Python chart-input function, and Singular reads a script. Singular was
+faster at both exponents. On the same host pinned to CPU 5, five trials
+gave the following measurements. Repeat with
+`taskset -c 5 python3 benchmarks/resolution_preprocessing.py --workload marked-power`.
+[Comparison driver](resolution_preprocessing.py)
+
+| Exponent | Solver | Five wall times (ms) | Median (ms) |
+|---|---|---|---:|
+| $47$ | Atlas | 29.484, 29.320, 28.798, 30.316, 30.778 | 29.484 |
+| $47$ | Singular 4.4.1 | 6.475, 6.601, 6.884, 6.144, 6.669 | 6.601 |
+| $2^{64}+1$ | Atlas | 29.877, 30.185, 29.579, 31.609, 35.319 | 30.185 |
+| $2^{64}+1$ | Singular 4.4.1 | 6.974, 6.954, 6.702, 6.150, 7.456 | 6.954 |
+
+## Does the centre lie in the singular locus?
+
+The centre is the line with ideal $I=(x-z,y)$ in rational affine three-space. Atlas fan replay uses the ray $(1,1,0)$ in the frame $(x,y,z)=(u+w,v,w)$. Graph replay accepts the two generators of $I$ directly. Singular computes the squarefree support $h$ with `sqrfree` and independently checks both $h\in I^2$ and $(h,\partial_xh,\partial_yh,\partial_zh)\subseteq I$. All four computations agreed on every call. In the second case the equation vanishes on the entire line, but its $y$-derivative there is $z$. In the third case the reduced plane is smooth.
+
+| Source equation | Containment | Atlas fan (µs) | Singular $I^2$ (µs) | Atlas graph (µs) | Singular Jacobian (µs) |
+|---|---|---:|---:|---:|---:|
+| $(x-z)^2-y^2z$ | Yes | 79.72 | 247.50 | 85.10 | 244.53 |
+| $(x-z)^2+yz$ | No | 74.78 | 243.23 | 107.33 | 232.91 |
+| $(x-z)^7$ | No | 62.57 | 275.35 | 97.69 | 260.20 |
+
+Each entry is the median per-check wall time over seven trials of 128 calls, following one warm-up trial. The four methods rotated order. All ran on logical CPU 13 of an AMD Ryzen 7 6800H, with Singular 4.4.1 using rational lexicographic order. Timings exclude process startup and Singular’s initial ring declaration. They include preparing the equation and centre, finding the reduced support and testing containment. Atlas also times its Python-to-native calls and their ring setup. The Atlas fan's support and frame caches were cleared before each timed call. Both Atlas paths were faster than their corresponding Singular tests in all seven trials of each case.
+
+Reproduce the individual samples with `taskset -c 13 python3 benchmarks/resolution_centre_containment.py --trials 7 --batch 128`. [Comparison driver](resolution_centre_containment.py)

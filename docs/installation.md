@@ -25,6 +25,16 @@ make -j4
 
 In this directory, `./atlas` opens the mathematical prompt and `./atlas --help` lists the command-line interfaces. Take the [tour](tour.md) or [run an Atlas script](tutorial/prompt-and-scripts.md#run-or-save-a-calculation).
 
+## Install the Resolution Zoo
+
+To browse resolution records at `./atlas serve` or run `zoo_search` at the prompt, clone the catalogue once. Run this from the Atlas source directory.
+
+```sh
+git clone https://github.com/pportilla/resolution-zoo.git ../resolution-zoo
+```
+
+Atlas reads this checkout offline. Run `git -C ../resolution-zoo pull --ff-only` to update it. If you keep the data elsewhere, set `ATLAS_ZOO_DIR` to that checkout's absolute path before starting Atlas. The solver itself can run independently of the catalogue. [Catalogue format and regeneration](thematic/resolution-records.md#resolution-zoo-catalogue)
+
 ## Build the manual
 
 The manual needs Python 3.10 or later and GNU Make. From the top of a source checkout or an unpacked archive, install the documentation dependencies in a virtual environment. On Debian and Ubuntu, the `python3-venv` package supplies the environment creator.

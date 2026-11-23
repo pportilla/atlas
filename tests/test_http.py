@@ -1,16 +1,25 @@
 import json
+import os
+from pathlib import Path
+import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from engine.app import AtlasServer
+from engine.zoo_data import catalogue_directory
 from engine.zoo_search import zoo_search
 from tests.http_support import QuietHandler
+from tests.zoo_support import TestZooMixin
 
 
-class WebAPITests(unittest.TestCase):
+class WebAPITests(TestZooMixin, unittest.TestCase):
+    zoo_records = True
+
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.http=AtlasServer(('127.0.0.1',0),QuietHandler)
         cls.thread=threading.Thread(target=cls.http.serve_forever,daemon=True)
         cls.thread.start()
@@ -58,11 +67,36 @@ class WebAPITests(unittest.TestCase):
             record = json.load(response)
         self.assertEqual(record['embedded']['status'], 'resolved')
         self.assertEqual(record['zeta']['topological']['status'], 'computed')
-        for path in ('records/does-not-exist.json', 'records/../../index.html'):
+        linked = catalogue_directory() / "records" / "outside.json"
+        with tempfile.NamedTemporaryFile() as private:
+            linked.symlink_to(private.name)
+            self.addCleanup(linked.unlink)
+            with self.assertRaises(HTTPError) as forbidden:
+                urlopen(self.url + '/zoo/zoo-data/records/outside.json', timeout=5)
+            self.assertEqual(forbidden.exception.code, 404)
+            forbidden.exception.close()
+        alias = catalogue_directory() / "records" / "private-seeds.json"
+        alias.symlink_to("../seeds.json")
+        self.addCleanup(alias.unlink)
+        for path in ('records/does-not-exist.json', 'records/../../index.html', 'seeds.json', '.git/config',
+                     'records/private-seeds.json'):
             with self.assertRaises(HTTPError) as missing:
                 urlopen(self.url + '/zoo/zoo-data/' + path, timeout=5)
             self.assertEqual(missing.exception.code, 404)
             missing.exception.close()
+
+    def test_missing_catalogue_reports_how_to_install_it(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ATLAS_ZOO_DIR=directory):
+            search = Request(self.url + '/api/zoo/search', b'{"query": ""}', {'Content-Type': 'application/json'})
+            for endpoint in (self.url + '/zoo/zoo-data/index.json', search):
+                with self.assertRaises(HTTPError) as missing:
+                    urlopen(endpoint, timeout=5)
+                with missing.exception as response:
+                    self.assertEqual(response.code, 503)
+                    self.assertIn("ATLAS_ZOO_DIR", json.load(response)["error"])
+            with self.assertRaisesRegex(RuntimeError, "ATLAS_ZOO_DIR"):
+                zoo_search('')
+            self.assertFalse(list(Path(directory).iterdir()))
 
     def test_invalid_or_inconclusive(self):
         with self.assertRaises(HTTPError) as err:

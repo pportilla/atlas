@@ -6,9 +6,10 @@ from docs.site.function_reference import FUNCTIONS, reference_for
 from engine.session import new_session
 from engine.session_function_help import function_help
 from tests.cli_support import run_prompt
+from tests.zoo_support import TestZooMixin
 
 
-class FunctionReferenceTests(unittest.TestCase):
+class FunctionReferenceTests(TestZooMixin, unittest.TestCase):
     def test_catalog_and_descriptions_cover_the_live_interface(self):
         builtins = new_session(None).builtins
         self.assertEqual(set(ENTRIES) | set(ALIASES), {name for name, f in builtins.items() if callable(f)})
