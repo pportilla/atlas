@@ -40,8 +40,8 @@ def resolution_summary(raw):
         raise ValueError(f"Incomplete {raw['mode']} geometry for {raw['polynomial']}")
     record = select(raw, ("status", "engine", "summary", "multiplicity", "steps", "dual_complex",
                           "coefficient_field", "algebraic_numbers", "root_families", "tangent_cone",
-                          "tangent_coordinates", "branches", "input_divisor"))
-    record["chart_count"] = len(raw["atlas"])
+                          "tangent_coordinates", "branches", "input_divisor", "graph"))
+    record["chart_count"] = len(raw["charts"] if raw["engine"] == "toric-graph" else raw["atlas"])
     # Keep coordinates, loci and the fan describing the modification. Chart-batch
     # timings, row-reduction traces and repeated copies of zeta strata do not belong here.
     certificate = raw["certificate"]

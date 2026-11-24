@@ -15,13 +15,13 @@ def _record(names, support, fan, centres, charts, mode):
                   summary=f"Certified toric modification with {len(charts)} charts.", fan=fan, certificate=proof)
 
 
-def _fan_charts(names, fan):
-    from .newton_backend import monomial
+def _fan_charts(names, fan, linear=None):
+    from .newton_backend import chart_map
     coordinates = [f"u{i+1}" for i in range(len(names))]
     charts = []
     for k, cone in enumerate(fan["cones"], 1):
         rays = [fan["rays"][i] for i in cone]
-        mapping = dict(zip(names, (monomial(coordinates, e) for e in zip(*rays))))
+        mapping = chart_map(names, coordinates, rays, linear)
         charts.append(dict(id=f"N{k}", coordinates=coordinates, ray_indices=cone, map=mapping))
     return charts
 
@@ -172,14 +172,14 @@ def verify_intrinsic_presentation(record, atlas, output):
 
 
 def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, verified=None, integrals=False,
-         construct=True):
+         construct=True, linear=None):
     from .newton_backend import _boundary_centres
     from .newton_faces import exhaustive_faces
     if fan is None:
         fan = build_fan(support, exhaustive=exhaustive_faces())
     if len(fan["cones"]) > 32768:
         return None
-    if verified is not None and construct and mode == "embedded":
+    if verified is not None and construct and mode == "embedded" and linear is None:
         from .monomial_construction import construct as native_construct
         value = native_construct(poly, names, fan, integrals)
         if value is not None:
@@ -188,11 +188,16 @@ def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, veri
             result["dual_complex"] = output["dual_complex"]
             verified.append((result, (atlas, output)))
             return result
-    centres = _boundary_centres(poly, names, fan) if fan["boundary_rays"] else []
+    # The image of a ray is a coordinate subspace in the fan's own frame.
+    # A caller supplying a linear frame also supplies that adapted equation.
+    equation = poly if linear is None else support
+    centres = _boundary_centres(equation, names, fan) if fan["boundary_rays"] else []
     if centres is None:
         return None
-    charts = _fan_charts(names, fan)
+    charts = _fan_charts(names, fan, linear)
     result = _record(names, support, fan, centres, charts, mode)
+    if linear is not None:
+        result["certificate"]["linear_map_to_input"] = linear
     from .monomial_atlas import fan_outputs
     try:
         intrinsic = mode == "intrinsic"

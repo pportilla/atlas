@@ -5,8 +5,13 @@
 // lattice-normalized: slicing the Cayley polytope integrates the mixed-volume
 // polynomial and gives each mixed term coefficient one, including pure terms.
 #include "groebner.hpp"
+#include "algebraic_number.hpp"
 #include "local_io.hpp"
 #include "rational_sparse_json.hpp"
+#include "toric_graph_candidates.hpp"
+#include <flint/fmpq.h>
+#include <flint/fmpz_mat.h>
+#include <flint/fmpz_poly.h>
 #include <algorithm>
 #include <map>
 #include <limits>
@@ -42,6 +47,51 @@ Polynomial product(const Polynomial& f, const Polynomial& g) {
     return result;
 }
 
+Polynomial power(Polynomial base, Z exponent, size_t width) {
+    Polynomial result{{Powers(width),1}};
+    while (exponent>0) {
+        if (mpz_odd_p(exponent.get_mpz_t())) result=product(result,base);
+        exponent/=2;
+        if (exponent>0) base=product(base,base);
+    }
+    return result;
+}
+
+Polynomial log_derivative(const Polynomial& f,int i);
+
+bool same_integer_power(const Z& base, const Z& target, const Z& exponent) {
+    if ((target<0) != (base<0 && mpz_odd_p(exponent.get_mpz_t()))) return false;
+    const Z b=abs(base), t=abs(target);
+    if (b<=1) return b==t;
+    if (exponent>mpz_sizeinbase(t.get_mpz_t(),2)) return false;
+    Z root;
+    return mpz_root(root.get_mpz_t(),t.get_mpz_t(),exponent.get_ui()) && root==b;
+}
+
+// Compare H = U*B^m without expanding B^m. In characteristic zero its
+// logarithmic derivatives determine the ratio up to a constant; the
+// leading monomial and coefficient determine that constant exactly.
+bool same_weighted_divisor(const Polynomial& h, const Polynomial& unit, const Polynomial& base,
+                           const Z& multiplicity, size_t width) {
+    if (h.empty() || base.empty()) return false;
+    if (multiplicity==1) return product(unit,base)==h;
+    const auto& [e,c]=*h.rbegin();
+    const auto& [b,v]=*base.rbegin();
+    const auto& [u,w]=*unit.rbegin();
+    for (size_t i=0;i<width;++i) if (e[i]!=u[i]+multiplicity*b[i]) return false;
+    const Q target=c/w;
+    if (!same_integer_power(v.get_num(),target.get_num(),multiplicity) ||
+        !same_integer_power(v.get_den(),target.get_den(),multiplicity)) return false;
+    auto ub=product(unit,base);
+    for (size_t i=0;i<width;++i) {
+        auto derivative=product(base,log_derivative(unit,i));
+        for (const auto& [monomial,coefficient]:product(unit,log_derivative(base,i)))
+            add(derivative,monomial,multiplicity*coefficient);
+        if (product(ub,log_derivative(h,i))!=product(h,derivative)) return false;
+    }
+    return true;
+}
+
 JsonValue integer(const Z& a) {
     if (mpz_fits_slong_p(a.get_mpz_t())) return Json::Int64(a.get_si());
     return a.get_str();
@@ -55,10 +105,18 @@ std::vector<std::string> names(const JsonValue& array) {
 struct Graph {
     int n;
     std::vector<std::string> vars, chart_vars;
-    Polynomial g, f;
+    Polynomial g, f, unit;
+    Z multiplicity;
     Graph(const JsonValue& input) : vars(names(input["variables"])) {
         if (vars.empty() || vars.size() >= 8) throw std::invalid_argument("Invalid graph dimension.");
         n = vars.size() + 1;
+        multiplicity=Z(input.get("multiplicity","1").asString(),10);
+        if (multiplicity<1) throw std::invalid_argument("Expected positive graph divisor multiplicity.");
+        auto original_unit=atlas::local::parse_expression(vars,input.get("unit","1").asString());
+        if (!original_unit.count(Powers(n-1))) throw std::invalid_argument("The graph divisor unit must be nonzero at the origin.");
+        for (const auto& [e,c]:original_unit) {
+            auto lifted=e; lifted.push_back(0); unit.emplace(std::move(lifted),c);
+        }
         auto all = vars;
         all.push_back(input["auxiliary"].asString());
         if (std::set<std::string>(all.begin(),all.end()).size() != all.size())
@@ -79,21 +137,15 @@ struct Graph {
         Polynomial base;
         for (const auto& [powers,c] : f) {
             Z k = powers.back();
-            if (!cache.count(k)) {
-                Polynomial power = sub, value=cache.at(0);
-                for (Z j=k; j>0; j/=2) {
-                    if (mpz_odd_p(j.get_mpz_t())) value=product(value,power);
-                    if (j>1) power=product(power,power);
-                }
-                cache.emplace(k,std::move(value));
-            }
+            if (!cache.count(k)) cache.emplace(k,power(sub,k,n-1));
             for (const auto& [p,b] : cache.at(k)) {
                 Powers shifted=p;
                 for (int i=0;i<n-1;++i) shifted[i]+=powers[i];
                 add(base,shifted,c*b);
             }
         }
-        if (base!=atlas::local::parse_expression(vars,input["polynomial"].asString()))
+        const auto original=atlas::local::parse_expression(vars,input["polynomial"].asString());
+        if (!same_weighted_divisor(original,original_unit,base,multiplicity,n-1))
             throw std::invalid_argument("The graph divisor restricts to a different polynomial.");
     }
 };
@@ -322,7 +374,7 @@ struct GraphIncidence {
         if (terms != target) throw std::logic_error("Incompatible split Newton faces.");
         return id(smaller, index);
     }
-    JsonValue complex(const Fan& fan, const Support& f) const {
+    JsonValue complex(const Fan& fan, const Support& f, const Z& multiplicity) const {
         JsonValue out;
         out["status"] = "complete";
         out["convention"] = "Ambient exceptional divisor on the smooth graph over the origin over Qbar.";
@@ -351,7 +403,7 @@ struct GraphIncidence {
                         const int r = cone.front();
                         row["dimension"] = fan.n - 2;
                         row["ray_index"] = r;
-                        row["total_multiplicity"] = integer(f.minima[r]);
+                        row["total_multiplicity"] = integer(multiplicity*f.minima[r]);
                         row["nu"] = integer(std::accumulate(fan.rays[r].begin(),fan.rays[r].end(),Z(0))-g.minima[r]);
                         out["vertices"].append(std::move(row));
                     } else {
@@ -402,9 +454,14 @@ void append_divisors(JsonValue& rows, const JsonValue& divisor, const Section& s
     }
 }
 
+#include "toric_graph_intrinsic.inc"
+
 JsonValue evaluate(const JsonValue& input) {
-    Graph graph(input);const int n=graph.n;
     const auto operation=input["operation"].asString();
+    if (operation=="candidates") return atlas::toric_graph_candidates::propose(input);
+    Graph graph(input);const int n=graph.n;
+    const bool intrinsic=input.get("intrinsic",false).asBool();
+    if (intrinsic && graph.multiplicity!=1) throw std::invalid_argument("Intrinsic graph resolution requires a reduced source.");
     if (operation=="support") {
         std::set<Powers> sum;
         for (const auto& [e,c]:graph.g) for (const auto& [h,b]:graph.f) {
@@ -414,13 +471,17 @@ JsonValue evaluate(const JsonValue& input) {
         for (const auto& p:sum) result.append(atlas::sparse_json::strings(p));
         return result;
     }
-    if (operation!="charts" && operation!="strata" && operation!="incidence")
+    if (operation!="charts" && operation!="strata" && operation!="incidence" && operation!="outputs")
         throw std::invalid_argument("Unknown graph operation.");
+    const bool integrals=operation=="strata" || input.get("integrals",false).asBool();
     Fan fan(input["fan"],n);Support g(graph.g,fan),f(graph.f,fan);
+    std::optional<Support> unit;
+    if (graph.unit!=Polynomial{{Powers(n),1}}) unit.emplace(graph.unit,fan);
     bool validate=input.isMember("saved_charts"), charts=operation=="charts" || validate;
     if (validate && !input["saved_charts"].isArray())
         throw std::invalid_argument("The saved charts must be a list.");
     GraphIncidence incidence(g);
+    IntrinsicGraphIncidence strict_incidence(g,f);
     bool need_incidence=operation!="strata" || validate;
     size_t chart_number=0;
     JsonValue out(Json::objectValue),chart_rows(Json::arrayValue);
@@ -452,8 +513,11 @@ JsonValue evaluate(const JsonValue& input) {
                 auto second=get(f,b);
                 if (!smooth_torus(get(g,a),&second,n)) throw std::invalid_argument("The divisor fails the orbit Jacobian test.");
             }
-            if (need_incidence && orbit.front()>=n) incidence.observe(orbit,a);
-            if (operation!="strata") continue;
+            if (need_incidence && orbit.front()>=n) {
+                if (intrinsic) strict_incidence.observe(orbit,a,b);
+                else incidence.observe(orbit,a);
+            }
+            if (!integrals) continue;
             const int d=remaining.size();
             auto [it,fresh]=characteristics.try_emplace({{a,b},d});
             if (fresh) {
@@ -481,15 +545,21 @@ JsonValue evaluate(const JsonValue& input) {
                 c["map"][graph.vars[j]]=atlas::local::format_polynomial({{e,1}},graph.chart_vars);
             }
             c["ambient_ideal"].append(atlas::local::format_polynomial(g.strict(cone),graph.chart_vars));
-            c["strict_transform"]=atlas::local::format_polynomial(f.strict(cone),graph.chart_vars);
+            auto strict=atlas::local::format_polynomial(f.strict(cone),graph.chart_vars);
+            if (graph.multiplicity!=1) strict="("+strict+")^"+graph.multiplicity.get_str();
+            if (unit) strict="("+atlas::local::format_polynomial(unit->strict(cone),graph.chart_vars)+")*("+strict+")";
+            c["strict_transform"]=strict;
             c["exceptional"]=JsonValue(Json::arrayValue);
             JsonValue unsplit(Json::arrayValue);
             for (int i=0;i<n;++i) if (cone[i]>=n && g.initial({cone[i]}).size()>1) {
                 int r=cone[i];JsonValue e;e["id"]=label(r);e["equation"]=graph.chart_vars[i];
-                e["total_multiplicity"]=integer(f.minima[r]);
+                e["total_multiplicity"]=integer(graph.multiplicity*f.minima[r]);
                 e["nu"]=integer(std::accumulate(fan.rays[r].begin(),fan.rays[r].end(),Z(0))-g.minima[r]);
-                if (validate) unsplit.append(e);
-                append_divisors(c["exceptional"],e,incidence.section(g.initial({r})),cone,fan,graph);
+                if (intrinsic) strict_incidence.append_chart_divisors(c["exceptional"],e,cone,fan,graph,r);
+                else {
+                    if (validate) unsplit.append(e);
+                    append_divisors(c["exceptional"],e,incidence.section(g.initial({r})),cone,fan,graph);
+                }
             }
             if (validate) {
                 const auto& saved=input["saved_charts"][Json::ArrayIndex(chart_number)];
@@ -498,7 +568,7 @@ JsonValue evaluate(const JsonValue& input) {
                     // for every rational ray divisor, even when it splits.
                     auto legacy=c;
                     legacy["exceptional"]=std::move(unsplit);
-                    if (legacy!=saved)
+                    if (intrinsic || legacy!=saved)
                         throw std::invalid_argument("The saved charts disagree with the verified toric graph modification.");
                 }
                 ++chart_number;
@@ -508,21 +578,22 @@ JsonValue evaluate(const JsonValue& input) {
     }
     if (validate && chart_number!=input["saved_charts"].size())
         throw std::invalid_argument("The saved charts disagree with the verified toric graph modification.");
-    if (operation=="incidence") return incidence.complex(fan,f);
+    auto complex=[&](){return intrinsic ? strict_incidence.complex(fan) : incidence.complex(fan,f,graph.multiplicity);};
+    if (operation=="incidence") return complex();
     out["orbits_over_origin_meeting_graph"]=Json::UInt64(seen.size());
     out["graph_face_tests"]=Json::UInt64(graph_checked.size());
     out["complete_intersection_face_tests"]=Json::UInt64(pair_checked.size());
-    if (operation=="charts") {
-        out["charts"]=std::move(chart_rows);
-        out["dual_complex"]=incidence.complex(fan,f);
-    }
-    else {
+    if (operation=="charts") out["charts"]=std::move(chart_rows);
+    if (operation=="charts" || operation=="outputs")
+        out["dual_complex"]=complex();
+    if (integrals) {
         for (int i:used) {
-            JsonValue row;row["component"]=label(i);row["multiplicity"]=integer(f.minima[i]);
+            JsonValue row;row["component"]=label(i);row["multiplicity"]=integer(graph.multiplicity*f.minima[i]);
             row["nu"]=integer(std::accumulate(fan.rays[i].begin(),fan.rays[i].end(),Z(0))-g.minima[i]);
             out["numerical_data"].append(row);
         }
-        JsonValue strict;strict["component"]="strict";strict["multiplicity"]=1;strict["nu"]=1;out["numerical_data"].append(strict);
+        JsonValue strict;strict["component"]="strict";strict["multiplicity"]=integer(graph.multiplicity);
+        strict["nu"]=1;out["numerical_data"].append(strict);
         for (const auto& [ids,chi]:contributions) if (chi!=0) {
             JsonValue row;for(int id:ids)row["components"].append(id<0?"strict":label(id));
             row["euler_characteristic"]=integer(chi);out["strata"].append(row);

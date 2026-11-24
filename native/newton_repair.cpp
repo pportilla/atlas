@@ -68,17 +68,20 @@ Value orbit_faces(const Value& request) {
             orbit["face_id"]=it->second;
             refines &= !face.empty();
         }
-        Indices free, fixed, exceptional, exceptional_axes;
+        Indices free, fixed, exceptional, exceptional_axes, ordinary_fixed;
         for (unsigned r : rays) if (r>=width) exceptional.push_back(r);
         const auto cone=indices(request["cones"][row["chart"].asUInt()]);
         for (unsigned i=0; i<cone.size(); ++i) {
-            (std::find(rays.begin(),rays.end(),cone[i])==rays.end()?free:fixed).push_back(i);
+            const bool vanishes=std::find(rays.begin(),rays.end(),cone[i])!=rays.end();
+            (vanishes?fixed:free).push_back(i);
             if (cone[i]>=width) exceptional_axes.push_back(i);
+            else if (vanishes) ordinary_fixed.push_back(i);
         }
         orbit["free"]=list(free);
         orbit["fixed"]=list(fixed);
         orbit["exceptional"]=list(exceptional);
         orbit["exceptional_axes"]=list(exceptional_axes);
+        orbit["ordinary_fixed"]=list(ordinary_fixed);
         orbits.append(std::move(orbit));
     }
     result["faces"]=std::move(faces);
@@ -176,30 +179,72 @@ Value supported_rows(const Value& request) {
     return result;
 }
 
-// The singular scheme on the coordinate torus is the Jacobian ideal
-// saturated by the product of its coordinates. The contracted lex basis
-// also determines whether only finitely many centres can be repaired.
+// Coordinate monomials are invertible on the orbit, even at wide exponents.
+Polynomial remove_torus_monomial(const Polynomial& original) {
+    if (original.empty()) return {};
+    Powers minimum=original.begin()->first;
+    for (const auto& [exponents,c] : original) for (unsigned i=0; i<minimum.size(); ++i)
+        minimum[i]=std::min(minimum[i],exponents[i]);
+    Polynomial result;
+    for (const auto& [exponents,c] : original) {
+        auto e=exponents;
+        for (unsigned i=0; i<minimum.size(); ++i) e[i]-=minimum[i];
+        result.emplace(std::move(e),c);
+    }
+    return result;
+}
+
+// At a point of the orbit, an ordinary vanishing coordinate remains a
+// tangent direction to the intersection of the genuine exceptional divisors.
+// Its derivative on the orbit is the linear coefficient in this coordinate
+// after setting every other vanishing coordinate to zero.
+Basis ordinary_derivatives(const Value& request, unsigned n) {
+    const auto& chart=request["chart"];
+    if (chart.isNull()) return {};
+    const unsigned width=chart["width"].asUInt();
+    const auto free=indices(chart["free"]), ordinary=indices(chart["ordinary_fixed"]);
+    if (free.size()!=n) throw std::invalid_argument("Wrong number of free Newton coordinates.");
+    std::vector<bool> free_axis(width,false);
+    for (unsigned i : free) {
+        if (i>=width || free_axis[i]) throw std::invalid_argument("Invalid free Newton coordinate.");
+        free_axis[i]=true;
+    }
+    std::vector<bool> ordinary_axis(width,false);
+    for (unsigned i : ordinary) {
+        if (i>=width || free_axis[i] || ordinary_axis[i]) throw std::invalid_argument("Invalid ordinary Newton coordinate.");
+        ordinary_axis[i]=true;
+    }
+    Basis derivatives(width);
+    const auto strict=atlas::local::decode_row(chart["equation"].asString(),width);
+    for (const auto& [e,c] : strict) {
+        unsigned linear=width;
+        bool higher=false;
+        for (unsigned i=0; i<width; ++i) if (!free_axis[i] && e[i]!=0) {
+            if (linear!=width || !ordinary_axis[i] || e[i]!=1) {higher=true;break;}
+            linear=i;
+        }
+        if (higher || linear==width) continue;
+        Powers projected;
+        for (unsigned i : free) projected.push_back(e[i]);
+        derivatives[linear].emplace(std::move(projected),c);
+    }
+    Basis result;
+    for (auto i : ordinary) if (!derivatives[i].empty())
+        result.push_back(remove_torus_monomial(derivatives[i]));
+    return result;
+}
+
+// The saturated Jacobian ideal records failures of transversality to the
+// actual boundary. Its contracted lex basis also gives the repair centres.
 Value singular_orbit(const Value& request) {
     const unsigned n=request["width"].asUInt();
     if (!n) throw std::invalid_argument("Expected a positive-dimensional Newton orbit.");
-    const auto original=atlas::local::decode_row(request["equation"].asString(),n);
-    // A Laurent monomial is invertible on this orbit. Divide it out before
-    // saturation, also when its exponents exceed the packed basis limits.
-    Polynomial f;
-    if (!original.empty()) {
-        Powers minimum=original.begin()->first;
-        for (const auto& [exponents,c] : original) for (unsigned i=0; i<n; ++i)
-            minimum[i]=std::min(minimum[i],exponents[i]);
-        for (const auto& [exponents,c] : original) {
-            auto e=exponents;
-            for (unsigned i=0; i<n; ++i) e[i]-=minimum[i];
-            f.emplace(std::move(e),c);
-        }
-    }
+    const auto f=remove_torus_monomial(atlas::local::decode_row(request["equation"].asString(),n));
     atlas::local::SparseLexRing ring(n);
     atlas::PolyValue input(ring.ctx), derivative(ring.ctx);
     ring.write(input.p,f);
-    Basis equations{f};
+    Basis equations=ordinary_derivatives(request,n);
+    equations.push_back(f);
     for (unsigned i=0; i<n; ++i) {
         fmpq_mpoly_derivative(derivative.p,input.p,i,ring.ctx);
         equations.push_back(ring.read(derivative.p));
@@ -209,6 +254,7 @@ Value singular_orbit(const Value& request) {
     const auto dim=atlas::primary::dimension_lex(ideal,n);
     Value result;
     result["kind"] = dim<0 ? "empty" : dim==0 ? "points" : "positive_dimension";
+    result["dimension"] = dim;
     result["ideal"] = array();
     for (const auto& g : ideal) result["ideal"].append(atlas::local::encode_row(g));
     return result;

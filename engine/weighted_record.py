@@ -169,6 +169,17 @@ def nonreduced_resolution(poly, names, mode, resolve_support):
     record["input_divisor"] = metadata
     if record["status"] != "resolved":
         return record
+    if record["engine"] == "toric-graph":
+        if not weights["uniform"]:
+            from .local_blowups import GiveUp
+            raise GiveUp("The graph modification needs separately certified orders for its strict factors.")
+        from .toric_graph import resolve_graph
+        graph = dict(record["graph"], multiplicity=integer_text(factors[0][1]), unit=unit)
+        equation = format_poly(poly, names)
+        lifted = resolve_graph(list(names), equation, graph, fan=record["fan"])
+        lifted.update(input_divisor=metadata,
+                      multiplicity=integer_from_decimal(point_operation("order", [0] * len(names), poly)))
+        return lifted
     if record["engine"] == "hyperplane-arrangement-fan":
         from .newton_trials import hyperplane_fan
         lifted = hyperplane_fan(poly, list(names), record["fan"], None, False, factor_original=True)

@@ -95,6 +95,10 @@ def chart_space(resolution_record, chart_record):
     used_names = set(_NAME.findall(words))
     constants = dict(constants)
     for name in sorted(used_names):
+        individual = families.get(name)
+        if individual and "exact" in individual:
+            constants[name] = {"exact": individual["exact"]}
+            continue
         family, _, index = name.rpartition("_")
         if family not in families or not index.isdigit():
             continue

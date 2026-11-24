@@ -26,6 +26,7 @@ class NewtonRepairKernel(unittest.TestCase):
                 self.assertEqual(item["fixed"], [i for i,r in enumerate(cone) if r in source["rays"]])
                 self.assertEqual(item["exceptional"], [r for r in source["rays"] if r>=3])
                 self.assertEqual(item["exceptional_axes"], [i for i,r in enumerate(cone) if r>=3])
+                self.assertEqual(item["ordinary_fixed"], [i for i,r in enumerate(cone) if r<3 and r in source["rays"]])
                 all_nonempty &= bool(faces[0])
             self.assertEqual(result["refines"], all_nonempty)
 
@@ -66,6 +67,22 @@ class NewtonRepairKernel(unittest.TestCase):
         value = str(2**117+5)
         self.assertEqual(repair_operation("branch_euler", cut=value, branches=["0",value], deleted=["2",None]),
                          [[-1,value,-1],[0,"2",-1],[1,value,1]])
+
+    def test_ordinary_normal_derivatives_on_a_repeated_torus_cut(self):
+        a,x,b,y = chart_vars = np.symbols("a x b y")
+        orbit = (x,y)
+        face = (x-1)**2
+        ordinary = a*y**(2**78)
+        for strict, axes, kind, dimension, ideal in [
+                (face+ordinary+b, [0], "empty", -1, (1,)),
+                (face+a*(y-2)+b, [0], "points", 0, (x-1,y-2)),
+                (face+ordinary+b, [], "positive_dimension", 1, (x-1,)),
+                (face+a*b+a**2, [0,2], "positive_dimension", 1, (x-1,))]:
+            result = repair_operation("singular_orbit", width=2, equation=centre_rows(orbit,(face,))[0],
+                                      chart=dict(width=4, free=[1,3], ordinary_fixed=axes,
+                                                 equation=centre_rows(chart_vars,(strict,))[0]))
+            self.assertEqual((result["kind"],result["dimension"]), (kind,dimension))
+            self.assertEqual(exprs(orbit,result["ideal"]), ideal)
 
     def test_toric_parent_verifies_wide_map_after_marked_reduction(self):
         from engine.repair_gluing import _repair_geometry

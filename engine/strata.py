@@ -30,6 +30,9 @@ def replay_record_zetas(record, kinds, polynomial=None):
 
 def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=True,
                            replay_canonical=False):
+    if record.get("engine") == "toric-graph":
+        from .toric_graph import graph_outputs
+        return graph_outputs(record, polynomial, integrals)
     from .identity_atlas import identity_outputs
     options = dict(complex=complex, intrinsic=intrinsic, integrals=integrals)
     if replay_canonical and record.get("engine") == "canonical-blowups":
@@ -95,9 +98,11 @@ def resolution_strata(record, polynomial=None, *, computed=None, strict=False):
         raise InputError("The resolution needs its ordered list of variables.")
     if polynomial is None:
         polynomial = parse(record.get("polynomial"), variables, bounded=False)
-    if computed is None and record.get("engine") == "toric-graph":
-        from .toric_graph import graph_strata
-        return graph_strata(record, polynomial)
+    if record.get("engine") == "toric-graph":
+        from .toric_graph import graph_strata, STRATA_METHOD
+        if computed is None:
+            return graph_strata(record, polynomial)
+        return computed["numerical_data"], computed["strata"], STRATA_METHOD
     if computed is None and record.get("mode") == "intrinsic" and "embedded_companion" in record:
         # Both sets of charts refer to the same original polynomial. The
         # companion must pass the ordinary embedded verification on re-read.

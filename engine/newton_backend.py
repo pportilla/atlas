@@ -18,6 +18,15 @@ def monomial(coordinates, powers):
                     for name, power in zip(coordinates, powers) if power) or '1'
 
 
+def chart_map(names, coordinates, rays, matrix=None):
+    words = [monomial(coordinates, exponents) for exponents in zip(*rays)]
+    if matrix is None:
+        return dict(zip(names, words))
+    return {name: '+'.join(word if c == 1 else f'{c}*{word}'
+                           for c, word in zip(row, words) if c)
+            for name, row in zip(names, matrix)}
+
+
 def shear(poly, donor, axis, scalar=1):
     """Pull back by x_donor = v_donor + scalar*v_axis."""
     _, _, expansion = _axial_data(poly)
@@ -112,7 +121,7 @@ def _boundary_centres(poly, variables, fan):
 
 
 def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False,
-              diagnostics=None, before_repair=None):
+              diagnostics=None, before_repair=None, clean_fans=None, graph_fallback=None):
     n=len(variables)
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
@@ -145,9 +154,8 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
             if diagnostics is not None:
                 diagnostics.setdefault("face", "A Newton face could not be certified.")
             return None
-        # On a degenerate face the strict transform fails normal crossings at
-        # the singular points of the cut it makes on the orbit. The
-        # modification is kept and those points are blown up afterwards.
+        # A singular orbit cut needs a transversality check against the
+        # genuine exceptional divisors before choosing a blowup centre.
         degenerate = degenerate or proof['status']!='nondegenerate' 
         proof['exponents']=[list(e) for e in initial]
         if proof['face_dimension']==1:
@@ -166,10 +174,14 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
         # Repair uses the fan and adapted equation. A failed trial has no
         # atlas to return, so test its singular orbits before expanding charts.
         repair = repair_strata(poly, variables, fan, deadline=deadline, count_strata=False,
-                               diagnostics=diagnostics, before_points=before_repair)
+                               diagnostics=diagnostics, before_points=before_repair, nonisolated_face=graph_fallback)
         if repair is not None and "alternative" in repair:
             return repair["alternative"]
-        if repair is None or not repair['repairs']:
+        if repair is None:
+            return None
+        if not repair['repairs']:
+            if clean_fans is not None:
+                clean_fans.append((poly, fan, matrix))
             return None
     coords=[f'u{i+1}' for i in range(n)]
     # The repaired cover has its own divisor intersections after the blowups.
@@ -197,9 +209,7 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     for index, (cone, strict) in enumerate(zip(cones, equations, strict=True), 1):
         rr=[rays[i] for i in cone]
         minimum=[exceptional_orders[i] for i in cone]
-        torus_map=[monomial(coords,[ray[j] for ray in rr]) for j in range(n)]
-        maps={name:'+'.join(word if c==1 else f'{c}*{word}' for c,word in zip(row,torus_map) if c)
-              for name,row in zip(variables,matrix)}
+        maps=chart_map(variables,coords,rr,matrix)
         divisors=[]
         for position,i in enumerate(cone):
             if i<n:
@@ -331,6 +341,11 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
             last_limit = error
             return None
 
+    def graph_fallback(face):
+        from .toric_graph import try_graphs
+        return try_graphs(variables, format_poly(poly, variables), [format_poly(face, variables)], verified, integrals, mode)
+
+    clean_fans = []
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
             fan=build_fan(transformed, exhaustive=exhaustive_faces())
@@ -338,7 +353,8 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 continue
             result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
                              defer_outputs=defer_outputs, diagnostics=diagnostics,
-                             before_repair=intrinsic_trial if mode == 'intrinsic' else None)
+                             before_repair=intrinsic_trial if mode == 'intrinsic' else None, clean_fans=clean_fans,
+                             graph_fallback=graph_fallback if transformed == poly else None)
         except LimitError as error:
             last_limit = error
             continue
@@ -353,6 +369,20 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         result = resolve_translated(poly, variables, mode, compute, ramification=True)
         if result is not None:
             return result
+    # A degenerate face can leave all genuine exceptional intersections
+    # transverse. Verify such a fan after the usual adapted choices, using
+    # the original equation and the same chart checks as other monomial fans.
+    if clean_fans:
+        from .newton_trials import _try
+        for adapted, fan, matrix in clean_fans:
+            try:
+                result = _try(poly, variables, adapted, mode=mode, fan=fan, linear=matrix,
+                              verified=verified, integrals=integrals)
+            except LimitError as error:
+                last_limit = error
+                continue
+            if result is not None:
+                return result
     if last_limit is not None:
         raise last_limit
     return None

@@ -1,12 +1,10 @@
 """Strata of a regular Newton modification over the origin, with blowups where normal crossings fail.
 
-On the torus orbit of a cone the strict transform is cut out by the face
-polynomial of that cone, in the coordinates of the orbit. It is smooth and
-transverse to the toric strata there exactly where that hypersurface of the
-orbit is smooth. For a degenerate face it has singular points. When they are
-finitely many, the total transform has normal crossings on the fibre over the
-origin except at those points, and they are blown up until it has
-(engine/local_blowups.py).
+On a torus orbit the strict transform is cut out by the face polynomial.
+At a singular point of this cut, derivatives in the vanishing ordinary
+coordinates can still certify transversality to all exceptional divisors.
+When the remaining rank failures over the origin are isolated, the point
+blowups in engine/local_blowups.py repair them.
 
 The result is the data that A'Campo's formula and the topological zeta
 function of Denef and Loeser need: for every component of the total
@@ -111,7 +109,7 @@ def _rational(coords, free, points, count):
 
 
 def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count_strata=True,
-           certify_subfaces=False, diagnostics=None, before_points=None):
+           certify_subfaces=False, diagnostics=None, before_points=None, nonisolated_face=None):
     """The numerical data, the strata over the origin and the blowups made.
 
     `poly` is the reduced equation, in the coordinates of the fan. `parts`
@@ -258,9 +256,19 @@ def strata(poly, variables, fan, parts=None, names=None, deadline=None, *, count
             free = tuple(coords[i] for i in free_axes)
             torus = [(u,) for u in free]
             on_orbit = support.strict(cone, face)
-            result = repair_operation("singular_orbit", width=len(free), equation=centre_rows(free, (on_orbit,))[0])
+            chart = None
+            if orbit["ordinary_fixed"]:
+                chart = dict(width=n, free=free_axes, ordinary_fixed=orbit["ordinary_fixed"],
+                             equation=centre_rows(coords, (support.strict(cone),))[0])
+            result = repair_operation("singular_orbit", width=len(free),
+                                      equation=centre_rows(free, (on_orbit,))[0], chart=chart)
             if result["kind"] == "positive_dimension":
-                raise GiveUp("The strict transform fails normal crossings along a curve of an orbit.")
+                if nonisolated_face is not None:
+                    alternative = nonisolated_face({exponents[j]: poly[exponents[j]] for j in face})
+                    if alternative is not None:
+                        return {"alternative": alternative}
+                raise GiveUp("The strict transform fails normal crossings on a positive-dimensional locus "
+                             f"in chart N{ci+1}. Its dimension on this orbit is {result['dimension']}.")
             singular = kernel.exprs(free, result["ideal"])
             isolated = result["kind"] == "points"
             if count_strata:

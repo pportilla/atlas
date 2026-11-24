@@ -40,6 +40,56 @@ class SmoothPolynomialGraph(unittest.TestCase):
         with self.assertRaisesRegex(InputError, "different polynomial"):
             monodromy_zeta(record)
 
+    def test_graph_integrals_share_the_original_chart_verification(self):
+        from engine.polynomial import parse_expression
+        from engine.strata import proposal_chart_outputs, resolution_strata
+        from tools.build_resolution_zoo import resolution_summary
+
+        names = ["x", "y"]
+        graph = dict(auxiliary="v", equation="v-x-y", divisor="v+x+2*y")
+        source = "2*x+3*y"
+        poly = parse_expression(source, names)
+        verified = []
+        record = resolve_graph(names, source, graph, verified=verified, integrals=True)
+        owner, (_, initial) = verified[0]
+        self.assertIs(owner, record)
+        _, checked = proposal_chart_outputs(record, poly, integrals=True)
+        self.assertEqual(checked["dual_complex"], initial["dual_complex"])
+        self.assertEqual(resolution_strata(record, poly, computed=initial), resolution_strata(record, poly))
+        self.assertEqual(checked["strata"], initial["strata"])
+        summary = resolution_summary(record)
+        self.assertEqual((summary["chart_count"], summary["graph"]), (len(record["charts"]), graph))
+
+    def test_uniform_power_and_unit_on_the_graph(self):
+        from engine.polynomial import parse_expression
+        from engine.weighted_record import nonreduced_resolution
+
+        names = ["x", "y"]
+        graph = dict(auxiliary="v", equation="v-x-y", divisor="v+x+2*y")
+        weighted = dict(graph, multiplicity="3", unit="1+x")
+        source = "(1+x)*(2*x+3*y)^3"
+        record = resolve_graph(names, source, weighted)
+        self.assertEqual(monodromy_zeta(record)["expression"], "1/(1-T^3)")
+        self.assertEqual(topological_zeta(record)["expression"], "1/(3*s + 1)")
+        with self.assertRaisesRegex(InputError, "different polynomial"):
+            graph_complex(dict(record, polynomial="(1+x)*((2*x+3*y)^3+y)"))
+        with self.assertRaisesRegex(InputError, "nonzero at the origin"):
+            resolve_graph(names, "x*(2*x+3*y)^3", dict(weighted, unit="x"), fan=record["fan"])
+        # Factor normalization can move a rational scalar into the unit.
+        def reduced_support(poly):
+            from engine.polynomial import format_poly
+            text = format_poly(poly, names)
+            return resolve_graph(names, text, dict(graph, divisor=f"({text})+(v-x-y)"))
+        lifted = nonreduced_resolution(parse_expression(source,names), names, "embedded", reduced_support)
+        self.assertEqual(topological_zeta(lifted)["expression"], "1/(3*s + 1)")
+
+    def test_large_graph_multiplicity_compares_sparse_polynomial_identities(self):
+        order = 2**74 + 11
+        graph = dict(auxiliary="v", equation="v-x-y", divisor="-x", multiplicity=str(order))
+        self.assertTrue(_request("support", ["x", "y"], f"-x^{order}", graph))
+        with self.assertRaisesRegex(InputError, "different polynomial"):
+            _request("support", ["x", "y"], f"x^{order}+y^{order}", dict(graph, divisor="v"))
+
     def test_graph_dependency_and_wide_coordinates(self):
         width = 2**78+1
         coeff = 2**170+33

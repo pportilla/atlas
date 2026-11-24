@@ -193,7 +193,9 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
                 certified = proposal_chart_outputs(record, p, integrals=wants_zetas)
         elif certified is None:
             certified = proposal_chart_outputs(record, p, integrals=wants_zetas)
-        record["atlas"], output = certified
+        owned, output = certified
+        if record.get("engine") != "toric-graph":
+            record["atlas"] = owned
         record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
         if "chart_sections" in record["dual_complex"].get("finite_sheet_certificate", {}):
             from .atlas_finite import geometric_chart_records

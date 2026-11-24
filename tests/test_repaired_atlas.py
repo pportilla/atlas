@@ -55,6 +55,24 @@ class RepairedNewtonAtlas(unittest.TestCase):
         self.assertEqual((record["engine"], len(record["charts"]), record["dual_complex"]["status"]),
                          ("newton-polyhedron", 15, "complete"))
 
+    def test_singular_orbit_cut_on_a_smooth_quadric_needs_no_point_blowups(self):
+        from engine.monodromy import monodromy_zeta
+        from engine.resolution_complex import dual_complex
+        from engine.topological import topological_zeta
+
+        # A linear presentation of XY-ZT. At z=t=0 its binary face has
+        # the repeated factor x-y, while the z derivative is nonzero there.
+        text = "z*(x+z)-(x-y+t)*(x-y-t)"
+        names = list("xyzt")
+        for mode in ("embedded", "intrinsic"):
+            with patch("engine.newton_repair.acampo_over", side_effect=AssertionError("spurious point blowup")):
+                record = resolve_newton(parse(text, names), names, mode, compute="cpu")
+            self.assertEqual((record["engine"], len(record["charts"])), ("verified-monomial-modification", 4))
+            record["polynomial"] = text
+            self.assertEqual(dual_complex(record), record["dual_complex"])
+            self.assertEqual(monodromy_zeta(record)["expression"], "1")
+            self.assertEqual(topological_zeta(record)["expression"], "2/((s + 1)*(s + 2))")
+
     def test_intrinsic_quartic_certifies_the_original_fan_before_repair(self):
         cli = Path(__file__).resolve().parents[1] / "atlas"
         record = json.loads(subprocess.check_output(
@@ -155,7 +173,7 @@ class RepairedNewtonAtlas(unittest.TestCase):
             with patch("engine.newton_repair.acampo_over", side_effect=AssertionError("premature point repair")):
                 self.assertIsNone(strata(adapted, names, build_fan(adapted), count_strata=False,
                                          diagnostics=diagnostics))
-            self.assertIn("curve of an orbit", diagnostics["point_repair"])
+            self.assertIn("positive-dimensional locus", diagnostics["point_repair"])
 
     def test_repaired_cycle_over_conjugate_centres_in_a_product(self):
         from collections import Counter
