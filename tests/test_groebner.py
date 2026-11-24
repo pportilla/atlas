@@ -380,5 +380,191 @@ class ModularRouteTests(unittest.TestCase):
             library.atlas_groebner_use_batch(None)
 
 
+@unittest.skipUnless(hasattr(_kernel(), "atlas_groebner_use_f4"), "rebuild the modular kernel")
+class F4TraceRouteTests(unittest.TestCase):
+    """The modular route traces a graded reverse lexicographic problem with F4
+    matrices: of the homogenized generators (native/KERNEL.md, section 7.5),
+    or of the generators themselves when the homogenized ideal would need a
+    larger basis (7.6). The certified basis must be the one the Buchberger
+    trace and the exact engine give."""
+
+    def setUp(self):
+        self.library = _kernel()
+        self.library.atlas_groebner_modular.argtypes = [ctypes.c_char_p, ctypes.c_size_t,
+                                                        ctypes.POINTER(ctypes.c_long), ctypes.POINTER(ctypes.c_double)]
+        self.library.atlas_groebner_modular.restype = ctypes.c_void_p
+        self.library.atlas_groebner_text.restype = ctypes.c_char_p
+        self.library.atlas_groebner_use_f4.argtypes, self.library.atlas_groebner_use_f4.restype = [ctypes.c_int], None
+        self.addCleanup(self.library.atlas_groebner_use_f4, 1)
+
+    def modular(self, variables, order, lines, f4=True):
+        payload = (f"{variables} {order} 0\n" + "".join(line + "\n" for line in lines)).encode()
+        counts = (ctypes.c_long * 7)()
+        self.library.atlas_groebner_use_f4(int(f4))
+        handle = self.library.atlas_groebner_modular(payload, len(payload), counts, None)
+        self.assertTrue(handle, self.library.atlas_groebner_error())
+        try:
+            return self.library.atlas_groebner_text(handle).decode(), self.library.atlas_groebner_modular_route(), counts
+        finally:
+            self.library.atlas_groebner_free(handle)
+
+    def exact(self, variables, order, lines):
+        payload = (f"{variables} {order} 0\n" + "".join(line + "\n" for line in lines)).encode()
+        handle = self.library.atlas_groebner(payload, len(payload))
+        self.assertTrue(handle, self.library.atlas_groebner_error())
+        try:
+            return self.library.atlas_groebner_text(handle).decode()
+        finally:
+            self.library.atlas_groebner_free(handle)
+
+    def test_same_basis_as_the_buchberger_trace_and_the_exact_engine(self):
+        cyclic5 = ["1 1 0 0 0 0;1 0 1 0 0 0;1 0 0 1 0 0;1 0 0 0 1 0;1 0 0 0 0 1",
+                   "1 1 1 0 0 0;1 0 1 1 0 0;1 0 0 1 1 0;1 0 0 0 1 1;1 1 0 0 0 1",
+                   "1 1 1 1 0 0;1 0 1 1 1 0;1 0 0 1 1 1;1 1 0 0 1 1;1 1 1 0 0 1",
+                   "1 1 1 1 1 0;1 0 1 1 1 1;1 1 0 1 1 1;1 1 1 0 1 1;1 1 1 1 0 1", "1 1 1 1 1 1;-1 0 0 0 0 0"]
+        cyclic6 = ["1 1 0 0 0 0 0;1 0 1 0 0 0 0;1 0 0 1 0 0 0;1 0 0 0 1 0 0;1 0 0 0 0 1 0;1 0 0 0 0 0 1",
+                   "1 1 1 0 0 0 0;1 0 1 1 0 0 0;1 0 0 1 1 0 0;1 0 0 0 1 1 0;1 0 0 0 0 1 1;1 1 0 0 0 0 1",
+                   "1 1 1 1 0 0 0;1 0 1 1 1 0 0;1 0 0 1 1 1 0;1 0 0 0 1 1 1;1 1 0 0 0 1 1;1 1 1 0 0 0 1",
+                   "1 1 1 1 1 0 0;1 0 1 1 1 1 0;1 0 0 1 1 1 1;1 1 0 0 1 1 1;1 1 1 0 0 1 1;1 1 1 1 0 0 1",
+                   "1 1 1 1 1 1 0;1 0 1 1 1 1 1;1 1 0 1 1 1 1;1 1 1 0 1 1 1;1 1 1 1 0 1 1;1 1 1 1 1 0 1",
+                   "1 1 1 1 1 1 1;-1 0 0 0 0 0 0"]
+        reimer4 = [";".join(f"{2 * (-1)**i} " + " ".join(str(k if j == i else 0) for j in range(4)) for i in range(4))
+                   + ";-1 0 0 0 0" for k in range(2, 6)]
+        # The same systems with one variable scaled by 2^70+1, and in seventh powers of the variables.
+        scaled = [";".join(f"{2**70 + 1} {term[2:]}" if term[2] == "1" else term for term in row.split(";")) for row in cyclic6]
+        powers = [";".join(" ".join([term.split()[0]] + [str(7 * int(e)) for e in term.split()[1:]]) for term in row.split(";"))
+                  for row in reimer4]
+        # The trace expected: 2 of the homogenized generators, 3 of the generators themselves.
+        problems = [
+            ("Katsura-4", 5, katsura(4), 2), ("Katsura-6", 7, katsura(6), 2),
+            # Every degree of the homogenized ideal meets the Hilbert bound.
+            ("cyclic-5", 5, cyclic5, 2),
+            ("principal", 2, ["3 2 1;-1/7 0 0"], 2),
+            ("wide coefficients", 2, [f"1 2 0;{2**100 + 1} 0 1;-1 0 0", f"1 1 1;{-(2**128) - 1} 0 0"], 2),
+            ("rational coefficients", 3, ["1 2 0 0;2/3 0 1 1;-5/7 0 0 0", "1 1 1 0;-11/13 0 0 2", "1 0 0 3;-1 1 0 0;1/2 0 1 0"], 2),
+            ("wide exponents", 2, ["1 40 0;-1 0 37;2 3 3", "1 5 30;-3 0 0"], 2),
+            # Homogeneous generators are traced as they are, with or without the bound.
+            ("monomials", 3, ["1 1 1 0", "1 1 0 1", "1 0 1 1"], 2),
+            ("homogeneous, bound missed", 3, ["1 2 0 0;-1 1 1 0", "1 1 1 0;-1 0 2 0", "1 1 0 1;-1 0 1 1"], 2),
+            # A degree misses the bound, or there is none, but the homogenized
+            # basis is not larger than the basis of the ideal.
+            ("twisted cubic", 3, ["1 1 0 1;-1 0 2 0", "1 0 1 0;-1 2 0 0", "1 0 0 1;-1 1 1 0"], 2),
+            ("repeated generator", 2, ["1 2 0;-3 0 1", "2 2 0;-6 0 1", "1 1 2;7 0 0"], 2),
+            ("overdetermined", 2, ["1 3 0;-2 1 1;5 0 0", "1 2 1;-1 0 2;1 1 0", "1 0 3;-1 1 0", "1 2 0;1 0 2;-4 0 0"], 2),
+            # The homogenized ideal needs a larger basis: the generators are traced as they are.
+            ("cyclic-6", 6, cyclic6, 3),
+            ("Reimer-4", 4, reimer4, 3),
+            ("cyclic-6, wide coefficients", 6, scaled, 3),
+            ("Reimer-4, wide exponents", 4, powers, 3),
+            ("the unit ideal", 2, ["1 2 0;1 0 1;1 0 0", "1 1 1;-1 0 0", "1 0 2;-1 1 0", "1 3 0;-2 0 0"], 3),
+        ]
+        for name, variables, lines, expected in problems:
+            with self.subTest(name=name):
+                basis, route, counts = self.modular(variables, 0, lines)
+                self.assertEqual(route, expected)
+                self.assertGreater(counts[3], 0)  # certified over Q
+                old, old_route, _ = self.modular(variables, 0, lines, f4=False)
+                self.assertEqual(old_route, 1)
+                self.assertEqual(basis, old)
+                self.assertEqual(basis, self.exact(variables, 0, lines))
+
+    def test_trace_primes_that_must_not_be_trusted(self):
+        # 2147483629 is the first prime tried. Modulo it the two generators
+        # coincide and the trace has rank one; every replay shows rank two,
+        # so the trace is discarded and the next prime gives (x^2, y^2).
+        p = 2147483629
+        lines = ["1 2 0;1 0 2", f"1 2 0;{p + 1} 0 2"]
+        basis, route, counts = self.modular(2, 0, lines)
+        self.assertEqual(route, 2)
+        self.assertEqual(basis, "1 2 0\n1 0 2\n")
+        self.assertEqual(basis, self.exact(2, 0, lines))
+        self.assertGreaterEqual(counts[2], 2)  # traces
+        self.assertGreater(counts[1], 0)       # rejected primes
+        # The same prime divides a leading coefficient, then another coefficient.
+        for lines in ([f"{p} 2 0;1 0 1;-1 0 0", "1 1 1;-2 0 0"], [f"1 2 0;{p} 0 1;-1 0 0", "1 1 1;-2 0 0"]):
+            with self.subTest(lines=lines):
+                basis, route, _ = self.modular(2, 0, lines)
+                self.assertEqual(route, 2)
+                self.assertEqual(basis, self.exact(2, 0, lines))
+        # The same for a direct trace: modulo p the last generator of this
+        # Reimer system is the first one, over Q their difference gives x1.
+        reimer4 = [";".join(f"{2 * (-1)**i} " + " ".join(str(k if j == i else 0) for j in range(4)) for i in range(4))
+                   + ";-1 0 0 0 0" for k in range(2, 6)]
+        lines = reimer4 + [reimer4[0] + f";{p} 1 0 0 0"]
+        basis, route, counts = self.modular(4, 0, lines)
+        self.assertEqual(route, 3)
+        self.assertEqual(basis, self.exact(4, 0, lines))
+        self.assertGreaterEqual(counts[2], 2)
+        self.assertGreater(counts[1], 0)
+        # A prime dividing the leading coefficient of a generator.
+        lines = [f"{p}" + reimer4[0][1:]] + reimer4[1:]
+        basis, route, _ = self.modular(4, 0, lines)
+        self.assertIn(route, (2, 3))
+        self.assertEqual(basis, self.exact(4, 0, lines))
+
+    def test_which_problems_keep_the_buchberger_trace(self):
+        from engine import native_library as native
+        lines = katsura(4)
+        # Orders that do not compare degrees first.
+        for order in (1, 2):
+            with self.subTest(order=order):
+                basis, route, _ = self.modular(5, order, lines)
+                self.assertEqual(route, 1)
+        # A unit among the generators, and no generator at all.
+        self.assertEqual(self.modular(2, 0, ["1 1 0;-1 0 0", "3 0 0"])[:2], ("1 0 0\n", 1))
+        self.assertEqual(self.modular(2, 0, [])[:2], ("", 1))
+        # A solve that asks for a device keeps the trace its replay program comes from.
+        reference, _, _ = self.modular(5, 0, lines)
+        with native.replay_scope("gpu", backend="reference") as scope:
+            basis, route, _ = self.modular(5, 0, lines)
+            self.assertEqual((basis, route), (reference, 1))
+            self.assertGreater(scope.report()["backends"]["reference"]["primes"], 0)
+        with native.replay_scope("cpu") as scope:
+            basis, route, _ = self.modular(5, 0, lines)
+            self.assertEqual((basis, route), (reference, 2))
+            report = scope.report()
+            self.assertEqual(report["backend"], "cpu")
+            self.assertGreater(report["primes"], 0)
+            self.assertGreater(report["trace"]["backends"]["cpu"]["pairs"], 0)
+
+    def test_profile_reports_the_trace_and_its_replays(self):
+        profile = self.library.atlas_groebner_f4_profile
+        profile.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_uint32, ctypes.c_uint32,
+                            ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_long),
+                            ctypes.POINTER(ctypes.c_void_p)]
+        lines = katsura(6)
+        payload = ("7 0 0\n" + "".join(line + "\n" for line in lines)).encode()
+        seconds, counts, text = (ctypes.c_double * 2)(), (ctypes.c_long * 9)(), ctypes.c_void_p()
+        self.assertEqual(profile(payload, len(payload), 5, 2, seconds, counts, ctypes.byref(text)), 0)
+        # 41 elements; a complete intersection: no combination is dependent
+        # and every degree meets the Hilbert bound; all replays agree.
+        self.assertEqual((counts[0], counts[4], counts[6], counts[7]), (41, 0, 1, 5))
+        # The basis modulo the trace prime is the certified basis modulo that prime.
+        prime = counts[8]
+        modular = ctypes.string_at(text).decode()
+        self.library.atlas_groebner_release(text)
+
+        def residues(basis, convert):
+            return sorted(tuple(sorted((tuple(map(int, term.split()[1:])), convert(term.split()[0]))
+                                       for term in row.split(";"))) for row in basis.splitlines())
+
+        def image(coefficient):
+            numerator, _, denominator = coefficient.partition("/")
+            return int(numerator) * pow(int(denominator or 1), -1, prime) % prime
+
+        self.assertEqual(residues(modular, int), residues(self.exact(7, 0, lines), image))
+        # Generators that miss the bound are traced as they are: the basis
+        # modulo the prime is again the reduced basis itself.
+        lines = ["1 1 0 1;-1 0 2 0", "1 0 1 0;-1 2 0 0", "1 0 0 1;-1 1 1 0", "1 3 0 0;-2 0 0 1;1 0 1 0"]
+        payload = ("3 0 0\n" + "".join(line + "\n" for line in lines)).encode()
+        self.assertEqual(profile(payload, len(payload), 3, 2, seconds, counts, ctypes.byref(text)), 0)
+        self.assertEqual((counts[6], counts[7]), (0, 3))
+        prime = counts[8]
+        modular = ctypes.string_at(text).decode()
+        self.library.atlas_groebner_release(text)
+        self.assertEqual(residues(modular, int), residues(self.exact(3, 0, lines), image))
+        self.assertEqual(profile(b"2 1 0\n1 1 0\n", 12, 0, 1, seconds, counts, None), -1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -70,6 +70,12 @@ class TracePolicyTests(unittest.TestCase):
         lib = native._kernel()
         lib.atlas_groebner_trace_rows_cpu.argtypes = native._TRACE._argtypes_
         lib.atlas_groebner_trace_rows_cpu.restype = ctypes.c_int
+        # The profile screens layers of the Buchberger trace. Its CPU count is
+        # the reference: a CPU scope alone would take the F4 trace.
+        if hasattr(lib, "atlas_groebner_use_f4"):
+            lib.atlas_groebner_use_f4.argtypes, lib.atlas_groebner_use_f4.restype = [ctypes.c_int], None
+            lib.atlas_groebner_use_f4(0)
+            self.addCleanup(lib.atlas_groebner_use_f4, 1)
 
         def solve(mode):
             with native.replay_scope(mode, backend="opencl") as scope:

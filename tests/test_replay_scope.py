@@ -162,6 +162,12 @@ class ReplayScopeTests(unittest.TestCase):
         names, polys = katsura(6)
         source = payload(polys, len(names), "grevlex")
         lib = native._kernel()
+        # A device scope runs the Buchberger trace. Compare its CPU fallback
+        # with that trace: a CPU scope alone would take the F4 trace.
+        if hasattr(lib, "atlas_groebner_use_f4"):
+            lib.atlas_groebner_use_f4.argtypes, lib.atlas_groebner_use_f4.restype = [ctypes.c_int], None
+            lib.atlas_groebner_use_f4(0)
+            self.addCleanup(lib.atlas_groebner_use_f4, 1)
 
         def solve():
             handle = lib.atlas_groebner(source, len(source))

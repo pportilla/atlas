@@ -20,7 +20,21 @@
 // 6. Setting the new variable to one gives a Groebner basis of the original
 //    ideal for the original order; it is then reduced.
 //
-// Nothing here is probabilistic: an unlucky prime can only cost time.
+// Steps 2 and 3 first use the F4 trace of f4_trace.cpp (KERNEL.md, section
+// 7.5): one matrix per degree, randomized elimination checked against the
+// Hilbert function, replayed matrix by matrix for the other primes. When it
+// does not apply (the solve asks for a device, the order does not compare
+// degrees first, a generator is constant) or gives up, the Buchberger trace
+// below runs instead.
+//
+// Generators that are not homogeneous and whose homogenizations miss the
+// Hilbert bound may skip step 1, when the homogenized ideal would need a much
+// larger basis: they are then traced as they are, and the lifted elements are
+// certified through the rows of the trace (KERNEL.md 7.6).
+//
+// Nothing here is probabilistic: an unlucky prime, or an unlucky random
+// combination in the F4 trace, can only cost time.
+#include "f4_trace.hpp"
 #include "groebner.hpp"
 #include "groebner_verify.hpp"
 #include "modular_replay.hpp"
@@ -33,6 +47,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <system_error>
 #include <thread>
 
@@ -349,6 +364,9 @@ private:
 // The standalone C API can set a process default. A solve may override it
 // (including selecting the CPU) for its own thread and restore it on exit.
 std::atomic<ReplayBatch> default_batch{nullptr};
+// The default hook is a dispatcher: it declines unless its caller's scope or
+// ATLAS_GROEBNER_GPU asks for a device.
+std::atomic<bool> default_dispatches{false};
 thread_local ReplayBatch scoped_batch = nullptr;
 thread_local int has_scoped_batch = 0;
 thread_local uint64_t cpu_batches = 0;
@@ -407,6 +425,18 @@ void merge_paired_images(const std::vector<uint32_t>& primes, const std::vector<
         fmpz_mul_ui(&modulus.v, &modulus.v, product);
         used += 2;
     }
+}
+
+// Whether this solve asked for a device: a trace screen or a batch hook of its
+// own scope, a hook installed directly as the default, or the environment
+// opt-in that a dispatcher honours outside a scope.
+bool device_requested() {
+    if (trace_screen) return true;
+    if (has_scoped_batch) return scoped_batch != nullptr;
+    if (!default_batch.load()) return false;
+    if (!default_dispatches.load()) return true;
+    const char* setting = std::getenv("ATLAS_GROEBNER_GPU");
+    return setting && *setting;
 }
 
 // Merge new prime images into the existing CRT residues and reconstruct
@@ -495,6 +525,334 @@ double since(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 
+// Which trace the last modular basis on this thread used: 1 Buchberger, 2 F4
+// on the homogenized generators, 3 F4 on the generators themselves.
+thread_local int last_modular_route = 0;
+std::atomic<int> f4_route_enabled{1};
+
+// Lift the images: `basis` receives, for each polynomial, the integer
+// multiple of its rational lift by the common denominator, on the given
+// monomials. False while the lift is not stable.
+bool lift_images(const std::vector<uint32_t>& primes, std::vector<std::vector<uint32_t>>& images, uint32_t trace_prime,
+                 size_t& used, Z& modulus, std::vector<Z>& lifted, const std::vector<const std::vector<u64>*>& monomials,
+                 const std::vector<uint32_t>& lengths, ModularReport& stats, std::vector<Poly>& basis) {
+    const auto clock = std::chrono::steady_clock::now();
+    std::vector<LiftedRational> rational(lifted.size());
+    const bool stable = reconstruct_coefficients(primes, images, trace_prime, used, modulus, lifted, rational);
+    // The images merged into `lifted` are no longer needed; the witness stays.
+    for (size_t k = 0; k < used && k + 1 < images.size(); ++k) std::vector<uint32_t>().swap(images[k]);
+    basis.clear();
+    if (stable) {
+        size_t i = 0;
+        Z common, factor;
+        for (size_t g = 0; g < lengths.size(); ++g) {
+            const uint32_t length = lengths[g];
+            fmpz_one(&common.v);
+            for (uint32_t t = 0; t < length; ++t) fmpz_lcm(&common.v, &common.v, fmpq_denref(&rational[i + t].value));
+            Poly f;
+            f.m = *monomials[g];
+            f.c.resize(length);
+            for (uint32_t t = 0; t < length; ++t) {
+                fmpz_divexact(&factor.v, &common.v, fmpq_denref(&rational[i + t].value));
+                fmpz_mul(&f.c[t].v, &factor.v, fmpq_numref(&rational[i + t].value));
+            }
+            i += length;
+            basis.push_back(std::move(f));
+        }
+    }
+    const auto lifting = std::chrono::steady_clock::now() - clock;
+    stats.lift_seconds += std::chrono::duration<double>(lifting).count();
+    lift_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(lifting).count();
+    return stable;
+}
+
+// The certificate of 7.3 for a lifted homogeneous basis. On success the
+// reduced basis for the given order is left in `result`.
+bool certify_homogeneous(const Ring& R, const Ring& H, const std::vector<Poly>& generators, const std::vector<Poly>& basis,
+                         Engine& result, ModularReport& stats) {
+    const auto clock = std::chrono::steady_clock::now();
+    ++stats.verifications;
+    ++certification_attempts;
+    std::optional<bool> proved = HomogeneousCertificate{}.check(H, basis, generators);
+    if (!proved.has_value()) {
+        Engine check;
+        check.R = H;
+        proved = check.is_basis(basis);
+        for (size_t k = 0; k < generators.size() && *proved; ++k) {
+            check_deadline();
+            Poly f = generators[k];
+            check.reduce(f, 0, nullptr, nullptr);
+            proved = f.empty();
+        }
+    }
+    const auto verifying = std::chrono::steady_clock::now() - clock;
+    stats.verify_seconds += std::chrono::duration<double>(verifying).count();
+    verification_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(verifying).count();
+    if (!*proved) return false;
+    std::vector<Poly> affine;
+    for (const Poly& f : basis) affine.push_back(dehomogenize(H, R, f));
+    // Every generator is declared part of a basis: no pair is formed,
+    // so this only removes redundant elements and reduces the tails.
+    result.R = R;
+    result.compute(affine, affine.size());
+    ++certified_bases;
+    return true;
+}
+
+// The certificate of 7.6 for a direct trace: `lifted` holds the elements of
+// the trace and then its reduced basis. The selected rows of every matrix
+// reduce to zero over Q, so all of them lie in the ideal; the reduced basis
+// is a Groebner basis; the generators reduce to zero by it.
+bool certify_direct(const Ring& R, const std::vector<Poly>& generators, const F4Trace& tracer, std::vector<Poly>& lifted,
+                    Engine& result, ModularReport& stats, unsigned threads) {
+    const auto clock = std::chrono::steady_clock::now();
+    ++stats.verifications;
+    ++certification_attempts;
+    const size_t elements = tracer.G.size();
+    std::vector<Poly> outputs(std::make_move_iterator(lifted.begin() + elements), std::make_move_iterator(lifted.end()));
+    lifted.resize(elements);
+    bool proved = tracer.rows_vanish(generators, lifted, outputs, threads);
+    if (proved) {
+        result.R = R;
+        proved = result.is_basis(outputs);
+        for (size_t k = 0; k < generators.size() && proved; ++k) {
+            check_deadline();
+            Poly f = generators[k];
+            result.reduce(f, 0, nullptr, nullptr);
+            proved = f.empty();
+        }
+    }
+    const auto verifying = std::chrono::steady_clock::now() - clock;
+    stats.verify_seconds += std::chrono::duration<double>(verifying).count();
+    verification_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(verifying).count();
+    if (proved) ++certified_bases;
+    return proved;
+}
+
+// Lift the images of a homogeneous basis and certify the result over Q.
+// -1: not yet stable, 0: stable but not proved, 1: proved, with the reduced
+// basis in `result`.
+int lift_and_certify(const Ring& R, const Ring& H, const std::vector<Poly>& generators, const std::vector<uint32_t>& primes,
+                     std::vector<std::vector<uint32_t>>& images, uint32_t trace_prime, size_t& used, Z& modulus,
+                     std::vector<Z>& lifted, const std::vector<std::vector<u64>>& output_monomials,
+                     const std::vector<uint32_t>& lengths, Engine& result, ModularReport& stats) {
+    std::vector<const std::vector<u64>*> monomials;
+    for (const std::vector<u64>& m : output_monomials) monomials.push_back(&m);
+    std::vector<Poly> basis;
+    if (!lift_images(primes, images, trace_prime, used, modulus, lifted, monomials, lengths, stats, basis)) return -1;
+    return certify_homogeneous(R, H, generators, basis, result, stats);
+}
+
+// Whether the F4 traces serve this problem.
+bool f4_applies(const Ring& R, const std::vector<Poly>& generators) {
+    if (!f4_route_enabled.load(std::memory_order_relaxed) || device_requested()) return false;
+    // For an order that does not compare degrees first most rows of a degree
+    // reduce to zero and many primes are needed: the Buchberger replay, which
+    // repeats only the useful reductions, is the cheaper one there.
+    if (R.lex || R.eliminate || generators.empty()) return false;
+    for (const Poly& f : generators)
+        if (f.m[0] == 0) return false;  // a constant: the ideal is the unit ideal
+    return true;
+}
+
+u64 previous_prime(u64 p) {
+    do { --p; } while (!n_is_prime(p));
+    return p;
+}
+
+// The trace the F4 route starts from, and its prime (KERNEL.md 7.6): of the
+// homogenized generators in H, or with `direct` of the given ones in R.
+// Homogeneous generators, and those meeting the Hilbert bound in every
+// degree, are traced homogenized. For the others both traces are made at one
+// prime, the homogenized one within twice the structure of the direct one,
+// and the one with less to lift and certify is kept. Null when the traces
+// exceed the budget.
+std::unique_ptr<F4Trace> first_trace(const Ring& R, const Ring& H, const std::vector<Poly>& given,
+                                     const std::vector<Poly>& homogenized, size_t budget, unsigned threads, bool& direct,
+                                     u64& prime) {
+    bool mixed = false;
+    for (const Poly& f : given)
+        for (size_t t = 1; t < f.size() && !mixed; ++t) mixed = f.m[t * R.stride] != f.m[0];
+    direct = false;
+    prime = (static_cast<u64>(1) << 31) - 1;
+    F4Trace::Options bounded;
+    bounded.stop_at_missed_bound = mixed;
+    while (true) {
+        prime = previous_prime(prime);
+        auto trace = std::make_unique<F4Trace>();
+        if (trace->trace(H, homogenized, static_cast<uint32_t>(prime), budget, threads, bounded)) return trace;
+        if (trace->too_large) return nullptr;
+        if (trace->missed_bound) break;
+    }
+    // A degree missed the bound: the homogenized ideal may need many more
+    // elements than the given one.
+    F4Trace::Options selecting;
+    selecting.select_rows = true;
+    auto own = std::make_unique<F4Trace>();
+    while (!own->trace(R, given, static_cast<uint32_t>(prime), budget, threads, selecting)) {
+        if (own->too_large) return nullptr;
+        prime = previous_prime(prime);
+        own = std::make_unique<F4Trace>();
+    }
+    auto full = std::make_unique<F4Trace>();
+    const size_t allowance = std::min(budget, 2 * own->words + (static_cast<size_t>(1) << 16));
+    if (full->trace(H, homogenized, static_cast<uint32_t>(prime), allowance, threads)) {
+        // The direct route lifts every element of its trace, the other one its
+        // basis alone. It pays when that basis is larger than the basis of
+        // the ideal, unless the elements of the direct trace outweigh that
+        // basis by far, as they do when the ideal is the unit ideal.
+        const size_t basis = own->output_residues.size(), elements = own->element_residues().size();
+        const size_t inflated = full->output_residues.size();
+        if (2 * inflated < 3 * basis || elements > 16 * basis) return full;
+    }
+    direct = true;
+    return own;
+}
+
+// Steps 3 to 5 from an F4 trace, and step 2 again when its prime turns out
+// unlucky. `generators` are the homogenized ones in T = H, certified as in 7.3
+// (KERNEL.md 7.5), or with `direct` the given ones in T = R, certified through
+// the rows of the trace (7.6). `ready`, when given, is the trace for `prime`.
+// False when the route gives up; nothing is left in `result` then.
+bool f4_modular_basis(const Ring& R, const Ring& H, const std::vector<Poly>& generators, bool direct, Engine& result,
+                      ModularReport& stats, size_t budget, std::unique_ptr<F4Trace> ready, u64 prime) {
+    const Ring& T = direct ? R : H;
+    F4Trace::Options options;
+    options.select_rows = direct;
+    const unsigned threads = std::max(1U, std::thread::hardware_concurrency());
+    auto previous = previous_prime;
+    u64 trace_prime = ready ? prime : (static_cast<u64>(1) << 31) - 1;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        auto clock = std::chrono::steady_clock::now();
+        std::unique_ptr<F4Trace> found = std::move(ready);
+        while (!found) {
+            trace_prime = previous(trace_prime);
+            found = std::make_unique<F4Trace>();
+            if (found->trace(T, generators, static_cast<uint32_t>(trace_prime), budget, threads, options)) break;
+            if (found->too_large) {
+                stats.trace_seconds += since(clock);
+                return false;
+            }
+            found.reset();
+        }
+        const F4Trace& tracer = *found;
+        ++stats.traces;
+        stats.trace_seconds += since(clock);
+        cpu_trace_batches += static_cast<uint64_t>(tracer.matrices);
+        cpu_trace_pairs += static_cast<uint64_t>(tracer.lanes);
+        stats.instructions = static_cast<long>(tracer.words);
+        stats.pool = 0;
+        stats.basis = static_cast<long>(tracer.output_lengths.size());
+        // What is lifted: the reduced basis and, for the direct trace, every
+        // element it inserted before it.
+        std::vector<const std::vector<u64>*> monomials;
+        std::vector<uint32_t> lengths;
+        std::vector<uint32_t> first;
+        if (direct) {
+            for (const Element& e : tracer.G) {
+                monomials.push_back(&e.p.m);
+                lengths.push_back(static_cast<uint32_t>(e.p.size()));
+            }
+            first = tracer.element_residues();
+        }
+        for (const std::vector<u64>& m : tracer.output_monomials) monomials.push_back(&m);
+        lengths.insert(lengths.end(), tracer.output_lengths.begin(), tracer.output_lengths.end());
+        first.insert(first.end(), tracer.output_residues.begin(), tracer.output_residues.end());
+        std::vector<uint32_t> primes{static_cast<uint32_t>(trace_prime)};
+        std::vector<std::vector<uint32_t>> images;
+        images.push_back(std::move(first));
+        std::vector<Z> lifted(images[0].size());
+        Z modulus;
+        fmpz_one(&modulus.v);
+        size_t used = 0, rejected = 0;
+        int unproved = 0;
+        u64 next_prime = trace_prime;
+        // Batches of 2, 4, 8 and 16 primes as in the Buchberger route, then
+        // of 16 or one per thread: a replay costs as much as the trace's
+        // elimination, so few primes should be replayed in vain.
+        // The elements of a direct trace can have far larger coefficients than
+        // the basis: past 255 primes the homogenized trace takes over.
+        const size_t most = direct ? 255 : 4096;
+        for (size_t batch = 2; primes.size() <= most; batch = batch < 16 ? 2 * batch : std::max<size_t>(16, threads)) {
+            check_deadline();
+            if (direct && primes.size() + batch > most + 1) return false;
+            clock = std::chrono::steady_clock::now();
+            std::vector<uint32_t> fresh(batch);
+            for (uint32_t& p : fresh) p = static_cast<uint32_t>(next_prime = previous(next_prime));
+            size_t active = 0;
+            for (uint32_t p : fresh) {
+                bool leads = true;
+                for (const Poly& f : generators) leads = leads && fmpz_fdiv_ui(&f.c[0].v, p) != 0;
+                active += leads;
+            }
+            ++cpu_batches;
+            cpu_primes += active;
+            std::vector<std::vector<uint32_t>> residues(batch);
+            std::vector<char> agrees(batch, 0);
+            std::atomic<size_t> cursor{0};
+            // A batch smaller than the host shares the threads among its primes.
+            const unsigned inner = static_cast<unsigned>(std::max<size_t>(1, threads / batch));
+            std::mutex lock;
+            std::exception_ptr error;
+            // The workers stop at the next prime once the caller's deadline passes.
+            const Deadline limit = thread_deadline();
+            std::atomic<bool> late{false};
+            auto worker = [&] {
+                try {
+                    for (size_t b; (b = cursor.fetch_add(1, std::memory_order_relaxed)) < batch;) {
+                        if (passed(limit)) {
+                            late = true;
+                            cursor.store(batch);
+                            break;
+                        }
+                        std::vector<uint32_t> outputs;
+                        agrees[b] = tracer.replay(generators, fresh[b], outputs, inner, direct ? &residues[b] : nullptr);
+                        residues[b].insert(residues[b].end(), outputs.begin(), outputs.end());
+                    }
+                } catch (...) {
+                    std::lock_guard<std::mutex> guard(lock);
+                    if (!error) error = std::current_exception();
+                    cursor.store(batch);
+                }
+            };
+            std::vector<std::thread> crew;
+            try {
+                for (size_t w = 1; w < std::min<size_t>(batch, threads); ++w) crew.emplace_back([&] {
+                    worker();
+                    flint_cleanup();
+                });
+            } catch (const std::system_error&) {
+                // The calling thread replays the remaining primes.
+            }
+            worker();
+            for (std::thread& t : crew) t.join();
+            if (late) expire();
+            if (error) std::rethrow_exception(error);
+            stats.replay_seconds += since(clock);
+            for (size_t b = 0; b < batch; ++b) {
+                if (!agrees[b]) { ++rejected; ++stats.rejected; continue; }
+                primes.push_back(fresh[b]);
+                images.push_back(std::move(residues[b]));
+            }
+            stats.primes = static_cast<long>(primes.size());
+            // When most primes disagree with the trace, its prime was the unlucky one.
+            if (rejected > 2 && rejected >= primes.size()) break;
+            if (primes.size() < 2) continue;
+            std::vector<Poly> basis;
+            if (!lift_images(primes, images, static_cast<uint32_t>(trace_prime), used, modulus, lifted, monomials, lengths,
+                             stats, basis))
+                continue;
+            if (direct ? certify_direct(R, generators, tracer, basis, result, stats, threads)
+                       : certify_homogeneous(R, H, generators, basis, result, stats))
+                return true;
+            // A stable lift that is not a basis: more primes correct a chance
+            // reconstruction; after that the trace is the suspect.
+            if (++unproved == 2) break;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 // f with every term brought to the degree of f by a power of the new last
@@ -556,6 +914,32 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
     std::vector<Poly> generators;
     for (const Poly& f : input)
         if (!f.empty()) generators.push_back(homogenize(R, H, f));
+    try {
+        if (f4_applies(R, generators)) {
+            std::vector<Poly> given;
+            for (const Poly& f : input)
+                if (!f.empty()) given.push_back(f);
+            const auto clock = std::chrono::steady_clock::now();
+            bool direct = false;
+            u64 prime = 0;
+            std::unique_ptr<F4Trace> trace = first_trace(R, H, given, generators, budget,
+                                                         std::max(1U, std::thread::hardware_concurrency()), direct, prime);
+            stats.trace_seconds += since(clock);
+            if (trace && f4_modular_basis(R, H, direct ? given : generators, direct, result, stats, budget, std::move(trace), prime)) {
+                last_modular_route = direct ? 3 : 2;
+                return true;
+            }
+            // The direct route gave up: the homogenized trace to its end.
+            if (direct && f4_modular_basis(R, H, generators, false, result, stats, budget, nullptr, 0)) {
+                last_modular_route = 2;
+                return true;
+            }
+        }
+    } catch (const std::bad_alloc&) {
+        // The matrices of a degree did not fit: the Buchberger trace reduces
+        // one pair at a time.
+    }
+    last_modular_route = 1;
 
     u64 trace_prime = (static_cast<u64>(1) << 31) - 1;  // primes are taken downwards from 2^31
     auto previous = [](u64 p) {
@@ -649,62 +1033,13 @@ bool modular_basis(const Ring& R, const std::vector<Poly>& input, Engine& result
             if (rejected > 2 && rejected >= primes.size()) break;
             if (primes.size() < 2) continue;
 
-            // Lift all images but the last, which serves as a witness.
-            clock = std::chrono::steady_clock::now();
-            std::vector<LiftedRational> rational(coefficients);
-            const bool stable = reconstruct_coefficients(primes, images, trace_prime, used, modulus, lifted, rational);
-            std::vector<Poly> basis;
-            if (stable) {
-                size_t i = 0;
-                Z common, factor;
-                for (size_t g = 0; g < tracer.outputs.size(); ++g) {
-                    const uint32_t length = tracer.outputs[g].length;
-                    fmpz_one(&common.v);
-                    for (uint32_t t = 0; t < length; ++t) fmpz_lcm(&common.v, &common.v, fmpq_denref(&rational[i + t].value));
-                    Poly f;
-                    f.m = tracer.output_monomials[g];
-                    f.c.resize(length);
-                    for (uint32_t t = 0; t < length; ++t) {
-                        fmpz_divexact(&factor.v, &common.v, fmpq_denref(&rational[i + t].value));
-                        fmpz_mul(&f.c[t].v, &factor.v, fmpq_numref(&rational[i + t].value));
-                    }
-                    i += length;
-                    basis.push_back(std::move(f));
-                }
-            }
-            const auto lifting = std::chrono::steady_clock::now() - clock;
-            stats.lift_seconds += std::chrono::duration<double>(lifting).count();
-            lift_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(lifting).count();
-            if (!stable) continue;
-
-            // Certification over Q.
-            clock = std::chrono::steady_clock::now();
-            ++stats.verifications;
-            ++certification_attempts;
-            std::optional<bool> proved = HomogeneousCertificate{}.check(H, basis, generators);
-            if (!proved.has_value()) {
-                Engine check;
-                check.R = H;
-                proved = check.is_basis(basis);
-                for (size_t k = 0; k < generators.size() && *proved; ++k) {
-                    check_deadline();
-                    Poly f = generators[k];
-                    check.reduce(f, 0, nullptr, nullptr);
-                    proved = f.empty();
-                }
-            }
-            const auto verifying = std::chrono::steady_clock::now() - clock;
-            stats.verify_seconds += std::chrono::duration<double>(verifying).count();
-            verification_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(verifying).count();
-            if (!*proved) continue;
-            std::vector<Poly> affine;
-            for (const Poly& f : basis) affine.push_back(dehomogenize(H, R, f));
-            // Every generator is declared part of a basis: no pair is formed,
-            // so this only removes redundant elements and reduces the tails.
-            result.R = R;
-            result.compute(affine, affine.size());
-            ++certified_bases;
-            return true;
+            // Lift all images but the last, which serves as a witness, and
+            // certify the result over Q.
+            std::vector<uint32_t> lengths;
+            for (const Slot& slot : tracer.outputs) lengths.push_back(slot.length);
+            if (lift_and_certify(R, H, generators, primes, images, static_cast<uint32_t>(trace_prime), used, modulus, lifted,
+                                 tracer.output_monomials, lengths, result, stats) == 1)
+                return true;
         }
     }
     return false;
@@ -717,6 +1052,15 @@ using namespace atlas;
 extern "C" {
 
 void atlas_groebner_swap_crt_pairs(CRTPairs* hook) noexcept { std::swap(crt_pairs, *hook); }
+
+// Which trace the last modular basis on this thread used: 0 none, 1 the
+// Buchberger trace, 2 the F4 trace of the homogenized generators, 3 the F4
+// trace of the generators themselves.
+int atlas_groebner_modular_route() noexcept { return last_modular_route; }
+
+// Allow (nonzero) or disallow the F4 trace in every thread; used to compare
+// the two traces. Allowed by default.
+void atlas_groebner_use_f4(int allowed) noexcept { f4_route_enabled.store(allowed != 0); }
 
 // Optional per-thread benchmark observer. A completed layer reports degree,
 // prime, dimensions, CSR edge count, rank, device use and the wall times for
@@ -748,7 +1092,18 @@ int atlas_groebner_trace_rows_cpu(uint32_t prime, uint32_t jobs, uint32_t width,
 
 // A function that runs replay programs for several primes at once (a GPU),
 // or null for the threads of the host.
-void atlas_groebner_use_batch(ReplayBatch hook) noexcept { default_batch.store(hook); }
+void atlas_groebner_use_batch(ReplayBatch hook) noexcept {
+    default_dispatches.store(false);
+    default_batch.store(hook);
+}
+
+// As atlas_groebner_use_batch, for a hook that declines unless its caller's
+// scope or ATLAS_GROEBNER_GPU asks for a device. A solve that asked for none
+// then keeps the F4 trace.
+void atlas_groebner_use_dispatcher(ReplayBatch hook) noexcept {
+    default_dispatches.store(hook != nullptr);
+    default_batch.store(hook);
+}
 
 // Host implementation of the optional batch callback. The producer supplies
 // the same validated trace, buffer dimensions and primes as to a device.
@@ -809,6 +1164,7 @@ void atlas_groebner_swap_cpu_scope(ReplayBatch* batch, int* active, TraceScreen*
 void atlas_groebner_reset_fork_child() noexcept {
     crt_pairs = nullptr;
     default_batch.store(nullptr);
+    default_dispatches.store(false);
     scoped_batch = nullptr;
     has_scoped_batch = 0;
     trace_screen = nullptr;
@@ -891,6 +1247,112 @@ long atlas_groebner_replay_compare(const char* input, size_t length, uint32_t co
         set_error("Unknown failure.");
     }
     return -2;
+}
+
+// The F4 trace alone, for benchmarks: the reduced basis of a graded reverse
+// lexicographic problem modulo the first usable prime below 2^31, then
+// `replays` further primes, one per thread on `threads` threads (0: all).
+// The trace is the one the modular route takes (first_trace), and the
+// seconds include the traces made to choose it. seconds: the trace, the
+// replays together. counts: basis
+// elements, terms, matrices, combinations reduced, dependent ones, recorded
+// words, whether every degree met the Hilbert bound, replays that agree,
+// the trace prime.
+// `basis`, when not null, receives the basis modulo the trace prime, one
+// element per line as "residue e1 ... en" terms separated by ';', to be
+// released with atlas_groebner_release. Returns 0, or -1 with the error set.
+int atlas_groebner_f4_profile(const char* input, size_t length, uint32_t replays, uint32_t threads,
+                              double* seconds, long* counts, char** basis) noexcept {
+    try {
+        const char* at = input;
+        const char* end = input + length;
+        char* stop = nullptr;
+        const long n = std::strtol(at, &stop, 10);
+        const long order = std::strtol(stop, &stop, 10);
+        std::strtol(stop, &stop, 10);
+        at = stop;
+        if (at >= end || *at != '\n' || order != 0) throw std::invalid_argument("Bad header.");
+        ++at;
+        Ring R, H;
+        R.init(static_cast<int>(n), 0);
+        H.init(R.n + 1, 0, true);
+        std::vector<Poly> homogenized, given;
+        while (at < end) {
+            Poly f = parse(R, at, end, nullptr);
+            if (f.empty()) continue;
+            if (f.m[0] == 0) throw std::invalid_argument("A constant generator.");
+            homogenized.push_back(homogenize(R, H, f));
+            given.push_back(std::move(f));
+        }
+        if (given.empty()) throw std::invalid_argument("No generator.");
+        const unsigned workers = threads ? threads : std::max(1U, std::thread::hardware_concurrency());
+        auto previous = previous_prime;
+        auto clock = std::chrono::steady_clock::now();
+        bool direct = false;
+        u64 prime = 0;
+        std::unique_ptr<F4Trace> tracer = first_trace(R, H, given, homogenized, ~static_cast<size_t>(0), workers, direct, prime);
+        if (!tracer) throw std::runtime_error("The trace is too large.");
+        const Ring& T = direct ? R : H;
+        const std::vector<Poly>& generators = direct ? given : homogenized;
+        seconds[0] = since(clock);
+        counts[0] = static_cast<long>(tracer->output_lengths.size());
+        counts[1] = static_cast<long>(tracer->output_residues.size());
+        counts[2] = tracer->matrices;
+        counts[3] = tracer->lanes;
+        counts[4] = tracer->dependent;
+        counts[5] = static_cast<long>(tracer->words);
+        counts[6] = tracer->hilbert && tracer->proved_degrees;
+        counts[8] = static_cast<long>(prime);
+        std::vector<uint32_t> primes(replays);
+        for (uint32_t& p : primes) p = static_cast<uint32_t>(prime = previous(prime));
+        std::atomic<size_t> cursor{0};
+        std::atomic<long> agreeing{0};
+        clock = std::chrono::steady_clock::now();
+        std::mutex lock;
+        std::exception_ptr error;
+        auto worker = [&] {
+            try {
+                std::vector<uint32_t> residues, elements;
+                for (size_t b; (b = cursor.fetch_add(1)) < primes.size();)
+                    agreeing += tracer->replay(generators, primes[b], residues, 1, direct ? &elements : nullptr);
+            } catch (...) {
+                std::lock_guard<std::mutex> guard(lock);
+                if (!error) error = std::current_exception();
+                cursor.store(primes.size());
+            }
+        };
+        std::vector<std::thread> crew;
+        for (unsigned w = 1; w < std::min<size_t>(workers, primes.size()); ++w) crew.emplace_back([&] {
+            worker();
+            flint_cleanup();
+        });
+        worker();
+        for (std::thread& t : crew) t.join();
+        if (error) std::rethrow_exception(error);
+        seconds[1] = since(clock);
+        counts[7] = agreeing.load();
+        if (basis) {
+            std::string text;
+            long e[MAX_VARIABLES];
+            size_t i = 0;
+            for (size_t g = 0; g < tracer->output_lengths.size(); ++g) {
+                for (uint32_t t = 0; t < tracer->output_lengths[g]; ++t, ++i) {
+                    if (t) text += ';';
+                    text += std::to_string(tracer->output_residues[i]);
+                    T.unpack(tracer->output_monomials[g].data() + static_cast<size_t>(t) * T.stride, e);
+                    for (int v = 0; v < R.n; ++v) text += ' ' + std::to_string(e[v]);
+                }
+                text += '\n';
+            }
+            *basis = copy_text(text);
+        }
+        return 0;
+    } catch (const std::exception& error) {
+        set_error(error.what());
+    } catch (...) {
+        set_error("Unknown failure.");
+    }
+    return -1;
 }
 
 // As atlas_groebner, through modular images. `report` receives, when not

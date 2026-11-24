@@ -78,8 +78,19 @@ def _kernel():
         # Standalone library users can opt in through the environment even
         # after the library has loaded. Old binaries use the same permanent
         # dispatcher so concurrent Atlas requests never swap a global hook.
-        library.atlas_groebner_use_batch(ctypes.cast(_dispatch_batch, ctypes.c_void_p))
+        _install_dispatcher(library)
     return library
+
+
+def _install_dispatcher(library):
+    # A kernel with the F4 trace is told that this hook only dispatches: a
+    # solve that asked for no device then keeps that trace.
+    install = getattr(library, "atlas_groebner_use_dispatcher", None)
+    if install is None:
+        install = library.atlas_groebner_use_batch
+    else:
+        install.argtypes, install.restype = [ctypes.c_void_p], None
+    install(ctypes.cast(_dispatch_batch, ctypes.c_void_p))
 
 
 _UINTS = ctypes.POINTER(ctypes.c_uint32)
@@ -114,11 +125,16 @@ def fork_reset():
     if reset is None:
         return lambda: None
     reset.argtypes, reset.restype = [], None
+    install = getattr(library, "atlas_groebner_use_dispatcher", None)
+    if install is None:
+        install = library.atlas_groebner_use_batch
+    else:
+        install.argtypes, install.restype = [ctypes.c_void_p], None
     hook = ctypes.cast(_dispatch_batch, ctypes.c_void_p)
 
     def child():
         reset()
-        library.atlas_groebner_use_batch(hook)
+        install(hook)
     return child
 
 

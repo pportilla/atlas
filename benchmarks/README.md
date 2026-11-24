@@ -9,6 +9,7 @@ Each report identifies the inputs, the check for agreement and the machine and t
 <a id="gröbner-kernel"></a><a id="the-verifiers-bases"></a><a id="ideals-whose-coefficients-swell"></a><a id="phase-1-rational-ideal-arithmetic"></a><a id="membership-with-a-prepared-basis"></a><a id="replays-on-the-gpu"></a><a id="full-katsura-7-solve-on-cpu-and-gpu"></a><a id="profiling-katsura-6--7-and--8"></a><a id="one-verification-end-to-end"></a>
 
 - [Gröbner basis and normal form timings](groebner-timings.md) — Basis verification, coefficient growth, prepared membership and modular replay on CPU and GPU.
+- [The F4 trace of the modular Gröbner route](groebner-f4.md) — Katsura-11 modulo one prime and over Q, and standard systems, against msolve, giac and Groebner.jl.
 - [Multivariate polynomial GCD benchmark](polynomial_gcd.py) compares the public Atlas call, generic FLINT and Singular on nine Liao–Fateman examples and a 401-bit coefficient case. The reports include the original single-call comparison, repeated calls on prepared inputs, and first use on fresh operands. [Pinned CPU](polynomial-gcd-prepared-ryzen-6800h.json) · [Default scheduling](polynomial-gcd-prepared-unpinned-ryzen-6800h.json) · [Before, pinned](polynomial-gcd-ryzen-6800h.json) · [Before, default scheduling](polynomial-gcd-unpinned-ryzen-6800h.json)
 
 <a id="primary-decomposition-over-qq"></a><a id="normalization-of-affine-algebras-over-qq"></a><a id="localization-at-a-prime-over-qq"></a><a id="ordinary-and-symbolic-powers-over-qq"></a><a id="arithmetic-in-declared-quotient-rings-over-qq"></a>

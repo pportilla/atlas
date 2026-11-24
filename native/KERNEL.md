@@ -114,7 +114,7 @@ Each generator $f_k$ is replaced by its homogenization $f_k^h\in\mathbf Q[x,y]$,
 
 ### Trace, replay, lifting
 
-*Trace.* For one prime $p_0$ the reduced Gröbner basis $G_{p_0}$ of $I'_{p_0}=(\bar f_1^h,\dots,\bar f_s^h)\subset\mathbf F_{p_0}[x,y]$ is computed by [Buchberger’s algorithm](#gröbner-bases), which is valid over any field, degree by degree. Each S-polynomial is reduced in a vector indexed by the monomials that can occur; the list of monomials and of reducers depends only on leading monomials. For every S-polynomial with a nonzero remainder the row operations are appended to a *replay program*, together with the positions of the coefficients that were zero.
+*Trace.* For the graded reverse lexicographic order on the CPU, [the F4 trace](#the-f4-trace) builds one matrix per degree instead. The trace described here serves the other orders and the devices. For one prime $p_0$ the reduced Gröbner basis $G_{p_0}$ of $I'_{p_0}=(\bar f_1^h,\dots,\bar f_s^h)\subset\mathbf F_{p_0}[x,y]$ is computed by [Buchberger’s algorithm](#gröbner-bases), which is valid over any field, degree by degree. Each S-polynomial is reduced in a vector indexed by the monomials that can occur; the list of monomials and of reducers depends only on leading monomials. For every S-polynomial with a nonzero remainder the row operations are appended to a *replay program*, together with the positions of the coefficients that were zero.
 
 For a sufficiently large group of same-degree pairs, the tracer freezes the current basis and constructs the union of the monomial columns and shifted reducers once. Each S-polynomial reduces independently against this triangular table on CPU threads, Triton, or OpenCL. Row elimination on the remainders proceeds in increasing least-common-multiple order. A dependent row is a linear combination of earlier rows of the same degree and of shifted reducers with leading terms strictly smaller than its pair lcm. Once the earlier pairs have a standard representation, so does this pair. Independent pairs enter the ordinary trace in order. A size bound limits the temporary table, and a failed device launch can reuse the same table on the CPU. For the GPU, the edges of the triangular table can also be grouped by destination. The level of a column is one more than the largest level of its parents, with source columns at level zero. Columns within a level can therefore be evaluated in parallel from completed parent residues, with one output per column and row.
 
@@ -145,6 +145,93 @@ Homogenizing is necessary. For a prime $p$ let $I=(x,z)\cap(1-py,\,z-1)$, genera
 ### Back to the given order
 
 By Theorem 6 and Lemma 5 the polynomials $g(x,1)$, $g\in G$, are a Gröbner basis of $I$ for the given order. The exact engine then removes the redundant ones and reduces the tails (no pair is formed), which gives the reduced basis.
+
+<a id="75-the-f4-trace"></a><a id="the-f4-trace"></a>
+
+### The F4 trace
+
+For the graded reverse lexicographic order, `f4_trace.cpp` computes the [modular trace](#72-trace-replay-lifting) with one matrix per degree, and replays it matrix by matrix. A solve that asks for a device, or whose order does not compare degrees first, keeps the [Buchberger trace](#72-trace-replay-lifting). A constant generator is also left to that trace. Generators that are not homogeneous and miss the Hilbert bound below may be traced as they are, without homogenizing ([the direct trace](#the-direct-trace)). [F4 trace](f4_trace.cpp) · [Benchmark](../benchmarks/groebner_f4.py)
+
+**The matrix of a degree.** Let $G$ be the elements found in lower degrees. The rows to reduce in degree $d$ are the generators of degree $d$ and, for each least common multiple $m$ of a pair of that degree, the products $(m/\operatorname{lm} g)\,g$ of its members except one, which is the *pivot row* of the column $m$. Every other monomial of a row that a leading monomial of $G$ divides gets a pivot row $(m/\operatorname{lm} g)\,g$ as well, and so do the monomials these rows bring in. The pivot rows are monic with distinct leading columns. Subtracting multiples of them, largest column first, clears the pivot columns of any row. This map $N$ from rows to vectors on the columns without a pivot row is linear. The new elements of degree $d$ are the rows of the reduced echelon form of the span $W$ of the $N(r)$, for the rows $r$ to reduce. Their leading monomials have no divisor among the leading monomials of $G$. This is the algorithm F4 [F], with the pairs of section 2.
+
+**Random combinations.** Reducing every row costs one pass over the pivot rows per row, and most rows give nothing new (88% for Katsura-10). The tracer reduces $k$ combinations $\sum_i a_{ji}r_i$ with coefficients drawn uniformly modulo $p$ instead. By linearity their images $\sum_i a_{ji}N(r_i)$ are independent uniform elements of $W$. When a matrix has few rows, they are reduced themselves and nothing is random.
+
+**Lemma 8.** If $U\subsetneq W$ is a subspace, a uniform element of $W$ lies in $U$ with probability at most $1/p$. So $k\le\dim W$ uniform elements are independent with probability at least $1-1/(p-1)$, and when $v_1,\dots,v_k$ do not span $W$, a further uniform element depends on them with probability at most $1/p$.
+
+*Proof.* $|U|/|W|\le 1/p$. The $i$-th element must avoid the span of the earlier ones, of dimension at most $i-1$ in a space of dimension at least $k$: the probability of failure is at most $\sum_{i\le k}p^{i-1-k}<1/(p-1)$. $\square$
+
+The $k$ combinations are the *lanes* of one block: an array with $k$ entries per column. The pass over the pivot rows reads each row once and applies it to all lanes, with a 64-bit accumulator per entry kept below $p^2<2^{62}$. Blocks have at most 32 lanes and run on separate threads.
+
+**How many combinations.** When the ideal has at most as many generators as variables, the number is known in advance.
+
+**Lemma 9.** Let $f_1,\dots,f_s$ be forms of degrees $d_1,\dots,d_s\ge1$ in $S=k[x_1,\dots,x_n]$ over a field, with $s\le n$, and let $\sum_d c_dt^d=\prod_i(1-t^{d_i})/(1-t)^n$. Then $\dim_k(S/(f_1,\dots,f_s))_d\ge c_d$ for every $d$.
+
+*Proof.* The dimensions do not change over the algebraic closure, so let $k$ be algebraically closed. Let $A$ be the affine space of all tuples of forms of these degrees. For a tuple $g$, $\dim(g_1,\dots,g_s)_d$ is the rank of the map $\bigoplus_iS_{d-d_i}\to S_d$, $(a_i)\mapsto\sum a_ig_i$, whose matrix has entries linear in the coordinates of $A$. So the tuples where this rank is at least a given number form an open set. The tuples that are regular sequences also form an open set: these are the tuples whose zero set in $\mathbf P^{n-1}$ has dimension $n-1-s$ [E, Ch. 18], and the dimension of the fibres of a projective family is upper semicontinuous [E, §14.3]. It is not empty, since it contains $(x_1^{d_1},\dots,x_s^{d_s})$. For a regular sequence the quotient has the Hilbert series $\prod_i(1-t^{d_i})/(1-t)^n$. If some tuple had $\dim(S/(f))_d<c_d$, the open set of tuples with a rank at least as large as its rank would meet the regular sequences, because $A$ is irreducible. That contradicts their Hilbert series. $\square$
+
+Let $L$ be the monomial ideal generated by the leading monomials found so far, all of them leading monomials of elements of $I'_p$, the ideal of the homogenized generators modulo $p$. Then $\dim(S/L)_d\ge\dim(S/I'_p)_d\ge c_d$. So degree $d$ has at most $\tau_d=\dim(S/L)_d-c_d$ new leading monomials. The tracer computes $\tau_d$ from the numerator of the Hilbert series of $L$ (8.1) and reduces $\tau_d$ combinations.
+
+- If they give $\tau_d$ new elements, then $\dim(S/L)_d=c_d$ afterwards, both inequalities are equalities, and the leading monomials of degree $d$ are complete. This is a proof. No randomness enters it.
+- If $\tau_d=0$ the degree needs no matrix.
+- If the Hilbert series of $S/L$ equals $\prod_i(1-t^{d_i})/(1-t)^n$, the same holds in every degree at once. By Theorem 7 the elements found are a Gröbner basis of $I'_p$, and the remaining pairs are dropped.
+- If a combination depends on the earlier ones before $\tau_d$ is reached, the combinations are drawn once more. If the count is still short, the homogenized generators are no complete intersection, or the draw was unlucky. When the given generators are not homogeneous, the trace is given up and the choice of [the direct trace](#the-direct-trace) is made. Otherwise it continues with what it found, and treats the later degrees as if there were no bound. By Lemma 8 the rows found span $W$ except with probability at most $1/p$.
+
+With more generators than variables there is no bound, and for generators that are not homogeneous the choice of [the direct trace](#the-direct-trace) is made. Without a bound, blocks are reduced, one, two, four, … at a time, until a combination depends on the earlier ones. By Lemma 8 they then span $W$ except with probability at most $1/p$ for each matrix.
+
+For the Katsura ideals of the tests and benchmarks every degree meets its bound: their homogenized generators are a regular sequence.
+
+**The reduced basis.** The minimal elements are the rows to reduce of a last matrix, each without its leading term, with a pivot row for every monomial a leading monomial divides. Reducing them gives the reduced basis $T$ modulo $p$.
+
+**Correctness.** Every element the trace inserts is a combination of the generators modulo $p$: the rows are multiples of generators or of earlier elements, and elimination forms combinations of rows. So $T\subset I'_p$, whether or not the draws were lucky. This is all that the [certificate](#73-certification) uses.
+
+**Proposition 10.** Theorem 6 holds with (c) replaced by: (c′) there is a finite set $T\subset I'_p$ whose leading monomials are those of $G$.
+
+*Proof.* As in the proof of Theorem 6, (a) shows that $\bar G$ is a Gröbner basis of $\bar J$, so $L(\bar J)$ is generated by the leading monomials of $G$, and (b) gives $I'_p\subset\bar J$. Then
+$$L(I'_p)\subset L(\bar J)=(\operatorname{lm}G)=(\operatorname{lm}T)\subset L(I'_p),$$
+the last inclusion because $T\subset I'_p$. So $L(I'_p)=L(\bar J)$, and the proof of Theorem 6 continues unchanged. $\square$
+
+So the lifted basis is proved from $T\subset I'_p$ alone. A trace that missed an element cannot pass: with (a) and (b), Proposition 10 shows that its leading monomials were complete. Such a trace only costs time, like an unlucky prime.
+
+**Replay.** For another prime $q$ the same matrices are filled with the images of the generators and of the elements already replayed. No pair is formed and no monomial is searched. Each matrix must give the number of new elements of the trace, with the same leading columns. One combination more than that number is reduced, and it must depend on the others; a matrix with few rows has its rows reduced instead, which gives its rank. A coefficient outside the terms of the trace must vanish. A prime that fails one of these tests is dropped: the matrix has another rank modulo $q$, or a term of the trace vanished modulo $p$. If every replay shows a larger rank, the trace prime lost an element and another one is taken. The replays only supply residues for the lift. The certificate does not rely on them.
+
+The primes are replayed on separate threads. The first batches have 2, 4, 8 and 16 primes, as in the [Buchberger replay](#72-trace-replay-lifting). Later ones have 16, or one prime per thread. A batch with fewer primes than threads shares the threads among the blocks of each prime. A replay costs about as much as the elimination of the trace, while the [replay program](#72-trace-replay-lifting) repeats only the reductions of the useful pairs. For lexicographic and elimination orders, where the trace is short and the primes are many, that program stays the cheaper one.
+
+**Measurements.** `atlas_groebner_f4_profile` runs the trace and a number of replays alone, and returns the basis modulo the trace prime. `atlas_groebner_use_f4(0)` selects the Buchberger trace for comparison, and `atlas_groebner_modular_route` tells which trace the last basis used. [Katsura measurements](../benchmarks/groebner-f4.md)
+
+<a id="76-generators-that-are-not-homogeneous-the-direct-trace"></a><a id="the-direct-trace"></a>
+
+### Generators that are not homogeneous: the direct trace
+
+**Why.** Homogenizing serves the [certificate](#73-certification), and it has a price. The ideal $I'$ of the homogenized generators is contained in the homogenization of $I$, and can be smaller: an element may only enter after a power of $y$ multiplies it. Its Gröbner basis then has more elements than that of $I$. For the Reimer system in 7 variables it has 2587 elements and 5.0 million terms modulo a prime, against 227 elements and 195 thousand terms for $I$. This happens when the homogenized generators are no complete intersection, which the bound of Lemma 9 shows: a degree misses it.
+
+**Detection.** When the generators are not all homogeneous, the F4 trace is given up at the first degree that misses its Hilbert bound, or at once when it has no bound. Homogeneous generators, and generators whose homogenizations meet the bound in every degree, keep the F4 trace. For the others two traces are made modulo one prime: the direct one below, and the F4 trace without its bound, allowed at most twice the recorded structure of the direct one. They show what each route would lift and certify. The direct route is taken when
+
+- the homogenized trace exceeds that allowance, or
+- its reduced basis has at least one and a half times the terms of the reduced basis of $I$, and the elements of the direct trace have at most sixteen times the terms of that basis.
+
+The second condition keeps the F4 trace where the direct certificate would cost more than it saves. It lifts every element of the trace, and their coefficients can be far larger than those of the basis. When $I$ is the unit ideal the basis is $1$, and the homogenized route proves it from a few small elements. A direct lift that is not stable after 255 primes is given up, and the F4 trace then runs to its end.
+
+**The direct trace.** The matrices are those of the F4 trace, for the generators themselves. The pairs are taken by the degree of their least common multiple, so an element of lower degree that a matrix produces is used at once by the next one. There is no Hilbert bound: the combinations of a matrix are counted by their dependence (Lemma 8). Once the number $k$ of new elements of a matrix is known, its rows to reduce are reduced themselves, a few blocks at a time, until $k$ of them have independent images under $N$. These *selected rows* are recorded. New leading monomials of one matrix may divide one another; the reduced basis keeps the minimal ones.
+
+**Replay and lift.** As in the F4 trace. Every element the trace inserted is replayed and lifted, not only the reduced basis: the certificate needs them.
+
+**Certificate.** Let $p$ be the trace prime, $e_1,\dots,e_r$ the lifted elements in the order of the trace, and $G$ the lifted reduced basis. All are monic with denominators prime to $p$, and reduce modulo $p$ to the elements of the trace.
+
+**Proposition 11.** Suppose that
+
+1. in every matrix, each selected row reduces to zero over $\mathbf Q$ by the pivot rows of that matrix and its new elements, the rows being formed from the generators and the $e_j$;
+2. each element of $G$ is its element $e_j$ minus a combination of the pivot rows of the last matrix;
+3. every S-polynomial of $G$ that the criteria of section 2 keep reduces to zero by $G$;
+4. every generator reduces to zero by $G$.
+
+Then $G$ is the reduced Gröbner basis of $I$.
+
+*Proof.* Every row of a matrix is a multiple of a generator or of an earlier element. Assume the earlier elements lie in $I$; then so do the rows. Let $N_{\mathbf Q}$ be the reduction by the pivot rows over $\mathbf Q$, $W$ the span of the $N_{\mathbf Q}(r)$ for the $k$ selected rows $r$, and $E$ the span of the $k$ new elements, which are independent because they are monic with distinct leading columns. By 1, $W\subset E$. The pivot rows are monic with coefficients in $\mathbf Z_{(p)}$, so each $N_{\mathbf Q}(r)$ has coefficients in $\mathbf Z_{(p)}$ and reduces modulo $p$ to the image of the row of the trace. Those $k$ images are independent, so a minor of size $k$ is nonzero modulo $p$ and therefore nonzero: $\dim W=k$. Hence $W=E$. Each new element is thus $N_{\mathbf Q}$ of a combination of rows, that is, a combination of rows of the matrix, and lies in $I$. By induction all $e_j$ lie in $I$, and by 2 so does $G$. By 4, $I\subset(G)$. So $(G)=I$, and by 3 and Buchberger's criterion $G$ is a Gröbner basis of it. The engine returns its reduced form, which is unique. $\square$
+
+The proof uses no grading, and it does not need the trace to be complete. If the trace prime lost rank in a matrix, or the trace missed an element, 1 or 3 fails and another prime is taken. Condition 1 costs one exact reduction for each element of the trace. The pairs that gave nothing are not reduced again over $\mathbf Q$; they only enter through 3, for the reduced basis.
+
+The exact reductions are made without fractions: a row is scaled by what the leading coefficient of a pivot row lacks, and its content is removed after every eighth scaling. They run on all threads.
+
+**What keeps the F4 trace without the comparison.** A complete intersection with solutions at infinity meets the bound in every degree, although its homogenized basis is larger than the basis of $I$. For the cyclic system in 5 variables it has 38 elements against 20.
 
 <a id="8-the-hilbert-driven-route"></a>
 
@@ -201,3 +288,5 @@ The Hilbert series used is exact, because $G_0$ is a certified basis. A Hilbert 
 [E] David Eisenbud, *Commutative Algebra with a View Toward Algebraic Geometry* (1995). [Book](https://doi.org/10.1007/978-1-4612-5350-1)
 
 [A] Elizabeth A. Arnold, *Modular algorithms for computing Gröbner bases*, Journal of Symbolic Computation 35 (2003), 403–419. Theorem 6 above gives the homogeneous criterion used to certify a lifted basis. [Paper](https://doi.org/10.1016/S0747-7171(02)00140-2)
+
+[F] Jean-Charles Faugère, *A new efficient algorithm for computing Gröbner bases (F4)*, Journal of Pure and Applied Algebra 139 (1999), 61–88. The F4 trace reduces the rows of one degree together, as F4 does. [Paper](https://doi.org/10.1016/S0022-4049(99)00005-5)

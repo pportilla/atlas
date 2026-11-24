@@ -1,0 +1,129 @@
+{
+ "input": "Katsura-8 (9 variables), grevlex",
+ "threads": 12,
+ "date": "2026-11-16T04:20:59+00:00",
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 12,
+  "load_1min_start": 3.64794921875,
+  "load_1min_end": 4.39111328125
+ },
+ "systems": {
+  "msolve": "/usr/bin/msolve",
+  "giac": "/usr/bin/giac"
+ },
+ "prime": {
+  "prime": 2147483629,
+  "basis_elements": 143,
+  "basis_terms": 26135,
+  "matrices": 9,
+  "combinations_reduced": 143,
+  "dependent_combinations": 0,
+  "recorded_words": 628787,
+  "hilbert_bound_met": true,
+  "seconds": {
+   "Atlas F4 trace, 1 thread(s)": {
+    "best_s": 0.018,
+    "median_s": 0.018,
+    "runs": 2
+   },
+   "Atlas F4 replay, 1 prime(s) at once on 1 thread(s)": {
+    "best_s": 0.004,
+    "median_s": 0.004,
+    "runs": 2
+   },
+   "Atlas F4 trace, 12 thread(s)": {
+    "best_s": 0.017,
+    "median_s": 0.018,
+    "runs": 2
+   },
+   "Atlas F4 replay, 4 prime(s) at once on 12 thread(s)": {
+    "best_s": 0.01,
+    "median_s": 0.01,
+    "runs": 2
+   },
+   "msolve F4, exact linear algebra, 1 thread(s)": {
+    "best_s": 0.066,
+    "median_s": 0.07,
+    "runs": 2
+   },
+   "msolve F4, exact linear algebra, 12 thread(s)": {
+    "best_s": 0.089,
+    "median_s": 0.093,
+    "runs": 2
+   },
+   "msolve F4, probabilistic linear algebra, 1 thread(s)": {
+    "best_s": 0.044,
+    "median_s": 0.046,
+    "runs": 2
+   },
+   "msolve F4, probabilistic linear algebra, 12 thread(s)": {
+    "best_s": 0.045,
+    "median_s": 0.049,
+    "runs": 2
+   },
+   "giac gbasis, default settings, 1 thread(s)": {
+    "best_s": 0.747,
+    "median_s": 0.747,
+    "runs": 1
+   },
+   "giac gbasis, default settings, 12 thread(s)": {
+    "best_s": 0.448,
+    "median_s": 0.448,
+    "runs": 1
+   }
+  },
+  "same_basis_as_atlas": {
+   "msolve exact, 1 thread(s)": true,
+   "msolve exact, 12 thread(s)": true,
+   "msolve probabilistic, 1 thread(s)": true,
+   "msolve probabilistic, 12 thread(s)": true,
+   "giac, 1 thread(s)": true,
+   "giac, 12 thread(s)": true
+  }
+ },
+ "rational": {
+  "seconds": {
+   "Atlas certified, F4 trace": {
+    "total_s": 0.504,
+    "primes": 31,
+    "rejected": 0,
+    "traces": 1,
+    "trace_s": 0.023,
+    "replay_s": 0.076,
+    "lift_s": 0.034,
+    "certify_s": 0.344,
+    "candidate_s": 0.133
+   },
+   "giac gbasis over Q, probabilistic, 12 thread(s)": {
+    "total_s": 0.385
+   },
+   "giac gbasis over Q, certified, 12 thread(s)": {
+    "total_s": 13.044
+   },
+   "msolve solve over Q (parametrization and real roots, no basis over Q), 12 thread(s)": {
+    "total_s": 1.202
+   },
+   "Atlas certified, Buchberger trace (before this change)": {
+    "total_s": 0.695,
+    "primes": 31,
+    "rejected": 0,
+    "traces": 1,
+    "trace_s": 0.106,
+    "replay_s": 0.03,
+    "lift_s": 0.041,
+    "certify_s": 0.48,
+    "candidate_s": 0.178
+   }
+  },
+  "same_basis_as_atlas": {
+   "msolve exact modulo 2147483629": true,
+   "giac gbasis over Q, probabilistic, 12 thread(s)": true,
+   "giac gbasis over Q, certified, 12 thread(s)": true,
+   "Buchberger trace": true
+  },
+  "basis_elements": 143,
+  "basis_terms": 26135,
+  "basis_sha256": "51c7c05ebb5c0c04e0e84e0066b9e9878d5010e79c0d6cf35f986b259a4e6e98"
+ }
+}

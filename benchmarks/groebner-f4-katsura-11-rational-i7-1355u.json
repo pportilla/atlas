@@ -1,0 +1,46 @@
+{
+ "input": "Katsura-11 (12 variables), grevlex",
+ "threads": 12,
+ "date": "2026-11-16T04:38:29+00:00",
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 12,
+  "load_1min_start": 7.72607421875,
+  "load_1min_end": 7.1240234375
+ },
+ "systems": {
+  "msolve": "/usr/bin/msolve",
+  "giac": "/usr/bin/giac"
+ },
+ "rational": {
+  "seconds": {
+   "Atlas certified, F4 trace": {
+    "total_s": 1967.313,
+    "primes": 63,
+    "rejected": 0,
+    "traces": 1,
+    "trace_s": 1.996,
+    "replay_s": 41.991,
+    "lift_s": 5.276,
+    "certify_s": 1911.788,
+    "candidate_s": 49.263
+   },
+   "giac gbasis over Q, probabilistic, 12 thread(s)": {
+    "total_s": 135.842
+   },
+   "giac gbasis over Q, certified, 12 thread(s)": null,
+   "msolve solve over Q (parametrization and real roots, no basis over Q), 12 thread(s)": null,
+   "Atlas certified, Buchberger trace (before this change)": {
+    "gave_up": "The modular route gave up.",
+    "total_s": 26.864
+   }
+  },
+  "same_basis_as_atlas": {
+   "msolve exact modulo 2147483629": true,
+   "giac gbasis over Q, probabilistic, 12 thread(s) (number of elements only)": true
+  },
+  "basis_elements": 1050,
+  "basis_terms": 1481345,
+  "basis_sha256": "53ff854cbc9c213d18d64163c439abb4b12c61c3977cca62e37b1cbaa2486171"
+ }
+}

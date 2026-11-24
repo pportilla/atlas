@@ -1,0 +1,164 @@
+{
+ "date": "2026-11-17T03:37:27+00:00",
+ "threads": 12,
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 12
+ },
+ "programs": {
+  "msolve": null,
+  "julia": null
+ },
+ "systems": {
+  "katsura-8": {
+   "variables": 9,
+   "generators": 9,
+   "load_1min": 0.83984375,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 143,
+    "basis_terms": 26135,
+    "matrices": 9,
+    "combinations_reduced": 143,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.016,
+      "median_s": 0.017,
+      "runs": 5
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.003,
+      "median_s": 0.004,
+      "runs": 5
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.016,
+      "median_s": 0.017,
+      "runs": 5
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 0.486,
+      "primes": 31,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.016,
+      "replay_s": 0.067,
+      "lift_s": 0.038,
+      "certify_s": 0.333,
+      "candidate_s": 0.121,
+      "trace": "F4, homogenized"
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "load_1min_end": 0.83984375
+  },
+  "katsura-9": {
+   "variables": 10,
+   "generators": 10,
+   "load_1min": 0.83984375,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 272,
+    "basis_terms": 98499,
+    "matrices": 10,
+    "combinations_reduced": 272,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.073,
+      "median_s": 0.075,
+      "runs": 5
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.021,
+      "median_s": 0.022,
+      "runs": 5
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.072,
+      "median_s": 0.075,
+      "runs": 5
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 8.678,
+      "primes": 31,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.079,
+      "replay_s": 0.305,
+      "lift_s": 0.129,
+      "certify_s": 8.016,
+      "candidate_s": 0.513,
+      "trace": "F4, homogenized"
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "load_1min_end": 2.20703125
+  },
+  "katsura-10": {
+   "variables": 11,
+   "generators": 11,
+   "load_1min": 2.20703125,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 537,
+    "basis_terms": 383467,
+    "matrices": 11,
+    "combinations_reduced": 537,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.366,
+      "median_s": 0.367,
+      "runs": 5
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.157,
+      "median_s": 0.158,
+      "runs": 5
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.339,
+      "median_s": 0.348,
+      "runs": 5
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 104.775,
+      "primes": 47,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.341,
+      "replay_s": 3.017,
+      "lift_s": 0.749,
+      "certify_s": 99.8,
+      "candidate_s": 4.107,
+      "trace": "F4, homogenized"
+     }
+    },
+    "same_basis_as_atlas": {}
+   },
+   "load_1min_end": 10.83642578125
+  }
+ }
+}

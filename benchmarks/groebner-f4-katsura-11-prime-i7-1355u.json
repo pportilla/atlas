@@ -1,0 +1,85 @@
+{
+ "input": "Katsura-11 (12 variables), grevlex",
+ "threads": 12,
+ "date": "2026-11-16T04:27:28+00:00",
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 12,
+  "load_1min_start": 3.04052734375,
+  "load_1min_end": 7.72607421875
+ },
+ "systems": {
+  "msolve": "/usr/bin/msolve",
+  "giac": "/usr/bin/giac"
+ },
+ "prime": {
+  "prime": 2147483629,
+  "basis_elements": 1050,
+  "basis_terms": 1481345,
+  "matrices": 12,
+  "combinations_reduced": 1050,
+  "dependent_combinations": 0,
+  "recorded_words": 51456887,
+  "hilbert_bound_met": true,
+  "seconds": {
+   "Atlas F4 trace, 1 thread(s)": {
+    "best_s": 2.835,
+    "median_s": 3.083,
+    "runs": 3
+   },
+   "Atlas F4 replay, 1 prime(s) at once on 1 thread(s)": {
+    "best_s": 1.672,
+    "median_s": 1.793,
+    "runs": 3
+   },
+   "Atlas F4 trace, 12 thread(s)": {
+    "best_s": 2.187,
+    "median_s": 2.207,
+    "runs": 3
+   },
+   "Atlas F4 replay, 4 prime(s) at once on 12 thread(s)": {
+    "best_s": 3.826,
+    "median_s": 3.857,
+    "runs": 3
+   },
+   "msolve F4, exact linear algebra, 1 thread(s)": {
+    "best_s": 22.211,
+    "median_s": 23.001,
+    "runs": 3
+   },
+   "msolve F4, exact linear algebra, 12 thread(s)": {
+    "best_s": 11.955,
+    "median_s": 11.995,
+    "runs": 3
+   },
+   "msolve F4, probabilistic linear algebra, 1 thread(s)": {
+    "best_s": 5.144,
+    "median_s": 6.049,
+    "runs": 3
+   },
+   "msolve F4, probabilistic linear algebra, 12 thread(s)": {
+    "best_s": 4.266,
+    "median_s": 4.484,
+    "runs": 3
+   },
+   "giac gbasis, default settings, 1 thread(s)": {
+    "best_s": 324.493,
+    "median_s": 324.493,
+    "runs": 1
+   },
+   "giac gbasis, default settings, 12 thread(s)": {
+    "best_s": 124.019,
+    "median_s": 124.019,
+    "runs": 1
+   }
+  },
+  "same_basis_as_atlas": {
+   "msolve exact, 1 thread(s)": true,
+   "msolve exact, 12 thread(s)": true,
+   "msolve probabilistic, 1 thread(s)": true,
+   "msolve probabilistic, 12 thread(s)": true,
+   "giac, 1 thread(s) (number of elements only)": true,
+   "giac, 12 thread(s) (number of elements only)": true
+  }
+ }
+}

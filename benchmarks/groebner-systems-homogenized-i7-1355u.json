@@ -1,0 +1,1003 @@
+{
+ "date": "2026-11-16T08:49:24+00:00",
+ "threads": 12,
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 12
+ },
+ "programs": {
+  "msolve": "/usr/bin/msolve",
+  "julia": "/usr/bin/julia"
+ },
+ "systems": {
+  "katsura-9": {
+   "variables": 10,
+   "generators": 10,
+   "load_1min": 11.47216796875,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 272,
+    "basis_terms": 98499,
+    "matrices": 10,
+    "combinations_reduced": 272,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.195,
+      "median_s": 0.232,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.074,
+      "median_s": 0.076,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.163,
+      "median_s": 0.166,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 0.649,
+      "median_s": 0.703,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 0.425,
+      "median_s": 0.492,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 0.33,
+      "median_s": 0.424,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 0.266,
+      "median_s": 0.296,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 0.551,
+      "median_s": 0.551,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 0.284,
+      "median_s": 0.348,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.107,
+      "median_s": 0.121,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.097,
+      "median_s": 0.106,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 0.57,
+      "median_s": 0.899,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.048,
+      "median_s": 0.091,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 272,
+    "reduced_terms": 98499
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 19.377,
+      "primes": 31,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.218,
+      "replay_s": 0.654,
+      "lift_s": 0.37,
+      "certify_s": 17.738,
+      "candidate_s": 1.242,
+      "trace": "F4"
+     },
+     "Groebner.jl over Q, certify=false, 12 threads": {
+      "best_s": 1.164,
+      "median_s": 1.372,
+      "runs": 3
+     },
+     "Groebner.jl over Q, certify=true, 12 threads": null
+    },
+    "same_basis_as_atlas": {
+     "Groebner.jl over Q, certify=false": true
+    },
+    "basis_elements": 272,
+    "basis_terms": 98499
+   },
+   "load_1min_end": 10.6142578125
+  },
+  "katsura-10": {
+   "variables": 11,
+   "generators": 11,
+   "load_1min": 10.6142578125,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 537,
+    "basis_terms": 383467,
+    "matrices": 11,
+    "combinations_reduced": 537,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.61,
+      "median_s": 0.618,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.27,
+      "median_s": 0.283,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.527,
+      "median_s": 0.561,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 3.639,
+      "median_s": 5.183,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 1.884,
+      "median_s": 2.216,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 1.481,
+      "median_s": 1.744,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 2.214,
+      "median_s": 2.279,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 6.221,
+      "median_s": 8.206,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 2.167,
+      "median_s": 3.202,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.625,
+      "median_s": 0.63,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.435,
+      "median_s": 0.482,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 4.697,
+      "median_s": 11.009,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.279,
+      "median_s": 0.998,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 537,
+    "reduced_terms": 383467
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 163.4,
+      "primes": 47,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.893,
+      "replay_s": 6.055,
+      "lift_s": 1.513,
+      "certify_s": 153.479,
+      "candidate_s": 8.46,
+      "trace": "F4"
+     },
+     "Groebner.jl over Q, certify=false, 12 threads": {
+      "best_s": 5.497,
+      "median_s": 5.792,
+      "runs": 3
+     },
+     "Groebner.jl over Q, certify=true, 12 threads": null
+    },
+    "same_basis_as_atlas": {
+     "Groebner.jl over Q, certify=false": true
+    },
+    "basis_elements": 537,
+    "basis_terms": 383467
+   },
+   "load_1min_end": 6.326171875
+  },
+  "katsura-11": {
+   "variables": 12,
+   "generators": 12,
+   "load_1min": 6.326171875,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 1050,
+    "basis_terms": 1481345,
+    "matrices": 12,
+    "combinations_reduced": 1050,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 4.55,
+      "median_s": 4.593,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 2.11,
+      "median_s": 2.653,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 3.528,
+      "median_s": 4.337,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 39.069,
+      "median_s": 39.352,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 16.383,
+      "median_s": 17.054,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 6.406,
+      "median_s": 7.323,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 6.976,
+      "median_s": 7.009,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 69.107,
+      "median_s": 70.025,
+      "runs": 2
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 13.016,
+      "median_s": 16.281,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 4.378,
+      "median_s": 9.016,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 2.621,
+      "median_s": 2.959,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 56.151,
+      "median_s": 60.327,
+      "runs": 2
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 2.407,
+      "median_s": 3.817,
+      "runs": 2
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 1050,
+    "reduced_terms": 1481345
+   },
+   "load_1min_end": 7.59912109375
+  },
+  "noon-7": {
+   "variables": 7,
+   "generators": 7,
+   "load_1min": 7.59912109375,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 495,
+    "basis_terms": 71153,
+    "matrices": 13,
+    "combinations_reduced": 495,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.308,
+      "median_s": 0.333,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.212,
+      "median_s": 0.229,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.336,
+      "median_s": 0.344,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 0.214,
+      "median_s": 0.242,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 0.275,
+      "median_s": 0.409,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 0.35,
+      "median_s": 0.387,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 0.269,
+      "median_s": 0.323,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 0.187,
+      "median_s": 0.247,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 0.187,
+      "median_s": 0.188,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.194,
+      "median_s": 0.198,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.123,
+      "median_s": 0.145,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 0.148,
+      "median_s": 0.191,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.022,
+      "median_s": 0.024,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 495,
+    "reduced_terms": 71153
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 1.715,
+      "primes": 7,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.23,
+      "replay_s": 0.528,
+      "lift_s": 0.056,
+      "certify_s": 0.798,
+      "candidate_s": 0.814,
+      "trace": "F4"
+     },
+     "Groebner.jl over Q, certify=false, 12 threads": {
+      "best_s": 0.886,
+      "median_s": 0.969,
+      "runs": 3
+     },
+     "Groebner.jl over Q, certify=true, 12 threads": {
+      "best_s": 26.298,
+      "median_s": 29.227,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "Groebner.jl over Q, certify=false": true,
+     "Groebner.jl over Q, certify=true": true
+    },
+    "basis_elements": 495,
+    "basis_terms": 71153
+   },
+   "load_1min_end": 12.6630859375
+  },
+  "noon-8": {
+   "variables": 8,
+   "generators": 8,
+   "load_1min": 12.6630859375,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 1338,
+    "basis_terms": 408695,
+    "matrices": 15,
+    "combinations_reduced": 1338,
+    "dependent_combinations": 0,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 2.468,
+      "median_s": 3.182,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 2.008,
+      "median_s": 2.219,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 3.296,
+      "median_s": 3.304,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 1.52,
+      "median_s": 1.548,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 2.771,
+      "median_s": 2.775,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 3.217,
+      "median_s": 3.415,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 3.595,
+      "median_s": 3.618,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 2.501,
+      "median_s": 2.612,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 1.082,
+      "median_s": 1.542,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 1.075,
+      "median_s": 1.287,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.812,
+      "median_s": 0.863,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 1.08,
+      "median_s": 1.118,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.174,
+      "median_s": 0.194,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 1338,
+    "reduced_terms": 408695
+   },
+   "load_1min_end": 8.89453125
+  },
+  "henrion-6": {
+   "variables": 6,
+   "generators": 6,
+   "load_1min": 8.89453125,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 90,
+    "basis_terms": 33611,
+    "matrices": 16,
+    "combinations_reduced": 100,
+    "dependent_combinations": 10,
+    "hilbert_bound_met": true,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.039,
+      "median_s": 0.04,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.007,
+      "median_s": 0.008,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.04,
+      "median_s": 0.043,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 0.065,
+      "median_s": 0.069,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 0.077,
+      "median_s": 0.081,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 0.075,
+      "median_s": 0.076,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 0.067,
+      "median_s": 0.071,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 0.027,
+      "median_s": 0.028,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 0.023,
+      "median_s": 0.031,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.017,
+      "median_s": 0.018,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.03,
+      "median_s": 0.03,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 0.032,
+      "median_s": 0.036,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.009,
+      "median_s": 0.01,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": true,
+     "msolve exact, 12 thread(s)": true,
+     "msolve probabilistic, 1 thread(s)": true,
+     "msolve probabilistic, 12 thread(s)": true,
+     "Groebner.jl deterministic, 1 thread(s)": true,
+     "Groebner.jl deterministic, 12 thread(s)": true,
+     "Groebner.jl randomized, 1 thread(s)": true,
+     "Groebner.jl randomized, 12 thread(s)": true
+    },
+    "reduced_elements": 90,
+    "reduced_terms": 33611
+   },
+   "load_1min_end": 6.88525390625
+  },
+  "cyclic-7": {
+   "variables": 7,
+   "generators": 7,
+   "load_1min": 6.88525390625,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 443,
+    "basis_terms": 79901,
+    "matrices": 20,
+    "combinations_reduced": 823,
+    "dependent_combinations": 380,
+    "hilbert_bound_met": false,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.116,
+      "median_s": 0.119,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.049,
+      "median_s": 0.05,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.101,
+      "median_s": 0.107,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 0.249,
+      "median_s": 0.288,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 0.164,
+      "median_s": 0.19,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 0.175,
+      "median_s": 0.177,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 0.163,
+      "median_s": 0.18,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 0.138,
+      "median_s": 0.139,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 0.095,
+      "median_s": 0.125,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.054,
+      "median_s": 0.054,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.049,
+      "median_s": 0.057,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 0.264,
+      "median_s": 0.274,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.038,
+      "median_s": 0.042,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": "after reduction",
+     "msolve exact, 12 thread(s)": "after reduction",
+     "msolve probabilistic, 1 thread(s)": "after reduction",
+     "msolve probabilistic, 12 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 1 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 12 thread(s)": "after reduction",
+     "Groebner.jl randomized, 1 thread(s)": "after reduction",
+     "Groebner.jl randomized, 12 thread(s)": "after reduction"
+    },
+    "reduced_elements": 209,
+    "reduced_terms": 27187
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 1.323,
+      "primes": 31,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.069,
+      "replay_s": 0.294,
+      "lift_s": 0.148,
+      "certify_s": 0.73,
+      "candidate_s": 0.51,
+      "trace": "F4"
+     },
+     "Groebner.jl over Q, certify=false, 12 threads": {
+      "best_s": 0.486,
+      "median_s": 0.504,
+      "runs": 3
+     },
+     "Groebner.jl over Q, certify=true, 12 threads": {
+      "best_s": 194.433,
+      "median_s": 194.433,
+      "runs": 1
+     }
+    },
+    "same_basis_as_atlas": {
+     "Groebner.jl over Q, certify=false": true,
+     "Groebner.jl over Q, certify=true": true
+    },
+    "basis_elements": 209,
+    "basis_terms": 27187
+   },
+   "load_1min_end": 4.3525390625
+  },
+  "cyclic-8": {
+   "variables": 8,
+   "generators": 8,
+   "load_1min": 4.3525390625,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 1182,
+    "basis_terms": 676478,
+    "matrices": 30,
+    "combinations_reduced": 1867,
+    "dependent_combinations": 685,
+    "hilbert_bound_met": false,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 1.305,
+      "median_s": 1.402,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.584,
+      "median_s": 0.592,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 1.153,
+      "median_s": 1.39,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 2.659,
+      "median_s": 2.69,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 1.798,
+      "median_s": 1.838,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 1.542,
+      "median_s": 1.573,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 1.241,
+      "median_s": 1.399,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 3.247,
+      "median_s": 3.336,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 1.436,
+      "median_s": 1.438,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 1.006,
+      "median_s": 1.118,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.566,
+      "median_s": 0.574,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 2.84,
+      "median_s": 3.19,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.429,
+      "median_s": 0.479,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": "after reduction",
+     "msolve exact, 12 thread(s)": "after reduction",
+     "msolve probabilistic, 1 thread(s)": "after reduction",
+     "msolve probabilistic, 12 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 1 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 12 thread(s)": "after reduction",
+     "Groebner.jl randomized, 1 thread(s)": "after reduction",
+     "Groebner.jl randomized, 12 thread(s)": "after reduction"
+    },
+    "reduced_elements": 372,
+    "reduced_terms": 93503
+   },
+   "load_1min_end": 5.55859375
+  },
+  "eco-11": {
+   "variables": 11,
+   "generators": 11,
+   "load_1min": 5.55859375,
+   "prime": {
+    "prime": 2147483629,
+    "basis_elements": 758,
+    "basis_terms": 216325,
+    "matrices": 18,
+    "combinations_reduced": 1275,
+    "dependent_combinations": 517,
+    "hilbert_bound_met": false,
+    "seconds": {
+     "Atlas F4 trace, 1 thread(s)": {
+      "best_s": 0.367,
+      "median_s": 0.718,
+      "runs": 3
+     },
+     "Atlas F4 replay of one prime, 1 thread": {
+      "best_s": 0.147,
+      "median_s": 0.251,
+      "runs": 3
+     },
+     "Atlas F4 trace, 12 thread(s)": {
+      "best_s": 0.442,
+      "median_s": 0.453,
+      "runs": 3
+     },
+     "msolve F4, exact, 1 thread(s)": {
+      "best_s": 0.92,
+      "median_s": 1.008,
+      "runs": 3
+     },
+     "msolve F4, exact, 12 thread(s)": {
+      "best_s": 0.737,
+      "median_s": 0.773,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 1 thread(s)": {
+      "best_s": 0.479,
+      "median_s": 0.481,
+      "runs": 3
+     },
+     "msolve F4, probabilistic, 12 thread(s)": {
+      "best_s": 0.534,
+      "median_s": 0.561,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 1 thread(s)": {
+      "best_s": 1.413,
+      "median_s": 1.631,
+      "runs": 3
+     },
+     "Groebner.jl, deterministic, 12 thread(s)": {
+      "best_s": 0.424,
+      "median_s": 0.432,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 1 thread(s)": {
+      "best_s": 0.494,
+      "median_s": 0.581,
+      "runs": 3
+     },
+     "Groebner.jl, randomized, 12 thread(s)": {
+      "best_s": 0.183,
+      "median_s": 0.232,
+      "runs": 3
+     },
+     "Groebner.jl learn, 1 thread": {
+      "best_s": 0.905,
+      "median_s": 0.959,
+      "runs": 3
+     },
+     "Groebner.jl apply to one prime, 1 thread": {
+      "best_s": 0.12,
+      "median_s": 0.126,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "msolve exact, 1 thread(s)": "after reduction",
+     "msolve exact, 12 thread(s)": "after reduction",
+     "msolve probabilistic, 1 thread(s)": "after reduction",
+     "msolve probabilistic, 12 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 1 thread(s)": "after reduction",
+     "Groebner.jl deterministic, 12 thread(s)": "after reduction",
+     "Groebner.jl randomized, 1 thread(s)": "after reduction",
+     "Groebner.jl randomized, 12 thread(s)": "after reduction"
+    },
+    "reduced_elements": 389,
+    "reduced_terms": 115823
+   },
+   "rational": {
+    "seconds": {
+     "Atlas certified": {
+      "total_s": 31.327,
+      "primes": 15,
+      "rejected": 0,
+      "traces": 1,
+      "trace_s": 0.422,
+      "replay_s": 0.94,
+      "lift_s": 0.099,
+      "certify_s": 29.447,
+      "candidate_s": 1.46,
+      "trace": "F4"
+     },
+     "Groebner.jl over Q, certify=false, 12 threads": {
+      "best_s": 2.117,
+      "median_s": 2.167,
+      "runs": 3
+     }
+    },
+    "same_basis_as_atlas": {
+     "Groebner.jl over Q, certify=false": true
+    },
+    "basis_elements": 389,
+    "basis_terms": 115823
+   }
+  }
+ }
+}

@@ -71,7 +71,7 @@ build/local_algebra: $(LOCAL_SOURCES) ae_codimension.hpp local_io.hpp local_basi
 build/primary_decomposition build/normalization build/localization build/ideal_sum build/ideal_product build/ideal_power build/symbolic_power build/quotient_ring: build/local_algebra
 	ln -sf local_algebra $@
 
-KERNEL_SOURCES := trace_levels.cpp groebner.cpp ideal.cpp ideal_arithmetic.cpp prepared_ideal.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
+KERNEL_SOURCES := trace_levels.cpp groebner.cpp f4_trace.cpp ideal.cpp ideal_arithmetic.cpp prepared_ideal.cpp modular.cpp modular_replay.cpp hilbert.cpp euler.cpp euler_lattice.cpp affine.cpp zeta.cpp \
   graph_replay.cpp graph_wide.cpp field_wide.cpp field_coefficient.cpp common_field.cpp field_factorization.cpp marked_scalar.cpp lattice_volume.cpp toric_graph.cpp fan_cover.cpp centre_weights.cpp centre_search.cpp centre_affine_maximum.cpp surface_centre_choice.cpp binomial_fan.cpp newton_repair.cpp repair_geometry.cpp \
   atlas_incidence.cpp graph_centre_incidence.cpp graph_regular.cpp torus_sections.cpp fan_surface.cpp owned_chart_incidence.cpp chart_gluing.cpp marked_chart_geometry.cpp ordered_ideals.cpp monomial_resolution.cpp component_projection.cpp component_geometry.cpp finite_sheet_incidence.cpp identity_divisor.cpp monomial_quotient.cpp rational_arithmetic.cpp \
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp triton_polynomial.cpp monodromy.cpp point_geometry.cpp \
@@ -100,8 +100,9 @@ $(GROEBNER_LIB): $(KERNEL_OBJECTS)
 
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient build/test_chart_expr
+test-verify: build/test_groebner_verify build/test_f4_trace build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient build/test_chart_expr
 	./build/test_groebner_verify
+	./build/test_f4_trace
 	./build/test_local_dimension_graph
 	./build/test_small_prime_rank
 	./build/test_ae_weighted_quotient
@@ -119,6 +120,9 @@ build/test_small_prime_rank: test_small_prime_rank.cpp small_prime_rank.hpp
 
 build/test_local_dimension_graph: test_local_dimension_graph.cpp local_dimension_graph.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp
+
+build/test_f4_trace: test_f4_trace.cpp f4_trace.hpp groebner.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< $(abspath $(GROEBNER_LIB)) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
 
 build/test_groebner_verify: test_groebner_verify.cpp groebner_verify.hpp groebner.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint) $< $(abspath $(GROEBNER_LIB)) -o $@ $(LDFLAGS) $(shell pkg-config --libs flint) -pthread
