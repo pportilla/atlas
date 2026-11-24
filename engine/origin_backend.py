@@ -78,6 +78,27 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     return record
 
 
+RATIONAL_FACTORS = "rational factors"
+
+
+def strict_components(symbols, equation, factors, *, separate):
+    """The components of the reduced hypersurface that the blowups carry.
+
+    An intrinsic resolution asks for a smooth strict transform, so the whole
+    hypersurface is one component "strict": its branches have to come apart.
+    An embedded resolution asks for normal crossings of the total transform.
+    Smooth branches that cross normally already have them, so with
+    `separate` each factor over Q is a component S1, S2, ... of its own, in
+    the order of `rational_factor_rows`. A factor that splits over Qbar is
+    one component, which the Jacobian criterion then requires to be smooth:
+    its conjugate branches have to come apart as before.
+    """
+    if not separate or len(factors) < 2:
+        return [("strict", 1, 1, (equation,))]
+    from .affine_kernel import _sparse_expression
+    return [(f"S{i}", 1, 1, (_sparse_expression(symbols, row),)) for i, (row, _, _) in enumerate(factors, 1)]
+
+
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False,
              full_boundary=False, order_only=False):
     """The computation of `resolve_origin`, in this process.
@@ -102,7 +123,8 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     # The rule is for a reduced equation: a repeated factor is left to the
     # treatment of divisors with multiplicities.
     from .affine_kernel import rational_factor_rows
-    if any(power > 1 for _, power, _ in rational_factor_rows(symbols, equation)[1]):
+    factors = rational_factor_rows(symbols, equation)[1]
+    if any(power > 1 for _, power, _ in factors):
         return None
     # At an isolated singular point the complete rule comes first. Along a
     # curve or surface of singular points the maximal order rule comes
@@ -118,17 +140,34 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
     if len(symbols) >= 4 and not (skip_tangent or order_only):
         rules = ("tangent",) if tangent_only else ("tangent", *rules)
     intrinsic = mode == "intrinsic"
+    whole = strict_components(symbols, equation, factors, separate=False)
+    parts = strict_components(symbols, equation, factors, separate=not intrinsic)
+    deadline = None if seconds is None else monotonic() + seconds
+
+    def blowups(components, rules):
+        return acampo_over(symbols, components, symbols, dimension=len(symbols), rules=rules, deadline=deadline,
+                           budget=None if seconds is None else 400,
+                           count_strata=not (defer_outputs or intrinsic),
+                           intrinsic=intrinsic and not full_boundary)
+
     try:
-        data, strata, charts, centres = acampo_over(symbols, [("strict", 1, 1, (equation,))], symbols,
-                                                    dimension=len(symbols), rules=rules,
-                                                    deadline=None if seconds is None else monotonic() + seconds,
-                                                    budget=None if seconds is None else 400,
-                                                    count_strata=not (defer_outputs or intrinsic),
-                                                    intrinsic=intrinsic and not full_boundary)
+        if len(parts) > 1 and rules[0] == "tangent":
+            # The repeated-tangent rule reads the tangent cone of the whole hypersurface.
+            try:
+                data, strata, charts, centres = blowups(whole, rules[:1])
+                parts = whole
+            except GiveUp:
+                if len(rules) == 1 or deadline is not None and monotonic() > deadline:
+                    raise
+                data, strata, charts, centres = blowups(parts, rules[1:])
+        else:
+            data, strata, charts, centres = blowups(parts, rules)
     except GiveUp:
         return None
     record = _record(names, charts, centres, data, strata, defer_outputs=defer_outputs or intrinsic,
                      intrinsic=intrinsic)
+    if record is not None and len(parts) > 1:
+        record["certificate"]["strict_components"] = RATIONAL_FACTORS
     if record is not None and intrinsic and not defer_outputs:
         _, output = certified_outputs(record, names, mode, False)
         record["dual_complex"] = output["dual_complex"]
@@ -149,7 +188,7 @@ def _isolated(symbols, equation):
 def _record(names, charts, centres, data, strata, *, defer_outputs, intrinsic=False):
     """Serialize certified charts from any of the successive smooth-centre rules."""
     from .atlas import to_json
-    from .local_blowups import GiveUp, cells, dual_cells
+    from .local_blowups import GiveUp, _hypersurface, _is_strict, cells, dual_cells
     from .strata import records
 
     if not centres:
@@ -165,13 +204,16 @@ def _record(names, charts, centres, data, strata, *, defer_outputs, intrinsic=Fa
     final = []
     for k, chart in enumerate(charts, 1):
         divisors = [(label, m, [_text(g) for g in ideal]) for label, m, _, ideal in chart.components]
-        strict = [ideal for label, _, ideal in divisors if label == "strict"]
+        strict = [ideal for label, _, ideal in divisors if _is_strict(label)]
+        if len(strict) > 1:
+            # The hypersurface is the union of its separate components.
+            strict = [[_text(g) for g in _hypersurface(chart)]]
         final.append({
             "id": f"C{k}", "coordinates": [v.name for v in chart.variables],
             "ambient_ideal": [_text(g) for g in chart.ambient],
             "map": {name: _text(expr) for name, expr in chart.coordinates if name in names},
             "exceptional": [{"id": label, "ideal": ideal, "equation": ", ".join(ideal), "total_multiplicity": m}
-                            for label, m, ideal in divisors if label != "strict"],
+                            for label, m, ideal in divisors if not _is_strict(label)],
             "strict_transform": strict[0] if strict else ["1"],
             # The chart is used off these centres, whose blowups other charts describe.
             **({"blown_up": [{"ideal": [_text(g) for g in z]} for z in chart.removed]} if chart.removed else {}),
@@ -185,7 +227,7 @@ def _record(names, charts, centres, data, strata, *, defer_outputs, intrinsic=Fa
         created = [{"id": label, "ambient_order": orders[label]} for label in births if label in orders]
     else:
         created = [{"id": row["component"], "ambient_order": row["multiplicity"]}
-                   for row in rows if row["component"] != "strict"]
+                   for row in rows if not _is_strict(row["component"])]
     points = sum(1 for centre in centres if centre["dimension"] == 0)
     curves = sum(1 for centre in centres if centre["dimension"] == 1)
     kinds = ", ".join(text for text in (f"{points} at points" if points else "", f"{curves} along curves" if curves else "",

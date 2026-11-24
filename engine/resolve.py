@@ -1,4 +1,5 @@
 """Dispatch only to algorithms whose hypotheses have been checked."""
+from contextvars import ContextVar
 from pathlib import Path
 from time import perf_counter
 import subprocess
@@ -60,7 +61,13 @@ def resolve(request):
     with replay_scope(compute) as replay, face_search(request.get('search', 'exhaustive') == 'exhaustive'):
         start = perf_counter()
         proofs = []
-        result = _resolve(request, proofs)
+        # A solve started inside another one shares the time of the outer request.
+        token = _REQUEST_START.set(start) if _REQUEST_START.get() is None else None
+        try:
+            result = _resolve(request, proofs)
+        finally:
+            if token is not None:
+                _REQUEST_START.reset(token)
         finish_requested_check(result, result, request.get("search", "exhaustive"))
         result["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
         result['execution'] = _execution(compute, proofs, replay.report())
@@ -218,7 +225,15 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             raise GiveUp("The proposed charts did not certify all the requested outputs.")
         if found is not None and wants_zetas:
             report("Computing the selected zeta functions", recorded_blowups(result))
-            return zetas_from_strata(result, kinds, found, polynomial=p)
+            if exhaustive:
+                return zetas_from_strata(result, kinds, found, polynomial=p)
+            # The zeta functions are exact arithmetic on the certified strata.
+            # The search for nearby strata that accompanies them is optional
+            # and can be long: a quick request bounds it.
+            from time import monotonic
+            from .monodromy import nearby_search_limit
+            with nearby_search_limit(monotonic() + quick_nearby_seconds()):
+                return zetas_from_strata(result, kinds, found, polynomial=p)
         return None
 
     proposed = {}
@@ -361,11 +376,45 @@ def _resolve_jung(p, request, kinds, start):
     return record
 
 
-# Seconds that a quick request gives the canonical smooth-centre rule.
+# Seconds that a quick request gives the canonical smooth-centre rule at least.
 QUICK_CANONICAL_SECONDS = 20
+# Seconds of the quick worker's limit kept after that rule, for the priority
+# ideals (4 seconds of their own), the certified outputs and the zeta functions.
+QUICK_FINAL_RESERVE = 7
 # Seconds of the quick worker's limit kept for that rule when it must replace
 # a proposal whose verification did not finish: its run and its outputs.
 QUICK_FALLBACK_RESERVE = QUICK_CANONICAL_SECONDS + 5
+
+# When the outermost request of this context started (time.perf_counter).
+_REQUEST_START = ContextVar("atlas_resolve_request_start", default=None)
+
+
+# Seconds that a quick request gives the optional search for nearby strata.
+QUICK_NEARBY_SECONDS = 10
+
+
+def _quick_seconds_left():
+    """Seconds of the quick worker's limit left before QUICK_FINAL_RESERVE."""
+    from .resolve_cli import MAX_SECONDS
+    started = _REQUEST_START.get()
+    elapsed = 0.0 if started is None else perf_counter() - started
+    return MAX_SECONDS - QUICK_FINAL_RESERVE - elapsed
+
+
+def quick_nearby_seconds():
+    """Seconds that a quick request gives the optional search for nearby strata now."""
+    return max(0.0, min(QUICK_NEARBY_SECONDS, _quick_seconds_left()))
+
+
+def quick_canonical_seconds():
+    """Seconds that a quick request gives the canonical smooth-centre rules now.
+
+    Whoever asks for a quick search already bounds it: the worker stops at
+    MAX_SECONDS. Rules that are still working are therefore not stopped at a
+    fixed share before that. They get the rest of the worker's limit, less
+    QUICK_FINAL_RESERVE, and never less than QUICK_CANONICAL_SECONDS.
+    """
+    return max(QUICK_CANONICAL_SECONDS, _quick_seconds_left())
 
 
 def canonical_applicable(p, variables):
@@ -375,11 +424,15 @@ def canonical_applicable(p, variables):
     return order > 1 and 3 <= len(variables) <= 8 and len(p) <= 4096 and degree <= 128
 
 
-def canonical_record(p, variables, mode, start, *, verified=None, integrals=False,
-                     seconds=QUICK_CANONICAL_SECONDS):
-    """The canonical smooth-centre resolution as a solver record, or None."""
+def canonical_record(p, variables, mode, start, *, verified=None, integrals=False, seconds=None):
+    """The canonical smooth-centre resolution as a solver record, or None.
+
+    Without `seconds` the rules get the time of `quick_canonical_seconds`.
+    """
     from .origin_backend import resolve_origin
     report("Resolving by blowups with smooth centres chosen by the canonical rule")
+    if seconds is None:
+        seconds = quick_canonical_seconds()
     r = resolve_origin(p, variables, mode, seconds=seconds, defer_outputs=True, verified=verified,
                        integrals=integrals)
     if r is not None:
@@ -526,16 +579,18 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     elif r is None and native_range and singular and len(variables) >= 4:
         # The repeated tangent rule has five specified centres. When it does
         # not apply, the canonical rule chooses the centres from the
-        # invariant, in a bounded time.
+        # invariant, in the rest of the time that the quick worker has.
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
                            verified=verified, integrals=bool(selected_zetas(request)))
         if r is None:
             fallback_details.append("The repeated-tangent search returned no certified atlas.")
-            r = resolve_origin(p, variables, mode, seconds=QUICK_CANONICAL_SECONDS, defer_outputs=True,
+            seconds = quick_canonical_seconds()
+            r = resolve_origin(p, variables, mode, seconds=seconds, defer_outputs=True,
                                verified=verified, integrals=bool(selected_zetas(request)), skip_tangent=True)
             if r is None:
                 fallback_details.append("The canonical smooth-centre rule returned no certified atlas.")
+                diagnostic["canonical_seconds"] = round(seconds, 1)
     if r is None:
         from .general_resolution import search
         report("Searching for a blow-up centre")

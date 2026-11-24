@@ -178,7 +178,11 @@ Newton modification, including available coordinate changes and repairs of
 failed crossings. For unresolved singularities in three to eight variables
 it can start blowups from the origin. In four to eight variables the
 repeated-tangent rule comes first, then the smooth-centre rules described
-below, for 20 seconds. The final attempt tests priority ideals. When the
+below. Whoever asks for a quick search already bounds it, so these rules are
+not stopped at a fixed share while they are still working. They get the rest
+of the worker's limit, less 7 seconds for the last steps, and at least 20
+seconds. A germ therefore ends with a certified atlas, with rules that gave
+up, or at the worker's limit. The final attempt tests priority ideals. When the
 verifier rejects the charts that a faster method proposed, the quick search
 does not stop there. The smooth-centre rules make their own proposal, whose
 charts are verified in the same way. Verifying a proposal replays its
@@ -306,7 +310,10 @@ Some germs have a curve or surface of singular points through the origin,
 and on these the invariant can be slow or find no hypersurface of maximal
 contact. Under a deadline the complete rule therefore keeps 60% of the
 remaining time, and then a **maximal order rule** starts again from the
-original germ. An exhaustive search has no deadline to share, so there the
+original germ. A rule stopped at its share keeps its charts. When the rules
+after it give up before the deadline, it continues from the stage it had
+reached, and the rule that completed a blowup most recently goes first.
+An exhaustive search has no deadline to share, so there the
 maximal order rule races in a worker of its own. It can also be the faster
 rule at an isolated point: for
 `x^9+x^4*y*z+1/8*x^3*y^3-3/2*x^3*z^2-1/32*x*y^4+1/2*x*y*z^2+y^2*z^2-z^3`
@@ -330,6 +337,20 @@ given ones. For `x*y^4+z^2+t^2` the rule blows up the singular $x$-axis
 twice. The first entry of the invariant comes from the same native
 calculation. [Order locus](../../native/centre_maximum.cpp) · [Maximal order rule](../../engine/local_blowups.py)
 
+An embedded resolution asks for normal crossings of the total transform,
+and smooth branches that cross normally already have them. In embedded mode
+the blowups therefore carry each factor of the equation over $\mathbb Q$ as
+a component S1, S2, … of its own, and stop when these and the exceptional
+divisors cross normally. For the six hyperplanes $xyztu(x+y+z+t+u)=0$ the
+blowup of the origin is enough: on its exceptional $\mathbb P^4$ the
+hyperplanes are in general position. A factor that splits over
+$\overline{\mathbb Q}$ stays one component, which must become smooth, so its
+conjugate branches still come apart. Intrinsic mode asks for a smooth strict
+transform and keeps the whole hypersurface as one component: there every
+pair of branches has to be separated. A record made with separate components
+says so in `certificate.strict_components`, and its replay derives the same
+factors from the equation. [Components](../../engine/origin_backend.py)
+
 The components of a smooth centre can lie on different earlier divisors, so
 that the new exceptional divisor gets different data $(N,\nu)$ on them. A
 curve centre is first divided by the divisor that contains part of it. The
@@ -340,6 +361,17 @@ $\mathbb Q$ gives its new divisor one value of $(N,\nu)$. Conjugate points
 and the generic point of a curve have the same orders. The components with
 the largest value are blown up first. Disjoint centres blown up at
 successive stages give the same space. [Split rules](../../native/centre_weights.cpp)
+
+A chart that has been blown up stays for its points off the centre. Later
+the prime components of a smooth centre can meet in such a chart, inside a
+centre already removed from it. For $xyztu(x+y)$ the planes where three
+hyperplanes meet do so in the first chart of the origin blowup, along the
+lines blown up before. Their union is singular there, and its blowup in
+that chart has no uniform orders. The components are then blown up one by
+one: near the points of one component that the chart owns, this is the
+blowup of the whole centre. The other components join the centres removed
+from the new charts. Components that meet outside the removed centres are
+refused. [Blowup stage](../../native/canonical_blowup.cpp)
 
 When a finite centre must be split, the exceptional divisors through a
 point can identify its class across charts. If several points have the

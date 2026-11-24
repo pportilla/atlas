@@ -935,19 +935,27 @@ def _chart_from_fields(parent, item, stage):
                  parent.coefficient_field)
 
 
-def _blown_up(current, chosen, label, stage, dimension, size, deadline, retains=False):
+def _blown_up(current, chosen, label, stage, dimension, size, deadline, retains=False, parts=None):
     """The charts after the blowup of the centre given in each chart (None where it does not meet the chart).
 
     With `retains` the chart stays for its points off the centre, and each
-    chart of the blowup owns its part of the new divisor only.
+    chart of the blowup owns its part of the new divisor only. `parts` then
+    lists, for each chart, the prime parts of its centre: the kernel blows
+    them up one by one when they meet only inside the centres removed from
+    the chart, where their union is singular (native/canonical_blowup.cpp).
 
     The kernel computes the whole stage (native/canonical_blowup.cpp); the
     step-by-step route below answers for rings beyond its packed range.
     Either way the parts of a centre in different charts must give the new
     divisor the same numerical data."""
     if _native_charts(chart for chart, centre in zip(current, chosen) if centre is not None):
-        answer = _native_stage("stage", charts=[_chart_fields(chart, centre) if centre is not None else dict(centre=None)
-                                                for chart, centre in zip(current, chosen)],
+        from .native_polynomial import row
+        pieces = parts if parts is not None else [None] * len(current)
+        answer = _native_stage("stage", charts=[
+            dict(centre=None) if centre is None else
+            _chart_fields(chart, centre) if not own else
+            _chart_fields(chart, centre, parts=[[row(chart.variables, g) for g in part] for part in own])
+            for chart, centre, own in zip(current, chosen, pieces)],
                                label=label, stage=stage, dimension=dimension, size=size, retains=bool(retains),
                                seconds=None if deadline is None else deadline - monotonic(),
                                packed_present=_packed_present())
@@ -963,6 +971,8 @@ def _blown_up(current, chosen, label, stage, dimension, size, deadline, retains=
                 else:
                     following.append(_chart_from_fields(current[item["parent"]], item, stage))
             return following
+    if parts is not None:
+        raise Uneven("The parts of this centre can only be blown up one by one by the native stage.")
     following = _blown_up_stepwise(current, chosen, label, stage, dimension, size, deadline, retains)
     values = [[str(n), str(nu)] for chart in following for name, n, nu, _ in chart.components if name == label]
     if values and level_weights("common_value", (), values=values) is None:
@@ -1123,11 +1133,17 @@ def _by_numerical_data(current, chosen, label, stage, dimension, size, deadline,
                                                                    for values in found] for found in data])
     if not selected or not any(selected):
         raise Uneven("No prime part of the centre gives its new divisor one set of numerical data.")
+    kept = [[pieces[k] for k in indices] for pieces, indices in zip(parts, selected)]
+    return _united(current, kept), kept
+
+
+def _united(current, kept):
+    """In each chart the union of the listed parts of a centre, or None."""
     out = []
-    for chart, pieces, indices in zip(current, parts, selected):
+    for chart, pieces in zip(current, kept):
         centre = None
-        for k in indices:
-            centre = pieces[k] if centre is None else _union(chart.variables, centre, pieces[k])
+        for piece in pieces:
+            centre = piece if centre is None else _union(chart.variables, centre, piece)
         out.append(centre)
     return out
 
@@ -1240,16 +1256,23 @@ def _smooth_strict(current, dimension, failures, owned):
 
 
 def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimension=None, count_strata=True,
-         max_blowups=None, intrinsic=False):
+         max_blowups=None, intrinsic=False, state=None):
+    """The blowups of one rule. `state` keeps the charts and centres at the
+    start of the stage being computed: a run that was stopped for its time
+    continues from that stage when called again with the same rule and state."""
     if intrinsic and (count_strata or len(components) != 1 or components[0][0] != "strict"):
         raise ValueError("Intrinsic stopping requires one reduced strict equation and no embedded strata.")
     dimension = len(variables) if dimension is None else dimension
-    current = [Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
-                     tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
-    centres, known, seen = [], {}, {}
-    stages = (count(1) if budget is None and type(rule) is _Canonical else
-              range(1, rule.stages + (_Canonical.stages if type(rule) is _Order else 0) + 1))
+    state = {} if state is None else state
+    current = state.get("current") or [
+        Chart(variables, tuple(ambient), tuple((label, n, nu, tuple(ideal)) for label, n, nu, ideal in components),
+              tuple(fibre), (), tuple((v.name, v) for v in variables), ())]
+    centres, known, seen = state.setdefault("centres", []), state.setdefault("known", {}), state.setdefault("seen", {})
+    first = state.get("stage", 1)
+    stages = (count(first) if budget is None and type(rule) is _Canonical else
+              range(first, rule.stages + (_Canonical.stages if type(rule) is _Order else 0) + 1))
     for stage in stages:
+        state.update(current=current, stage=stage, progress=monotonic())
         report(f"Checking charts for normal crossings ({rule.name} method)", len(centres))
         if deadline is not None and monotonic() > deadline:
             raise GiveUp("The time allowed for the blowups is over.")
@@ -1335,9 +1358,17 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
             if following is None:
                 # Any centre: its prime parts with the largest numerical data first.
                 keep_complement = retains or getattr(rule, "keep_complement", False)
-                chosen = _by_numerical_data(current, whole, label, stage, dimension, size, deadline,
-                                            keep_complement)
-                following = blown(chosen)
+                chosen, kept = _by_numerical_data(current, whole, label, stage, dimension, size, deadline,
+                                                  keep_complement)
+                try:
+                    following = blown(chosen)
+                except Uneven:
+                    if not keep_complement:
+                        raise
+                    # Parts that meet only inside the centres removed from a
+                    # chart: their union is singular there, and each is blown up on its own.
+                    following = _blown_up(current, chosen, label, stage, dimension, size, deadline, True,
+                                          parts=kept)
         rule.created(label, detail)
         # Keep the ideals of the accepted blowup, in its actual local coordinates.
         # Stage and pivot identify the parent open even when it is no longer a final chart.
@@ -1406,6 +1437,7 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
     rules = tuple(rules)
+    stopped = []
     for index, name in enumerate(rules):
         if name == "tangent":
             from .repeated_tangent import RepeatedTangent
@@ -1420,13 +1452,30 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
         limit = deadline
         if deadline is not None and index + 1 < len(rules) and name in RULE_SHARES:
             limit = min(deadline, monotonic() + RULE_SHARES[name] * max(0.0, deadline - monotonic()))
+        state = {}
         try:
             return _run(rule, variables, components, fibre, budget, limit, ambient, dimension, count_strata,
-                        intrinsic=intrinsic)
+                        intrinsic=intrinsic, state=state)
         except GiveUp as error:
             reason = error
-            if deadline is not None and monotonic() > deadline:
+            now = monotonic()
+            if deadline is not None and now > deadline:
                 break
+            if limit is not None and now > limit:
+                # Stopped at its share, not for a reason of its own.
+                stopped.append((now - state.get("progress", now), index, rule, state))
+    else:
+        # The rules that follow can give up early. The time they leave goes
+        # back to the rules stopped at their share, which continue where they
+        # were: first the one that had completed a blowup most recently.
+        for _, _, rule, state in sorted(stopped, key=lambda item: item[:2]):
+            if monotonic() > deadline:
+                break
+            try:
+                return _run(rule, variables, components, fibre, budget, deadline, ambient, dimension, count_strata,
+                            intrinsic=intrinsic, state=state)
+            except GiveUp as error:
+                reason = error
     raise reason
 
 
@@ -1512,7 +1561,23 @@ def _chart_cell_counts(chart, dimension, labels):
     def geometric(whole, dimension):
         from .geometric_components import geometric_components
         primes = geometric_components(chart.variables, whole, dimension)
-        return None if primes is None else [owned((*chart.ambient, *prime)) for prime in primes]
+        if primes is not None:
+            return [owned((*chart.ambient, *prime)) for prime in primes]
+        # A chart shows its own part as it is. The rest it may show as it was
+        # before later blowups, and there the branches of an intersection can
+        # still meet: in a centre removed from the chart, or at points that
+        # other charts own. The branches are then found one by one. Those
+        # inside the chart's own part are counted when none of them meets
+        # another branch outside the removed centres.
+        primes = geometric_components(chart.variables, whole, dimension, reduced_support=True)
+        if primes is None:
+            return None
+        flags = [owned((*chart.ambient, *prime)) for prime in primes]
+        for i, mine in enumerate(flags):
+            if mine and any(_present(chart.variables, (*chart.ambient, *primes[i], *other), chart.removed)
+                            for j, other in enumerate(primes) if j != i):
+                return None
+        return flags
 
     from .native_library import _kernel, current_replay_scope
     replay = current_replay_scope()

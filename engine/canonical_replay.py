@@ -2,7 +2,8 @@
 from . import atlas, native_polynomial as np
 from .exact_json import sorted_record
 from .local_blowups import GiveUp, _Canonical, _Direct, _Order, _run
-from .origin_backend import _record
+from .affine_kernel import rational_factor_rows
+from .origin_backend import RATIONAL_FACTORS, _record, strict_components
 from .repeated_tangent import RepeatedTangent
 from .strata import InvalidChart
 
@@ -16,8 +17,15 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
     names = record["variables"]
     axes = tuple(map(np.Symbol, names))
 
+    # A record whose blowups carried each rational factor as a component says so.
+    # Either way the components are derived again from the defining equation.
+    separate = (not smooth_endpoint and
+                (record.get("certificate") or {}).get("strict_components") == RATIONAL_FACTORS)
+
     def reconstruct(support):
-        components = [("strict", 1, 1, (np.from_terms(axes, support),))]
+        equation = np.from_terms(axes, support)
+        factors = rational_factor_rows(axes, equation)[1] if separate else ()
+        components = strict_components(axes, equation, factors, separate=separate)
         order_rules = {"maximal order", "maximal order with boundary"}
         if rules & order_rules and rules <= order_rules | {"invariant", "surface", "complete", "shared boundary curve"}:
             rule = _Order(components, boundary_centres="maximal order with boundary" in rules)
@@ -36,7 +44,10 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
             raise InvalidChart(f"The saved canonical blowup sequence failed replay. {exc}") from exc
         if len(centres) != len(steps):
             raise InvalidChart("The saved canonical blowup sequence differs from its defining germ.")
-        return _record(names, charts, centres, data, strata, defer_outputs=True, intrinsic=smooth_endpoint)
+        rebuilt = _record(names, charts, centres, data, strata, defer_outputs=True, intrinsic=smooth_endpoint)
+        if rebuilt is not None and len(components) > 1:
+            rebuilt["certificate"]["strict_components"] = RATIONAL_FACTORS
+        return rebuilt
 
     if "input_divisor" in record:
         from .weighted_record import nonreduced_resolution

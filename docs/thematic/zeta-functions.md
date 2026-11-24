@@ -138,6 +138,8 @@ The web workspace started by `./atlas serve` shows the same information. With bo
 
 A transverse composition writes $f=G(h_1,\dots,h_k)$, where the $h_i$ vanish on a component of the critical locus of codimension $k$. Near a point of $h_1=\dots=h_k=0$ where $dh_1,\dots,dh_k$ are independent, the $h_i$ are part of a coordinate system. There $f$ is $G$ times a smooth factor and has the zeta function of $G$. Atlas checks $f=G(h)$ as an identity of polynomials, and checks that the points where $dh$ drops rank form a smaller set, so that good points exist arbitrarily close to the origin.
 
+This search decomposes the critical locus of $f$, which can take long: for the six hyperplanes $xyztu(x+y+z+t+u)=0$ it is still working after two minutes. The zeta functions do not depend on it. A quick search therefore gives it 10 seconds, keeps the compositions certified by then, and records in `monodromy_zeta.nearby_search` that the search stopped. An exhaustive search lets it finish. [Search](../../native/monodromy.cpp) · [Time limit](../../engine/resolve.py)
+
 For $f=(x^2+y^2+z^2)^2+x^5$ the singular locus is the pair of lines $x=y^2+z^2=0$. With $u_1=x^2+y^2+z^2$ and $u_2=x$, Atlas finds $G=u_1^2+u_2^5$, whose zeta function $(1-T^{10})/((1-T^2)(1-T^5))$ witnesses the pole $-7/10$. That eigenvalue of order ten is absent from the zeta function at the origin.
 
 ```atlas
