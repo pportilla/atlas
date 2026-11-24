@@ -47,6 +47,7 @@ Each report identifies the inputs, the check for agreement and the machine and t
 - [Canonical blowup stages and centre choices in one native call, before and after](canonical-native-steps.md)
 - [Centre selection and exceptional intersections](canonical-chart-batches.md) and [replay of saved charts](native-resolution-boundary.md) compare the geometry returned by whole CLI runs.
 - [Performance log for canonical blowups](../docs/developer/perf-log-resolve.md) traces the cost of successive stages for one surface and records a correction to the ninth-blowup measurements.
+- [Performance log for Jung's method](../docs/developer/perf-log-jung.md) times `jung_resolution` next to `atlas resolve` on the same surfaces. [Driver](jung_timings.py)
 - The inclined pinch point illustrates why the choice of centre matters. The early Atlas run took nine blowups and produced 36 charts. Blowing up the singular line directly needed one blowup and two charts. The intervening studies include inclined and nonlinearly sheared centres. [Early search](exhaustive-search-resolution.md) · [Inclined centres](inclined-centre-resolution.md) · [Sheared centres](sheared-centre-resolution.md) · [Reduced singular locus](reduced-centre-resolution.md)
 
 ## Execution and devices

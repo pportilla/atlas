@@ -155,8 +155,8 @@ class JungMethodTests(unittest.TestCase):
         """)
         self.assertEqual((status, error), (0, ""))
         for text in ("J is a Jung resolution of x^2 + y^3 + z^5 in R1 (QQ[x, y, z]).",
-                     "J.geometric_genus is p_g", "docs/jung-method.md#fields-of-a-jung-resolution",
-                     "docs/jung-method.md#resolve-a-surface-with-jungs-method"):
+                     "J.geometric_genus is p_g", "docs/thematic/jung-method.md#fields-of-a-jung-resolution",
+                     "docs/thematic/jung-method.md#resolve-a-surface-with-jungs-method"):
             self.assertIn(text, output)
 
     def test_resolve_with_method_jung_checks_then_uses_the_method(self):
@@ -187,7 +187,7 @@ class JungMethodTests(unittest.TestCase):
             'resolve(x^2+y^3+z^5, method="jung", monodromy=True)': "zeta functions",
             'resolve((x+y+z)^2-z*(x-y)^2, method="jung")': "does not apply here (isolated_singularity)",
             'resolve(x*y*z, method="jung")': "does not apply here (reduced_irreducible_germ)",
-            'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto or jung",
+            'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto, weighted or jung",
         }
         for source, message in cases.items():
             with self.subTest(source=source):
@@ -236,7 +236,7 @@ class JungMethodTests(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("isolated_singularity", answer["error"])
             status, answer = post("/api/searches", dict(body, method="newton", search="exhaustive"))
-            self.assertEqual((status, answer["error"]), (400, "Method must be auto or jung."))
+            self.assertEqual((status, answer["error"]), (400, "Method must be auto, weighted or jung."))
         finally:
             server.shutdown()
             server.server_close()

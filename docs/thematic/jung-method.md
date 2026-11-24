@@ -4,7 +4,7 @@
 origin over $\mathbf Q$ and returns its resolution graph, canonical cycle,
 $K^2$, the Euler characteristic of the exceptional set and the geometric genus
 $p_g$. All of the mathematics runs in the native program
-[`native/jung.cpp`](../native/jung.cpp); Python only parses the input and
+[`native/jung.cpp`](../../native/jung.cpp); Python only parses the input and
 presents the record. The method does not use Gröbner bases or a centre search:
 it is a projection, one resultant, a plane curve resolution and toric
 calculations with integer matrices.
@@ -91,7 +91,7 @@ charts.
 2. **Discriminant.** $\Delta=\operatorname{Res}_t(f,\partial_t f)$, computed by
    FLINT. Its rational factors through the origin form the reduced germ.
 3. **Resolution of the discriminant.** The plane engine's `Resolver`
-   ([`native/plane_resolver.hpp`](../native/plane_resolver.hpp), shared with
+   ([`native/plane_resolver.hpp`](../../native/plane_resolver.hpp), shared with
    `atlas resolve --vars x,y`) blows up points until the total transform has
    normal crossings. It keeps every chart map, the exceptional axes and the
    points blown up later.
@@ -193,4 +193,4 @@ from the local algebra, independently of this construction.
 - more than 20 sheets over one curve in the global test.
 
 Timings and checks on the test surfaces are in the
-[performance log](perf-log-jung.md).
+[performance log](../developer/perf-log-jung.md).

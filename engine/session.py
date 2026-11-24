@@ -128,7 +128,7 @@ def new_session(calculate):
         >>> J = jung_resolution(x^2 + y^3 + z^5)
         >>> print(len(J.curves), J.K2, J.euler_characteristic, J.geometric_genus)  # 8 0 9 0
 
-        Docs: docs/jung-method.md#resolve-a-surface-with-jungs-method
+        Docs: docs/thematic/jung-method.md#resolve-a-surface-with-jungs-method
         """
         expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
         from .jung import JungResolution, jung_record

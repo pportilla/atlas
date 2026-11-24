@@ -148,8 +148,8 @@ class JungResolution:
         return "\n".join(lines)
 
 
-_DOC = "docs/jung-method.md#resolve-a-surface-with-jungs-method"
-_FIELDS_DOC = "docs/jung-method.md#fields-of-a-jung-resolution"
+_DOC = "docs/thematic/jung-method.md#resolve-a-surface-with-jungs-method"
+_FIELDS_DOC = "docs/thematic/jung-method.md#fields-of-a-jung-resolution"
 _CARDS = {
     "": ("{n} is a Jung resolution of {source} in {ring}.", "{n}.curves\n{n}.edges\n{n}.geometric_genus", _DOC),
     "curves": ("{n}.curves lists the exceptional curves of the minimal good resolution with genus and self-intersection.",

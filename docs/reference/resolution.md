@@ -25,6 +25,7 @@ The table lists the most common questions. `Z` is a resolution and `f` its equat
 | An embedded resolution | `Z = resolve(f)` | [`resolve`](#resolve) |
 | A resolution of the hypersurface itself | `resolve(f, mode="intrinsic")` | [Resolution modes](../thematic/resolution-records.md#resolution-modes) |
 | A resolution by weighted blowups | `resolve(f, method="weighted")` | [Weighted resolution](../thematic/weighted-resolution.md) |
+| A surface resolved by Jung's method | `resolve(f, method="jung")`, `jung_resolution(f)` | [Jung's method](../thematic/jung-method.md) |
 | The charts and their maps | `Z.charts`, `Z.chart("B3.u").map` | [Charts](resolution-values.md#charts) |
 | The exceptional divisors and their multiplicities $N$ | `Z.divisors`, `Z.divisor("E3").total_multiplicity` | [Exceptional divisors](resolution-values.md#exceptional-divisors) |
 | The numerical data $(N_i,\nu_i)$ of all components | `Z.topological_zeta.numerical_data` | [Topological zeta function](resolution-values.md#topological-zeta-function) |

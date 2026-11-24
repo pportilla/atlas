@@ -79,7 +79,8 @@ DOCUMENTS = (
             "local-algebra", "local-geometry", "resolving-a-cusp"))),
         (CONSTRUCTIONS, ()),
         ("docs/thematic/index.md", tuple(f"docs/thematic/{name}.md" for name in (
-            "zeta-functions", "resolution-records", "resolution-pipeline", "weighted-resolution"))),
+            "zeta-functions", "resolution-records", "resolution-pipeline", "weighted-resolution",
+            "jung-method"))),
     )),
     ("Reference", (
         (REFERENCE, (*REFERENCE_TOPICS, "docs/reference/saved-values.md", "docs/reference/command-line.md",

@@ -1,6 +1,6 @@
 # Performance log: Jung's method for surfaces
 
-`jung_resolution` / `atlas jung` ([guide](jung-method.md)) on the test surfaces,
+`jung_resolution` / `atlas jung` ([guide](../thematic/jung-method.md)) on the test surfaces,
 next to `atlas resolve` on the same inputs. Reproduce with
 `python3 benchmarks/jung_timings.py --trials 5 --cap 40`.
 

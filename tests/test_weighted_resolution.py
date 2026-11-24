@@ -174,7 +174,7 @@ class WeightedResolutionTest(unittest.TestCase):
         cases = {
             'resolve(x^2+y^3+z^5, method="weighted", mode="intrinsic")': "use the embedded mode",
             'resolve(x^2+y^3+z^5+1, method="weighted")': "does not pass through the origin",
-            'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto or weighted",
+            'resolve(x^2+y^3+z^5, method="newton")': "Method must be auto, weighted or jung",
         }
         for source, message in cases.items():
             with self.subTest(source=source):
@@ -263,7 +263,7 @@ class WeightedResolutionTest(unittest.TestCase):
             status, answer = post("/api/resolve", dict(body, mode="intrinsic"))
             self.assertEqual(status, 400)
             status, answer = post("/api/searches", dict(body, method="newton", search="exhaustive"))
-            self.assertEqual((status, answer["error"]), (400, "Method must be auto or weighted."))
+            self.assertEqual((status, answer["error"]), (400, "Method must be auto, weighted or jung."))
         finally:
             server.shutdown()
             server.server_close()

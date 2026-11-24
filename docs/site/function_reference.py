@@ -258,6 +258,16 @@ FUNCTIONS = {
                               'as a rational polynomial, or as a list or tuple of either kind. Each monomial must occur '
                               'with exactly this coefficient, up to one renaming of the variables and one overall sign. '
                               'Polynomial inputs must belong to one ring.'),
+    'jung_resolution': entry('A resolution `J` of the surface by Jung\'s method: the curves of its minimal good '
+                             'resolution with their genera and self-intersections in `J.dual_complex.vertices`, and '
+                             '`J.invariants` with the canonical cycle, $K^2$, the Euler characteristic of the '
+                             'exceptional set and the geometric genus `J.geometric_genus`. The method checks its '
+                             'hypotheses first and names the one that fails. '
+                             '[Jung\'s method](../thematic/jung-method.md#fields-of-a-jung-resolution)',
+                             polynomial='The equation $f(x,y,z)$ of a surface with an isolated singular point at the '
+                                        'origin: a polynomial over `QQ` in three variables, or a formula string '
+                                        'together with `variables` or `ring`.',
+                             variables=RESOLUTION_INPUT['variables'], ring=RESOLUTION_INPUT['ring']),
     'resolve': entry('A resolution `Z`. Read the zeta functions as `Z.topological_zeta.expression` and '
                      '`Z.monodromy_zeta.expression`, the poles as `Z.topological_zeta.poles` and the pole check as '
                      '`Z.monodromy_check`. The geometry is in `Z.charts`, `Z.divisors`, `Z.branches` and '
@@ -273,7 +283,9 @@ FUNCTIONS = {
                           'itself.',
                      method='`"auto"` (default) chooses the construction. `"weighted"` uses embedded weighted blowups '
                             'in 1–16 variables. If the weighted engine declines, an exhaustive search continues with '
-                            'ordinary embedded resolution and records the reason in `Z.record["weighted_attempt"]`.',
+                            'ordinary embedded resolution and records the reason in `Z.record["weighted_attempt"]`. '
+                            '`"jung"` resolves a surface in three variables by Jung\'s method after checking that it '
+                            'applies; its mode defaults to `"intrinsic"`.',
                      monodromy='`True` computes the topological and monodromy zeta functions during the call. With '
                                '`False` (default) they are computed the first time you read `Z.topological_zeta`, '
                                '`Z.monodromy_zeta` or `Z.monodromy_check`.',

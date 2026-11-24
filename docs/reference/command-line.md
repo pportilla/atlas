@@ -38,6 +38,7 @@ The output summarizes the resolution and lists each chart with its map, strict t
 | `--vars x,y,…` | Required. The coordinates in order, separated by commas. |
 | `--mode embedded`, `--mode intrinsic` | Resolve the hypersurface in its ambient space (default), or the hypersurface itself. [Resolution modes](../thematic/resolution-records.md#resolution-modes) |
 | `--method auto`, `--method weighted` | Let Atlas choose the construction (default), or use weighted blowups in embedded mode. [Weighted resolution](../thematic/weighted-resolution.md) |
+| `--method jung` | Resolve a surface in three variables by Jung's method, after checking that it applies; the mode defaults to intrinsic. [Jung's method](../thematic/jung-method.md#resolve-with-method-jung) |
 | `--exhaustive`, `--quick` | Search until the resolution is certified (default), or stop at a bound. |
 | `--monodromy` | Also compute the topological and monodromy zeta functions. |
 | `--zetas-only` | Compute both zeta functions and the pole check. Atlas may then use a certificate without charts, as for germs made of polynomial graphs. [Zeta functions](../thematic/zeta-functions.md#germs-made-of-polynomial-graphs) |

@@ -291,7 +291,7 @@ _GROUPS = {
     },
     "docs/reference/resolution.md": {
         "resolve": Entry(
-            (native("Point blowups of plane curve germs", "plane", "void visit(Task&"),
+            (Link("Point blowups of plane curve germs", "native/plane_resolver.hpp", needle="void visit(Task&"),
              native("Weighted blowups along points and bad curves", "weighted_resolution",
                     "CurvePlan plan_curve(const Chart& chart"),
              session("Dispatch a resolution from the session", "session", "def resolve(polynomial")),
@@ -314,6 +314,14 @@ _GROUPS = {
             (native("Match monomials under a shared coordinate injection", "zoo_search", "bool assign_axes("),),
             (example("Find the same catalogue records at the prompt and in a script", "zoo_search",
                      "prompt_and_script"),)),
+        "jung_resolution": Entry(
+            (native("Check the hypotheses and resolve by Jung's method", "jung", "static J run(const J& req)"),
+             native("Invariants of the minimal good resolution", "jung", "static J invariants(const Graph& G"),
+             session("Resolve a surface from the session", "session", "def jung_resolution(polynomial")),
+            (example("Give each rational double point its Dynkin graph", "jung",
+                     "rational_double_points_have_their_dynkin_graphs"),
+             example("Return the same resolution at the prompt, in a script and from the shell", "jung",
+                     "prompt_script_and_cli_return_the_same_resolution"))),
     },
     "docs/reference/output.md": {
         "print": Entry((builtin_registration,), (resolve_example,)),
