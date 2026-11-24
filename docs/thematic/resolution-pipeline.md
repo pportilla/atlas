@@ -176,7 +176,11 @@ repeated-tangent rule comes first, then the smooth-centre rules described
 below, for 20 seconds. The final attempt tests priority ideals. When the
 verifier rejects the charts that a faster method proposed, the quick search
 does not stop there. The smooth-centre rules make their own proposal, whose
-charts are verified in the same way. The CLI worker has 55 seconds. If it
+charts are verified in the same way. Verifying a proposal replays its
+blowups, which can take longer than constructing them, so the first
+verification must finish while 25 seconds of the worker's limit remain.
+The replayed blowups share that deadline between their rules, and if it
+passes, the smooth-centre rules take over. The CLI worker has 55 seconds. If it
 exhausts its budget, its diagnostic reports an inconclusive calculation and
 the reasons for each rejection. [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
 

@@ -34,6 +34,8 @@ On each blowup the chart of the i-th generator of the centre keeps the points
 where the earlier generators' ratios vanish. These pieces partition the
 space, which gives Euler characteristics by addition.
 """
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from itertools import count, islice
@@ -1354,6 +1356,29 @@ def _run(rule, variables, components, fibre, budget, deadline, ambient=(), dimen
     raise GiveUp("Normal crossings were not reached.")
 
 
+# A deadline (of time.monotonic) for every call of acampo_over in a context,
+# as if each had been given it. A verification can replay blowups deep inside
+# other modules, which do not pass a deadline along.
+_TIME_LIMIT = ContextVar("atlas_blowup_time_limit", default=None)
+
+
+@contextmanager
+def time_limit(deadline):
+    """Bound the blowups of this context by `deadline` (of time.monotonic)."""
+    outer = _TIME_LIMIT.get()
+    token = _TIME_LIMIT.set(deadline if outer is None else min(outer, deadline))
+    try:
+        yield
+    finally:
+        _TIME_LIMIT.reset(token)
+
+
+def time_limit_passed():
+    """Whether the deadline of the enclosing `time_limit` has passed."""
+    limit = _TIME_LIMIT.get()
+    return limit is not None and monotonic() > limit
+
+
 def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, budget=400, deadline=None,
                 rules=("complete", "direct"), count_strata=True, intrinsic=False):
     """Blow up over V(fibre) until the divisor has normal crossings there.
@@ -1373,7 +1398,11 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     object, with normal crossings verified in every final chart. For a single
     reduced source labelled "strict", intrinsic=True with count_strata=False
     stops once the strict transform is smooth on the entire owned fibre.
+    An enclosing `time_limit` bounds the deadline.
     """
+    limit = _TIME_LIMIT.get()
+    if limit is not None:
+        deadline = limit if deadline is None else min(deadline, limit)
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
     rules = tuple(rules)

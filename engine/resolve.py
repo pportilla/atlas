@@ -173,13 +173,17 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             result.update(polynomial=format_poly(p, variables), elapsed_ms=round((perf_counter()-start)*1000, 3))
             return result
 
-    def attach(record):
+    def attach(record, deadline=None):
         if record["status"] != "resolved":
             return
         report("Verifying charts and exceptional intersections", recorded_blowups(record))
         intrinsic = record["mode"] == "intrinsic"
         certified = next((value for producer, value in verified if producer is record), None)
-        if certified is None:
+        if certified is None and deadline is not None:
+            from .local_blowups import time_limit
+            with time_limit(deadline):
+                certified = proposal_chart_outputs(record, p, integrals=wants_zetas)
+        elif certified is None:
             certified = proposal_chart_outputs(record, p, integrals=wants_zetas)
         record["atlas"], output = certified
         record["dual_complex"] = annotate_complex(record["dual_complex"], output["dual_complex"])
@@ -198,8 +202,8 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     # charts still lack the numerical data needed for integration. Exhaustive
     # search admits a projective certificate only after its requested outputs
     # have passed verification inside the candidate's timed attempt.
-    def finish(result):
-        found = attach(result)
+    def finish(result, deadline=None):
+        found = attach(result, deadline)
         if exhaustive and (result["status"] != "resolved" or
                            (not request.get("zetas_only") and result["dual_complex"]["status"] != "complete") or
                            (wants_zetas and mode == "embedded" and found is None)):
@@ -210,6 +214,18 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         return None
 
     proposed = {}
+
+    def verification_deadline():
+        """For a quick request, when verifying the primary proposal must give way.
+
+        Replaying a proposal's blowups can take longer than constructing them.
+        The canonical fallback then keeps its own time within the worker's limit.
+        """
+        if exhaustive or proposed.get("engine") == "canonical-blowups" or not canonical_applicable(p, variables):
+            return None
+        from time import monotonic
+        from .resolve_cli import MAX_SECONDS
+        return monotonic() + max(0.0, MAX_SECONDS - QUICK_FALLBACK_RESERVE - (perf_counter() - start))
 
     def primary(poly):
         record = _resolve_polynomial(poly, request, start, verified=verified)
@@ -237,7 +253,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
 
     try:
         result = resolve_with_multiplicities(primary)
-        outputs = finish(result)
+        outputs = finish(result, verification_deadline())
     except NonReducedError:
         raise  # Intrinsic resolution requires a reduced source.
     except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as error:
@@ -301,6 +317,9 @@ def _resolve_weighted(p, request, kinds, start, proofs):
 
 # Seconds that a quick request gives the canonical smooth-centre rule.
 QUICK_CANONICAL_SECONDS = 20
+# Seconds of the quick worker's limit kept for that rule when it must replace
+# a proposal whose verification did not finish: its run and its outputs.
+QUICK_FALLBACK_RESERVE = QUICK_CANONICAL_SECONDS + 5
 
 
 def canonical_applicable(p, variables):

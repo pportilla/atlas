@@ -11,7 +11,7 @@ from .affine_kernel import pullbacks
 from .blowup_ideal import ideal_basis, radical_subset
 from .chart_expressions import chart_expressions
 from .groebner import groebner
-from .local_blowups import GiveUp, _covers, _dimension, _is_strict, _present, acampo_over
+from .local_blowups import GiveUp, _covers, _dimension, _is_strict, _present, acampo_over, time_limit_passed
 
 
 def chart_signature(variables, ambient, coordinates, components):
@@ -119,6 +119,10 @@ def _local_pivots(index, parent, centre, children):
         _, _, charts, _ = acampo_over(space, parent.components, fibre, ambient=relation,
                                       dimension=len(coords), count_strata=False)
     except GiveUp:
+        # Running out of time proves nothing about the cover, and the
+        # answers above it are cached: let the timeout reach the caller.
+        if time_limit_passed():
+            raise
         return None
     return [projected_patch(index, parent, c) for c in charts]
 
