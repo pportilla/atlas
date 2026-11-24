@@ -61,6 +61,11 @@ def local_number(operation, equation, variables):
     return select(result, ("finite", "value"))
 
 
+def origin_zeta(output):
+    """A zeta output without its optional search for nearby strata."""
+    return {key: value for key, value in output.items() if key not in ("nearby_strata", "nearby_search")}
+
+
 def build_record(seed, dimension, variables):
     equation = seed["equation"]
     native_dimension = atlas("algebra", "local-dimension", "--gen=" + equation, "--vars", ",".join(variables),
@@ -83,8 +88,13 @@ def build_record(seed, dimension, variables):
     if zeta["pole_check"]["status"] == "unresolved":
         replay = replay_zetas(dict(record=embedded, zetas=["monodromy", "topological"],
                                    compute="cpu", search="exhaustive"))
-        if any(replay[name + "_zeta"] != zeta[name] for name in ("monodromy", "topological")):
-            raise ValueError("Replaying the embedded certificate changed a computed zeta function")
+        # A quick request may stop its optional search for nearby strata, and
+        # the replay carries that search to its end. The zeta functions at the
+        # origin must agree; the replayed outputs hold the complete search.
+        for name in ("monodromy", "topological"):
+            if origin_zeta(replay[name + "_zeta"]) != origin_zeta(zeta[name]):
+                raise ValueError("Replaying the embedded certificate changed a computed zeta function")
+            zeta[name] = replay[name + "_zeta"]
         zeta["pole_check"] = replay["monodromy_check"]
         source["pole_check_search"] = "exhaustive"
     # The sparse row and degree bounds are native operations. Transfer their
