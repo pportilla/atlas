@@ -224,9 +224,17 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     # search goes on in the same way.
     def finish(result, deadline=None):
         found = attach(result, deadline)
-        if unending and (result["status"] != "resolved" or
-                           (not request.get("zetas_only") and result["dual_complex"]["status"] != "complete") or
-                           (wants_zetas and mode == "embedded" and found is None)):
+        geometry = result["status"] == "resolved" and (
+            request.get("zetas_only") or result["dual_complex"]["status"] == "complete")
+        missing = wants_zetas and mode == "embedded" and found is None
+        if unending and missing and geometry and not exhaustive and not request.get("zetas_only"):
+            # A quick search reads these zeta functions off the contact
+            # certificate of the germ when its charts carry no strata.
+            from .contact_zetas import contact_zetas
+            contact = contact_zetas(p, variables, kinds)
+            if contact is not None:
+                return contact
+        if unending and (not geometry or missing):
             raise GiveUp("The proposed charts did not certify all the requested outputs.")
         if found is not None and wants_zetas:
             report("Computing the selected zeta functions", recorded_blowups(result))

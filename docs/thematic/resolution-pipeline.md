@@ -185,13 +185,17 @@ regular Newton modification, including available coordinate changes and
 repairs of failed crossings (20 seconds), and in four to eight variables the
 repeated-tangent rule. When they do not apply or decline, the smooth-centre
 rules described below are the safe method, in three to eight variables. They
-have no deadline of their own and no budget of charts or stages. The rules
-take turns of 10, 20, 40, … seconds, and each continues from the blowup it
-had reached, so no rule loses its work and none can keep the others waiting
-for ever. A rule leaves only when it stops for a reason of its own. The last
-one left runs without turns. Such a reason is a defect of the rule: it is
-kept in `diagnostic.canonical_reason` and in the progress of the request.
-The search then continues with projective ideal blowups, as an exhaustive
+have no deadline of their own and no budget of charts, and the complete rule
+has no limit of stages. The rules take turns of 10, 20, 40, … seconds, and
+each continues from the blowup it had reached, so no rule loses its work to
+another. A turn can run over: the check of crossings at the start of a stage
+and parts of the invariant do not read the deadline yet. A rule leaves only
+when it stops for a reason of its own: the maximal order rule and the short
+rule are not guaranteed to end and have guards, and a reason of the complete
+rule is a defect of its implementation. The last rule left runs without
+turns. Each reason is shown in the progress of the request, and a bounded
+attempt returns it in `diagnostic.canonical_reason`. When every rule has
+left, the search continues with projective ideal blowups, as an exhaustive
 search does, which returns only with a certificate.
 
 The same holds for the outputs. A resolved record whose dual complex is
