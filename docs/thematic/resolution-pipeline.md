@@ -134,6 +134,87 @@ makes the strict transform smooth. Embedded resolution takes three ordinary
 blowups to give the total divisor simple normal crossings.
 [Dispatch and size checks](../../engine/resolve.py) · [Binomial charts](../../native/binomial_fan.cpp) · [Recovering multiplicities](../../engine/weighted_record.py)
 
+### Coordinates adapted to the singular locus
+
+A Newton fan is certified only if every exceptional ray maps into the
+singular locus and every face on a stratum over the origin is nondegenerate.
+Both conditions depend on the coordinates. Take $x^2y+z^2+t^3+u^4$, which
+is singular along the $y$-axis. Its Newton polyhedron has the facet normal
+$(0,12,6,4,3)$, and a fan with this ray modifies the $x$-axis. The $x$-axis
+lies on the hypersurface because no monomial is a power of $x$, but its
+points away from the origin are smooth. The substitution $y=Y+x$ gives
+$x^3+x^2Y+z^2+t^3+u^4$. The only boundary ray left is $(6,0,6,4,3)$, over
+the singular $y$-axis, and every face is nondegenerate.
+
+In general, let $L$ be a coordinate subspace with free coordinates $x_I$
+that lies on the hypersurface and outside its singular locus. The equation
+then has terms $x_j\,n(x_I)$ with $j\notin I$, and Atlas substitutes
+$x_j=X_j+\bigl(\prod_{i\in I}x_i\bigr)^k$. This fixes every coordinate
+subspace that does not contain $L$, in particular those of the singular
+locus, and the new terms $n(x_I)\prod x_i^k$ take $L$ off the hypersurface.
+The exponent $k$ is the least one for which the new terms have larger value
+than the old ones on every normal of the polyhedron that does not vanish on
+$x_I$, so that the polyhedron changes only towards $L$. A smaller $k$ with
+equality on some normal is also proposed. The image
+of a boundary ray can contain smaller coordinate subspaces that also leave
+the singular locus. Atlas takes the least ones, in order of dimension, since
+a subspace that contains a treated one has left the hypersurface with it.
+For $xyz+t^2+u^3$, singular along three axes, three steps adapt $z$, $y$
+and $x$ in turn, starting with $z=Z+xy$.
+
+The second step concerns a degenerate face whose polynomial has a factor
+$c\,x_j+m$, where $m$ does not involve $x_j$. A repeated factor makes the
+face singular along its zeros, and two factors make it singular where both
+vanish. The substitution $x_j=X_j-m/c$ makes the factor a coordinate, whose
+zeros lie outside the torus. For $t^4+u^4+y^3+z^3+x^2+2xy+y^2$ the face
+$(x+y)^2$ gives $x=X-y$ and the Brieskorn–Pham germ $X^2+y^3+z^3+t^4+u^4$.
+
+A substitution of the first kind can bring a singular point of a face into
+its torus: in $x(x+y-z^2)$ the step $x=X+y$ gives $(X+y)(X+2y-z^2)$, whose
+factors meet. The search therefore goes depth first. From each frame it
+tries first the step that leaves the fewest degenerate faces, and it returns
+to the other steps at a dead end. It stops at the first frame whose fan has
+neither obstruction, after at most twelve steps on a path, 64 frames and
+eight seconds.
+
+Each step is a triangular automorphism of affine space that fixes the origin
+and has Jacobian determinant one, so the composite preserves the origin
+fibre and the orders of the volume form. From four variables on the search
+is part of the Newton method. It runs after the linear frames whose fans
+need no blowups and before the point repairs of the degenerate ones, which
+can use all the time of the method before they decline.
+In three variables the blowups from the origin come first, and a quick
+search asks for adapted coordinates after them: on these germs the blowups
+take under a second and give the smaller model, as the single blowup of the
+sheared cusp cylinder [below](#where-the-resolution-decisions-run). The fan
+and its charts are then verified in the adapted
+coordinates, and every chart map is composed with the steps. The certificate
+lists them in order under `coordinate_translation.steps`, with the adapted
+equation in `adapted_polynomial`: the first step is substituted into the
+input equation first. Replay checks that each offset avoids its own
+coordinate and vanishes at the origin, computes the adapted equation again,
+undoes the steps on every chart map and verifies the fan.
+[Frame search](../../engine/newton_frames.py) · [Substitutions](../../native/resolution_candidate.cpp) · [Tests](../../tests/test_newton_frames.py)
+
+A frame of this kind does not exist for every germ. A face can be degenerate
+along a subvariety of its torus that no substitution straightens, as for
+$(x^3-y^4)^2+z^2+t^3+u^3$, and the singular locus can have more components
+through the origin than there are coordinate subspaces to hold them.
+
+### When the Newton method does not apply
+
+The Newton method tries its constructions one after another: a fan of
+hyperplanes, the fan of the input with its boundary rays, monomial ideals,
+linear frames, from four variables on adapted coordinates, and point repairs
+of degenerate linear frames. A construction that
+declines, reaches a budget or has its charts rejected leaves its reason in
+`diagnostic.newton_declines` and the next one runs. Nothing it built is kept.
+When none applies the germ goes to the smooth-centre rules, and a proposal
+that the verifier rejects is replaced by theirs in the same way. The reasons
+appear in the result only if every other method also ends without an atlas.
+Fan constructions and point repairs share the 20 seconds that a quick
+request gives the method. [Constructions](../../engine/newton_backend.py) · [Dispatch](../../engine/resolve.py)
+
 ### Bounded centre proofs
 
 A natural centre to try is the reduced singular locus. Consider
@@ -220,13 +301,15 @@ in that record. [Termination conditions](#what-the-exhaustive-search-can-certify
 One tangent-cone test changes this order. Suppose an embedded ternary input
 has a higher-order term and initial form $cL^d$, with $d\ge2$ and all three
 coefficients of $L$ nonzero. Its axial intercepts all have degree $d$. In
-the coordinate choices available to this search the Newton modification is
+the linear coordinate choices of the Newton search the modification is
 the ordinary origin blowup. The exceptional plane meets the strict transform
 along a repeated line whose intersection with the dense torus is a curve.
 Newton's finite-point repair cannot resolve that curve. For degree at most
 16, at most 128 terms and 64-bit rational numerators and denominators, Atlas
 can detect this case and start origin blowups immediately. Ideal certification
-joins on failure or after 250 ms. [Tangent test](../../native/resolution_candidate.cpp) · [Newton repair](../../engine/newton_repair.py)
+joins on failure or after 250 ms. [Adapted coordinates](#coordinates-adapted-to-the-singular-locus)
+can make $L$ a coordinate. In three variables a quick search tries them
+after the origin blowups. [Tangent test](../../native/resolution_candidate.cpp) · [Newton repair](../../engine/newton_repair.py)
 
 ### Workers and deadlines
 

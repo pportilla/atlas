@@ -6,6 +6,8 @@
 #include "local_io.hpp"
 #include "local_point_quotient.hpp"
 
+#include <flint/fmpq_mpoly_factor.h>
+#include <flint/fmpz_vec.h>
 #include <algorithm>
 #include <memory>
 #include <numeric>
@@ -313,6 +315,72 @@ Json::Value support_certificate(const Support& p) {
     return {};
 }
 
+// Write f = a*x^2 + b*x + c in one of its variables, with a, b, c free of x.
+// A factor of f free of x divides gcd(a,b,c). Otherwise f has two factors of
+// degree one in x over the algebraic closure, which happens exactly when the
+// discriminant b^2 - 4ac is a square there. A square-free factorization over
+// Q stays square-free over the closure, so that a nonconstant factor of odd
+// multiplicity excludes a square. Then f is absolutely irreducible.
+struct RationalPolynomial {
+    fmpq_mpoly_t p;
+    const fmpq_mpoly_ctx_struct* ctx;
+    RationalPolynomial(const fmpq_mpoly_ctx_t c, const Terms& f) : ctx(c) {
+        fmpq_mpoly_init(p, ctx);
+        const slong width = fmpq_mpoly_ctx_nvars(ctx);
+        fmpz* powers = _fmpz_vec_init(width);
+        std::vector<fmpz*> entries(width);
+        for (slong j = 0; j < width; ++j) entries[j] = powers + j;
+        fmpq_t coefficient;
+        fmpq_init(coefficient);
+        for (const auto& [e, c] : f) {
+            for (slong j = 0; j < width; ++j) fmpz_set_mpz(powers + j, e[j].get_mpz_t());
+            fmpq_set_mpq(coefficient, c.get_mpq_t());
+            fmpq_mpoly_push_term_fmpq_fmpz(p, coefficient, entries.data(), ctx);
+        }
+        fmpq_clear(coefficient);
+        _fmpz_vec_clear(powers, width);
+        fmpq_mpoly_sort_terms(p, ctx);
+        fmpq_mpoly_combine_like_terms(p, ctx);
+    }
+    RationalPolynomial(const RationalPolynomial&) = delete;
+    ~RationalPolynomial() { fmpq_mpoly_clear(p, ctx); }
+};
+
+bool quadratic_certificate(const Terms& f, size_t width) {
+    if (f.size() > 4096) return false;
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, width, ORD_LEX);
+    bool certified = false;
+    for (size_t axis = 0; axis < width && !certified; ++axis) {
+        Terms a, b, c;
+        bool quadratic = true;
+        for (const auto& [e, coefficient] : f) {
+            if (e[axis] > 2) { quadratic = false; break; }
+            Powers rest = e;
+            rest[axis] = 0;
+            (e[axis] == 2 ? a : e[axis] == 1 ? b : c).emplace(std::move(rest), coefficient);
+        }
+        if (!quadratic || a.empty() || c.empty()) continue;
+        RationalPolynomial A(ctx, a), B(ctx, b), C(ctx, c), content(ctx, {}), discriminant(ctx, {}), product(ctx, {});
+        if (!fmpq_mpoly_gcd(content.p, A.p, C.p, ctx)) continue;
+        if (!b.empty() && !fmpq_mpoly_gcd(content.p, content.p, B.p, ctx)) continue;
+        if (!fmpq_mpoly_is_fmpq(content.p, ctx)) continue;
+        fmpq_mpoly_mul(discriminant.p, B.p, B.p, ctx);
+        fmpq_mpoly_mul(product.p, A.p, C.p, ctx);
+        fmpq_mpoly_scalar_mul_si(product.p, product.p, 4, ctx);
+        fmpq_mpoly_sub(discriminant.p, discriminant.p, product.p, ctx);
+        if (fmpq_mpoly_is_fmpq(discriminant.p, ctx)) continue;
+        fmpq_mpoly_factor_t factors;
+        fmpq_mpoly_factor_init(factors, ctx);
+        if (fmpq_mpoly_factor_squarefree(factors, discriminant.p, ctx))
+            for (slong i = 0; i < factors->num; ++i)
+                certified = certified || (fmpz_is_odd(factors->exp + i) && !fmpq_mpoly_is_fmpq(factors->poly + i, ctx));
+        fmpq_mpoly_factor_clear(factors, ctx);
+    }
+    fmpq_mpoly_ctx_clear(ctx);
+    return certified;
+}
+
 Json::Value absolute_factor(const Json::Value& q) {
     const size_t n=q["width"].asUInt();
     const bool marked=!q["relation"].isNull();
@@ -356,6 +424,7 @@ Json::Value absolute_factor(const Json::Value& q) {
         if (!primitive) throw std::runtime_error(atlas_groebner_error());
         if (std::string(primitive.get())=="1\n") return true;
     }
+    if (!marked && quadratic_certificate(f, axes.size())) return true;
     if (axes.size()==2 && !marked) {
         const auto input="plane_components 2 1 0\n"+local::encode_row(f)+"\n";
         std::unique_ptr<char,decltype(&atlas_groebner_release)> reply(atlas_ideal(input.data(),input.size()),atlas_groebner_release);

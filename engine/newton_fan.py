@@ -25,14 +25,20 @@ def _small_fan():
     return operation
 
 
-def build_fan(exponents, *, exhaustive=False):
+# Seconds for one fan construction when the caller has no shorter deadline.
+FAN_SECONDS = 35
+
+
+def build_fan(exponents, *, exhaustive=False, seconds=None):
     """Return primitive rays, full-dimensional smooth cones and boundary data.
 
     The first n rays are the coordinate vectors. New boundary rays can modify
     positive-dimensional coordinate strata away from the origin. The output
     describes the ambient toric map and does not assert face nondegeneracy.
+    A caller with a deadline gives the `seconds` it has left: the
+    construction stops with a LimitError after the shorter of the two times.
     """
-    fan = _request(exponents, exhaustive)
+    fan = _request(exponents, exhaustive, seconds=seconds)
     if exhaustive:
         fan["rays"] = [[_integer(v) if isinstance(v, str) else v for v in ray] for ray in fan["rays"]]
     return fan
@@ -62,7 +68,7 @@ def bounded_fan(support, *, trials=False):
     return None
 
 
-def _request(exponents, exhaustive, *, operation=None):
+def _request(exponents, exhaustive, *, operation=None, seconds=None):
     if not _BINARY.is_file():
         raise RuntimeError("The Newton fan engine is not built. Run make.")
     support = list(exponents)
@@ -80,7 +86,8 @@ def _request(exponents, exhaustive, *, operation=None):
         request["operation"] = operation
     try:
         from . import native_process
-        proc = native_process.run("newton_fan", input=json.dumps(request), timeout=35)
+        timeout = FAN_SECONDS if seconds is None else max(1.0, min(FAN_SECONDS, seconds))
+        proc = native_process.run("newton_fan", input=json.dumps(request), timeout=timeout)
     except subprocess.TimeoutExpired:
         raise LimitError("Newton fan construction exceeded its time budget.") from None
     try:

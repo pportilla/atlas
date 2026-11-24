@@ -264,9 +264,20 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         outputs = finish(result, verification_deadline())
     except NonReducedError:
         raise  # Intrinsic resolution requires a reduced source.
-    except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as error:
+    except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired,
+            LookupError, TypeError, AttributeError, AssertionError) as error:
         # The input equation, mode and origin have been validated. These
         # failures concern a solver-generated proposal, never a saved proof.
+        # The rejected proposal and its atlas are dropped here: the record
+        # and the outputs below come from the method that replaces it.
+        if not isinstance(error, (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired)):
+            # An internal error while a Newton proposal is verified rejects
+            # that proposal like a failed check. For the other engines it
+            # is reported as before.
+            if proposed.get("engine") not in NEWTON_ENGINES:
+                raise
+            error = GiveUp(f"The verification of the Newton proposal stopped on an internal error "
+                           f"({type(error).__name__}: {error}).")
         if exhaustive:
             result = general_certificate()
             outputs = finish(result)
@@ -361,6 +372,11 @@ def _resolve_jung(p, request, kinds, start):
     return record
 
 
+# Engines whose proposals come from the Newton method.
+NEWTON_ENGINES = frozenset({"newton-polyhedron", "verified-monomial-modification", "hyperplane-arrangement-fan"})
+# Seconds that a quick request gives the fan constructions and the point
+# repairs of the Newton method before it hands the germ over.
+QUICK_NEWTON_SECONDS = 20
 # Seconds that a quick request gives the canonical smooth-centre rule.
 QUICK_CANONICAL_SECONDS = 20
 # Seconds of the quick worker's limit kept for that rule when it must replace
@@ -496,22 +512,52 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     if r is None and native_range and singular and len(variables) >= 3 and len(p)>3:
         from .reduced_centre import smooth_reduced_graph
         r = smooth_reduced_graph(p, variables, mode)
+    # The Newton method either returns a proposal or does not apply. Each of
+    # its constructions records why it declined, and the germ is handed over
+    # to the methods below. A decline is never the outcome of the request.
     newton_declines = {}
-    try:
-        if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
-            from .newton_backend import resolve_newton
+
+    def newton(frames=None):
+        """A proposal of the Newton method, or None with its reasons recorded for the hand-over."""
+        from .newton_backend import resolve_newton
+        proposal = None
+        try:
             # A quick request is given 55 seconds in all by the worker.
-            r = resolve_newton(p, variables, mode, compute=compute, seconds=1200 if exhaustive else 20,
-                               defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)),
-                               diagnostics=newton_declines)
-            if r is None:
+            proposal = resolve_newton(p, variables, mode, compute=compute,
+                                      seconds=1200 if exhaustive else QUICK_NEWTON_SECONDS,
+                                      defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)),
+                                      diagnostics=newton_declines, frames=frames)
+            if proposal is None and frames is None:
                 fallback_details.append("The Newton search returned no certified atlas.")
-    except (LimitError,subprocess.TimeoutExpired) as error:
-        diagnostic['fast_path_limit']=str(error)
-        fallback_details.append(f"The Newton search reached a limit ({error}).")
-    if r is None and newton_declines:
-        diagnostic["newton_declines"] = newton_declines
-        fallback_details.extend(newton_declines.values())
+        except NonReducedError:
+            raise
+        except (LimitError,subprocess.TimeoutExpired) as error:
+            diagnostic['fast_path_limit']=str(error)
+            fallback_details.append(f"The Newton search reached a limit ({error}).")
+        except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, AssertionError) as error:
+            # The search isolates the declines of its constructions. Anything
+            # else is a defect of the Newton code, which the other methods do
+            # not share: record it and hand the germ over all the same.
+            newton_declines["defect"] = (f"The Newton search stopped on an internal error "
+                                         f"({type(error).__name__}: {error}).")
+            if frames is None:
+                fallback_details.append("The Newton search returned no certified atlas.")
+        return proposal
+
+    reported = []
+
+    def newton_reasons():
+        """Add the reasons recorded since the last call to the diagnostic."""
+        if newton_declines:
+            diagnostic["newton_declines"] = newton_declines
+            fresh = [reason for key, reason in newton_declines.items() if key not in reported]
+            reported.extend(newton_declines)
+            fallback_details.extend(fresh)
+
+    if r is None and not parallel_search and (native_range or exhaustive and singular and len(variables)==2):
+        r = newton()
+    if r is None:
+        newton_reasons()
     if r is None and parallel_search:
         from .exhaustive_resolution import search as exhaustive_search
         report("Searching for a verified resolution with independent methods")
@@ -523,6 +569,10 @@ def _resolve_polynomial(p, request, start, *, verified=None):
                            verified=verified, integrals=bool(selected_zetas(request)))
         if r is None:
             fallback_details.append("The successive blowup search returned no certified atlas.")
+            # In three variables the adapted Newton frames come after these blowups.
+            r = newton("adapted")
+            if r is None:
+                newton_reasons()
     elif r is None and native_range and singular and len(variables) >= 4:
         # The repeated tangent rule has five specified centres. When it does
         # not apply, the canonical rule chooses the centres from the
