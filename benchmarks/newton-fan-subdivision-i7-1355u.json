@@ -1,0 +1,934 @@
+{
+ "host": "13th Gen Intel Core i7-1355U, 32 GB, Linux 6.18; other jobs ran on the host (load average about 5)",
+ "fan_program": {
+  "program": "native/build/newton_fan, one JSON request on standard input per run, as engine/newton_fan.py sends it",
+  "reproduce": "python3 benchmarks/newton_fan_subdivision.py --trials 3 --seconds 120",
+  "conditions": {
+   "previous": "native/newton_fan.cpp of commit 2975cad: subdivision points sampled from 96 multiples of each coordinate residue, budgets of 16,000 rays and 120,000 cone records, 3 trials",
+   "previous_without_count_budgets": "the same source with both count budgets raised out of reach, 1 trial",
+   "current": "exact subdivision points, comparison of two scoring rules from 4,096 cones, no cone limit in the request, 3 trials",
+   "agreement": "every fan below 60,000 cones passed the independent check of the script: determinant one, a common minimal Newton vertex on each cone, interior facets shared by two cones, sections filling the simplex. The trials of one program gave the same rays and cones."
+  },
+  "rows": [
+   {
+    "germ": "x^3*y+y^3*z+z^3*t+t^3*u+u^4",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u"
+    ],
+    "previous": {
+     "outcome": "regular fan",
+     "rays": 173,
+     "cones": 956,
+     "seconds": [
+      0.043,
+      0.05,
+      0.044
+     ],
+     "median_seconds": 0.044,
+     "peak_resident_mb": 15,
+     "largest_ray_coordinate": 52,
+     "regular_and_complete": true
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 173,
+     "cones": 956,
+     "seconds": [
+      0.049
+     ],
+     "median_seconds": 0.049,
+     "peak_resident_mb": 15,
+     "largest_ray_coordinate": 52
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 173,
+     "cones": 956,
+     "seconds": [
+      0.234,
+      0.173,
+      0.184
+     ],
+     "median_seconds": 0.184,
+     "peak_resident_mb": 15,
+     "largest_ray_coordinate": 52,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^3+y^5+z^8+t^9+u^9+x*y*z*t*u",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      1.196
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 54653,
+     "cones": 339349,
+     "seconds": [
+      3.399
+     ],
+     "median_seconds": 3.399,
+     "peak_resident_mb": 421,
+     "largest_ray_coordinate": 561
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 3653,
+     "cones": 24295,
+     "seconds": [
+      2.002,
+      1.706,
+      1.885
+     ],
+     "median_seconds": 1.885,
+     "peak_resident_mb": 45,
+     "largest_ray_coordinate": 257,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^3+y^6+z^7+t^7+u^8+x*y*z*t*u",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u"
+    ],
+    "previous": {
+     "outcome": "regular fan",
+     "rays": 3417,
+     "cones": 26045,
+     "seconds": [
+      0.25,
+      0.238,
+      0.233
+     ],
+     "median_seconds": 0.238,
+     "peak_resident_mb": 45,
+     "largest_ray_coordinate": 122,
+     "regular_and_complete": true
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 3417,
+     "cones": 26045,
+     "seconds": [
+      0.298
+     ],
+     "median_seconds": 0.298,
+     "peak_resident_mb": 44,
+     "largest_ray_coordinate": 122
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 1043,
+     "cones": 7641,
+     "seconds": [
+      0.567,
+      0.655,
+      0.761
+     ],
+     "median_seconds": 0.655,
+     "peak_resident_mb": 29,
+     "largest_ray_coordinate": 109,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^3+y^8+z^8+t^9+u^9+x*y*z*t*u",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u"
+    ],
+    "previous": {
+     "outcome": "regular fan",
+     "rays": 8966,
+     "cones": 60901,
+     "seconds": [
+      0.607,
+      0.926,
+      0.702
+     ],
+     "median_seconds": 0.702,
+     "peak_resident_mb": 86,
+     "largest_ray_coordinate": 120
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 8966,
+     "cones": 60901,
+     "seconds": [
+      0.593
+     ],
+     "median_seconds": 0.593,
+     "peak_resident_mb": 86,
+     "largest_ray_coordinate": 120
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 3903,
+     "cones": 29227,
+     "seconds": [
+      3.225,
+      3.178,
+      3.247
+     ],
+     "median_seconds": 3.225,
+     "peak_resident_mb": 89,
+     "largest_ray_coordinate": 90,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^3+y^6+z^7+t^7+u^9+v^11+x*y*z*t*u*v",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      1.412
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 192064,
+     "cones": 1769962,
+     "seconds": [
+      22.637
+     ],
+     "median_seconds": 22.637,
+     "peak_resident_mb": 2282,
+     "largest_ray_coordinate": 3702
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 4905,
+     "cones": 58053,
+     "seconds": [
+      3.148,
+      2.531,
+      1.81
+     ],
+     "median_seconds": 2.531,
+     "peak_resident_mb": 91,
+     "largest_ray_coordinate": 983,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "regular fan",
+     "rays": 4274,
+     "cones": 41224,
+     "seconds": [
+      0.357,
+      0.34,
+      0.367
+     ],
+     "median_seconds": 0.357,
+     "peak_resident_mb": 66,
+     "largest_ray_coordinate": 549,
+     "regular_and_complete": true
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 4274,
+     "cones": 41224,
+     "seconds": [
+      0.854
+     ],
+     "median_seconds": 0.854,
+     "peak_resident_mb": 66,
+     "largest_ray_coordinate": 549
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 4149,
+     "cones": 40145,
+     "seconds": [
+      1.237,
+      1.539,
+      1.22
+     ],
+     "median_seconds": 1.237,
+     "peak_resident_mb": 68,
+     "largest_ray_coordinate": 549,
+     "regular_and_complete": true
+    }
+   },
+   {
+    "germ": "x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      0.797
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 23948,
+     "cones": 249895,
+     "seconds": [
+      5.134
+     ],
+     "median_seconds": 5.134,
+     "peak_resident_mb": 330,
+     "largest_ray_coordinate": 1490
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 24461,
+     "cones": 250208,
+     "seconds": [
+      11.569,
+      8.066,
+      7.929
+     ],
+     "median_seconds": 8.066,
+     "peak_resident_mb": 344,
+     "largest_ray_coordinate": 1490
+    }
+   },
+   {
+    "germ": "x^2*y+y^2*z+z^4*t+t^4*u+u^2*v+v^4*x",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      0.673
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 11983,
+     "cones": 135936,
+     "seconds": [
+      2.756
+     ],
+     "median_seconds": 2.756,
+     "peak_resident_mb": 186,
+     "largest_ray_coordinate": 526
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 9805,
+     "cones": 108886,
+     "seconds": [
+      3.97,
+      3.34,
+      3.278
+     ],
+     "median_seconds": 3.34,
+     "peak_resident_mb": 158,
+     "largest_ray_coordinate": 450
+    }
+   },
+   {
+    "germ": "x^3*y+y^2*z+z^4*t+t^4*u+u^4*v+v^2*x",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      0.677
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 52236,
+     "cones": 629767,
+     "seconds": [
+      13.997
+     ],
+     "median_seconds": 13.997,
+     "peak_resident_mb": 802,
+     "largest_ray_coordinate": 1171
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 46419,
+     "cones": 556356,
+     "seconds": [
+      23.979,
+      30.456,
+      28.128
+     ],
+     "median_seconds": 28.128,
+     "peak_resident_mb": 742,
+     "largest_ray_coordinate": 1288
+    }
+   },
+   {
+    "germ": "x^2*y+y^6+z^4+z^2*t^2+t^5+u^3+v^7+u*v^5",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "Newton fan exceeded its cone budget.",
+     "seconds": [
+      0.589
+     ]
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 13128,
+     "cones": 150995,
+     "seconds": [
+      2.869
+     ],
+     "median_seconds": 2.869,
+     "peak_resident_mb": 204,
+     "largest_ray_coordinate": 385
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 6498,
+     "cones": 80114,
+     "seconds": [
+      2.327,
+      2.597,
+      2.66
+     ],
+     "median_seconds": 2.597,
+     "peak_resident_mb": 119,
+     "largest_ray_coordinate": 302
+    }
+   },
+   {
+    "germ": "x*y-z*t+u^3+v^4",
+    "variables": [
+     "x",
+     "y",
+     "z",
+     "t",
+     "u",
+     "v"
+    ],
+    "previous": {
+     "outcome": "regular fan",
+     "rays": 394,
+     "cones": 4669,
+     "seconds": [
+      0.07,
+      0.069,
+      0.065
+     ],
+     "median_seconds": 0.069,
+     "peak_resident_mb": 19,
+     "largest_ray_coordinate": 19,
+     "regular_and_complete": true
+    },
+    "previous_without_count_budgets": {
+     "outcome": "regular fan",
+     "rays": 394,
+     "cones": 4669,
+     "seconds": [
+      0.156
+     ],
+     "median_seconds": 0.156,
+     "peak_resident_mb": 19,
+     "largest_ray_coordinate": 19
+    },
+    "current": {
+     "outcome": "regular fan",
+     "rays": 390,
+     "cones": 4640,
+     "seconds": [
+      0.228,
+      0.164,
+      0.168
+     ],
+     "median_seconds": 0.168,
+     "peak_resident_mb": 20,
+     "largest_ray_coordinate": 15,
+     "regular_and_complete": true
+    }
+   }
+  ]
+ },
+ "quick_cli": {
+  "command": "./atlas resolve EQ --vars VARS --compute cpu --quick --mode embedded --monodromy --json",
+  "conditions": "one run per germ and tree on the same host in the same hour; before is commit 2975cad with its fan program, after is this change; peak_process_mb is the largest resident size of one process of the run and peak_session_mb the sum over its process tree, sampled four times a second; the quick worker stops itself at 55 s and the caller of the Zoo screen stops it at 50 s",
+  "rows": [
+   {
+    "germ": "x^3*y+y^3*z+z^3*t+t^3*u+u^4",
+    "before": {
+     "exit": 0,
+     "seconds": 1.7,
+     "peak_process_mb": 108,
+     "peak_session_mb": 112,
+     "status": "resolved",
+     "engine": "verified-monomial-modification",
+     "charts": 2275,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 9.9,
+     "monodromy_zeta": "1/(1-T^4)^61",
+     "topological_zeta": "(61*s + 5)/((s + 1)*(4*s + 5))"
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 1.8,
+     "peak_process_mb": 109,
+     "peak_session_mb": 113,
+     "status": "resolved",
+     "engine": "verified-monomial-modification",
+     "charts": 2275,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 9.9,
+     "monodromy_zeta": "1/(1-T^4)^61",
+     "topological_zeta": "(61*s + 5)/((s + 1)*(4*s + 5))"
+    }
+   },
+   {
+    "germ": "x^3+y^6+z^7+t^7+u^8+x*y*z*t*u",
+    "before": {
+     "exit": 3,
+     "seconds": 24.5,
+     "peak_process_mb": 843,
+     "peak_session_mb": 891,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0] in coordinates [x:y:z:t:u]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (The Newton fan exceeds the stratum or valuation budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 3 candidates (2 rejected, 1 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 5.5,
+     "peak_process_mb": 242,
+     "peak_session_mb": 246,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 7641,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 38.9,
+     "monodromy_zeta": "(1-T^6)^2*(1-T^7)^5/((1-T^3)*(1-T^8)*(1-T^21)^5*(1-T^24)^3*(1-T^42)^11*(1-T^56)^5*(1-T^168)^6)",
+     "topological_zeta": "(28224*s^4 + 230608*s^3 + 552035*s^2 + 525142*s + 175616)/(175616*(s + 1)^5)"
+    }
+   },
+   {
+    "germ": "x^3+y^5+z^8+t^9+u^9+x*y*z*t*u",
+    "before": {
+     "exit": 3,
+     "seconds": 21.5,
+     "peak_process_mb": 273,
+     "peak_session_mb": 316,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0] in coordinates [x:y:z:t:u]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 3 candidates (2 rejected, 1 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 15.7,
+     "peak_process_mb": 725,
+     "peak_session_mb": 729,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 24295,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 122.4,
+     "monodromy_zeta": "(1-T^15)*(1-T^24)*(1-T^40)/((1-T^3)*(1-T^5)*(1-T^8)*(1-T^9)^14*(1-T^45)^13*(1-T^72)^13*(1-T^120)*(1-T^360)^2)",
+     "topological_zeta": "(119620800*s^4 + 394419240*s^3 + 476552573*s^2 + 248330626*s + 46656000)/(46656000*(s + 1)^5)"
+    }
+   },
+   {
+    "germ": "x^3+y^8+z^8+t^9+u^9+x*y*z*t*u",
+    "before": {
+     "exit": 3,
+     "seconds": 20.0,
+     "peak_process_mb": 1098,
+     "peak_session_mb": 1154,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0] in coordinates [x:y:z:t:u]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (The Newton fan exceeds the stratum or valuation budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 3 candidates (2 rejected, 1 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 19.8,
+     "peak_process_mb": 908,
+     "peak_session_mb": 912,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 29227,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 150.0,
+     "monodromy_zeta": "(1-T^8)^6/((1-T^3)*(1-T^9)^14*(1-T^24)^6*(1-T^72)^42)",
+     "topological_zeta": "(92016*s^4 + 295488*s^3 + 361241*s^2 + 204082*s + 46656)/(46656*(s + 1)^5)"
+    }
+   },
+   {
+    "germ": "x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v",
+    "before": {
+     "exit": 3,
+     "seconds": 19.0,
+     "peak_process_mb": 168,
+     "peak_session_mb": 218,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (The Newton fan exceeds the stratum or valuation budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 38.7,
+     "peak_process_mb": 1446,
+     "peak_session_mb": 1450,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 40145,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 234.8,
+     "monodromy_zeta": "(1-T^9)^2*(1-T^15)*(1-T^21)*(1-T^30)^32*(1-T^35)*(1-T^70)^32*(1-T^90)^86*(1-T^210)^18*(1-T^315)^2*(1-T^630)^24/((1-T^3)*(1-T^5)*(1-T^7)*(1-T^10)^32*(1-T^45)^2*(1-T^63)^2*(1-T^105))",
+     "topological_zeta": "(9720577125*s^5 + 49195060425*s^4 + 99103120830*s^3 + 99348969254*s^2 + 49565932093*s + 9845600625)/(9845600625*(s + 1)^6)"
+    }
+   },
+   {
+    "germ": "x^3+y^6+z^7+t^7+u^9+v^11+x*y*z*t*u*v",
+    "before": {
+     "exit": 3,
+     "seconds": 27.3,
+     "peak_process_mb": 1144,
+     "peak_session_mb": 1187,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (1 rejected, 1 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 57.3,
+     "peak_process_mb": 2902,
+     "peak_session_mb": 2905,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 58053,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 396.3,
+     "monodromy_zeta": "(1-T^6)^2*(1-T^7)^5*(1-T^9)^2*(1-T^33)*(1-T^42)^10*(1-T^63)^10*(1-T^126)^33*(1-T^198)^6*(1-T^231)^5*(1-T^462)^11*(1-T^693)^11*(1-T^1386)^6/((1-T^3)*(1-T^11)*(1-T^18)^6*(1-T^21)^5*(1-T^66)^2*(1-T^77)^5*(1-T^99)^2)",
+     "topological_zeta": "-(3482550596448*s^5 + 10270478328264*s^4 + 6227165115864*s^3 - 8117127915767*s^2 - 11246590848310*s - 3690225632016)/(3690225632016*(s + 1)^6)"
+    }
+   },
+   {
+    "germ": "x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3",
+    "before": {
+     "exit": 3,
+     "seconds": 25.6,
+     "peak_process_mb": 461,
+     "peak_session_mb": 529,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [1:0:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The strict transform fails normal crossings along a curve of an orbit. The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    },
+    "after": {
+     "exit": 3,
+     "seconds": 53.0,
+     "peak_process_mb": 440,
+     "peak_session_mb": 544,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [1:0:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (The regular Newton fan has more than 244920 cones, the number whose charts fit in the available memory.). The strict transform fails normal crossings along a curve of an orbit. The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    }
+   },
+   {
+    "germ": "x^2*y+y^2*z+z^4*t+t^4*u+u^2*v+v^4*x",
+    "before": {
+     "exit": 3,
+     "seconds": 25.4,
+     "peak_process_mb": 730,
+     "peak_session_mb": 799,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:0:1:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The strict transform fails normal crossings along a curve of an orbit. The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    },
+    "after": {
+     "exit": 3,
+     "seconds": 55.4,
+     "peak_process_mb": 987,
+     "peak_session_mb": 1078,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The quick worker reached its 55-second wall-clock limit."
+    }
+   },
+   {
+    "germ": "x^3*y+y^2*z+z^4*t+t^4*u+u^4*v+v^2*x",
+    "before": {
+     "exit": 3,
+     "seconds": 25.1,
+     "peak_process_mb": 715,
+     "peak_session_mb": 784,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [1:0:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The strict transform fails normal crossings along a curve of an orbit. The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    },
+    "after": {
+     "exit": 3,
+     "seconds": 55.3,
+     "peak_process_mb": 199,
+     "peak_session_mb": 273,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The quick worker reached its 55-second wall-clock limit."
+    }
+   },
+   {
+    "germ": "x^2*y+y^6+z^4+z^2*t^2+t^5+u^3+v^7+u*v^5",
+    "before": {
+     "exit": 3,
+     "seconds": 21.0,
+     "peak_process_mb": 1146,
+     "peak_session_mb": 1199,
+     "status": "inconclusive",
+     "engine": "general-search",
+     "charts": 0,
+     "zetas": [
+      "inconclusive",
+      "inconclusive"
+     ],
+     "output_mb": 0.0,
+     "diagnostic": "The tangent cone of degree 3 is singular at [0:1:0:0:0:0] in coordinates [x:y:z:t:u:v]. All its first partial derivatives vanish there, so the ordinary-point resolution criterion fails. The Newton search reached a limit (Newton fan exceeded its cone budget.). The repeated-tangent search returned no certified atlas. The canonical smooth-centre rule returned no certified atlas. The general search checked 2 candidates (2 rejected, 0 undecided)."
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 47.4,
+     "peak_process_mb": 1405,
+     "peak_session_mb": 2349,
+     "status": "resolved",
+     "engine": "newton-polyhedron",
+     "charts": 21390,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 138.3,
+     "monodromy_zeta": "(1-T^4)*(1-T^6)^2*(1-T^10)*(1-T^15)*(1-T^21)*(1-T^30)*(1-T^35)*(1-T^84)^7*(1-T^420)^2/((1-T^3)*(1-T^5)*(1-T^7)*(1-T^12)^7*(1-T^28)*(1-T^42)^2*(1-T^60)^2*(1-T^70)*(1-T^105)*(1-T^210))",
+     "topological_zeta": "(16128*s^2 + 79920*s + 85805)/(5*(s + 1)*(84*s + 131)^2)"
+    }
+   },
+   {
+    "germ": "x*y-z*t+u^3+v^4",
+    "before": {
+     "exit": 0,
+     "seconds": 9.5,
+     "peak_process_mb": 895,
+     "peak_session_mb": 899,
+     "status": "resolved",
+     "engine": "verified-monomial-modification",
+     "charts": 23308,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 117.6,
+     "monodromy_zeta": "(1-T^12)/((1-T^3)*(1-T^4))",
+     "topological_zeta": "(6*s + 31)/((s + 1)*(12*s + 31))"
+    },
+    "after": {
+     "exit": 0,
+     "seconds": 13.3,
+     "peak_process_mb": 614,
+     "peak_session_mb": 618,
+     "status": "resolved",
+     "engine": "verified-monomial-modification",
+     "charts": 16369,
+     "zetas": [
+      "computed",
+      "computed"
+     ],
+     "dual_complex": "complete",
+     "output_mb": 82.3,
+     "monodromy_zeta": "(1-T^12)/((1-T^3)*(1-T^4))",
+     "topological_zeta": "(6*s + 31)/((s + 1)*(12*s + 31))"
+    }
+   }
+  ]
+ },
+ "topological_reduction": {
+  "conditions": "three calls of atlas_topological on the saved numerical data of each atlas, previous kernel and current kernel on the same host; both give the same text",
+  "rows": [
+   {
+    "atlas": "x^3+y^5+z^8+t^9+u^9+x*y*z*t*u, 24,295 charts",
+    "components": 3649,
+    "nonzero_strata": 25911,
+    "candidate_poles": 346,
+    "given_order_seconds": [
+     0.888,
+     0.853,
+     0.878
+    ],
+    "sorted_seconds": [
+     0.283,
+     0.269,
+     0.268
+    ]
+   },
+   {
+    "atlas": "x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v, 40,145 charts",
+    "components": 4144,
+    "nonzero_strata": 46367,
+    "candidate_poles": 1000,
+    "given_order_seconds": [
+     13.681,
+     13.671,
+     17.575
+    ],
+    "sorted_seconds": [
+     1.652,
+     1.648,
+     1.673
+    ]
+   }
+  ]
+ }
+}
