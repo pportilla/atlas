@@ -5,7 +5,7 @@ from .kernel_json import kernel_json
 from .chart_batch import transform_atlas
 from .binomial_kernel import _newton, signed_powers
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
-from .newton_fan import build_fan
+from .newton_fan import build_fan, require_chart_memory
 from .polynomial import format_poly, integer_from_decimal, integer_text, LimitError
 
 
@@ -116,10 +116,8 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     n=len(variables)
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
-    if len(cones)*(2**n-1)>750_000 or len(rays)*len(exponents)>500_000:
-        raise LimitError('The Newton fan exceeds the stratum or valuation budget.')
-    if len(exponents)*len(cones)>400_000:
-        raise LimitError('The Newton atlas exceeds the chart expansion budget.')
+    # One chart per cone: the atlas is bounded by the memory it needs.
+    require_chart_memory(fan, len(exponents))
     # Every cone maps to a Newton vertex. Its strata have initial forms given
     # by the common minimizers of their rays. A positive sum of the rays picks
     # exactly this common face, including strata over the origin with some
@@ -283,14 +281,17 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
     from time import monotonic
     deadline = monotonic()+seconds
     last_limit = None
+    # Trial fans too large to try before the other candidates of this method.
+    deferred = []
     nonconvenient = not all(_axial_data(poly)[1])
     if mode == 'embedded' and nonconvenient:
         # A subdivision on the boundary is permissible if it preserves the
         # smooth locus. Each exceptional ray maps onto the coordinate subspace
         # cut out by its positive entries. For a reduced polynomial, membership
         # in the square of each corresponding ideal certifies that inclusion.
+        fan = None
         try:
-            fan = build_fan(poly, exhaustive=exhaustive_faces())
+            fan = build_fan(poly, exhaustive=exhaustive_faces(), seconds=None, chart_terms=len(poly))
             if len(variables) == 4:
                 from .newton_trials import hyperplane_fan
                 trial = hyperplane_fan(poly, variables, fan, verified, integrals)
@@ -301,7 +302,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 if centres is None:
                     from .newton_trials import resolve_trials
                     trial = resolve_trials(poly, variables, verified=verified, integrals=integrals,
-                                           construct=construct)
+                                           construct=construct, deferred=deferred)
                     if trial is not None:
                         return trial
                 else:
@@ -318,6 +319,14 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                         return result
         except LimitError as error:
             last_limit = error
+            if fan is None:
+                # The fan of the germ itself does not fit. Each trial fan is
+                # verified on its own charts and can be much smaller.
+                from .newton_trials import resolve_trials
+                trial = resolve_trials(poly, variables, verified=verified, integrals=integrals,
+                                       construct=construct, deferred=deferred)
+                if trial is not None:
+                    return trial
     # Failure of embedded transversality can still leave a smooth strict
     # transform. Test its own boundary before constructing point blowups.
     # All adapted-coordinate candidates share the same original equation.
@@ -326,14 +335,15 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         nonlocal last_limit
         from .newton_trials import resolve_trials
         try:
-            return resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
+            return resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals,
+                                  deferred=deferred)
         except LimitError as error:
             last_limit = error
             return None
 
     for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
         try:
-            fan=build_fan(transformed, exhaustive=exhaustive_faces())
+            fan=build_fan(transformed, exhaustive=exhaustive_faces(), seconds=None, chart_terms=len(transformed))
             if not fan['isomorphism_off_origin']:
                 continue
             result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
@@ -353,6 +363,17 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         result = resolve_translated(poly, variables, mode, compute, ramification=True)
         if result is not None:
             return result
+    if deferred:
+        # Every cheaper candidate has declined. The large fans are still
+        # resolutions to try, as far as their charts fit in memory.
+        from .newton_trials import resolve_deferred_trials
+        try:
+            trial = resolve_deferred_trials(poly, variables, deferred)
+        except LimitError as error:
+            last_limit = error
+        else:
+            if trial is not None:
+                return trial
     if last_limit is not None:
         raise last_limit
     return None

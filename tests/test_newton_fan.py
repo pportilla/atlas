@@ -148,6 +148,181 @@ class NewtonFan(unittest.TestCase):
         self.assertTrue(fan["boundary_subdivided"])
         check_fan(self,fan,list(p))
 
+    def test_five_and_six_variable_germs_have_regular_fans_within_memory(self):
+        # The sampled subdivision points gave 339,349 cones for the first
+        # germ, past the former budget of 120,000 cone records. The second
+        # germ stopped at the same budget.
+        cases = [("x^3+y^5+z^8+t^9+u^9+x*y*z*t*u", "xyztu", 30_000),
+                 ("x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v", "xyztuv", 50_000)]
+        for expression, names, bound in cases:
+            with self.subTest(germ=expression):
+                p = parse(expression, list(names))
+                fan = build_fan(p, seconds=None)
+                self.assertTrue(fan["isomorphism_off_origin"])
+                self.assertLess(len(fan["cones"]), bound)
+                check_fan(self, fan, list(p))
+                self.assertEqual(fan, build_fan(reversed(list(p)), seconds=None))
+
+    def test_exact_subdivision_point_gives_fewer_cones_than_sampled_points(self):
+        # Sampling 96 multiples of each coordinate residue gave 61 rays and
+        # 117 cones here. A point of smaller total child index exists in a
+        # parallelepiped the samples did not cover.
+        support = [(7, 0, 0), (0, 5, 0), (0, 0, 3), (1, 1, 1)]
+        fan = build_fan(support)
+        check_fan(self, fan, support)
+        self.assertLessEqual(len(fan["rays"]), 45)
+        self.assertLessEqual(len(fan["cones"]), 85)
+
+    def test_chart_memory_bound_follows_the_available_memory(self):
+        from unittest.mock import patch
+        from engine import newton_fan
+
+        axes = [[int(i == j) for j in range(5)] for i in range(5)]
+        fan = {"rays": axes, "cones": [list(range(5))] * 30_000}
+        for available in (64 << 30, None):
+            with patch.object(newton_fan, "available_memory", return_value=available):
+                newton_fan.require_chart_memory(fan, 6)
+        with patch.object(newton_fan, "available_memory", return_value=1 << 30):
+            with self.assertRaisesRegex(LimitError, "30000 charts.*memory.*1024 MB are available"):
+                newton_fan.require_chart_memory(fan, 6)
+        self.assertGreater(newton_fan.available_memory(), 0)
+
+    def test_memory_bound_hands_over_to_the_smooth_centre_rules(self):
+        from unittest.mock import patch
+        from engine import newton_fan
+        from engine.resolve import resolve
+
+        # With too little memory for its charts the Newton method stops and
+        # the quick search continues with the smooth-centre rules.
+        calls = []
+
+        def smooth_centres(p, variables, mode, **options):
+            calls.append("repeated tangent" if options.get("tangent_only") else "canonical")
+            return None
+
+        request = {"polynomial": "x^3+y^6+z^7+t^7+u^8+x*y*z*t*u", "variables": list("xyztu"),
+                   "mode": "embedded", "search": "quick", "compute": "cpu"}
+        with patch.object(newton_fan, "available_memory", return_value=1 << 20), \
+                patch("engine.origin_backend.resolve_origin", side_effect=smooth_centres), \
+                patch("engine.general_resolution.search", return_value=None):
+            record = resolve(request)
+        self.assertEqual(calls, ["repeated tangent", "canonical"])
+        self.assertEqual(record["status"], "inconclusive")
+        # The fan program stopped at the number of cones whose charts fit.
+        self.assertRegex(record["diagnostic"]["fast_path_limit"],
+                         "more than 12 cones, the number whose charts fit in the available memory")
+
+    def test_fan_stops_at_the_cones_whose_charts_fit_in_memory(self):
+        from unittest.mock import patch
+        from engine import newton_fan
+
+        p = parse("x^3+y^6+z^7+t^7+u^8+x*y*z*t*u", list("xyztu"))
+        free = build_fan(p, seconds=None)
+        size = len(free["cones"])
+        need = newton_fan._chart_bytes(5, len(p))
+        # Room for exactly this fan: the first scoring rule passes the limit,
+        # the second stays within it, and the answer is the unlimited one.
+        with patch.object(newton_fan, "available_memory", return_value=2 * need * size):
+            self.assertEqual(newton_fan.chart_cone_limit(5, len(p)), size)
+            self.assertEqual(build_fan(p, seconds=None, chart_terms=len(p)), free)
+            newton_fan.require_chart_memory(free, len(p))
+        with patch.object(newton_fan, "available_memory", return_value=2 * need * (size - 1)):
+            with self.assertRaisesRegex(LimitError, f"more than {size - 1} cones.*memory"):
+                build_fan(p, seconds=None, chart_terms=len(p))
+            with self.assertRaisesRegex(LimitError, f"{size} charts"):
+                newton_fan.require_chart_memory(free, len(p))
+            # A caller that builds no charts on the fan has no such limit.
+            self.assertEqual(build_fan(p, seconds=None), free)
+
+    def test_trial_fans_are_tried_when_the_fan_of_the_germ_does_not_fit(self):
+        from unittest.mock import patch
+        from engine import newton_backend
+        from engine.newton_backend import resolve_newton
+
+        names = list("xyzt")
+        p = parse("x^2*y+y^3*z+z^4+t^5", names)
+        expected = resolve_newton(p, names, "embedded", verified=[], integrals=True)
+        self.assertEqual(expected["engine"], "verified-monomial-modification")
+        real, calls = newton_backend.build_fan, []
+
+        def first_fan_too_large(exponents, **options):
+            calls.append(options)
+            if len(calls) == 1:
+                raise LimitError("The regular Newton fan has more than 3 cones.")
+            return real(exponents, **options)
+
+        with patch.object(newton_backend, "build_fan", side_effect=first_fan_too_large):
+            record = resolve_newton(p, names, "embedded", verified=[], integrals=True)
+        self.assertEqual((record["engine"], len(record["charts"])), (expected["engine"], len(expected["charts"])))
+        self.assertEqual(calls[0], {"exhaustive": False, "seconds": None, "chart_terms": len(p)})
+
+    def test_large_trial_fans_are_deferred_and_then_tried_within_memory(self):
+        from unittest.mock import patch
+        from engine import newton_fan, newton_trials
+
+        names = list("xyzt")
+        p = parse("x^2*y+y^3*z+z^4+t^5", names)
+        support = next(s for s in trial_supports(p)
+                       if newton_trials._try(p, names, s, verified=[], integrals=True) is not None)
+        direct = newton_trials._try(p, names, support, verified=[], integrals=True)
+        self.assertEqual(direct["engine"], "verified-monomial-modification")
+        size = len(direct["charts"])
+        self.assertGreater(size, 100)
+        with patch.object(newton_trials, "DEFERRED_CONES", size - 1):
+            # Above the threshold the trial is set aside, or dropped by a
+            # caller that keeps no list. It is never an error.
+            self.assertIsNone(newton_trials._try(p, names, support, verified=[], integrals=True))
+            deferred = []
+            self.assertIsNone(newton_trials._try(p, names, support, verified=[], integrals=True, deferred=deferred))
+            self.assertEqual([len(fan["cones"]) for _, fan, _ in deferred], [size])
+            small = build_fan([(1, 1, 1, 1)])
+            self.assertEqual(len(small["cones"]), 1)
+            order = []
+            real = newton_trials._try
+
+            def watch(poly, variables, trial, **options):
+                order.append(len(options["fan"]["cones"]))
+                self.assertFalse(options["defer"])
+                return real(poly, variables, trial, **options)
+
+            # Smallest fan first. The one-cone fan is not a resolution.
+            listed = [*deferred, (p, small, deferred[0][2])]
+            with patch.object(newton_trials, "_try", side_effect=watch):
+                late = newton_trials.resolve_deferred_trials(p, names, listed)
+            self.assertEqual(order, [1, size])
+            self.assertEqual((late["engine"], len(late["charts"])), (direct["engine"], size))
+            # Without memory for its charts the deferred fan stops the Newton
+            # method with a limit that its caller hands over.
+            with patch.object(newton_fan, "available_memory", return_value=1 << 20):
+                with self.assertRaisesRegex(LimitError, f"{size} charts.*memory"):
+                    newton_trials.resolve_deferred_trials(p, names, deferred)
+            self.assertIsNone(newton_trials.resolve_deferred_trials(p, names, [(p, small, deferred[0][2])]))
+
+    def test_five_variable_cusp_resolves_with_both_zetas(self):
+        from itertools import combinations as subsets
+        from engine.resolve import resolve
+
+        # Its fan has 26,045 cones with the sampled subdivision points: more
+        # strata than the former budget of 750,000 allowed in five variables.
+        powers = (3, 6, 7, 7, 8)
+        expression = "x^3+y^6+z^7+t^7+u^8+x*y*z*t*u"
+        record = resolve({"polynomial": expression, "variables": list("xyztu"), "mode": "embedded",
+                          "search": "quick", "compute": "cpu", "monodromy": True})
+        self.assertEqual((record["status"], record["engine"]), ("resolved", "newton-polyhedron"))
+        self.assertEqual(len(record["charts"]), len(record["fan"]["cones"]))
+        self.assertLess(len(record["charts"]), 10_000)
+        self.assertEqual(len(record["atlas"]), len(record["charts"]))
+        self.assertEqual(record["dual_complex"]["status"], "complete")
+        self.assertEqual(record["topological_zeta"]["status"], "computed")
+        self.assertEqual(record["monodromy_zeta"]["status"], "computed")
+        # Kouchnirenko: on the Newton boundary of sum x_i^a_i + x_1...x_n the
+        # two top volumes cancel, leaving the alternating sum of the
+        # elementary symmetric functions of the a_i of degree at most n-2.
+        n = len(powers)
+        milnor = sum((-1) ** (n - k) * sum(prod(choice) for choice in subsets(powers, k)) for k in range(n - 1))
+        self.assertEqual(milnor, 1890)
+        self.assertEqual(record["monodromy_zeta"]["milnor_fiber_euler_characteristic"], 1 + (-1) ** (n - 1) * milnor)
+
     def test_high_dimension_and_single_vertex(self):
         for dim in (2,4,8):
             for support in [[tuple(int(j==i) for j in range(dim)) for i in range(dim)],

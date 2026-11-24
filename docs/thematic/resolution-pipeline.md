@@ -290,6 +290,33 @@ affine chart. The rays specify a monomial substitution. Removing the
 exceptional monomial from the pullback gives the strict-transform equation.
 [Newton chart construction](../../engine/newton_backend.py)
 
+The regular fan refines the normal fan of the Newton polyhedron by star
+subdivisions. Each one adds a lattice point of the fundamental parallelepiped
+of a singular cone, and that choice decides how many charts the atlas has.
+Atlas takes the point with the smallest total index of the new cones among
+all the points of the parallelepiped. It enumerates them for a cone of index
+at most 4,096 and searches the Hilbert basis of a larger cone. For
+`x^3+y^5+z^8+t^9+u^9+x*y*z*t*u` the fan has 24,295 cones. Points sampled from
+multiples of the coordinate residues gave 339,349. A fan with at least 4,096
+cones is also built with a second rule, which weighs that total by the number
+of new cones, and the smaller fan is kept. A Hilbert basis can be very large.
+One that takes more than two seconds of processor time is dropped, and its
+cone is subdivided at a sampled point instead.
+[Fan subdivision](../../native/newton_fan.cpp) · [Fan timings](../../benchmarks/resolution-timings.md#regular-newton-fans-in-five-and-six-variables)
+
+The fan of the germ has no limit on its cones, rays or construction time.
+Its size is bounded by memory. Every cone becomes a chart that is assembled,
+verified and saved, so the fan program stops once it has more cones than
+charts fit in half the memory the system reports as available. The fan of a
+monomial modification proposed for a germ without all its axial terms
+follows the same bound. One with more than 32,768 cones waits until the
+other candidates of the Newton method have declined, so that it does not
+hold up a cheaper one. Past the memory bound the Newton method stops and the
+search continues with the
+[smooth-centre rules](#where-the-resolution-decisions-run). No fixed count
+of cones, rays or strata stops the Newton method.
+[Memory bound](../../engine/newton_fan.py) · [Deferred fans](../../engine/newton_trials.py)
+
 An embedded divisor with several rational factors through the origin can
 have normal crossings although the union of their strict transforms is
 singular. Take `y*(x^2+x*z+y^3)`. The plane $y=0$ meets the $A_2$ surface

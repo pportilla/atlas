@@ -353,8 +353,10 @@ class FourVariableTorus(unittest.TestCase):
         cls.record.update(variables=names, mode="intrinsic")
         cls.charts = atlas.from_record(cls.record, polynomial)
 
-    def test_sheared_598_chart_complex_and_its_integral_boundaries(self):
-        self.assertEqual(len(self.charts), 598)
+    def test_sheared_427_chart_complex_and_its_integral_boundaries(self):
+        # One chart per cone of the regular fan the solver chose: 598 with
+        # sampled subdivision points, 427 with the exact search.
+        self.assertEqual(len(self.charts), 427)
         identity = tuple(tuple(int(i == j) for j in range(4)) for i in range(4))
         self.assertNotEqual(self.charts[0].torus[1], identity)
         charts = atlas.from_json(atlas.to_json(self.charts))
@@ -363,7 +365,7 @@ class FourVariableTorus(unittest.TestCase):
         vertices = {v["id"] for v in dual["vertices"]}
         edges = {c["id"]: c for c in dual["cells"] if c["dimension"] == 1}
         triangles = [c for c in dual["cells"] if c["dimension"] == 2]
-        self.assertEqual((len(vertices), len(edges), len(triangles)), (99, 251, 153))
+        self.assertEqual((len(vertices), len(edges), len(triangles)), (99, 252, 154))
         for edge in edges.values():
             self.assertEqual(edge["vertices"], edge["faces"])
             self.assertTrue(set(edge["vertices"]) <= vertices)
