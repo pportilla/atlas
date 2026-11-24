@@ -4,7 +4,6 @@ import codeop
 from contextlib import nullcontext
 import json
 from pathlib import Path
-import re
 import shlex
 import shutil
 import signal
@@ -23,7 +22,6 @@ MAX_REQUEST=32768
 WEB_FONTS = frozenset(f'/fonts/{face}.woff2' for face in (
     'source-code-pro', 'source-code-pro-italic', 'source-sans-3', 'source-sans-3-italic',
     'stix-two-text', 'stix-two-text-italic'))
-ZOO_RECORD = re.compile(r'/zoo-data/records/[a-z0-9]+(?:-[a-z0-9]+)*\.json')
 CAPACITY=threading.BoundedSemaphore(2)
 
 
@@ -64,18 +62,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         address = urlsplit(self.path)
         path = address.path
-        if path in ('/zoo', '/zoo.html'):
-            self.send_response(308)
-            self.send_header('Location', '/zoo/' + ('?' + address.query if address.query else ''))
-            self.end_headers()
-            return
-        if path.startswith('/zoo/'):
-            path = '/zoo.html' if path in ('/zoo/', '/zoo/index.html') else path[len('/zoo'):]
-            if path.startswith('/api/'):
-                return self.obj(404, {'error': 'Unknown endpoint.'})
         static={'/':('index.html','text/html'),'/index.html':('index.html','text/html'),
-                '/zoo.html':('zoo.html','text/html'),'/zoo.js':('zoo.js','text/javascript'),
-                '/zoo.css':('zoo.css','text/css'),'/zoo-mark.svg':('zoo-mark.svg','image/svg+xml'),
                 '/typeset.js':('typeset.js','text/javascript'),'/dual-graph.js':('dual-graph.js','text/javascript'),
                 '/exact-json.js':('exact-json.js','text/javascript'),
                 '/resolution.css':('resolution.css','text/css'),'/runs.css':('runs.css','text/css'),
@@ -85,16 +72,6 @@ class Handler(BaseHTTPRequestHandler):
                 '/style.css':('style.css','text/css'),'/app.js':('app.js','text/javascript')}
         if path in WEB_FONTS:
             return self.send(200, (WEB / path[1:]).read_bytes(), 'font/woff2')
-        if path in ('/zoo-data/index.json', '/zoo-data/schema.json') or ZOO_RECORD.fullmatch(path):
-            from .zoo_data import catalogue_file
-            try:
-                resource = catalogue_file(path.removeprefix('/zoo-data/'))
-                contents = resource.read_bytes()
-            except FileNotFoundError:
-                return self.obj(404, {'error': 'Unknown catalogue record.'})
-            except (RuntimeError, OSError) as exc:
-                return self.obj(503, {'error': str(exc)})
-            return self.send(200, contents, 'application/json; charset=utf-8')
         if path=='/api/health': return self.obj(200,{'status':'ok'})
         if path=='/api/searches':
             return self.obj(200,{'jobs':self.server.search_jobs.list()})
@@ -117,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         replay = zeta_job is not None or path == '/api/zetas'
         algebra = path in ('/api/algebra', '/api/algebra/exhaustive')
         exhaustive = path in ('/api/searches', '/api/algebra/exhaustive')
-        if not replay and not algebra and path not in ('/api/resolve','/api/searches','/api/zoo/search'): return self.obj(404,{'error':'Unknown endpoint.'})
+        if not replay and not algebra and path not in ('/api/resolve','/api/searches'): return self.obj(404,{'error':'Unknown endpoint.'})
         def reject(status, message, code='invalid_request'):
             if algebra:
                 from .algebra import error_record
@@ -129,8 +106,6 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError: return reject(411, 'Content-Length is required.')
         if size <= 0: return reject(413, 'Request is empty.')
         if size > MAX_REQUEST and not exhaustive and path != '/api/zetas':
-            if path == '/api/zoo/search':
-                return reject(413, f'Catalogue searches accept up to {MAX_REQUEST} bytes.')
             endpoint = '/api/algebra/exhaustive' if algebra else '/api/searches'
             return reject(413, f'Standard requests accept up to {MAX_REQUEST} bytes. Choose exhaustive mode or post to {endpoint}.')
         try:
@@ -151,16 +126,6 @@ class Handler(BaseHTTPRequestHandler):
             del body
         except (ValueError,OSError,RecursionError): return reject(400, 'Invalid JSON request.')
         except MemoryError: return reject(503, 'Insufficient memory to read the request.', 'worker_unavailable')
-        if path == '/api/zoo/search':
-            from .zoo_search import zoo_search
-            if not isinstance(data, dict) or 'query' not in data:
-                return reject(400, 'Supply a monomial query.')
-            try:
-                return self.obj(200, zoo_search(data['query']))
-            except (TypeError, ValueError) as exc:
-                return reject(400, str(exc))
-            except (OSError, RuntimeError) as exc:
-                return reject(503, str(exc))
         if replay:
             return self.replay_zetas(data, zeta_job)
         def start_search():

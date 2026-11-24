@@ -452,7 +452,7 @@ hits = zoo_search("x^2, -y^2*z")
 print(len(hits.ids) > 0)                                   # True
 ```
 
-The query lists monomials that must all occur in the equation, up to renaming the variables and an overall sign. Browse the catalogue with `./atlas serve` at `/zoo/`. [Search the Resolution Zoo](reference/resolution.md#search-the-resolution-zoo)
+The query lists monomials that must all occur in the equation, up to renaming the variables and an overall sign. Browse the catalogue on the [Atlas website](https://pportilla.github.io/atlas-website/zoo/). [Search the Resolution Zoo](reference/resolution.md#search-the-resolution-zoo)
 
 ## Interface issues
 

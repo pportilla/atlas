@@ -77,7 +77,7 @@ The ring is given by `--vars` in order, with `--order lex` or `--order grevlex` 
 
 ## Start the web workspace
 
-`./atlas serve` starts the web workspace and the HTTP API at `http://127.0.0.1:8765`. Choose another port with `--port`. The workspace resolves germs in the browser and includes the Resolution Zoo at `/zoo/`. [HTTP API and compute options](http-and-compute.md)
+`./atlas serve` starts the web workspace and the HTTP API at `http://127.0.0.1:8765`. Choose another port with `--port`. The workspace resolves germs in the browser. [HTTP API and compute options](http-and-compute.md)
 
 ## List devices
 

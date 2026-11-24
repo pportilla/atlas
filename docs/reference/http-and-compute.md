@@ -4,20 +4,9 @@ The Atlas server provides the resolution workspace in a browser and accepts calc
 
 When Atlas runs on a remote machine, forward the port from the machine with your browser. In a terminal on that machine, use `ssh -N -L 8765:127.0.0.1:8765 user@host` with your usual SSH destination in place of `user@host`. Keep the SSH session open, then open the local address in your browser. The same tunnel carries the requests on this page.
 
-## Browse the Resolution Zoo
+## The Resolution Zoo
 
-Install the catalogue beside Atlas or set `ATLAS_ZOO_DIR` to its checkout. Open `/zoo/` on the Atlas server to browse the same records as the prompt and scripts. [Install the Resolution Zoo](../installation.md#install-the-resolution-zoo)
-
-The page fetches the searchable index from `/zoo/zoo-data/index.json` and a selected record from `/zoo/zoo-data/records/<id>.json`.
-
-To find records containing a particular monomial pattern, send the same query accepted by the Atlas session.
-
-```sh
-curl -sS http://127.0.0.1:8765/api/zoo/search \
-  -H 'Content-Type: application/json' -d '{"query":"1/2*x*y^3"}'
-```
-
-The response contains an `ids` array in catalogue order. An empty query returns every ID. An invalid query returns HTTP 400. [Search syntax](resolution.md#search-the-resolution-zoo) · [Catalogue record format](../thematic/resolution-records.md#resolution-zoo-catalogue)
+The Atlas server provides only the resolution workspace. The Resolution Zoo catalogue lives in its own repository and is published on the [Atlas website](https://pportilla.github.io/atlas-website/zoo/). To search a local checkout from the prompt or a script, install the catalogue beside Atlas or set `ATLAS_ZOO_DIR`, and call `zoo_search`. [Install the Resolution Zoo](../installation.md#install-the-resolution-zoo) · [Search syntax](resolution.md#search-the-resolution-zoo) · [Catalogue record format](../thematic/resolution-records.md#resolution-zoo-catalogue)
 
 ## Request a resolution
 
