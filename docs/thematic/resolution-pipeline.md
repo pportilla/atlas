@@ -46,11 +46,13 @@ A particular family often admits a short construction. If its hypotheses
 fail, the search moves on to a more general method. Any candidate must still
 supply the charts and satisfy the checks for the requested mode.
 
-On an inconclusive quick search, a singular tangent direction explains why
-the single ordinary blowup test declined. The diagnostic also reports the
-outcome of the Newton and successive blowup searches when these ran. The
-general search records how many candidate certificates it rejected and how
-many it left undecided within the search budget.
+A quick search is inconclusive only when its caller's time is over: the
+worker stops it after 55 seconds. Its diagnostic then says so. A bounded
+attempt that Atlas makes inside another computation can still end early. Its
+diagnostic names a singular tangent direction that made the ordinary blowup
+test decline, the outcome of the Newton and successive blowup searches, the
+reason the smooth-centre rules gave, and how many candidate certificates the
+general search rejected or left undecided.
 
 ### Structured inputs
 
@@ -173,25 +175,44 @@ centres in order. The shortcut succeeds when only the third centre works.
 
 ### Quick search
 
-Use `--quick` for a bounded attempt. The search tries an eligible regular
-Newton modification, including available coordinate changes and repairs of
-failed crossings. For unresolved singularities in three to eight variables
-it can start blowups from the origin. In four to eight variables the
-repeated-tangent rule comes first, then the smooth-centre rules described
-below. Whoever asks for a quick search already bounds it, so these rules are
-not stopped at a fixed share while they are still working. They get the rest
-of the worker's limit, less 7 seconds for the last steps, and at least 20
-seconds. A germ therefore ends with a certified atlas, with rules that gave
-up, or at the worker's limit. The final attempt tests priority ideals. When the
-verifier rejects the charts that a faster method proposed, the quick search
-does not stop there. The smooth-centre rules make their own proposal, whose
-charts are verified in the same way. Verifying a proposal replays its
-blowups, which can take longer than constructing them, so the first
-verification must finish while 25 seconds of the worker's limit remain.
-The replayed blowups share that deadline between their rules, and if it
-passes, the smooth-centre rules take over. The CLI worker has 55 seconds. If it
-exhausts its budget, its diagnostic reports an inconclusive calculation and
-the reasons for each rejection. [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
+Use `--quick` to give the search 55 seconds: the worker of a quick request
+stops then. Inside that time the search does not give up. It ends with a
+certified answer, or when the time is over, and only then is the result
+inconclusive (exit code 3). The limits on the size of the input remain.
+
+The search first tries the fast methods, each within a budget: an eligible
+regular Newton modification, including available coordinate changes and
+repairs of failed crossings (20 seconds), and in four to eight variables the
+repeated-tangent rule. When they do not apply or decline, the smooth-centre
+rules described below are the safe method, in three to eight variables. They
+have no deadline of their own and no budget of charts or stages. The rules
+take turns of 10, 20, 40, … seconds, and each continues from the blowup it
+had reached, so no rule loses its work and none can keep the others waiting
+for ever. A rule leaves only when it stops for a reason of its own. The last
+one left runs without turns. Such a reason is a defect of the rule: it is
+kept in `diagnostic.canonical_reason` and in the progress of the request.
+The search then continues with projective ideal blowups, as an exhaustive
+search does, which returns only with a certificate.
+
+The same holds for the outputs. A resolved record whose dual complex is
+partial, or which lacks a requested zeta function, is not the answer of a
+quick search: the search continues as above. In intrinsic mode the
+smooth-centre rules first go on to total normal crossings, which gives the
+exceptional complex on the smooth strict transform.
+
+When the verifier rejects the charts that a faster method proposed, the
+smooth-centre rules make their own proposal, whose charts are verified in
+the same way. Verifying a proposal replays its blowups, which can take
+longer than constructing them, so the first verification must finish while
+25 seconds of the worker's limit remain, and then the smooth-centre rules
+take over. Once no such time is left, a verification runs to its end.
+[Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
+
+Atlas also solves smaller problems inside a computation, such as the zeta
+function of a transverse germ for a nearby stratum. These are bounded
+attempts (`bounded` in the request): each method keeps its budget, the
+smooth-centre rules get the rest of the worker's limit less 7 seconds, and
+the attempt may return inconclusive.
 
 ### Exhaustive search
 
@@ -247,7 +268,10 @@ A rule's deadline also reaches the exact computations inside a native centre
 choice. A Gröbner basis, its modular lifting and its verification stop within
 milliseconds of the deadline, and the rule gives up so that the next rule can
 start. Before, one such computation could overrun a 7-second share by
-14 seconds. [Kernel deadlines](../../native/KERNEL.md#deadlines)
+14 seconds. The radical and the prime components of a locus of maximal order
+stop in the same way: for the twenty planes where three of
+$xyztu(x+y+z+t+u)=0$ meet, that decomposition alone ran for two minutes.
+[Kernel deadlines](../../native/KERNEL.md#deadlines)
 
 When enough processors are available the other workers may start alongside
 Newton, holding their answers until its head start ends. Otherwise a forked
@@ -308,11 +332,13 @@ why the intrinsic record has one blowup and the embedded record has three.
 
 Some germs have a curve or surface of singular points through the origin,
 and on these the invariant can be slow or find no hypersurface of maximal
-contact. Under a deadline the complete rule therefore keeps 60% of the
-remaining time, and then a **maximal order rule** starts again from the
-original germ. A rule stopped at its share keeps its charts. When the rules
-after it give up before the deadline, it continues from the stage it had
-reached, and the rule that completed a blowup most recently goes first.
+contact. A **maximal order rule** therefore works beside the complete rule,
+from the original germ. In a quick search the two take turns, as described
+under [Quick search](#quick-search). In a bounded attempt the complete rule
+keeps 60% of the remaining time and the maximal order rule follows. A rule
+stopped at its share keeps its charts. When the rules after it give up
+before the deadline, it continues from the stage it had reached, and the
+rule that completed a blowup most recently goes first.
 An exhaustive search has no deadline to share, so there the
 maximal order rule races in a worker of its own. It can also be the faster
 rule at an isolated point: for
@@ -486,8 +512,16 @@ Given the certified strata, their Euler characteristics are computable by
 projection one coordinate at a time. On each constructible piece of the
 base, polynomial gcd calculations give the number of distinct roots in a
 finite fibre or identify an affine-line fibre. Additivity then reduces the
-calculation to fewer coordinates. A’Campo's product and the Denef–Loeser
-sum are exact finite arithmetic once these counts are known. [Euler kernel](../../native/euler.cpp) · [Denef and Loeser](https://webusers.imj-prg.fr/~francois.loeser/jams92.pdf)
+calculation to fewer coordinates. The points lying on exactly a set $J$ of
+components are counted from closed strata. By additivity their Euler
+characteristic is the alternating sum, over the sets $K\supseteq J$ with a
+common point, of that of the common points of the components of $K$. A
+closed stratum is counted with no component left out, which matters when
+several components are not coordinates of the chart: on the origin blowup of
+seven hyperplanes in general position in $\mathbb C^5$ each chart has two
+such planes, and the sum takes a twentieth of a second. A’Campo's product
+and the Denef–Loeser sum are exact finite arithmetic once these counts are
+known. [Euler kernel](../../native/euler.cpp) · [Strata](../../native/ideal.cpp) · [Denef and Loeser](https://webusers.imj-prg.fr/~francois.loeser/jams92.pdf)
 
 With terminating exact tests for chart regularity, geometric components,
 their gluing and divisor orders, the theoretical algorithm eventually

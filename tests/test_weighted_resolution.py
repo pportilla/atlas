@@ -131,14 +131,21 @@ class WeightedResolutionTest(unittest.TestCase):
                 self.assertEqual(record["monodromy_zeta"]["expression"], f"1/(1-T^{exponent})")
                 self.assertEqual(record["monodromy_check"]["poles"][0]["value"], "-1/" + exponent)
 
-    def test_weighted_decline_is_inconclusive_only_when_quick_and_worker_crashes_propagate(self):
+    def test_weighted_decline_is_inconclusive_only_when_bounded_and_worker_crashes_propagate(self):
         from engine.weighted_blowups import WeightedDeclined
         request = dict(polynomial="x^2+y^3", variables=["x","y"], search="quick", method="weighted", monodromy=True)
         with patch("engine.weighted_blowups.weighted_resolution", side_effect=WeightedDeclined("test chart decline")):
             status, record = evaluate(request)
+            bounded_status, bounded = evaluate(dict(request, bounded=True))
+        # A quick request continues with the ordinary resolution, as an exhaustive one does.
         self.assertEqual((status, record["status"], record["weighted_attempt"]["reason"]),
+                         (200, "resolved", "test chart decline"))
+        self.assertNotEqual(record["engine"], "weighted")
+        self.assertEqual(record["monodromy_zeta"]["status"], "computed")
+        # Only an attempt inside another computation reports the decline as its answer.
+        self.assertEqual((bounded_status, bounded["status"], bounded["weighted_attempt"]["reason"]),
                          (200, "inconclusive", "test chart decline"))
-        self.assertEqual(record["monodromy_zeta"]["status"], "inconclusive")
+        self.assertEqual(bounded["monodromy_zeta"]["status"], "inconclusive")
         with patch("engine.native_process.run", return_value=subprocess.CompletedProcess([], -9, "", "")):
             status, failed = evaluate(dict(request, search="exhaustive"))
         self.assertEqual(status, 503)

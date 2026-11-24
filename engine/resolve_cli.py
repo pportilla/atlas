@@ -112,7 +112,8 @@ def add_resolution_options(calc):
                       "method applies to this surface and then uses it")
     policies=calc.add_mutually_exclusive_group()
     policies.add_argument('--quick',dest='search',action='store_const',const='quick',
-                          help='use a bounded search and return exit code 3 if inconclusive')
+                          help=f'search for at most {MAX_SECONDS} seconds: exit code 3 when that limit ends the '
+                               'search before a certified result. Inside the limit the search does not give up')
     policies.add_argument('--exhaustive',dest='search',action='store_const',const='exhaustive',
                           help='continue until certified or interrupted (default)')
     calc.set_defaults(search='exhaustive')

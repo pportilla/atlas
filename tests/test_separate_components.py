@@ -12,8 +12,7 @@ from unittest.mock import patch
 from engine.canonical_replay import canonical_outputs
 from engine.origin_backend import RATIONAL_FACTORS, _resolve
 from engine.polynomial import parse
-from engine.resolve import (QUICK_CANONICAL_SECONDS, QUICK_NEARBY_SECONDS, quick_canonical_seconds,
-                            quick_nearby_seconds, resolve)
+from engine.resolve import resolve
 from engine.strata import InvalidChart
 
 FIVE = ["x", "y", "z", "t", "u"]
@@ -70,20 +69,46 @@ class SeparateStrictComponents(unittest.TestCase):
         self.assertEqual([step["dimension"] for step in record["steps"]], [2])
 
     def test_quick_resolution_and_zetas_agree_with_the_intersection_lattice(self):
-        with patch("engine.resolve.QUICK_NEARBY_SECONDS", 1):
-            record = resolve({"polynomial": GENERIC, "variables": FIVE, "mode": "embedded", "search": "quick",
-                              "compute": "cpu", "monodromy": True})
-        self.assertEqual((record["status"], record["engine"]), ("resolved", "canonical-blowups"))
-        self.assertEqual(record["dual_complex"]["status"], "complete")
-        self.assertEqual([v["id"] for v in record["dual_complex"]["vertices"]], ["B1"])
-        # P^4 less six generic hyperplanes has Euler characteristic 1.
-        self.assertEqual(record["monodromy_zeta"]["expression"], "1/(1-T^6)")
-        expression = record["topological_zeta"]["expression"]
-        for s in (Fraction(1), Fraction(2), Fraction(-1, 3), Fraction(5, 7), Fraction(3)):
-            self.assertEqual(value(expression, s), generic_arrangement_zeta(6, 5, s))
-        self.assertEqual(record["monodromy_check"]["status"], "verified")
-        # The optional search along the critical locus does not finish on this germ.
-        self.assertEqual(record["monodromy_zeta"]["nearby_search"]["status"], "stopped")
+        # (equation, variables, planes, Euler characteristic of the complement in the exceptional P^(n-1))
+        cases = [(GENERIC, FIVE, 6, 1),
+                 ("x*y*z*t*u*(x+y+z+t+u)*(x+2*y+3*z+4*t+5*u)", FIVE, 7, 5),
+                 ("x*y*z*t*u*v*(x+y+z+t+u+v)*(x+2*y+3*z+4*t+5*u+6*v)", SIX, 8, -6)]
+        for equation, names, planes, chi in cases:
+            with self.subTest(planes=planes, variables=len(names)):
+                with patch("engine.resolve.QUICK_NEARBY_SECONDS", 1):
+                    record = resolve({"polynomial": equation, "variables": names, "mode": "embedded",
+                                      "search": "quick", "compute": "cpu", "monodromy": True})
+                self.assertEqual((record["status"], record["engine"]), ("resolved", "canonical-blowups"))
+                self.assertEqual(record["dual_complex"]["status"], "complete")
+                self.assertEqual([v["id"] for v in record["dual_complex"]["vertices"]], ["B1"])
+                # A'Campo: the open part of the exceptional divisor alone meets the fibre.
+                self.assertEqual(record["monodromy_zeta"]["factors"],
+                                 [{"multiplicity": planes, "exponent": -chi}])
+                expression = record["topological_zeta"]["expression"]
+                for s in (Fraction(1), Fraction(2), Fraction(-1, 3), Fraction(5, 7), Fraction(3)):
+                    self.assertEqual(value(expression, s), generic_arrangement_zeta(planes, len(names), s))
+                self.assertEqual(record["monodromy_check"]["status"], "verified")
+                # The optional search along the critical locus does not finish on these germs.
+                self.assertEqual(record["monodromy_zeta"]["nearby_search"]["status"], "stopped")
+
+    def test_strata_of_two_planes_that_are_not_coordinates_are_counted(self):
+        # In each chart of the origin blowup two of the seven planes are not coordinates. The
+        # kernel counts closed strata and takes their alternating sums: leaving the other
+        # components out of each count did not end here.
+        from engine.atlas import from_json
+        from engine.chart_kernel import owned_strata
+        record = self.blowups("x*y*z*t*u*(x+y+z+t+u)*(x+2*y+3*z+4*t+5*u)", FIVE)
+        chart = from_json(record["atlas"], native=True)[0]
+        labels = [label for label, *_ in chart.components]
+        strata = {frozenset(labels[j] for j in subset): chi for subset, chi in owned_strata(chart).items()}
+        # This chart owns the affine part A^4 of the exceptional P^4, with six planes in general position.
+        open_part = sum((-1) ** j * comb(6, j) for j in range(5))  # A^4 less six generic hyperplanes
+        self.assertEqual(strata[frozenset({"B1"})], open_part)
+        # Four of the planes and B1 meet in one point; five planes do not meet in A^4.
+        deepest = [key for key in strata if len(key) == 5]
+        self.assertEqual(len(deepest), comb(6, 4))
+        self.assertTrue(all(strata[key] == 1 for key in deepest))
+        self.assertFalse(any(len(key) > 5 for key in strata))
 
     def test_replay_derives_the_same_components_from_the_equation(self):
         names = FIVE
@@ -101,40 +126,6 @@ class SeparateStrictComponents(unittest.TestCase):
                                               if k != "strict_components"}}
         with self.assertRaises(InvalidChart):
             canonical_outputs(legacy, polynomial, complex=True, intrinsic=False, integrals=True)
-
-
-class QuickTimeForSmoothCentres(unittest.TestCase):
-    def test_the_rules_get_the_rest_of_the_workers_limit(self):
-        from engine import resolve as module
-        from engine.resolve_cli import MAX_SECONDS
-        token = module._REQUEST_START.set(1000.0)
-        try:
-            with patch("engine.resolve.perf_counter", return_value=1003.0):
-                self.assertEqual(quick_canonical_seconds(), MAX_SECONDS - module.QUICK_FINAL_RESERVE - 3)
-                self.assertEqual(quick_nearby_seconds(), QUICK_NEARBY_SECONDS)
-            # Late in the request the rules keep their former share.
-            with patch("engine.resolve.perf_counter", return_value=1048.0):
-                self.assertEqual(quick_canonical_seconds(), QUICK_CANONICAL_SECONDS)
-                self.assertEqual(quick_nearby_seconds(), MAX_SECONDS - module.QUICK_FINAL_RESERVE - 48)
-            with patch("engine.resolve.perf_counter", return_value=1060.0):
-                self.assertEqual(quick_nearby_seconds(), 0)
-        finally:
-            module._REQUEST_START.reset(token)
-
-    def test_quick_search_passes_that_time_to_the_canonical_rules(self):
-        from engine.resolve_cli import MAX_SECONDS
-        with patch("engine.origin_backend.resolve_origin", return_value=None) as origin, \
-             patch("engine.newton_backend.resolve_newton", return_value=None), \
-             patch("engine.general_resolution.search", return_value=None):
-            record = resolve({"polynomial": "x^2*y^2+z^3*t^2+u^5*x+y^4*t^3", "variables": FIVE,
-                              "mode": "embedded", "search": "quick", "compute": "cpu"})
-        self.assertEqual(record["status"], "inconclusive")
-        canonical = [call for call in origin.call_args_list if call.kwargs.get("skip_tangent")]
-        self.assertEqual(len(canonical), 1)
-        seconds = canonical[0].kwargs["seconds"]
-        self.assertGreater(seconds, QUICK_CANONICAL_SECONDS)
-        self.assertLessEqual(seconds, MAX_SECONDS)
-        self.assertEqual(record["diagnostic"]["canonical_seconds"], round(seconds, 1))
 
 
 class ComponentsInAChartsOwnPart(unittest.TestCase):
@@ -173,61 +164,6 @@ class ComponentsInAChartsOwnPart(unittest.TestCase):
         # On a*(b^2+c^2+d^2)+y = 0 the divisor y = 0 has the branch a = 0, which the chart
         # owns, and the cone b^2+c^2+d^2 = 0, which meets it there: the count stays open.
         self.assertIsNone(self.count((a*(b**2 + c**2 + d**2) + y,), (a,), fibre=(y*a,)))
-
-
-class RulesContinueWithLeftoverTime(unittest.TestCase):
-    def run_rules(self, behaviour):
-        """Run three rules whose blowups are replaced by `behaviour(name, visit, limit)`."""
-        from time import monotonic
-        from engine import local_blowups as lb
-        from engine import native_polynomial as np
-        x, y, z = symbols = tuple(map(np.Symbol, "xyz"))
-        calls = []
-
-        def fake(rule, variables, components, fibre, budget, limit, *rest, state=None, **options):
-            visit = sum(1 for name, *_ in calls if name == rule.name)
-            calls.append((rule.name, limit, state))
-            return behaviour(rule.name, visit, limit, state)
-
-        deadline = monotonic() + 0.6
-        with patch.object(lb, "_run", side_effect=fake):
-            try:
-                answer = lb.acampo_over(symbols, [("strict", 1, 1, (x*y - z**2,))], symbols, dimension=3,
-                                        rules=("order", "complete", "direct"), deadline=deadline)
-            except lb.GiveUp as error:
-                answer = error
-        return answer, calls, deadline
-
-    def test_a_rule_stopped_at_its_share_continues_when_the_others_give_up(self):
-        from time import monotonic, sleep
-        from engine.local_blowups import GiveUp
-
-        def behaviour(name, visit, limit, state):
-            if name == "order" and visit == 0:
-                state["progress"] = monotonic()
-                sleep(max(0.0, limit - monotonic()) + 0.02)
-                raise GiveUp("The time allowed for the blowups is over.")
-            if name == "order":
-                return "continued"
-            raise GiveUp(f"The {name} rule has nothing to do.")
-
-        answer, calls, deadline = self.run_rules(behaviour)
-        self.assertEqual(answer, "continued")
-        self.assertEqual([name for name, *_ in calls], ["order", "complete", "direct", "order"])
-        first, last = calls[0], calls[-1]
-        self.assertIs(first[2], last[2])       # the same charts and centres
-        self.assertLess(first[1], deadline)    # a share the first time
-        self.assertEqual(last[1], deadline)    # everything that is left afterwards
-
-    def test_a_rule_that_gave_up_for_its_own_reason_is_not_run_again(self):
-        from engine.local_blowups import GiveUp
-
-        def behaviour(name, visit, limit, state):
-            raise GiveUp(f"The {name} rule has nothing to do.")
-
-        answer, calls, _ = self.run_rules(behaviour)
-        self.assertIsInstance(answer, GiveUp)
-        self.assertEqual([name for name, *_ in calls], ["order", "complete", "direct"])
 
 
 if __name__ == "__main__":

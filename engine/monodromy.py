@@ -124,8 +124,9 @@ def _origin_factors(polynomial, variables):
     """The origin zeta of a germ in fewer variables, from its own certified resolution."""
     from .resolve import resolve
     try:
+        # An attempt inside the optional search for nearby strata: it keeps its bounds.
         record = resolve({"polynomial": polynomial, "variables": variables, "mode": "embedded",
-                          "search": "quick", "zetas": ["monodromy"]})
+                          "search": "quick", "bounded": True, "zetas": ["monodromy"]})
     except (InputError, LimitError, ArithmeticError, RuntimeError, OSError):
         return None
     zeta = record.get("monodromy_zeta") or {}

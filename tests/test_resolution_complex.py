@@ -96,9 +96,10 @@ class ResolutionComplexTests(unittest.TestCase):
                 with self.assertRaisesRegex(InputError, "strict transform differs"):
                     replay_zetas(dict(record=bad, zetas=["topological"]))
                 request = dict(mode=mode, polynomial=bad["polynomial"], variables=list("xyz"), search="quick")
+                # A bounded attempt reports the rejection. A quick request goes on after it.
                 with patch("engine.resolve._resolve_polynomial", return_value=bad), \
                      patch("engine.resolve.canonical_record", return_value=None):
-                    result = resolve(request)
+                    result = resolve(dict(request, bounded=True))
                 self.assertEqual(result["status"], "inconclusive")
                 self.assertIn("strict transform differs", result["diagnostic"]["description"])
                 # The quick search replaces the rejected proposal with its own smooth-centre charts.

@@ -216,7 +216,7 @@ The six roots $c_i\pm\sqrt D$ have contact orders and ramification that determin
 
 ## Quick checks
 
-By default `monodromy_check` and `resolve` search exhaustively, until the result is certified or you interrupt them. With `search="quick"` they stop at fixed bounds and say why.
+By default `monodromy_check` and `resolve` search exhaustively, until the result is certified or you interrupt them. With `search="quick"` they search for at most 55 seconds, and the resolution is inconclusive only when that time is over. [Quick search](resolution-pipeline.md#quick-search)
 
 ```atlas
 t = coordinates("t")

@@ -2393,6 +2393,15 @@ void count_fibre_piece(const Ring& R, Basis& basis, DivisorIdeals ideals,
     restrict_to_base_monomials(R, base, ideals, removed);
     const size_t k = ideals.size();
     Euler euler(R);
+    // The Euler characteristic with compact supports is additive. So that of
+    // the points on exactly the components of J is the alternating sum, over
+    // the sets K containing J with a common point, of that of the closed
+    // stratum of K: the common points of its components, off the removed
+    // sets. A closed stratum is counted with no component left out. Leaving
+    // out the other components in the count itself is slow as soon as
+    // several of them are not coordinates: for seven hyperplanes in general
+    // position it did not end, and this sum takes a twentieth of a second.
+    StratumTotals closed;
     std::vector<std::vector<size_t>> alive = {{}};
     for (size_t size = 1; size <= k; ++size) {
         std::vector<std::vector<size_t>> found;
@@ -2411,14 +2420,8 @@ void count_fibre_piece(const Ring& R, Basis& basis, DivisorIdeals ideals,
                 for (size_t j : subset) equations = joined(std::move(equations), ideals[j]);
                 if (!unit_basis(R, equations)) {
                     found.push_back(subset);
-                    std::vector<std::vector<Poly>> others = removed;
-                    for (size_t j = 0; j < k; ++j)
-                        if (std::find(subset.begin(), subset.end(), j) == subset.end()) others.push_back(ideals[j]);
-                    const auto chi = euler.characteristic(equations, others);
-                    if (!fmpz_is_zero(&chi.v)) {
-                        auto& value = totals[subset];
-                        fmpz_add(&value.v, &value.v, &chi.v);
-                    }
+                    const auto chi = euler.characteristic(equations, removed);
+                    fmpz_set(&closed[subset].v, &chi.v);
                 }
             }
             size_t d = size;
@@ -2429,6 +2432,20 @@ void count_fibre_piece(const Ring& R, Basis& basis, DivisorIdeals ideals,
         }
         if (found.empty()) break;
         alive = std::move(found);
+    }
+    for (const auto& entry : closed) {
+        const auto& subset = entry.first;
+        Z chi;
+        for (const auto& [larger, value] : closed) {
+            if (larger.size() < subset.size() ||
+                !std::includes(larger.begin(), larger.end(), subset.begin(), subset.end())) continue;
+            if ((larger.size() - subset.size()) % 2) fmpz_sub(&chi.v, &chi.v, &value.v);
+            else fmpz_add(&chi.v, &chi.v, &value.v);
+        }
+        if (!fmpz_is_zero(&chi.v)) {
+            auto& value = totals[subset];
+            fmpz_add(&value.v, &value.v, &chi.v);
+        }
     }
 }
 

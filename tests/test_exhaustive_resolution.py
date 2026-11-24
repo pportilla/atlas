@@ -36,9 +36,11 @@ class ExhaustiveFallback(unittest.TestCase):
         self.assertEqual(result["status"], "resolved")
         self.assertTrue(result["charts"])
 
-    def test_quick_keeps_a_bounded_search(self):
+    def test_a_bounded_attempt_keeps_a_bounded_search(self):
+        # A quick request has no end of its own (tests/test_safe_fallback.py). An attempt
+        # inside another computation keeps the budget of each method and says why it stopped.
         request = dict(polynomial="(x*y-z*t+u^2)^2 + x^5+2*y^5+3*z^5+4*t^5+5*u^5",
-                       variables=list("xyztu"), mode="embedded", search="quick", monodromy=True)
+                       variables=list("xyztu"), mode="embedded", search="quick", bounded=True, monodromy=True)
         with patch("engine.newton_backend.resolve_newton", side_effect=LimitError("fan limit")), \
              patch("engine.origin_backend.resolve_origin", return_value=None) as origin, \
              patch("engine.general_resolution.search", return_value=None) as quick, \

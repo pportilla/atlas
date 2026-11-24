@@ -548,7 +548,16 @@ def _library():
     return lib
 
 
-def affine_request(lines):
+class Expired(ArithmeticError):
+    """An exact computation stopped at the deadline it was given: it has no answer."""
+
+
+_EXPIRED = "The time allowed for the computation is over."
+
+
+def affine_request(lines, seconds=None):
+    """One request of the affine kernel. With `seconds` its exact computations
+    stop at that deadline and the request raises Expired."""
     data = ("\n".join(lines) + "\n").encode("utf-8")
     lib = _library()
     if lines[0].startswith("lattice_") and not hasattr(lib, "atlas_lattice_abi"):
@@ -557,11 +566,18 @@ def affine_request(lines):
         raise Unavailable("The installed kernel predates the public input parser.")
     if lines[0] == "parse_field_input" and (not hasattr(lib, "atlas_input_abi") or lib.atlas_input_abi() < 2):
         raise Unavailable("Rebuild the native kernel to parse division by algebraic chart coefficients.")
-    answer = lib.atlas_affine(data, len(data))
+    if seconds is None or not hasattr(lib, "atlas_affine_until"):
+        answer = lib.atlas_affine(data, len(data))
+    else:
+        lib.atlas_affine_until.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_double]
+        lib.atlas_affine_until.restype = ctypes.c_void_p
+        answer = lib.atlas_affine_until(data, len(data), max(0.0, seconds))
     if not answer:
         message = lib.atlas_groebner_error().decode("utf-8")
         if message in ("Unsupported number of variables.", "Degree out of range.", "Exponent out of range."):
             raise Unavailable(message)
+        if message == _EXPIRED:
+            raise Expired(message)
         raise ArithmeticError(message)
     try:
         return ctypes.string_at(answer).decode("ascii").splitlines()

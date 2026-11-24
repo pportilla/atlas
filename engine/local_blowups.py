@@ -233,6 +233,10 @@ class Uneven(GiveUp):
     """The parts of a centre are not alike: a divisor has different orders along them."""
 
 
+class NoSurfaceStep(GiveUp):
+    """The procedure for a smooth surface has no step here: the invariant continues."""
+
+
 def _point_factor_rows(variables, ideal, parameter):
     """Rational factors of the coordinate eliminant, with their multiplicities."""
     from .affine_kernel import rational_factor_rows
@@ -569,8 +573,9 @@ class _Canonical:
     (engine/centres.py). Once X is smooth at all of them, in dimension
     three, the procedure for a smooth surface takes over (engine/surface.py):
     it keeps X smooth, so the first phase does not come back. Where the
-    surface has no plane model the invariant is used to the end, starting
-    again from the divisors present. Each phase is finite."""
+    surface has no plane model, or its procedure has no step at the points
+    that are left, the invariant is used to the end, starting again from the
+    divisors present. Each phase is finite."""
     # With `retains` a chart that is blown up stays, for its points off the
     # centre, and the charts of the blowup own only the new divisor: what is
     # far from a centre keeps the equations it had.
@@ -613,7 +618,10 @@ class _Canonical:
         exceptional = [(label, ideal) for label, _, _, ideal in chart.components if not _is_strict(label)]
         strict = _hypersurface(chart)
         working = list(bad)
-        for _ in range(8):
+        # Each turn adds points where the invariant is strictly larger. It
+        # takes finitely many values on a chart and is upper semicontinuous,
+        # so the set stops growing: the loop needs no bound.
+        while True:
             item = maximum(chart.variables, chart.ambient, dimension, strict, exceptional, working,
                            self.records, self.births, deadline, away=chart.removed)
             if item is None:
@@ -626,8 +634,6 @@ class _Canonical:
             if check is None or 0 in maximum_indices((item,check)):
                 break
             working.append(on_fibre)
-        else:
-            raise GiveUp("The locus of the invariant keeps meeting points of larger invariant.")
         self._loci[id(chart)] = chart, item
         return item
 
@@ -639,7 +645,7 @@ class _Canonical:
                 found.append(None)
                 continue
             if surface is None:
-                raise GiveUp("The strict transform is no longer a smooth surface at the points considered.")
+                raise NoSurfaceStep("The strict transform is no longer a smooth surface at the points considered.")
             exceptional = [(label, ideal) for label, _, _, ideal in chart.components if not _is_strict(label)]
             if id(chart) not in self._steps:
                 self._steps[id(chart)] = chart, step(chart.variables, chart.ambient, surface, exceptional,
@@ -647,7 +653,7 @@ class _Canonical:
             found.append(self._steps[id(chart)][1])
         selected = surface_maxima(found)
         if not selected:
-            raise GiveUp("Normal crossings fail where the procedure for a surface has nothing to do.")
+            raise NoSurfaceStep("Normal crossings fail where the procedure for a surface has nothing to do.")
         key, kind, _ = found[selected[0]]
         if self.shared_curves and kind == "points":
             from .surface import shared_boundary_curve
@@ -669,8 +675,9 @@ class _Canonical:
                 surfaces = [None if index is None else chart.components[index][3]
                             for chart, index in zip(current, phase["surfaces"])]
                 return self._on_surface(current, failures, surfaces, deadline)
-            except NoModel:
+            except (NoModel, NoSurfaceStep):
                 # The invariant from here on, with the divisors present as the given ones.
+                # It needs no model of the surface and resolves from any such state.
                 self.mode = "invariant"
                 self._loci = {}
                 labels = dict.fromkeys(label for chart in current for label, *_ in chart.components
@@ -697,13 +704,21 @@ class _Canonical:
         self.births.append(label)
 
 
-def _radical(chart, ideal):
+def _until(deadline, lines):
+    """One request of the affine kernel that stops at the deadline of the rule (of time.monotonic)."""
+    from .native_library import Expired, affine_request
+    try:
+        return affine_request(lines, None if deadline is None else deadline - monotonic())
+    except Expired:
+        raise GiveUp("The time allowed for the blowups is over.") from None
+
+
+def _radical(chart, ideal, deadline=None):
     """The radical of an ideal on the chart, from the native decomposition kernel."""
-    from .native_library import affine_request
     from .native_polynomial import from_terms, row
     from .polynomial import sparse_row
     names = " ".join(v.name for v in chart.variables)
-    rows = affine_request(["ideal_radical", names, "grevlex", *(row(chart.variables, g) for g in ideal)])
+    rows = _until(deadline, ["ideal_radical", names, "grevlex", *(row(chart.variables, g) for g in ideal)])
     return tuple(ideal_basis(chart.variables, [from_terms(chart.variables, sparse_row(r)) for r in rows]))
 
 
@@ -733,6 +748,7 @@ class _Order(_Canonical):
         self.boundary_centres = boundary_centres
         self.order_phase = True
         self._trend = (None, 0, 0)  # (order, charts selected, stages in a row)
+        self._trend_at = None       # the number of divisors when the trend was last read
 
     def _order_locus(self, chart, bad, dimension, deadline):
         key = ("order", id(chart))
@@ -744,7 +760,7 @@ class _Order(_Canonical):
         return self._loci[key][1]
 
     @staticmethod
-    def _owned_parts(current, loci):
+    def _owned_parts(current, loci, deadline=None):
         """The reduced components of the loci that meet an owned point over
         the fibre, of the largest dimension among all charts. Components far
         from the fibre play no part, and a chart that does not own a
@@ -753,7 +769,7 @@ class _Order(_Canonical):
         for i, locus in loci.items():
             chart = current[i]
             parts = []
-            for part in _prime_parts(chart, _radical(chart, (*chart.ambient, *locus)), None):
+            for part in _prime_parts(chart, _radical(chart, (*chart.ambient, *locus), deadline), None, deadline):
                 if _present(chart.variables, (*chart.ambient, *chart.fibre, *chart.region, *part), chart.removed):
                     parts.append((_dimension(chart.variables, (*chart.ambient, *part)), part))
             kept[i] = parts
@@ -809,7 +825,7 @@ class _Order(_Canonical):
                     defects[i] = defect
         return defects
 
-    def _smooth_centres(self, current, centres):
+    def _smooth_centres(self, current, centres, deadline=None):
         from .native_library import Unavailable
         used_boundary = False
         for depth in range(4):
@@ -829,7 +845,7 @@ class _Order(_Canonical):
                 defects = self._boundary_defects(current, centres) if self.boundary_centres else {}
                 if not defects:
                     return centres, used_boundary
-                centres = self._owned_parts(current, defects)
+                centres = self._owned_parts(current, defects, deadline)
                 used_boundary = True
                 continue
             # A chart where the locus is smooth contains none of its singular points.
@@ -838,7 +854,7 @@ class _Order(_Canonical):
                 if centre is None or bad is None:
                     following.append(None)
                     continue
-                locus = _radical(chart, (*chart.ambient, *centre, *bad))
+                locus = _radical(chart, (*chart.ambient, *centre, *bad), deadline)
                 following.append(None if locus == (1,) else locus)
             centres = following
             if all(centre is None for centre in centres):
@@ -855,13 +871,18 @@ class _Order(_Canonical):
             # A maximal order above one: the strict transform is singular at some point.
             if selected and maximum_indices([found[selected[0]][:2], ((Fraction(1),), ())]) == [0]:
                 value = found[selected[0]][0]
-                order, count, streak = self._trend
-                growing = order == value and len(selected) > count
-                self._trend = (value, len(selected), streak + 1 if growing else 0)
+                if self._trend_at != len(self.births):
+                    # Once for each stage: a stage that is computed again after a
+                    # turn ended reads the same trend, as a run without turns does.
+                    order, count, streak = self._trend
+                    growing = order == value and len(selected) > count
+                    self._trend = (value, len(selected), streak + 1 if growing else 0)
+                    self._trend_at = len(self.births)
                 if self._trend[2] >= self.RUNAWAY:
                     raise GiveUp("The maximal order rule selects more charts at the same order at every stage.")
-                centres = self._owned_parts(current, {i: found[i][2] for i in selected})
-                centres, used_boundary = self._smooth_centres(current, centres)
+                # The radicals and prime parts of these loci stop at the rule's deadline too.
+                centres = self._owned_parts(current, {i: found[i][2] for i in selected}, deadline)
+                centres, used_boundary = self._smooth_centres(current, centres, deadline)
                 return centres, {"invariant": [str(entry) for entry in value], "value": value,
                                  "rule": "maximal order with boundary" if used_boundary else "maximal order"}
             # X is smooth at every point where normal crossings fail.
@@ -1085,19 +1106,18 @@ def _apart(current, chosen):
     raise Uneven("A divisor has different orders along curves that no divisor separates.")
 
 
-def _prime_parts(chart, centre, size):
+def _prime_parts(chart, centre, size, deadline=None):
     """The prime components over Q of a smooth centre on the chart."""
     ideal = ideal_basis(chart.variables, (*chart.ambient, *centre))
     if ideal == (1,):
         return []
     if size == 0:
         return _point_components(chart.variables, ideal)
-    from .native_library import affine_request
     from .native_polynomial import from_terms, row
     from .polynomial import sparse_row
     names = " ".join(v.name for v in chart.variables)
-    rows = iter(affine_request(["primary_decomposition", names, "grevlex",
-                                *(row(chart.variables, g) for g in ideal)]))
+    rows = iter(_until(deadline, ["primary_decomposition", names, "grevlex",
+                                  *(row(chart.variables, g) for g in ideal)]))
     parts = []
     for _ in range(int(next(rows))):
         primary, prime = map(int, next(rows).split())
@@ -1114,7 +1134,7 @@ def _by_numerical_data(current, chosen, label, stage, dimension, size, deadline,
     "largest_divisor_data"). The others are blown up at later stages."""
     parts, data = [], []
     for i, (chart, centre) in enumerate(zip(current, chosen)):
-        pieces = [] if centre is None else _prime_parts(chart, centre, size)
+        pieces = [] if centre is None else _prime_parts(chart, centre, size, deadline)
         found = []
         for piece in pieces:
             trial = [None] * len(current)
@@ -1411,7 +1431,7 @@ def time_limit_passed():
 
 
 def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, budget=400, deadline=None,
-                rules=("complete", "direct"), count_strata=True, intrinsic=False):
+                rules=("complete", "direct"), count_strata=True, intrinsic=False, rounds=None):
     """Blow up over V(fibre) until the divisor has normal crossings there.
 
     `components` lists (label, N, nu, ideal) on affine space with the given
@@ -1430,6 +1450,12 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     reduced source labelled "strict", intrinsic=True with count_strata=False
     stops once the strict transform is smooth on the entire owned fibre.
     An enclosing `time_limit` bounds the deadline.
+
+    With `rounds` (seconds) no rule is stopped for good by the time it has
+    used: the rules take turns, each continuing where it was, and the turns
+    double in length. Only a rule that gives up for a reason of its own
+    leaves, and the last one left runs without turns. This is the form for a
+    caller with no deadline of its own, or one that must not end early.
     """
     limit = _TIME_LIMIT.get()
     if limit is not None:
@@ -1437,15 +1463,39 @@ def acampo_over(variables, components, fibre, *, ambient=(), dimension=None, bud
     variables = tuple(variables)
     reason = GiveUp("No rule was allowed.")
     rules = tuple(rules)
-    stopped = []
-    for index, name in enumerate(rules):
+
+    def made(name):
         if name == "tangent":
             from .repeated_tangent import RepeatedTangent
-            rule = RepeatedTangent()
-        elif name == "order":
-            rule = _Order(components)
-        else:
-            rule = _Direct() if name == "direct" else _Canonical(components)
+            return RepeatedTangent()
+        if name == "order":
+            return _Order(components)
+        return _Direct() if name == "direct" else _Canonical(components)
+
+    if rounds is not None:
+        waiting = [(name, made(name), {}) for name in rules]
+        reasons = []
+        turn = rounds
+        while waiting:
+            for item in list(waiting):
+                name, rule, state = item
+                now = monotonic()
+                if deadline is not None and now > deadline:
+                    raise GiveUp("The time allowed for the blowups is over.")
+                limit = deadline if len(waiting) == 1 else now + turn if deadline is None else min(deadline, now + turn)
+                try:
+                    return _run(rule, variables, components, fibre, budget, limit, ambient, dimension, count_strata,
+                                intrinsic=intrinsic, state=state)
+                except GiveUp as error:
+                    if limit is not None and monotonic() > limit:
+                        continue  # Its turn is over: it continues in the next round.
+                    reasons.append(f"The {rule.name} rule: {error}")
+                    waiting.remove(item)
+            turn *= 2
+        raise GiveUp(" ".join(reasons) or "No rule was allowed.")
+    stopped = []
+    for index, name in enumerate(rules):
+        rule = made(name)
         # Each rule is fast when it succeeds and can be slow when it fails. A
         # rule followed by another keeps the share of the remaining time in
         # RULE_SHARES, so that the next one also runs.
