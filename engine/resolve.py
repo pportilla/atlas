@@ -312,8 +312,18 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
                 raise
             except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as second:
                 proposed["canonical_reason"] = str(second)
+            except INTERNAL_ERRORS as second:
+                # A defect of the smooth-centre rules is recorded for repair.
+                # The projective search does not depend on them.
+                proposed["canonical_reason"] = defect(second, "canonical-blowups")
         result = general_certificate()
         return result, finish(result)
+
+    def defect(error, engine):
+        text = f"{engine or 'fast search'}: {type(error).__name__}: {error}"
+        proposed.setdefault("defects", []).append(text)
+        report(f"A method stopped on an internal error ({text}); continuing with the safe method")
+        return text
 
     try:
         result = resolve_with_multiplicities(primary)
@@ -321,18 +331,23 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     except NonReducedError:
         raise  # Intrinsic resolution requires a reduced source.
     except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired,
-            LookupError, TypeError, AttributeError, AssertionError) as error:
+            *INTERNAL_ERRORS) as error:
         # The input equation, mode and origin have been validated. These
         # failures concern a solver-generated proposal, never a saved proof.
         # The rejected proposal and its atlas are dropped here: the record
         # and the outputs below come from the method that replaces it.
         if not isinstance(error, (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired)):
             # An internal error while a Newton proposal is verified rejects
-            # that proposal like a failed check. For the other engines it
-            # is reported as before.
-            if proposed.get("engine") not in NEWTON_ENGINES:
+            # that proposal like a failed check. A quick search treats every
+            # fast method in this way: the defect is recorded in the result
+            # and the safe method takes over. Otherwise the error of another
+            # engine is reported as before.
+            newton = proposed.get("engine") in NEWTON_ENGINES
+            if not newton and not safe_quick(request):
                 raise
-            error = GiveUp(f"The verification of the Newton proposal stopped on an internal error "
+            if safe_quick(request):
+                defect(error, proposed.get("engine"))
+            error = GiveUp(f"The verification of the {'Newton ' if newton else ''}proposal stopped on an internal error "
                            f"({type(error).__name__}: {error}).")
         if exhaustive:
             result = general_certificate()
@@ -341,6 +356,9 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             result, outputs = safe_fallback(error)
         else:
             result, outputs = quick_fallback(error)
+    if proposed.get("defects"):
+        # Kept with the certified answer: each one is a defect to repair.
+        result["defects"] = list(proposed["defects"])
     proofs.append(('primary', result.get('certificate', {})))
     if wants_zetas:
         if outputs is None and mode == "intrinsic" and result["status"] == "resolved":
@@ -431,6 +449,10 @@ def _resolve_jung(p, request, kinds, start):
 
 
 # Engines whose proposals come from the Newton method.
+# Errors that no method raises to decline: a method that stops on one has a
+# defect. A quick search records it and continues with the safe method.
+INTERNAL_ERRORS = (LookupError, TypeError, AttributeError, AssertionError, ValueError, RuntimeError, OSError,
+                   MemoryError)
 NEWTON_ENGINES = frozenset({"newton-polyhedron", "verified-monomial-modification", "hyperplane-arrangement-fan"})
 # Seconds that a quick request gives the point repairs of the Newton method
 # before it hands the germ over.

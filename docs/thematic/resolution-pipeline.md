@@ -285,6 +285,12 @@ quick search: the search continues as above. In intrinsic mode the
 smooth-centre rules first go on to total normal crossings, which gives the
 exceptional complex on the smooth strict transform.
 
+A fast method can also stop on an internal error. A quick search rejects its
+proposal like a failed check and continues with the safe method. The certified
+answer then lists each such error in `defects`, with the method and the
+message, so that it can be repaired. An exhaustive search and a bounded
+attempt report the error of a method other than Newton, as before.
+
 When the verifier rejects the charts that a faster method proposed, the
 smooth-centre rules make their own proposal, whose charts are verified in
 the same way. Verifying a proposal replays its blowups, which can take

@@ -286,3 +286,57 @@ class RulesTakeTurns(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InternalErrorsHandOver(unittest.TestCase):
+    """A fast method that stops on an internal error is replaced by the safe method in a quick search."""
+
+    def test_a_defect_of_a_fast_method_is_recorded_and_the_safe_method_answers(self):
+        # The A2 surface is resolved by the smooth-centre rules after the fast
+        # search raises. The answer is certified and carries the defect.
+        request = dict(polynomial="x^2+y^2+z^3", variables=["x", "y", "z"], mode="embedded", search="quick",
+                       compute="cpu", zetas=["monodromy", "topological"])
+        with patch("engine.resolve._resolve_polynomial", side_effect=RuntimeError("broken engine")):
+            record = resolve(request)
+        self.assertEqual((record["status"], record["engine"]), ("resolved", "canonical-blowups"))
+        self.assertEqual(record["dual_complex"]["status"], "complete")
+        self.assertEqual(record["topological_zeta"]["status"], "computed")
+        self.assertEqual(record["defects"], ["fast search: RuntimeError: broken engine"])
+        direct = resolve(request)
+        self.assertNotIn("defects", direct)
+        self.assertEqual(record["topological_zeta"]["expression"], direct["topological_zeta"]["expression"])
+
+    def test_the_safe_method_gets_no_deadline_after_a_defect(self):
+        calls = []
+
+        def canonical(*args, **kwargs):
+            calls.append((kwargs.get("safe"), kwargs.get("seconds")))
+            raise Reached
+
+        request = dict(polynomial="x^2*y^2+z^3*t^2+u^5*x+y^4*t^3", variables=FIVE, mode="embedded", search="quick",
+                       compute="cpu")
+        for error in (KeyError("ray"), ValueError("bad row"), OSError("pipe")):
+            with self.subTest(error=type(error).__name__), \
+                    patch("engine.resolve._resolve_polynomial", side_effect=error), \
+                    patch("engine.resolve.canonical_record", side_effect=canonical):
+                with self.assertRaises(Reached):
+                    resolve(request)
+        self.assertEqual(calls, [(True, None)] * 3)
+
+    def test_other_searches_report_an_internal_error_as_before(self):
+        base = dict(polynomial="x^2+y^2+z^3", variables=["x", "y", "z"], mode="embedded", compute="cpu")
+        for extra in (dict(search="quick", bounded=True), dict(search="exhaustive")):
+            with self.subTest(**extra), \
+                    patch("engine.resolve._resolve_polynomial", side_effect=RuntimeError("broken engine")):
+                with self.assertRaises(RuntimeError):
+                    resolve(dict(base, **extra))
+
+    def test_a_defect_of_the_smooth_centre_rules_reaches_the_projective_search(self):
+        request = dict(polynomial="x^2*y^2+z^3*t^2+u^5*x+y^4*t^3", variables=FIVE, mode="embedded", search="quick",
+                       compute="cpu")
+        with patch("engine.resolve._resolve_polynomial", side_effect=KeyError("ray")), \
+                patch("engine.resolve.canonical_record", side_effect=TypeError("bad chart")), \
+                patch("engine.general_resolution.search", side_effect=Reached) as search:
+            with self.assertRaises(Reached):
+                resolve(request)
+        self.assertTrue(search.call_args.kwargs.get("exhaustive"))
