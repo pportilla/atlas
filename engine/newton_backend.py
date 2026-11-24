@@ -315,10 +315,8 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
 
     `frames` selects the constructions: "linear" for the fans in linear
     frames with their point repairs, "adapted" for the triangular changes of
-    coordinates alone, "all" for both, with the adapted frames after the
-    linear fans that need no blowups and before the point repairs. By
-    default the adapted frames are included from ADAPTED_FRAMES_DIMENSION
-    variables on.
+    coordinates alone, "all" for both in that order. By default the adapted
+    frames are included from ADAPTED_FRAMES_DIMENSION variables on.
 
     Returns None when the Newton method does not apply to this germ, for the
     caller to hand it over to another method. Each construction is tried on
@@ -427,34 +425,19 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         return attempt("intrinsic_fan", lambda: resolve_trials(poly, variables, mode=mode, verified=verified,
                                                                integrals=integrals))
 
-    fans = {}
-
-    def linear_frame(index, transformed, matrix, repair_points):
-        if index not in fans:
-            fans[index] = fan_of(transformed)
-        fan = fans[index]
+    def linear_frame(transformed, matrix):
+        fan=fan_of(transformed)
         if not fan['isomorphism_off_origin']:
             return None
         return _assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
                          defer_outputs=defer_outputs, diagnostics=diagnostics,
-                         before_repair=intrinsic_trial if mode == 'intrinsic' else None,
-                         repair_points=repair_points)
+                         before_repair=intrinsic_trial if mode == 'intrinsic' else None)
 
     choices = attempt("linear_frames", lambda: list(coordinate_choices(poly,len(variables)))) or ()
-    # With adapted frames in the search, a fan that needs no blowups comes
-    # before the point repairs of a degenerate one: the repairs can use the
-    # whole time of the search before they decline.
-    passes = (False, None, True) if frames == "all" else (True,)
-    for repair_points in passes:
-        if repair_points is None:
-            result = attempt("adapted_frame", adapted)
-            if result is not None:
-                return result
-            continue
-        for index, (transformed,matrix,_) in enumerate(choices):
-            result = attempt("linear_frame", lambda: linear_frame(index, transformed, matrix, repair_points))
-            if result is not None:
-                return result
+    for transformed,matrix,_ in choices:
+        result = attempt("linear_frame", lambda: linear_frame(transformed, matrix))
+        if result is not None:
+            return result
     if mode == 'intrinsic' and nonconvenient:
         trial = intrinsic_trial()
         if trial is not None:
@@ -464,6 +447,12 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
             from .quadratic_fan import resolve_translated
             return resolve_translated(poly, variables, mode, compute, ramification=True)
         result = attempt("translated_fan", translated)
+        if result is not None:
+            return result
+    # The adapted frames come last: a germ that a linear frame resolves,
+    # with or without point repairs, keeps that resolution.
+    if frames == "all":
+        result = attempt("adapted_frame", adapted)
         if result is not None:
             return result
     return declined()

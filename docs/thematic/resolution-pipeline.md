@@ -180,10 +180,9 @@ eight seconds.
 Each step is a triangular automorphism of affine space that fixes the origin
 and has Jacobian determinant one, so the composite preserves the origin
 fibre and the orders of the volume form. From four variables on the search
-is part of the Newton method. It runs after the linear frames whose fans
-need no blowups and before the point repairs of the degenerate ones, which
-can use all the time of the method before they decline.
-In three variables the blowups from the origin come first, and a quick
+is part of the Newton method and runs after its linear frames and their
+point repairs have declined, so that a germ they resolve keeps that
+resolution. In three variables the blowups from the origin come first, and a quick
 search asks for adapted coordinates after them: on these germs the blowups
 take under a second and give the smaller model, as the single blowup of the
 sheared cusp cylinder [below](#where-the-resolution-decisions-run). The fan
@@ -205,8 +204,8 @@ through the origin than there are coordinate subspaces to hold them.
 
 The Newton method tries its constructions one after another: a fan of
 hyperplanes, the fan of the input with its boundary rays, monomial ideals,
-linear frames, from four variables on adapted coordinates, and point repairs
-of degenerate linear frames. A construction that
+linear frames with point repairs, and from four variables on adapted
+coordinates. A construction that
 declines, reaches a budget or has its charts rejected leaves its reason in
 `diagnostic.newton_declines` and the next one runs. Nothing it built is kept.
 When none applies the germ goes to the smooth-centre rules, and a proposal
