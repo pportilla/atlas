@@ -32,7 +32,7 @@ Choose `search` according to how your client will receive the result.
 
 | Request to `/api/resolve` | How to read the response |
 | --- | --- |
-| `"search": "quick"` | Runs a bounded search and returns its outcome directly. Read `status` to see whether the calculation resolved the input. |
+| `"search": "quick"` | Searches for at most 55 seconds and returns the outcome directly. Read `status` to see whether the calculation resolved the input: it is `"inconclusive"` only when that deadline ended the search. |
 | Omit `search` | Tries quick resolution first. If the attempt reaches a limit or a requested result still needs a certificate, Atlas returns HTTP 202 with the ID of an exhaustive background job. |
 | `"search": "exhaustive"` | Starts a background job immediately. Use its returned `id` to follow progress. |
 

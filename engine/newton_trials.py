@@ -1,5 +1,5 @@
 """Try regular monomial ideal blowups and verify the original equation in every chart."""
-from .newton_fan import bounded_fan, build_fan, trial_supports
+from .newton_fan import bounded_fan, build_fan, require_chart_memory, trial_supports
 from .polynomial import LimitError, parse_expression
 from .strata import InvalidChart
 
@@ -171,14 +171,27 @@ def verify_intrinsic_presentation(record, atlas, output):
                 raise InvalidChart("The displayed exceptional ideals differ from the verified intrinsic sections.")
 
 
+# A trial fan with more cones waits until the smaller candidates have been tried.
+DEFERRED_CONES = 32768
+
+
 def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, verified=None, integrals=False,
-         construct=True):
+         construct=True, deferred=None, defer=True):
+    """One monomial modification. With `defer`, a fan above DEFERRED_CONES is
+    not tried now: it is appended to `deferred` with the options of this
+    call, for resolve_deferred_trials, or dropped when there is no such list."""
     from .newton_backend import _boundary_centres
     from .newton_faces import exhaustive_faces
     if fan is None:
-        fan = build_fan(support, exhaustive=exhaustive_faces())
-    if len(fan["cones"]) > 32768:
+        fan = build_fan(support, exhaustive=exhaustive_faces(), chart_terms=len(poly))
+    if defer and len(fan["cones"]) > DEFERRED_CONES:
+        if deferred is not None:
+            deferred.append((support, fan, dict(mode=mode, bounded=bounded, verified=verified, integrals=integrals,
+                                                construct=construct)))
         return None
+    # The charts of the trial must fit in memory. Otherwise the caller moves
+    # on to its next candidate.
+    require_chart_memory(fan, len(poly))
     if verified is not None and construct and mode == "embedded":
         from .monomial_construction import construct as native_construct
         value = native_construct(poly, names, fan, integrals)
@@ -218,7 +231,12 @@ def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, veri
     return result
 
 
-def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=False, construct=True):
+def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=False, construct=True, deferred=None):
+    """The first trial support whose fan resolves the germ, or None.
+
+    A fan above DEFERRED_CONES is kept in `deferred` for the end of the
+    Newton method, so one very large fan does not hold up cheaper candidates.
+    """
     def supports():
         if mode == "intrinsic":
             yield poly  # The original fan has not yet been tested on the strict transform.
@@ -226,11 +244,37 @@ def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=Fal
 
     for support in supports():
         try:
-            result = _try(poly, names, support, mode=mode, verified=verified, integrals=integrals, construct=construct)
-        except LimitError:
+            result = _try(poly, names, support, mode=mode, verified=verified, integrals=integrals, construct=construct,
+                          deferred=deferred)
+        except LimitError as error:
+            if deferred is not None:
+                deferred.append((support, None, error))  # no fan: the limit it reached
             continue
         if result is not None:
             return result
+    return None
+
+
+def resolve_deferred_trials(poly, names, deferred):
+    """Try the deferred fans, smallest first. Each needs its charts to fit in memory.
+
+    Returns the first resolution. When none resolves and a trial reached a
+    limit, here or in resolve_trials, that LimitError is raised: the Newton
+    method stops for lack of memory or time, not for lack of a candidate.
+    """
+    fans = sorted((item for item in deferred if item[1] is not None), key=lambda item: len(item[1]["cones"]))
+    limit = None
+    for support, fan, options in fans:
+        try:
+            result = _try(poly, names, support, fan=fan, defer=False, **options)
+        except LimitError as error:
+            limit = limit or error
+            continue
+        if result is not None:
+            return result
+    limit = limit or next((error for _, fan, error in deferred if fan is None), None)
+    if limit is not None:
+        raise limit
     return None
 
 

@@ -2,6 +2,7 @@
 import ctypes
 from functools import cache
 import json
+import os
 import sys
 from pathlib import Path
 import subprocess
@@ -25,20 +26,72 @@ def _small_fan():
     return operation
 
 
-# Seconds for one fan construction when the caller has no shorter deadline.
-FAN_SECONDS = 35
+# Seconds a caller that has other candidates to try gives one fan.
+TRIAL_SECONDS = 35
+# Memory one chart of a fan takes through assembly, verification and the
+# saved record: a fixed part and a part for each stratum of its cone. The
+# solver measured 30 to 32 kB for a chart in five variables (32 strata) and
+# 34 kB in six (64 strata). These constants give 40 kB and 48 kB.
+_CHART_BYTES = 32 << 10
+_STRATUM_BYTES = 256
 
 
-def build_fan(exponents, *, exhaustive=False, seconds=None):
+def available_memory():
+    """Bytes the system reports as available, or None when it does not say."""
+    try:
+        with open("/proc/meminfo") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) << 10
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _chart_bytes(dimension, terms):
+    return _CHART_BYTES + (_STRATUM_BYTES << dimension) + 64 * terms
+
+
+def chart_cone_limit(dimension, terms):
+    """The number of cones whose charts fit in half the available memory, or None when it is unknown."""
+    available = available_memory()
+    return None if available is None else available // (2 * _chart_bytes(dimension, terms))
+
+
+def require_chart_memory(fan, terms):
+    """Raise LimitError when the charts of the fan cannot fit in half the available memory.
+
+    The fan itself has no fixed size limit. One chart per cone is assembled,
+    verified and saved, so this is the size at which the atlas would exhaust
+    the machine.
+    """
+    dimension = len(fan["rays"][0])
+    cones = len(fan["cones"])
+    limit = chart_cone_limit(dimension, terms)
+    if limit is not None and cones > limit:
+        need = cones * _chart_bytes(dimension, terms)
+        raise LimitError(f"The Newton atlas has {cones} charts and needs about {(need >> 20) + 1} MB of memory; "
+                         f"{available_memory() >> 20} MB are available.")
+
+
+def build_fan(exponents, *, exhaustive=False, seconds=TRIAL_SECONDS, chart_terms=None):
     """Return primitive rays, full-dimensional smooth cones and boundary data.
 
     The first n rays are the coordinate vectors. New boundary rays can modify
     positive-dimensional coordinate strata away from the origin. The output
     describes the ambient toric map and does not assert face nondegeneracy.
-    A caller with a deadline gives the `seconds` it has left: the
-    construction stops with a LimitError after the shorter of the two times.
+    The construction may take `seconds`, or as long as it needs with None.
+    Its size is bounded by the available memory. With `chart_terms`, the
+    number of terms of the polynomial whose charts the caller will build on
+    every cone, the construction stops with a LimitError as soon as the fan
+    has more cones than require_chart_memory accepts.
     """
-    fan = _request(exponents, exhaustive, seconds=seconds)
+    support = list(exponents)
+    limit = None if chart_terms is None or not support else chart_cone_limit(len(support[0]), chart_terms)
+    fan = _request(support, exhaustive, seconds=seconds, cone_limit=limit)
     if exhaustive:
         fan["rays"] = [[_integer(v) if isinstance(v, str) else v for v in ray] for ray in fan["rays"]]
     return fan
@@ -68,7 +121,7 @@ def bounded_fan(support, *, trials=False):
     return None
 
 
-def _request(exponents, exhaustive, *, operation=None, seconds=None):
+def _request(exponents, exhaustive, *, operation=None, seconds=TRIAL_SECONDS, cone_limit=None):
     if not _BINARY.is_file():
         raise RuntimeError("The Newton fan engine is not built. Run make.")
     support = list(exponents)
@@ -84,10 +137,11 @@ def _request(exponents, exhaustive, *, operation=None, seconds=None):
     request = {"exponents": support, "exhaustive": exhaustive}
     if operation:
         request["operation"] = operation
+    if cone_limit is not None:
+        request["cone_limit"] = cone_limit
     try:
         from . import native_process
-        timeout = FAN_SECONDS if seconds is None else max(1.0, min(FAN_SECONDS, seconds))
-        proc = native_process.run("newton_fan", input=json.dumps(request), timeout=timeout)
+        proc = native_process.run("newton_fan", input=json.dumps(request), timeout=seconds)
     except subprocess.TimeoutExpired:
         raise LimitError("Newton fan construction exceeded its time budget.") from None
     try:

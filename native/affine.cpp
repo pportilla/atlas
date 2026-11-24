@@ -19,6 +19,7 @@
 #include <flint/gr_mat.h>
 #include <sstream>
 #include <cctype>
+#include <chrono>
 #include <unordered_set>
 #include <memory>
 
@@ -1922,6 +1923,27 @@ extern "C" char* atlas_affine(const char* input, size_t length) noexcept {
     try {
         std::istringstream stream(std::string(input, length));
         return atlas::copy_text(atlas::affine(stream));
+    } catch (const std::exception& e) {
+        atlas::set_error(e.what());
+    } catch (...) {
+        atlas::set_error("Unknown affine-map failure.");
+    }
+    return nullptr;
+}
+
+// The same request under a deadline for the exact computations of this
+// thread. A computation that stops returns nothing: the error is the message
+// of atlas::Expired, also when a step caught the exception and went on.
+extern "C" char* atlas_affine_until(const char* input, size_t length, double seconds) noexcept {
+    try {
+        const auto at = std::chrono::steady_clock::now() +
+            std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::duration<double>(seconds > 0 ? seconds : 0));
+        atlas::DeadlineScope limit(at);
+        std::istringstream stream(std::string(input, length));
+        std::string answer = atlas::affine(stream);
+        if (limit.expired() || std::chrono::steady_clock::now() > at) throw atlas::Expired();
+        return atlas::copy_text(answer);
     } catch (const std::exception& e) {
         atlas::set_error(e.what());
     } catch (...) {

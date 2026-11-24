@@ -93,7 +93,8 @@ class ResolutionCompletionTests(unittest.TestCase):
         request = dict(variables=list("xyz"), polynomial="(1+z)*(x^2-y^2*z)", mode="embedded",
                        search="exhaustive", monodromy=True)
         partial = dict(status="partial", vertices=[], cells=[], reason="Undetermined geometric components.")
-        for policy in ({}, {"zetas_only": True}, {"search": "quick"}):
+        bounded = {"search": "quick", "bounded": True}
+        for policy in ({}, {"zetas_only": True}, {"search": "quick"}, bounded):
             with self.subTest(policy=policy):
                 options = {**request, **policy}
                 def attach(old, found):
@@ -104,11 +105,14 @@ class ResolutionCompletionTests(unittest.TestCase):
                      patch("engine.general_resolution.search", wraps=search) as complete:
                     result = resolve(options)
                 self.assertEqual(result["monodromy_check"]["status"], "verified")
-                self.assertEqual(result["dual_complex"]["status"], "partial" if policy else "complete")
+                # A quick search goes on to the complete complex, as an exhaustive one does.
+                # Only an attempt inside another computation returns the partial one.
+                retried = policy in ({}, {"search": "quick"})
+                self.assertEqual(result["dual_complex"]["status"], "complete" if retried else "partial")
                 if not policy:
                     self.assertEqual(result["engine"], "verified-ideal-blowup")
                     self.assertTrue(complete.call_args.kwargs["exhaustive"])
-                self.assertEqual(needs_exhaustive_search(options, 200, result), policy == {"search": "quick"})
+                self.assertEqual(needs_exhaustive_search(options, 200, result), policy == bounded)
 
     def test_intrinsic_geometry_and_its_companion_survive_separate_replay(self):
         request = dict(variables=["x", "y"], polynomial="y^2-x^3", mode="intrinsic")

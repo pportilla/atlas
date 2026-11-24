@@ -4,6 +4,8 @@
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_poly_factor.h>
 #include <flint/fmpz_poly_q.h>
+#include <algorithm>
+#include <functional>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -96,31 +98,53 @@ std::string zeta(std::istream& in) {
         fmpz_poly_set_coeff_fmpz(linear.p, 0, &nu.v);
         fmpz_poly_set_coeff_fmpz(linear.p, 1, &order.v);
     }
-    std::vector<std::unique_ptr<RationalFunction>> levels;
+    // The candidate pole -nu/N of every component, as its position among
+    // the distinct candidate poles: 0 for the one nearest to zero.
+    std::map<mpq_class, size_t> positions;
+    for (const auto& linear : factors) positions.emplace(root(*linear.p), 0);
+    size_t next = positions.size();
+    for (auto& entry : positions) entry.second = --next;
+    std::vector<size_t> pole(n);
+    for (size_t i = 0; i < n; ++i) pole[i] = positions.at(root(*factors[i].p));
+
+    struct Stratum {
+        Z chi;
+        std::vector<size_t> components, poles;
+    };
+    std::vector<Stratum> terms;
     std::vector<size_t> seen(n, strata);
     for (size_t k = 0; k < strata; ++k) {
-        const auto chi = integer(in);
+        Stratum stratum;
+        stratum.chi = integer(in);
         size_t count;
         if (!(in >> count) || count > n) throw std::invalid_argument("Invalid stratum.");
-        std::unique_ptr<RationalFunction> term;
-        if (!fmpz_is_zero(&chi.v)) {
-            term = std::make_unique<RationalFunction>();
-            fmpz_poly_set_fmpz(fmpz_poly_q_numref(term->value), &chi.v);
-        }
         for (size_t j = 0; j < count; ++j) {
             size_t index;
             if (!(in >> index) || index >= n || seen[index] == k)
                 throw std::invalid_argument("Invalid component in stratum.");
             seen[index] = k;
-            if (term) {
-                auto denominator = fmpz_poly_q_denref(term->value);
-                fmpz_poly_mul(denominator, denominator, factors[index].p);
-            }
+            stratum.components.push_back(index);
+            stratum.poles.push_back(pole[index]);
         }
-        if (term) {
-            fmpz_poly_q_canonicalise(term->value);
-            add_stratum(levels, std::move(term));
-        }
+        if (fmpz_is_zero(&stratum.chi.v)) continue;
+        // Most negative candidate pole first.
+        std::sort(stratum.poles.begin(), stratum.poles.end(), std::greater<size_t>());
+        terms.push_back(std::move(stratum));
+    }
+    // The sum does not depend on the order of its terms; the size of the
+    // partial sums does. Strata next to each other in this order share their
+    // most negative candidate poles, so the sums of few strata have common
+    // denominators of low degree and cancel early.
+    std::stable_sort(terms.begin(), terms.end(),
+                     [](const Stratum& a, const Stratum& b) { return a.poles < b.poles; });
+    std::vector<std::unique_ptr<RationalFunction>> levels;
+    for (const auto& stratum : terms) {
+        auto term = std::make_unique<RationalFunction>();
+        fmpz_poly_set_fmpz(fmpz_poly_q_numref(term->value), &stratum.chi.v);
+        auto denominator = fmpz_poly_q_denref(term->value);
+        for (size_t index : stratum.components) fmpz_poly_mul(denominator, denominator, factors[index].p);
+        fmpz_poly_q_canonicalise(term->value);
+        add_stratum(levels, std::move(term));
     }
     RationalFunction sum;
     for (const auto& partial : levels)

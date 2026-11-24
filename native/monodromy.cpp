@@ -3,9 +3,11 @@
 #include "monodromy_local_b.hpp"
 #include "monodromy_transverse.hpp"
 #include "primary_decomposition.hpp"
+#include "groebner.hpp"
 #include <flint/fmpq.h>
 #include <flint/fmpq_mat.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <numeric>
@@ -773,7 +775,20 @@ Json::Value compute(const Json::Value& r) {
         }
         return strata;
     }
-    if (op == "transverse_compositions") return transverse_compositions(terms, width);
+    if (op == "transverse_compositions") {
+        // The search is optional. With "seconds" its exact computations stop
+        // at that deadline; the rows certified before it are kept, and the
+        // answer says whether the search was cut short.
+        if (!r.isMember("seconds") || r["seconds"].isNull()) return transverse_compositions(terms, width);
+        const auto at = std::chrono::steady_clock::now() +
+            std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::duration<double>(std::max(0.0, r["seconds"].asDouble())));
+        atlas::DeadlineScope limit(at);
+        Json::Value out;
+        out["rows"] = transverse_compositions(terms, width);
+        out["expired"] = limit.expired() || std::chrono::steady_clock::now() > at;
+        return out;
+    }
     if (op == "morse") {
         Axes axes(width);
         std::iota(axes.begin(), axes.end(), 0);

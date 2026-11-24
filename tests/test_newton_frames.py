@@ -401,26 +401,75 @@ class NewtonHandOver(unittest.TestCase):
     def test_rejected_proposal_is_replaced_and_leaves_no_atlas(self):
         # The verifier rejects the Newton charts, once by a failed check and
         # once by an internal error. The smooth-centre rule is asked next,
-        # and the result carries nothing of the rejected proposal.
+        # and the result carries nothing of the rejected proposal. A bounded
+        # attempt keeps the budgets of each method and may end without an atlas.
         from unittest.mock import patch
+        request = dict(polynomial="x^2*y+z^2+t^3+u^4", variables=FOURFOLD, mode="embedded", search="quick",
+                       compute="cpu", zetas=["monodromy", "topological"])
         for error, text in ((InvalidChart("Normal crossings fail on the owned origin fibre."), "Normal crossings fail"),
                             (KeyError("ray"), "internal error (KeyError")):
             asked = []
 
             def canonical(*args, **kwargs):
-                asked.append(True)
+                asked.append(kwargs.get("safe", False))
                 return None
 
             with self.subTest(error=type(error).__name__), \
                     patch("engine.strata.proposal_chart_outputs", side_effect=error), \
                     patch("engine.resolve.canonical_record", side_effect=canonical):
-                result = quick("x^2*y+z^2+t^3+u^4", FOURFOLD)
-            self.assertEqual(asked, [True])
+                result = resolve(dict(request, bounded=True))
+            self.assertEqual(asked, [False])
             self.assertEqual((result["status"], result["charts"]), ("inconclusive", []))
             self.assertNotIn("atlas", result)
             self.assertNotIn("fan", result)
             self.assertIn(text, result["diagnostic"]["description"])
             self.assertIn("After that proposal was rejected", result["diagnostic"]["description"])
+
+    def test_rejected_proposal_lands_in_the_safe_fallback(self):
+        # A quick request does not end on a rejected Newton proposal: the
+        # smooth-centre rules take over without a deadline of their own.
+        from unittest.mock import patch
+
+        class Reached(Exception):
+            pass
+
+        calls = []
+
+        def canonical(*args, **kwargs):
+            calls.append((kwargs.get("safe"), kwargs.get("seconds")))
+            raise Reached
+
+        with patch("engine.strata.proposal_chart_outputs", side_effect=KeyError("ray")), \
+                patch("engine.resolve.canonical_record", side_effect=canonical):
+            with self.assertRaises(Reached):
+                quick("x^2*y+z^2+t^3+u^4", FOURFOLD)
+        self.assertEqual(calls, [(True, None)])
+
+    def test_declined_search_lands_in_the_safe_smooth_centre_rules(self):
+        # When no construction applies, a quick request goes on with the
+        # smooth-centre rules as its safe method, after the repeated-tangent rule.
+        from unittest.mock import patch
+        from time import perf_counter
+        from engine.resolve import _resolve_polynomial
+
+        class Reached(Exception):
+            pass
+
+        calls = []
+
+        def origin(*args, **kwargs):
+            calls.append((kwargs.get("tangent_only", False), kwargs.get("safe", False), kwargs.get("seconds")))
+            if kwargs.get("safe"):
+                raise Reached
+            return None
+
+        request = dict(polynomial="(x^3-y^4)^2+z^2+t^3+u^3", variables=FOURFOLD, mode="embedded", search="quick",
+                       compute="cpu")
+        with patch("engine.newton_backend.resolve_newton", return_value=None), \
+                patch("engine.origin_backend.resolve_origin", side_effect=origin), face_search(False):
+            with self.assertRaises(Reached):
+                _resolve_polynomial(parse(request["polynomial"], FOURFOLD), request, perf_counter())
+        self.assertEqual(calls, [(True, False, 30), (False, True, None)])
 
 
 if __name__ == "__main__":

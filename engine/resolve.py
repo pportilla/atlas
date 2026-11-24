@@ -1,4 +1,5 @@
 """Dispatch only to algorithms whose hypotheses have been checked."""
+from contextvars import ContextVar
 from pathlib import Path
 from time import perf_counter
 import subprocess
@@ -60,7 +61,13 @@ def resolve(request):
     with replay_scope(compute) as replay, face_search(request.get('search', 'exhaustive') == 'exhaustive'):
         start = perf_counter()
         proofs = []
-        result = _resolve(request, proofs)
+        # A solve started inside another one shares the time of the outer request.
+        token = _REQUEST_START.set(start) if _REQUEST_START.get() is None else None
+        try:
+            result = _resolve(request, proofs)
+        finally:
+            if token is not None:
+                _REQUEST_START.reset(token)
         finish_requested_check(result, result, request.get("search", "exhaustive"))
         result["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
         result['execution'] = _execution(compute, proofs, replay.report())
@@ -134,6 +141,10 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     # The caller's literals have passed validation. Coefficients and exponents
     # printed from this point on can be larger as a result of exact arithmetic.
     exhaustive = request.get('search', 'exhaustive') == 'exhaustive'
+    # The search ends with every requested output certified, or when its
+    # caller stops it: no method of its own gives the last answer. Only a
+    # bounded attempt inside another computation returns without one.
+    unending = exhaustive or safe_quick(request)
     wants_zetas = bool(kinds)
     if request.get('method') == 'weighted':
         return _resolve_weighted(p, request, kinds, start, proofs)
@@ -209,16 +220,33 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
     # A fast proposal can have a smooth strict transform while its owned
     # charts still lack the numerical data needed for integration. Exhaustive
     # search admits a projective certificate only after its requested outputs
-    # have passed verification inside the candidate's timed attempt.
+    # have passed verification inside the candidate's timed attempt. A quick
+    # search goes on in the same way.
     def finish(result, deadline=None):
         found = attach(result, deadline)
-        if exhaustive and (result["status"] != "resolved" or
-                           (not request.get("zetas_only") and result["dual_complex"]["status"] != "complete") or
-                           (wants_zetas and mode == "embedded" and found is None)):
+        geometry = result["status"] == "resolved" and (
+            request.get("zetas_only") or result["dual_complex"]["status"] == "complete")
+        missing = wants_zetas and mode == "embedded" and found is None
+        if unending and missing and geometry and not exhaustive and not request.get("zetas_only"):
+            # A quick search reads these zeta functions off the contact
+            # certificate of the germ when its charts carry no strata.
+            from .contact_zetas import contact_zetas
+            contact = contact_zetas(p, variables, kinds)
+            if contact is not None:
+                return contact
+        if unending and (not geometry or missing):
             raise GiveUp("The proposed charts did not certify all the requested outputs.")
         if found is not None and wants_zetas:
             report("Computing the selected zeta functions", recorded_blowups(result))
-            return zetas_from_strata(result, kinds, found, polynomial=p)
+            if exhaustive:
+                return zetas_from_strata(result, kinds, found, polynomial=p)
+            # The zeta functions are exact arithmetic on the certified strata.
+            # The search for nearby strata that accompanies them is optional
+            # and can be long: a quick request bounds it.
+            from time import monotonic
+            from .monodromy import nearby_search_limit
+            with nearby_search_limit(monotonic() + quick_nearby_seconds()):
+                return zetas_from_strata(result, kinds, found, polynomial=p)
         return None
 
     proposed = {}
@@ -228,15 +256,19 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
 
         Replaying a proposal's blowups can take longer than constructing them.
         The canonical fallback then keeps its own time within the worker's limit.
+        Once that limit has no such time left, the verification runs to its end.
         """
         if exhaustive or proposed.get("engine") == "canonical-blowups" or not canonical_applicable(p, variables):
             return None
         from time import monotonic
         from .resolve_cli import MAX_SECONDS
-        return monotonic() + max(0.0, MAX_SECONDS - QUICK_FALLBACK_RESERVE - (perf_counter() - start))
+        left = MAX_SECONDS - QUICK_FALLBACK_RESERVE - (perf_counter() - start)
+        if unending and left <= 0:
+            return None
+        return monotonic() + max(0.0, left)
 
     def primary(poly):
-        record = _resolve_polynomial(poly, request, start, verified=verified)
+        record = _resolve_polynomial(poly, request, start, verified=verified, notes=proposed)
         proposed["engine"] = record.get("engine")
         return record
 
@@ -248,7 +280,8 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         reasons = [str(error)]
         if proposed.get("engine") != "canonical-blowups" and canonical_applicable(p, variables):
             try:
-                record = canonical_record(p, variables, mode, start, verified=verified, integrals=wants_zetas)
+                record = canonical_record(p, variables, mode, start, verified=verified, integrals=wants_zetas,
+                                          seconds=quick_canonical_seconds())
                 if record is None:
                     raise GiveUp("The canonical smooth-centre rule returned no certified atlas.")
                 return record, finish(record)
@@ -258,6 +291,29 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
                 reasons.append(f"After that proposal was rejected: {second}")
         return inconclusive(request, {"description": " ".join(reasons)}, (perf_counter()-start)*1000,
                             format_poly(p, variables)), None
+
+    def safe_fallback(error):
+        # A quick request does not end here. The smooth-centre rules work
+        # without a deadline of their own, unless
+        # they already made the proposal that fell short or stopped for a
+        # reason of their own. After them the projective search goes on,
+        # which returns only with a certificate of the requested outputs.
+        report("Continuing after a proposal that did not certify the requested outputs")
+        tried = proposed.get("engine") == "canonical-blowups" or "canonical_reason" in proposed
+        if not tried and canonical_applicable(p, variables):
+            try:
+                why = {}
+                record = canonical_record(p, variables, mode, start, verified=verified, integrals=wants_zetas,
+                                          seconds=None, safe=True, diagnostics=why)
+                if record is not None:
+                    return record, finish(record)
+                proposed["canonical_reason"] = why.get("reason")
+            except NonReducedError:
+                raise
+            except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as second:
+                proposed["canonical_reason"] = str(second)
+        result = general_certificate()
+        return result, finish(result)
 
     try:
         result = resolve_with_multiplicities(primary)
@@ -281,6 +337,8 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         if exhaustive:
             result = general_certificate()
             outputs = finish(result)
+        elif unending:
+            result, outputs = safe_fallback(error)
         else:
             result, outputs = quick_fallback(error)
     proofs.append(('primary', result.get('certificate', {})))
@@ -318,7 +376,7 @@ def _resolve_weighted(p, request, kinds, start, proofs):
         record = weighted_resolution(p, request['variables'], seconds=seconds)
     except WeightedDeclined as error:
         reason = str(error)
-        if seconds is None:
+        if seconds is None or safe_quick(request):
             report("Continuing with ordinary embedded resolution after a weighted method decline")
             ordinary = dict(request, method="auto", zetas=list(kinds), zetas_only=False)
             record = _resolve(ordinary, proofs)
@@ -374,14 +432,63 @@ def _resolve_jung(p, request, kinds, start):
 
 # Engines whose proposals come from the Newton method.
 NEWTON_ENGINES = frozenset({"newton-polyhedron", "verified-monomial-modification", "hyperplane-arrangement-fan"})
-# Seconds that a quick request gives the fan constructions and the point
-# repairs of the Newton method before it hands the germ over.
+# Seconds that a quick request gives the point repairs of the Newton method
+# before it hands the germ over.
 QUICK_NEWTON_SECONDS = 20
-# Seconds that a quick request gives the canonical smooth-centre rule.
+# Seconds that a quick request gives the canonical smooth-centre rule at least.
 QUICK_CANONICAL_SECONDS = 20
+# Seconds of the quick worker's limit kept after that rule, for the priority
+# ideals (4 seconds of their own), the certified outputs and the zeta functions.
+QUICK_FINAL_RESERVE = 7
 # Seconds of the quick worker's limit kept for that rule when it must replace
 # a proposal whose verification did not finish: its run and its outputs.
 QUICK_FALLBACK_RESERVE = QUICK_CANONICAL_SECONDS + 5
+
+# When the outermost request of this context started (time.perf_counter).
+_REQUEST_START = ContextVar("atlas_resolve_request_start", default=None)
+
+
+# Seconds that a quick request gives the optional search for nearby strata.
+QUICK_NEARBY_SECONDS = 10
+
+
+def _quick_seconds_left():
+    """Seconds of the quick worker's limit left before QUICK_FINAL_RESERVE."""
+    from .resolve_cli import MAX_SECONDS
+    started = _REQUEST_START.get()
+    elapsed = 0.0 if started is None else perf_counter() - started
+    return MAX_SECONDS - QUICK_FINAL_RESERVE - elapsed
+
+
+def quick_nearby_seconds():
+    """Seconds that a quick request gives the optional search for nearby strata now."""
+    return max(0.0, min(QUICK_NEARBY_SECONDS, _quick_seconds_left()))
+
+
+def safe_quick(request):
+    """Whether this is a quick request whose search has no end of its own.
+
+    A quick request is bounded by its caller: the worker stops it at
+    MAX_SECONDS. Inside that bound the search does not give up. When the
+    fast methods do not apply or decline, the smooth-centre rules are the
+    safe method: they get no deadline of their own, and the projective
+    search continues after them. The request ends with a certified answer,
+    or when the caller stops it.
+
+    A request with `bounded` set is an attempt inside another computation,
+    such as the zeta function of a transverse germ for a nearby stratum. It
+    keeps the budgets of each method and may return inconclusive.
+    """
+    return request.get('search', 'exhaustive') == 'quick' and not request.get('bounded')
+
+
+def quick_canonical_seconds():
+    """Seconds that a bounded attempt gives the canonical smooth-centre rules now.
+
+    The rules get the rest of the worker's limit, less QUICK_FINAL_RESERVE,
+    and never less than QUICK_CANONICAL_SECONDS.
+    """
+    return max(QUICK_CANONICAL_SECONDS, _quick_seconds_left())
 
 
 def canonical_applicable(p, variables):
@@ -392,12 +499,16 @@ def canonical_applicable(p, variables):
 
 
 def canonical_record(p, variables, mode, start, *, verified=None, integrals=False,
-                     seconds=QUICK_CANONICAL_SECONDS):
-    """The canonical smooth-centre resolution as a solver record, or None."""
+                     seconds=QUICK_CANONICAL_SECONDS, safe=False, diagnostics=None):
+    """The canonical smooth-centre resolution as a solver record, or None.
+
+    With `safe` and `seconds=None` this is the method that a quick request
+    falls back on: see `origin_backend.resolve_origin`.
+    """
     from .origin_backend import resolve_origin
     report("Resolving by blowups with smooth centres chosen by the canonical rule")
     r = resolve_origin(p, variables, mode, seconds=seconds, defer_outputs=True, verified=verified,
-                       integrals=integrals)
+                       integrals=integrals, safe=safe, diagnostics=diagnostics)
     if r is not None:
         r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
                  mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
@@ -405,7 +516,7 @@ def canonical_record(p, variables, mode, start, *, verified=None, integrals=Fals
     return r
 
 
-def _resolve_polynomial(p, request, start, *, verified=None):
+def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
     report("Checking the singularity at the origin", 0)
     variables = request['variables']
     mode = request.get('mode','embedded')
@@ -512,9 +623,35 @@ def _resolve_polynomial(p, request, start, *, verified=None):
     if r is None and native_range and singular and len(variables) >= 3 and len(p)>3:
         from .reduced_centre import smooth_reduced_graph
         r = smooth_reduced_graph(p, variables, mode)
+    safe = safe_quick(request)
+
+    def smooth_centres(seconds, declined, **options):
+        """The smooth-centre rules after the fast methods.
+
+        For a quick request they are the safe method: they take turns, have
+        no budget of charts or stages and no deadline of their own. Only the
+        caller's wall clock stops them, or a reason of their own, which is
+        kept: it is a defect to repair, and the projective search goes on.
+        A bounded attempt gives them `seconds`.
+        """
+        from .origin_backend import resolve_origin
+        why = {}
+        found = resolve_origin(p, variables, mode, seconds=None if safe else seconds, defer_outputs=True,
+                               verified=verified, integrals=bool(selected_zetas(request)), safe=safe,
+                               diagnostics=why, **options)
+        if found is None:
+            reason = why.get("reason") or "No reason was reported."
+            fallback_details.append(declined)
+            diagnostic["canonical_reason"] = reason
+            if notes is not None:
+                notes["canonical_reason"] = reason
+            report(f"The smooth-centre rules stopped ({reason}); searching projective blowups")
+        return found
+
     # The Newton method either returns a proposal or does not apply. Each of
     # its constructions records why it declined, and the germ is handed over
-    # to the methods below. A decline is never the outcome of the request.
+    # to the smooth-centre rules below. A decline is never the outcome of
+    # the request.
     newton_declines = {}
 
     def newton(frames=None):
@@ -564,32 +701,28 @@ def _resolve_polynomial(p, request, start, *, verified=None):
         r = exhaustive_search(p, variables, mode, compute=compute, integrals=bool(selected_zetas(request)),
                               verified=verified, zetas_only=request.get("zetas_only", False))
     elif r is None and native_range and singular and len(variables) == 3:
-        from .origin_backend import resolve_origin
-        r = resolve_origin(p, variables, mode, seconds=15, defer_outputs=True,
-                           verified=verified, integrals=bool(selected_zetas(request)))
+        r = smooth_centres(15, "The successive blowup search returned no certified atlas.")
         if r is None:
-            fallback_details.append("The successive blowup search returned no certified atlas.")
             # In three variables the adapted Newton frames come after these blowups.
             r = newton("adapted")
             if r is None:
                 newton_reasons()
     elif r is None and native_range and singular and len(variables) >= 4:
         # The repeated tangent rule has five specified centres. When it does
-        # not apply, the canonical rule chooses the centres from the
-        # invariant, in a bounded time.
+        # not apply, the smooth-centre rules choose the centres from the
+        # order and the invariant.
         from .origin_backend import resolve_origin
         r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
                            verified=verified, integrals=bool(selected_zetas(request)))
         if r is None:
             fallback_details.append("The repeated-tangent search returned no certified atlas.")
-            r = resolve_origin(p, variables, mode, seconds=QUICK_CANONICAL_SECONDS, defer_outputs=True,
-                               verified=verified, integrals=bool(selected_zetas(request)), skip_tangent=True)
-            if r is None:
-                fallback_details.append("The canonical smooth-centre rule returned no certified atlas.")
+            r = smooth_centres(quick_canonical_seconds(),
+                               "The canonical smooth-centre rule returned no certified atlas.", skip_tangent=True)
     if r is None:
         from .general_resolution import search
         report("Searching for a blow-up centre")
-        if exhaustive:
+        if exhaustive or safe:
+            # This search returns only with a certificate of the requested outputs.
             r = search(p, variables, mode, exhaustive=True, integrals=bool(selected_zetas(request)),
                        verified=verified, resolve_reduced_first=True)
         else:

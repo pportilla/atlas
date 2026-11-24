@@ -147,7 +147,7 @@ def _replay_zetas(request):
         # An older producer may have found a short resolution using its
         # bounded choice of centres. Recover it before enumerating ideals.
         try:
-            fresh = resolve(dict(calculation, search="quick"))
+            fresh = resolve(dict(calculation, search="quick", bounded=True))
         except (LimitError, TimeoutExpired):
             fresh = {}
         if all(fresh.get(k + "_zeta", {}).get("status") == "computed" for k in kinds):

@@ -207,6 +207,55 @@ The native chart batch now constructs the projections from the nonzero entries o
 
 The **full CLI median fell from 1.571 s to 1.494 s** across 36 alternating fresh-process pairs, including both zetas and writing the full 19.27 MB JSON result. The median paired saving was 66.8 ms. The 31 pairs that met the predeclared low-contention criterion saved 64.3 ms. An earlier 12-pair run on a saturated host had a paired interval spanning zero. Saved-chart replay recovered all 565 vertices, 9,972 higher-dimensional cells, 31,574 codimension-one attachments, 3,860 nonzero strata and both complete zeta records. [Paired measurements, command and checksums](fan-projection-3915.json)
 
+### Regular Newton fans in five and six variables
+
+The fan program subdivides a singular cone at a lattice point of its fundamental parallelepiped. It used to take the best of 96 sampled multiples of each coordinate residue and stopped at 16,000 rays or 120,000 cone records. It now takes the best point of the whole parallelepiped, by enumeration up to index 4,096 and from the Hilbert basis of a larger cone. From 4,096 cones on it also builds the fan of a second scoring rule and keeps the smaller one. A Hilbert basis that takes more than two seconds of processor time is dropped for the sampled point. The program has no count budget: it stops at the number of cones whose charts its caller can hold in memory.
+
+| Germ | Previous program | Previous, count budgets lifted | Current program |
+|---|---|---|---|
+| `x^3*y+y^3*z+z^3*t+t^3*u+u^4` | 956 cones, 0.04 s, 15 MB | 956 cones, 0.05 s, 15 MB | 956 cones, 0.18 s, 15 MB |
+| `x^3+y^5+z^8+t^9+u^9+x*y*z*t*u` | cone budget after 1.20 s | 339,349 cones, 3.40 s, 421 MB | 24,295 cones, 1.89 s, 45 MB |
+| `x^3+y^6+z^7+t^7+u^8+x*y*z*t*u` | 26,045 cones, 0.24 s, 45 MB | 26,045 cones, 0.30 s, 44 MB | 7,641 cones, 0.66 s, 29 MB |
+| `x^3+y^8+z^8+t^9+u^9+x*y*z*t*u` | 60,901 cones, 0.70 s, 86 MB | 60,901 cones, 0.59 s, 86 MB | 29,227 cones, 3.23 s, 89 MB |
+| `x^3+y^6+z^7+t^7+u^9+v^11+x*y*z*t*u*v` | cone budget after 1.41 s | 1,769,962 cones, 22.64 s, 2,282 MB | 58,053 cones, 2.53 s, 91 MB |
+| `x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v` | 41,224 cones, 0.36 s, 66 MB | 41,224 cones, 0.85 s, 66 MB | 40,145 cones, 1.24 s, 68 MB |
+| `x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3` | cone budget after 0.80 s | 249,895 cones, 5.13 s, 330 MB | 250,208 cones, 8.07 s, 344 MB |
+| `x^2*y+y^2*z+z^4*t+t^4*u+u^2*v+v^4*x` | cone budget after 0.67 s | 135,936 cones, 2.76 s, 186 MB | 108,886 cones, 3.34 s, 158 MB |
+| `x^3*y+y^2*z+z^4*t+t^4*u+u^4*v+v^2*x` | cone budget after 0.68 s | 629,767 cones, 14.00 s, 802 MB | 556,356 cones, 28.13 s, 742 MB |
+| `x^2*y+y^6+z^4+z^2*t^2+t^5+u^3+v^7+u*v^5` | cone budget after 0.59 s | 150,995 cones, 2.87 s, 204 MB | 80,114 cones, 2.60 s, 119 MB |
+| `x*y-z*t+u^3+v^4` | 4,669 cones, 0.07 s, 19 MB | 4,669 cones, 0.16 s, 19 MB | 4,640 cones, 0.17 s, 20 MB |
+
+Times are medians of three runs of the program on one request with no cone limit (one run with the budgets lifted), next to its largest resident memory. Every fan below 60,000 cones passed the script's independent check: determinant one on each cone, a common minimal Newton vertex, interior facets shared by two cones, and sections filling the simplex. The exact search does not win everywhere. On `x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3` it gives 0.1% more cones than the sampled points, and the three invertible polynomials keep fans of 10^5 cones or more. The program is slower per cone because it searches each parallelepiped and builds a second fan for comparison. That cost is small against the charts, which take half a millisecond to a millisecond each. [Script](newton_fan_subdivision.py) · [Timings of the three programs](newton-fan-subdivision-i7-1355u.json)
+
+The topological zeta kernel adds the strata of such an atlas pairwise. It now sorts them first by their candidate poles, most negative first, so that the sums of few strata share their denominators. The reduced fraction is the same. On the strata of two of the cusps the reduction took:
+
+| Atlas | Components | Nonzero strata | Candidate poles | Given order | Sorted by candidate poles |
+|---|---:|---:|---:|---:|---:|
+| `x^3+y^5+z^8+t^9+u^9+x*y*z*t*u`, 24,295 charts | 3,649 | 25,911 | 346 | 0.878 s | 0.269 s |
+| `x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v`, 40,145 charts | 4,144 | 46,367 | 1,000 | 13.68 s | 1.652 s |
+
+Each time is the median of three calls of the kernel on the saved numerical data of the atlas, on the same host. The answers of both orders have the same text. [Order invariance and direct evaluation](../tests/test_topological_reduction.py)
+
+The Zoo record builder calls `./atlas resolve EQ --vars ... --compute cpu --quick --mode embedded --monodromy --json`. The table has one run of that call for each germ, before and after the changes above, with the largest resident memory of one process of the run. Both columns were measured in the same hour on the same host, where other jobs kept the load average near 5. The quick worker stops itself after 55 s, and the Zoo screen stops a call after 50 s.
+
+| Germ | Before | After |
+|---|---|---|
+| `x^3*y+y^3*z+z^3*t+t^3*u+u^4` | resolved, 2,275 charts, 1.7 s, 108 MB | resolved, 2,275 charts, 1.8 s, 109 MB |
+| `x^3+y^6+z^7+t^7+u^8+x*y*z*t*u` | inconclusive at 24.5 s, 843 MB | resolved, 7,641 charts, 5.5 s, 242 MB |
+| `x^3+y^5+z^8+t^9+u^9+x*y*z*t*u` | inconclusive at 21.5 s, 273 MB | resolved, 24,295 charts, 15.7 s, 725 MB |
+| `x^3+y^8+z^8+t^9+u^9+x*y*z*t*u` | inconclusive at 20.0 s, 1,098 MB | resolved, 29,227 charts, 19.8 s, 908 MB |
+| `x^3+y^5+z^7+t^9+u^10+v^10+x*y*z*t*u*v` | inconclusive at 19.0 s, 168 MB | resolved, 40,145 charts, 38.7 s, 1,446 MB |
+| `x^3+y^6+z^7+t^7+u^9+v^11+x*y*z*t*u*v` | inconclusive at 27.3 s, 1,144 MB | resolved, 58,053 charts, 57.3 s, 2,902 MB |
+| `x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3` | inconclusive at 25.6 s, 461 MB | inconclusive at 53.0 s, 440 MB |
+| `x^2*y+y^2*z+z^4*t+t^4*u+u^2*v+v^4*x` | inconclusive at 25.4 s, 730 MB | at work when the worker stopped at 55.4 s, 987 MB |
+| `x^3*y+y^2*z+z^4*t+t^4*u+u^4*v+v^2*x` | inconclusive at 25.1 s, 715 MB | at work when the worker stopped at 55.3 s, 199 MB |
+| `x^2*y+y^6+z^4+z^2*t^2+t^5+u^3+v^7+u*v^5` | inconclusive at 21.0 s, 1,146 MB | resolved, 21,390 charts, 47.4 s, 1,405 MB |
+| `x*y-z*t+u^3+v^4` | resolved, 23,308 charts, 9.5 s, 895 MB | resolved, 16,369 charts, 13.3 s, 614 MB |
+
+A single run varies with the other jobs on the host. Inside the solver the last germ took 10.9 s and 11.8 s before and 8.7 s and 9.3 s after, and an earlier pass of the table at a load average of 10 to 20 took two to three times as long on every row. Every resolved record has a complete dual complex and both zeta functions. The Euler characteristic of the Milnor fibre read from each monodromy zeta agrees with an independent count: Kouchnirenko's number for the three cusps in five variables (Milnor numbers 1,890, 2,423 and 3,248), and the Sebastiani–Thom products 7·10·12 = 840 for the join and 1·6 for the last germ.
+
+On the three invertible polynomials the Newton method has no candidate it can use. For `x^4*y+y^3*z+z^3*t+t^4*u+u^3*v+v^3` its own fan and both convenient completions have more than 244,920 cones, the number whose charts fit in half the 24 GB then available, so it stopped with that reason and the smooth-centre rules ran next. They returned no atlas, which is what the table shows as inconclusive. For `x^2*y+y^2*z+z^4*t+t^4*u+u^2*v+v^4*x` a completion of 237,252 cones fits, is constructed in 35 s and does not resolve the germ.
+
 ### Newton coordinate choices
 
 The native kernel returns the axial intercepts, their volume product, and the expansion budget estimates for every donor coordinate in one call. Atlas keeps this result with each coordinate trial. A shear that changes the polynomial gets fresh statistics before the trial is ranked.

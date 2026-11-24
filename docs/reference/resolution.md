@@ -63,7 +63,7 @@ The options of `resolve` choose the kind of resolution and how long Atlas may se
 | --- | --- |
 | `mode` | `"embedded"` (default) makes the total transform a divisor with simple normal crossings and records the multiplicity of each component. `"intrinsic"` resolves the singularities of the reduced hypersurface. |
 | `method` | `"auto"` (default) chooses the construction. `"weighted"` uses weighted blowups in embedded mode. |
-| `search` | `"exhaustive"` (default) continues until the resolution is certified or you interrupt it. `"quick"` stops at a bound and then returns status `"inconclusive"`. A quick search has a 55-second deadline and reads at most eight variables, degree 128 and 4,096 expanded terms. |
+| `search` | `"exhaustive"` (default) continues until the resolution is certified or you interrupt it. `"quick"` searches in the same way for at most 55 seconds, and returns status `"inconclusive"` only when that deadline ends the search. A quick search reads at most eight variables, degree 128 and 4,096 expanded terms. |
 | `monodromy` | `True` computes both zeta functions during the call. With `False` (default) they are computed the first time you read one of them. |
 | `compute` | `"cpu"`, `"auto"` or `"gpu"`. Omit it to use the configured device, normally the CPU. [Select a device](http-and-compute.md#select-a-device) |
 

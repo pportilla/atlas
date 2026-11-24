@@ -17,6 +17,25 @@ def program(name, request, **options):
 @unittest.skipUnless(all(native_process.available(name) for name in native_process.HELPERS),
                      "Build the helper libraries with make.")
 class ForkedHelperPrograms(unittest.TestCase):
+    def setUp(self):
+        # These tests are about the fork. In a long test run an earlier
+        # computation can have left native threads in this process, and the
+        # helpers would then be started as programs.
+        threads = patch.object(native_process, "_native_threads", return_value=False)
+        threads.start()
+        self.addCleanup(threads.stop)
+
+    def test_process_with_native_threads_starts_the_program(self):
+        # A fork copies only the calling thread, and a helper that enters a
+        # parallel region would wait for the team of its parent.
+        request = json.dumps({"exponents": [[2, 0, 0], [0, 3, 0], [0, 0, 5]], "exhaustive": False})
+        with patch.object(native_process, "_native_threads", return_value=True), \
+                patch.object(native_process, "_start", side_effect=AssertionError("forked")):
+            self.assertFalse(native_process.available("newton_fan"))
+            self.assertIsNone(native_process.start("face_gb", ["--serve"], stdin=0, stdout=1, stderr=2))
+            answer = native_process.run("newton_fan", input=request)
+        self.assertEqual((answer.returncode, answer.stdout), (0, program("newton_fan", request).stdout))
+
     def assertSameRun(self, name, request, **options):
         forked = native_process.run(name, input=request, **options)
         expected = program(name, request, **{k: v for k, v in options.items() if k != "timeout"})

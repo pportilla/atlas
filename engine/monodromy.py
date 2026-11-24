@@ -1,4 +1,8 @@
 """Local Lefschetz zeta functions at the origin and on certified nearby strata."""
+from contextlib import contextmanager
+from contextvars import ContextVar
+from time import monotonic
+
 from .kernel_json import kernel_json
 from .point_geometry import decode_terms, encode_terms
 from .polynomial import InputError, LimitError, format_poly, integer_from_decimal, integer_text, parse
@@ -6,6 +10,24 @@ from .polynomial import InputError, LimitError, format_poly, integer_from_decima
 
 def _request(operation, **fields):
     return kernel_json("atlas_monodromy", operation, **fields)
+
+
+# A deadline (of time.monotonic) for the optional search for nearby strata in
+# a context. The zeta functions do not depend on that search.
+_NEARBY_LIMIT = ContextVar("atlas_nearby_search_limit", default=None)
+NEARBY_STOPPED = ("The search for transverse compositions along the critical locus stopped at the time limit "
+                  "of the request: there can be more nearby strata.")
+
+
+@contextmanager
+def nearby_search_limit(deadline):
+    """Stop the optional search for nearby strata of this context at `deadline` (of time.monotonic)."""
+    outer = _NEARBY_LIMIT.get()
+    token = _NEARBY_LIMIT.set(deadline if outer is None else min(outer, deadline))
+    try:
+        yield
+    finally:
+        _NEARBY_LIMIT.reset(token)
 
 
 def factor_rows(factors):
@@ -86,7 +108,8 @@ def _nearby_strata(polynomial, variables, data, strata, origin_factors):
                 transverse_germ=format_poly(decode_terms(row["germ"]), names), multiplicity=row["multiplicity"],
             )
         result.append(stratum)
-    return result + _transverse_compositions(polynomial, variables)
+    compositions, stopped = _transverse_search(polynomial, variables)
+    return result + compositions, stopped
 
 
 def _transverse_names(count, variables):
@@ -101,8 +124,9 @@ def _origin_factors(polynomial, variables):
     """The origin zeta of a germ in fewer variables, from its own certified resolution."""
     from .resolve import resolve
     try:
+        # An attempt inside the optional search for nearby strata: it keeps its bounds.
         record = resolve({"polynomial": polynomial, "variables": variables, "mode": "embedded",
-                          "search": "quick", "zetas": ["monodromy"]})
+                          "search": "quick", "bounded": True, "zetas": ["monodromy"]})
     except (InputError, LimitError, ArithmeticError, RuntimeError, OSError):
         return None
     zeta = record.get("monodromy_zeta") or {}
@@ -110,9 +134,23 @@ def _origin_factors(polynomial, variables):
 
 
 def _transverse_compositions(polynomial, variables):
+    return _transverse_search(polynomial, variables)[0]
+
+
+def _transverse_search(polynomial, variables):
+    """The certified transverse compositions, and whether a deadline cut the search short."""
     # The native search certifies f = G(h) along a critical component. The
     # local zeta at its generic points near 0 is the zeta of G at the origin.
-    rows = _request("transverse_compositions", width=len(variables), terms=encode_terms(polynomial))
+    # Under a deadline the search keeps the rows certified before it and
+    # says that it stopped.
+    limit = _NEARBY_LIMIT.get()
+    stopped = False
+    if limit is None:
+        rows = _request("transverse_compositions", width=len(variables), terms=encode_terms(polynomial))
+    else:
+        answer = _request("transverse_compositions", width=len(variables), terms=encode_terms(polynomial),
+                          seconds=max(0.0, limit - monotonic()))
+        rows, stopped = answer["rows"], bool(answer["expired"])
     result = []
     for row in rows:
         equations = [format_poly(decode_terms(terms), variables) for terms in row["equations"]]
@@ -125,7 +163,7 @@ def _transverse_compositions(polynomial, variables):
         result.append({"model": "transverse composition", "factors": factors, "expression": _quotient(factors),
                        "coordinates": equations, "dimension": row["dimension"],
                        "transverse_coordinates": names, "transverse_germ": germ})
-    return result
+    return result, stopped
 
 
 def monodromy_zeta(record, *, polynomial=None, strata=None):
@@ -150,9 +188,11 @@ def monodromy_zeta(record, *, polynomial=None, strata=None):
         polynomial = parse(record.get("polynomial"), variables, bounded=False)
     data, strata, method = strata
     rows, factors, chi = acampo_strata(data, strata)
+    nearby, stopped = _nearby_strata(polynomial, variables, data, strata, factors)
     return {"status":"computed", "variable":"T", "convention":"prod_q det(I - T*h^* | H^q(F_0; Q))^((-1)^(q+1))",
             "formula":"prod_i (1-T^N_i)^(-chi_c(E_i^open intersect pi^(-1)(0)))",
             "method":method, "resolution_engine":record.get("engine"),
             "expression":_quotient(factors), "factors":factors, "contributions":rows,
             "milnor_fiber_euler_characteristic":chi,
-            "nearby_strata":_nearby_strata(polynomial, variables, data, strata, factors)}
+            "nearby_strata":nearby,
+            **({"nearby_search": {"status": "stopped", "reason": NEARBY_STOPPED}} if stopped else {})}

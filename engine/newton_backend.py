@@ -5,7 +5,7 @@ from .kernel_json import kernel_json
 from .chart_batch import transform_atlas
 from .binomial_kernel import _newton, signed_powers
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
-from .newton_fan import build_fan
+from .newton_fan import build_fan, require_chart_memory
 from .polynomial import format_poly, integer_from_decimal, integer_text, LimitError
 
 
@@ -111,16 +111,6 @@ def _boundary_centres(poly, variables, fan):
     return singular_ray_images(format_poly(poly, variables), variables, (fan["rays"][i] for i in fan["boundary_rays"]))
 
 
-def check_fan_budget(fan, terms):
-    """Raise LimitError for a fan whose strata or chart equations exceed the budgets of the atlas."""
-    n = len(fan['rays'][0])
-    rays, cones = fan['rays'], fan['cones']
-    if len(cones)*(2**n-1)>750_000 or len(rays)*terms>500_000:
-        raise LimitError('The Newton fan exceeds the stratum or valuation budget.')
-    if terms*len(cones)>400_000:
-        raise LimitError('The Newton atlas exceeds the chart expansion budget.')
-
-
 def fan_faces(poly, fan):
     """The orders of the rays and the face of common minimizers on every stratum of the fan.
 
@@ -132,7 +122,8 @@ def fan_faces(poly, fan):
     n = len(fan['rays'][0])
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
-    check_fan_budget(fan, len(exponents))
+    # One chart per cone: the atlas is bounded by the memory it needs.
+    require_chart_memory(fan, len(exponents))
     valuations = _valuations(rays, exponents)
     rows = _newton("face_orders", n, (len(rays), len(cones), len(exponents)), *valuations, *cones)
     orders, exceptional_orders, minima, face_masks = [], [], [], {}
@@ -336,10 +327,12 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
     deadline = monotonic()+seconds
     last_limit = None
     kept = len(verified) if verified is not None else 0
+    # Trial fans too large to try before the other candidates of this method.
+    deferred = []
 
     def fan_of(terms):
-        # A fan that is not finished by the deadline of the search is of no use to it.
-        return build_fan(terms, exhaustive=exhaustive_faces(), seconds=deadline-monotonic())
+        # The fan is bounded by the memory that its charts need, not by a time.
+        return build_fan(terms, exhaustive=exhaustive_faces(), seconds=None, chart_terms=len(terms))
 
     def attempt(name, construct_record):
         """One construction: its record, or None after recording why it does not apply."""
@@ -390,7 +383,8 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
 
         def monomial_trials():
             from .newton_trials import resolve_trials
-            return resolve_trials(poly, variables, verified=verified, integrals=integrals, construct=construct)
+            return resolve_trials(poly, variables, verified=verified, integrals=integrals, construct=construct,
+                                  deferred=deferred)
 
         def boundary_fan(centres):
             result = _assemble(poly, variables, mode, fan, identity, compute, deadline, original=poly,
@@ -404,7 +398,13 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
                 proof['exceptional_orbit_faces'] = proof.pop('compact_faces')
             return result
 
-        if fan is not None:
+        if fan is None:
+            # The fan of the germ itself does not fit. Each trial fan is
+            # verified on its own charts and can be much smaller.
+            trial = attempt("monomial_trials", monomial_trials)
+            if trial is not None:
+                return trial
+        else:
             trial = attempt("hyperplane_fan", hyperplanes) if 4 <= len(variables) <= 8 else None
             if trial is not None:
                 return trial
@@ -423,7 +423,7 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
     def intrinsic_trial():
         from .newton_trials import resolve_trials
         return attempt("intrinsic_fan", lambda: resolve_trials(poly, variables, mode=mode, verified=verified,
-                                                               integrals=integrals))
+                                                               integrals=integrals, deferred=deferred))
 
     def linear_frame(transformed, matrix):
         fan=fan_of(transformed)
@@ -449,10 +449,19 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         result = attempt("translated_fan", translated)
         if result is not None:
             return result
-    # The adapted frames come last: a germ that a linear frame resolves,
-    # with or without point repairs, keeps that resolution.
+    # The adapted frames come after the linear ones: a germ that a linear
+    # frame resolves, with or without point repairs, keeps that resolution.
     if frames == "all":
         result = attempt("adapted_frame", adapted)
         if result is not None:
             return result
+    if deferred:
+        # Every cheaper candidate has declined. The large fans are still
+        # resolutions to try, as far as their charts fit in memory.
+        def deferred_trials():
+            from .newton_trials import resolve_deferred_trials
+            return resolve_deferred_trials(poly, variables, deferred)
+        trial = attempt("deferred_trials", deferred_trials)
+        if trial is not None:
+            return trial
     return declined()

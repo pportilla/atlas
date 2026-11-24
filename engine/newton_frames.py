@@ -70,15 +70,15 @@ class _Frame:
     """A polynomial with its fan, and the obstructions of that fan when they are needed."""
 
     def __init__(self, poly, names, limit=None):
-        from .newton_fan import build_fan
+        from .newton_fan import TRIAL_SECONDS, build_fan
         from .newton_faces import exhaustive_faces
         if limit is not None and monotonic() > limit:
             raise LimitError("The search for adapted coordinates exceeded its time budget.")
         self.poly, self.names, self.limit = poly, names, limit
-        # A fan beyond the budgets of an atlas can still lead to a smaller
-        # one: only the frame that is returned has to be within them.
-        self.fan = build_fan(poly, exhaustive=exhaustive_faces(),
-                             seconds=None if limit is None else limit - monotonic())
+        # The fan is bounded by the memory that its charts need and by the
+        # time that the search has left.
+        seconds = TRIAL_SECONDS if limit is None else max(1.0, min(TRIAL_SECONDS, limit - monotonic()))
+        self.fan = build_fan(poly, exhaustive=exhaustive_faces(), seconds=seconds, chart_terms=len(poly))
         self.smooth = _smooth_images(poly, names, self.fan)
         self._degenerate = None
 
@@ -281,7 +281,8 @@ def resolve_adapted(poly, names, mode, compute=None, deadline=None, *, defer_out
             proof["exceptional_orbit_faces"] = proof.pop("compact_faces")
     if result is None and mode == "intrinsic":
         from .newton_trials import _try
-        result = _try(adapted, names, adapted, mode=mode, fan=fan, construct=False)
+        # The fan of the frame is the only candidate here, whatever its size.
+        result = _try(adapted, names, adapted, mode=mode, fan=fan, construct=False, defer=False)
     if result is None:
         return None
     for chart in result["charts"]:
