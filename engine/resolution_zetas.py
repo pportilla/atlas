@@ -83,7 +83,9 @@ def attach_companion(record, embedded, kinds):
 def replay_zetas(request):
     """Verify saved evidence or recompute missing embedded data from the defining germ."""
     results = _replay_zetas(request)
-    return finish_requested_check(results, request["record"], request.get("search", "exhaustive"))
+    # A budget in seconds makes the search a quick one.
+    policy = "quick" if request.get("seconds") is not None else request.get("search", "exhaustive")
+    return finish_requested_check(results, request["record"], policy)
 
 
 def _replay_zetas(request):
@@ -91,9 +93,16 @@ def _replay_zetas(request):
     record = request.get("record")
     if not isinstance(record, dict) or record.get("status") not in ("resolved", "inconclusive", "zetas_computed"):
         raise InputError("Supply an Atlas resolution record with its defining germ.")
-    policy = request.get("search", "exhaustive")
-    if policy not in ("quick", "exhaustive"):
-        raise InputError("Search must be quick or exhaustive.")
+    from .quick_budget import request_seconds, with_budget
+    try:
+        # A budget in seconds makes the search a quick one.
+        request = with_budget(request)
+        policy = request.get("search", "exhaustive")
+        if policy not in ("quick", "exhaustive"):
+            raise InputError("Search must be quick or exhaustive.")
+        request_seconds(request)
+    except ValueError as error:
+        raise InputError(str(error)) from None
     if request.get("compute") not in (None, "auto", "cpu", "gpu"):
         raise InputError("Compute must be cpu, auto, or gpu.")
     names = record.get("variables")
@@ -152,5 +161,22 @@ def _replay_zetas(request):
             fresh = {}
         if all(fresh.get(k + "_zeta", {}).get("status") == "computed" for k in kinds):
             return _selected_outputs(fresh, kinds, companion=companion)
-    fresh = resolve(calculation)
+    if policy == "quick":
+        fresh = _budgeted(dict(calculation, **({} if request.get("seconds") is None else {"seconds": request["seconds"]})))
+    else:
+        fresh = resolve(calculation)
     return _selected_outputs(fresh, kinds, companion=companion)
+
+
+def _budgeted(calculation):
+    """A quick solve of the germ in a worker of its own, which is stopped when its time budget ends."""
+    from .resolve_cli import run_job
+    status, fresh = run_job(calculation)
+    if status == 200:
+        return fresh
+    reason = fresh.get("error", "The quick search did not return a record.")
+    if status == 400:
+        raise InputError(reason)
+    if status == 422:
+        raise LimitError(reason)
+    raise RuntimeError(reason)

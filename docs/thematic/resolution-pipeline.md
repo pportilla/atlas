@@ -46,8 +46,9 @@ A particular family often admits a short construction. If its hypotheses
 fail, the search moves on to a more general method. Any candidate must still
 supply the charts and satisfy the checks for the requested mode.
 
-A quick search is inconclusive only when its caller's time is over: the
-worker stops it after 55 seconds. Its diagnostic then says so. A bounded
+A quick search is the same search under a time budget, 20 seconds unless
+you name another. When the budget ends the answer says so, and nothing else
+ends a quick search. [Quick search](#quick-search) A bounded
 attempt that Atlas makes inside another computation can still end early. Its
 diagnostic names a singular tangent direction that made the ordinary blowup
 test decline, the outcome of the Newton and successive blowup searches, the
@@ -256,28 +257,98 @@ centres in order. The shortcut succeeds when only the third centre works.
 
 ### Quick search
 
-Use `--quick` to give the search 55 seconds: the worker of a quick request
-stops then. Inside that time the search does not give up. It ends with a
-certified answer, or when the time is over, and only then is the result
-inconclusive (exit code 3). The limits on the size of the input remain.
+`--quick` gives the search a time budget. The search itself is the one that
+runs without it: the fast methods first, then the smooth-centre rules as the
+safe method, then projective ideal blowups. It never stops for a reason of a
+method. The budget is 20 seconds. `--seconds N` names another and implies
+`--quick`. The session functions take `seconds=N` and an HTTP request takes
+`"seconds": N`.
 
-The search first tries the fast methods, each within a budget: an eligible
-regular Newton modification, including available coordinate changes and
-repairs of failed crossings (20 seconds), and in four to eight variables the
-repeated-tangent rule. When they do not apply or decline, the smooth-centre
-rules described below are the safe method, in three to eight variables. They
+When the budget ends, the process of the search is stopped and the answer is
+a normal record. It says how long the search ran and what it was doing:
+
+```json
+{
+  "status": "inconclusive",
+  "can_search": true,
+  "summary": "Not resolved within 20 seconds.",
+  "budget": {
+    "seconds": 20,
+    "elapsed_seconds": 20,
+    "expired": true,
+    "stage": "Blowing up centre B7 (order method)",
+    "blowups": 6
+  },
+  "diagnostic": {
+    "code": "budget_expired",
+    "description": "Not resolved within 20 seconds. Stopped while blowing up centre B7 (order method), after 6 blowups."
+  }
+}
+```
+
+`status` and `can_search` are those of every answer without a certified
+resolution. `budget.stage` is the stage that the search reported last, and
+`budget.blowups` the number of blowups it had made when the stage counts
+them. The record has no charts and no reason of a method. On the command
+line the answer is one line and the exit code is 3, which means not
+finished:
+
+```text
+Not resolved within 20 seconds. Stopped while blowing up centre B7 (order method), after 6 blowups. Run without --quick to continue the search.
+```
+
+A quick search also reads an input of bounded size. An input beyond those
+limits gets the same kind of record before any search, with
+`diagnostic.code` equal to `"input_limit"`.
+[Budget and record](../../engine/quick_budget.py) · [Command line](../reference/command-line.md#resolve-a-germ)
+
+The fast methods have limits of their own, and each is a share of the
+budget. A search with any budget therefore reaches the safe method and still
+has time to certify what it finds.
+
+| Limit | Share of the budget | With 20 seconds |
+| --- | --- | --- |
+| Point repairs of the Newton method, over all its coordinate choices | 20% | 4 s |
+| The five centres of the repeated-tangent rule (four to eight variables) | 25% | 5 s |
+| First turn of each smooth-centre rule; the turns double | 25% | 5 s |
+| Kept for the smooth-centre rules when the verification of an unverified first proposal has not finished | 45% | from 11 s on |
+| Optional search for nearby strata, after the zeta functions | 15% | 3 s |
+| Weighted construction, and again its certificate (`--method weighted`) | 25% | 5 s |
+| Kept at the end for writing the answer | 1.5 s | 1.5 s |
+
+The shares come from measurements. In a screen of 2,000 fourfolds and
+fivefolds with 50 seconds for each germ, 57% of the embedded steps that
+finished took at most 1 second, 79% at most 5, 86% at most 10 and 94% at
+most 20. Nine certified records in ten came from the Newton method, with
+medians of 0.6 and 1.3 seconds for its two kinds of record, and 34 of the 36
+records of the smooth-centre rules needed at most 5 blowups. A sample of 114
+germs of that screen, whose steps had taken 2 to 50 seconds or had not
+finished, was then run with a budget of 20 seconds under six settings of
+the shares: 20% to 60% for the point repairs, 15% to 30% for the first
+turn, 25% to 50% kept for the smooth-centre rules. Between 84 and 86 of the
+114 finished under each of the three settings that ran the whole sample, and
+two runs with the same shares differ by as much: the time of one germ
+varies by a second in the median.
+No germ needed more than 4 seconds of point repairs, while a germ that a
+later construction or the smooth-centre rules resolve waits for that limit.
+One germ took 4.9, 7.8 and 13.0 seconds with 20%, 35% and 60%. Hence the
+small share of the point repairs. None of the 24 germs that the screen had
+not finished in 50 seconds finished in 20.
+
+When the fast methods do not apply or decline, the smooth-centre rules
+described below are the safe method, in three to eight variables. They
 have no deadline of their own and no budget of charts, and the complete rule
-has no limit of stages. The rules take turns of 10, 20, 40, … seconds, and
-each continues from the blowup it had reached, so no rule loses its work to
-another. A turn can run over: the check of crossings at the start of a stage
-and parts of the invariant do not read the deadline yet. A rule leaves only
-when it stops for a reason of its own: the maximal order rule and the short
-rule are not guaranteed to end and have guards, and a reason of the complete
-rule is a defect of its implementation. The last rule left runs without
-turns. Each reason is shown in the progress of the request, and a bounded
-attempt returns it in `diagnostic.canonical_reason`. When every rule has
-left, the search continues with projective ideal blowups, as an exhaustive
-search does, which returns only with a certificate.
+has no limit of stages. The rules take turns, and each continues from the
+blowup it had reached, so no rule loses its work to another. A turn can run
+over: the check of crossings at the start of a stage and parts of the
+invariant do not read the deadline yet. A rule leaves only when it stops for
+a reason of its own: the maximal order rule and the short rule are not
+guaranteed to end and have guards, and a reason of the complete rule is a
+defect of its implementation. The last rule left runs without turns. Each
+reason is shown in the progress of the request, and a bounded attempt
+returns it in `diagnostic.canonical_reason`. When every rule has left, the
+search continues with projective ideal blowups, which return only with a
+certificate.
 
 The same holds for the outputs. A resolved record whose dual complex is
 partial, or which lacks a requested zeta function, is not the answer of a
@@ -295,15 +366,16 @@ When the verifier rejects the charts that a faster method proposed, the
 smooth-centre rules make their own proposal, whose charts are verified in
 the same way. Verifying a proposal replays its blowups, which can take
 longer than constructing them, so the first verification must finish while
-25 seconds of the worker's limit remain, and then the smooth-centre rules
+45% of the budget remains, and then the smooth-centre rules
 take over. Once no such time is left, a verification runs to its end.
 [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
 
 Atlas also solves smaller problems inside a computation, such as the zeta
 function of a transverse germ for a nearby stratum. These are bounded
-attempts (`bounded` in the request): each method keeps its budget, the
-smooth-centre rules get the rest of the worker's limit less 7 seconds, and
-the attempt may return inconclusive.
+attempts (`bounded` in the request). They have fixed limits in place of a
+budget: 20 seconds for the Newton point repairs, 30 for the repeated-tangent
+rule, the rest of 55 seconds less 7 for the smooth-centre rules, and they
+may return inconclusive with the reasons of the methods.
 
 ### Exhaustive search
 

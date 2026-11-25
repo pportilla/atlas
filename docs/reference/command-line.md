@@ -39,7 +39,8 @@ The output summarizes the resolution and lists each chart with its map, strict t
 | `--mode embedded`, `--mode intrinsic` | Resolve the hypersurface in its ambient space (default), or the hypersurface itself. [Resolution modes](../thematic/resolution-records.md#resolution-modes) |
 | `--method auto`, `--method weighted` | Let Atlas choose the construction (default), or use weighted blowups in embedded mode. [Weighted resolution](../thematic/weighted-resolution.md) |
 | `--method jung` | Resolve a surface in three variables by Jung's method, after checking that it applies; the mode defaults to intrinsic. [Jung's method](../thematic/jung-method.md#resolve-with-method-jung) |
-| `--exhaustive`, `--quick` | Search until the resolution is certified (default), or for at most 55 seconds. Inside that time a quick search does not give up. [Quick search](../thematic/resolution-pipeline.md#quick-search) |
+| `--exhaustive`, `--quick` | Search until the resolution is certified (default), or give the same search a time budget of 20 seconds. [Quick search](../thematic/resolution-pipeline.md#quick-search) |
+| `--seconds N` | The time budget of a quick search in seconds. It implies `--quick` and does not go with `--exhaustive`. |
 | `--monodromy` | Also compute the topological and monodromy zeta functions. |
 | `--zetas-only` | Compute both zeta functions and the pole check. Atlas may then use a certificate without charts, as for germs made of polynomial graphs. [Zeta functions](../thematic/zeta-functions.md#germs-made-of-polynomial-graphs) |
 | `--json` | Print the complete record as JSON instead of the summary. |
@@ -51,7 +52,7 @@ Save the record of a resolution with its zeta functions for later use.
 ./atlas resolve 'y^2-x^3' --vars x,y --monodromy --json > cusp.json
 ```
 
-The exit status is 0 when the resolution is certified and every requested zeta function was computed, 3 when the result is inconclusive or a requested zeta function is missing, and 2 for an invalid input. A quick search has a 55-second deadline, and is inconclusive only when that deadline ends it or the input exceeds the limits that follow. It reads at most eight variables, 8,192 characters, degree 128 and 4,096 expanded terms, with integers of up to 256 decimal digits and coefficients of up to 4,096 bits during expansion. An exhaustive search has no such bounds.
+The exit status is 0 when the resolution is certified and every requested zeta function was computed, and 2 for an invalid input or an error. It is 3 when a quick search is not finished: its time budget ended. The command then prints one line, such as `Not resolved within 20 seconds. Stopped while blowing up centre B7 (order method), after 6 blowups. Run without --quick to continue the search.` With `--json` it prints the record of the expired budget, with `status` `"inconclusive"` and the field `budget`. Nothing else ends a quick search, except an input beyond the limits that follow, which also exits with 3 before any search. It reads at most eight variables, 8,192 characters, degree 128 and 4,096 expanded terms, with integers of up to 256 decimal digits and coefficients of up to 4,096 bits during expansion. An exhaustive search has no such bounds.
 
 ## Read a saved record
 

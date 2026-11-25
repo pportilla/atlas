@@ -9,6 +9,7 @@ from .exact_json import result_json
 from .matrix_algebra import matrix_analysis
 from .modular_batch import modular_arithmetic
 from .polynomial import rational_text
+from .quick_budget import checked_seconds
 from .session_algebra import _coordinate_space, algebra_bindings
 from .session_algebra import polynomial_arithmetic as calculate_polynomial
 from .session_expressions import Evaluator, SessionError
@@ -75,11 +76,14 @@ def new_session(calculate):
     rings = session.rings
 
     def resolve(polynomial, *, variables=None, ring=None, mode=None, search="exhaustive",
-                compute=None, monodromy=False, method="auto"):
+                compute=None, monodromy=False, method="auto", seconds=None):
         expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
         if type(monodromy) is not bool:
             raise ValueError("monodromy must be true or false.")
         options = {"monodromy": True} if monodromy else {}
+        if seconds is not None:
+            # A time budget makes the search a quick one.
+            options["seconds"], search = checked_seconds(seconds), "quick"
         if method != "auto":
             options["method"] = method
         if mode is None:
@@ -91,11 +95,16 @@ def new_session(calculate):
         return Resolution(record, parent, source_polynomial=polynomial if isinstance(polynomial, Polynomial) else None,
                           _from_solver=True)
 
-    def monodromy_check(polynomial, *, variables=None, ring=None, search="exhaustive", compute=None, check_isolation=False):
+    def monodromy_check(polynomial, *, variables=None, ring=None, search="exhaustive", compute=None, check_isolation=False,
+                        seconds=None):
         if type(check_isolation) is not bool:
             raise ValueError("check_isolation must be true or false.")
         if search not in ("quick", "exhaustive"):
             raise ValueError("Search must be quick or exhaustive.")
+        budget = {}
+        if seconds is not None:
+            # A time budget makes the search a quick one.
+            budget["seconds"], search = checked_seconds(seconds), "quick"
         if compute not in (None, "cpu", "auto", "gpu"):
             raise ValueError("Compute must be cpu, auto, or gpu.")
         zetas = None
@@ -106,7 +115,7 @@ def new_session(calculate):
         else:
             expression, names, parent = _resolution_input(polynomial, variables, ring, declare, rings.active)
             status, record = calculate(expression, names, mode="embedded", search=search,
-                                       compute=compute, monodromy=True, zetas_only=True)
+                                       compute=compute, monodromy=True, zetas_only=True, **budget)
             if status == 422 and record.get("code") == "computation_limit" and search == "quick":
                 return inconclusive_check(record["error"])
             if status == 400:
@@ -119,7 +128,8 @@ def new_session(calculate):
             # without launching a second search after it reached its deadline.
             if search == "quick":
                 zetas = record.get("topological_zeta", {}), record.get("monodromy_zeta", {})
-        return check_resolution(resolution, check_isolation=check_isolation, compute=compute, search=search, zetas=zetas)
+        return check_resolution(resolution, check_isolation=check_isolation, compute=compute, search=search, zetas=zetas,
+                                **budget)
 
     def jung_resolution(polynomial, *, variables=None, ring=None):
         """Return the resolution graph and invariants of a surface singularity at the origin from Jung's method.

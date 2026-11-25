@@ -141,7 +141,13 @@ class Handler(BaseHTTPRequestHandler):
             if algebra:
                 timeout = None if exhaustive else MAX_SECONDS
                 return self.obj(*self.server.algebra_bases.calculate(data, timeout=timeout, owner=self.server.workers))
-            automatic=isinstance(data,dict) and 'search' not in data
+            # A budget in seconds asks for a quick search. Here a request holds
+            # one of the computation slots, so its budget has an upper bound.
+            budget=data.get('seconds') if isinstance(data,dict) else None
+            if type(budget) in (int,float) and budget > MAX_SECONDS:
+                return reject(400, f'A quick resolution here has at most {MAX_SECONDS} seconds. '
+                                   'Post a longer search to /api/searches.')
+            automatic=isinstance(data,dict) and 'search' not in data and budget is None
             status,res=run_job(dict(data,search='quick') if automatic else data, owner=self.server.workers)
             if automatic and needs_exhaustive_search(data, status, res):
                 return start_search()
@@ -228,9 +234,10 @@ def make_parser():
     return parser
 
 
-def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto", zetas_only=False):
+def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto",
+                         zetas_only=False, seconds=None):
     return _calculate_resolution(polynomial, variables, mode=mode, search=search, compute=compute, method=method,
-                                 monodromy=monodromy, zetas_only=zetas_only, job=run_job)
+                                 monodromy=monodromy, zetas_only=zetas_only, seconds=seconds, job=run_job)
 
 
 def run_command(parser, argv):

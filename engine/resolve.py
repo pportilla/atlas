@@ -5,6 +5,7 @@ from time import perf_counter
 import subprocess
 import sys
 from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text, saved_polynomial_input
+from . import quick_budget
 from .native_backend import resolve_native
 from .resolution_progress import recorded_blowups, report
 from .resolution_zetas import attach_companion, finish_requested_check, selected_zetas, zetas_from_strata
@@ -53,6 +54,11 @@ def resolve(request):
         raise InputError("Expected an object containing polynomial, variables, and mode.")
     method, mode = requested_method(request)
     request = dict(request, method=method, mode=mode)
+    try:
+        # A budget in seconds makes the search a quick one.
+        request = quick_budget.with_budget(request)
+    except ValueError as error:
+        raise InputError(str(error)) from None
     compute = request.get('compute')
     if compute is not None and compute not in ('cpu','auto','gpu'):
         raise InputError('Compute must be cpu, auto, or gpu.')
@@ -61,13 +67,16 @@ def resolve(request):
     with replay_scope(compute) as replay, face_search(request.get('search', 'exhaustive') == 'exhaustive'):
         start = perf_counter()
         proofs = []
-        # A solve started inside another one shares the time of the outer request.
+        # A solve started inside another one shares the time and the budget of the outer request.
         token = _REQUEST_START.set(start) if _REQUEST_START.get() is None else None
+        budget = (_REQUEST_BUDGET.set(quick_budget.request_seconds(request) if safe_quick(request) else None)
+                  if token is not None else None)
         try:
             result = _resolve(request, proofs)
         finally:
             if token is not None:
                 _REQUEST_START.reset(token)
+                _REQUEST_BUDGET.reset(budget)
         finish_requested_check(result, result, request.get("search", "exhaustive"))
         result["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
         result['execution'] = _execution(compute, proofs, replay.report())
@@ -130,7 +139,10 @@ def _resolve(request, proofs):
     except LimitError as error:
         if exhaustive:
             raise
-        return inconclusive(request,{'description':str(error)},(perf_counter()-start)*1000)
+        # The search did not start: a quick search reads an input of bounded size.
+        record = inconclusive(request, {'code': 'input_limit', 'description': str(error)}, (perf_counter()-start)*1000)
+        record.update(engine='quick-search', summary='The input exceeds the limits of a quick search.')
+        return record
     if request.get('method') == 'jung':
         return _resolve_jung(p, request, kinds, start)
     return _resolve_parsed(p, variables, mode, request, kinds, start, proofs)
@@ -245,7 +257,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             # and can be long: a quick request bounds it.
             from time import monotonic
             from .monodromy import nearby_search_limit
-            with nearby_search_limit(monotonic() + quick_nearby_seconds()):
+            with nearby_search_limit(monotonic() + quick_nearby_seconds(request)):
                 return zetas_from_strata(result, kinds, found, polynomial=p)
         return None
 
@@ -255,14 +267,17 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         """For a quick request, when verifying the primary proposal must give way.
 
         Replaying a proposal's blowups can take longer than constructing them.
-        The canonical fallback then keeps its own time within the worker's limit.
-        Once that limit has no such time left, the verification runs to its end.
+        The smooth-centre rules then keep a share of the budget of the request.
+        Once no such time is left, the verification runs to its end.
         """
         if exhaustive or proposed.get("engine") == "canonical-blowups" or not canonical_applicable(p, variables):
             return None
         from time import monotonic
-        from .resolve_cli import MAX_SECONDS
-        left = MAX_SECONDS - QUICK_FALLBACK_RESERVE - (perf_counter() - start)
+        seconds = _budget(request)
+        if seconds is None:
+            left = quick_budget.BOUNDED_SECONDS - QUICK_FALLBACK_RESERVE - (perf_counter() - start)
+        else:
+            left = (1 - quick_budget.FALLBACK_SHARE) * seconds - _elapsed()
         if unending and left <= 0:
             return None
         return monotonic() + max(0.0, left)
@@ -304,7 +319,8 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
             try:
                 why = {}
                 record = canonical_record(p, variables, mode, start, verified=verified, integrals=wants_zetas,
-                                          seconds=None, safe=True, diagnostics=why)
+                                          seconds=None, safe=True, diagnostics=why,
+                                          turn=quick_turn_seconds(request))
                 if record is not None:
                     return record, finish(record)
                 proposed["canonical_reason"] = why.get("reason")
@@ -389,7 +405,10 @@ def _resolve_weighted(p, request, kinds, start, proofs):
         raise InputError("The weighted resolution is embedded: use the embedded mode with method weighted.")
     from .weighted_blowups import SECONDS, WeightedDeclined, weighted_resolution
     report("Resolving by weighted blowups", 0)
-    seconds = SECONDS if request.get("search") == "quick" else None
+    seconds = None
+    if request.get("search") == "quick":
+        budget = _budget(request)
+        seconds = SECONDS if budget is None else min(SECONDS, quick_budget.WEIGHTED_SHARE * budget)
     try:
         record = weighted_resolution(p, request['variables'], seconds=seconds)
     except WeightedDeclined as error:
@@ -454,48 +473,96 @@ def _resolve_jung(p, request, kinds, start):
 INTERNAL_ERRORS = (LookupError, TypeError, AttributeError, AssertionError, ValueError, RuntimeError, OSError,
                    MemoryError)
 NEWTON_ENGINES = frozenset({"newton-polyhedron", "verified-monomial-modification", "hyperplane-arrangement-fan"})
-# Seconds that a quick request gives the point repairs of the Newton method
-# before it hands the germ over.
+# The limits below are those of a bounded attempt: a quick solve inside
+# another computation, sized for quick_budget.BOUNDED_SECONDS in all. A quick
+# request has a time budget instead, and its limits are shares of the budget
+# (engine/quick_budget.py).
+# Seconds for the point repairs of the Newton method before it hands the germ over.
 QUICK_NEWTON_SECONDS = 20
-# Seconds that a quick request gives the canonical smooth-centre rule at least.
+# Seconds for the repeated-tangent rule.
+QUICK_TANGENT_SECONDS = 30
+# Seconds for the canonical smooth-centre rule at least.
 QUICK_CANONICAL_SECONDS = 20
-# Seconds of the quick worker's limit kept after that rule, for the priority
-# ideals (4 seconds of their own), the certified outputs and the zeta functions.
+# Seconds kept after that rule, for the priority ideals (4 seconds of their
+# own), the certified outputs and the zeta functions.
 QUICK_FINAL_RESERVE = 7
-# Seconds of the quick worker's limit kept for that rule when it must replace
-# a proposal whose verification did not finish: its run and its outputs.
+# Seconds kept for that rule when it must replace a proposal whose
+# verification did not finish: its run and its outputs.
 QUICK_FALLBACK_RESERVE = QUICK_CANONICAL_SECONDS + 5
 
-# When the outermost request of this context started (time.perf_counter).
+# When the outermost request of this context started (time.perf_counter),
+# and its time budget in seconds when it is a quick search.
 _REQUEST_START = ContextVar("atlas_resolve_request_start", default=None)
+_REQUEST_BUDGET = ContextVar("atlas_resolve_request_budget", default=None)
 
 
-# Seconds that a quick request gives the optional search for nearby strata.
+# Seconds that a bounded attempt gives the optional search for nearby strata.
 QUICK_NEARBY_SECONDS = 10
 
 
-def _quick_seconds_left():
-    """Seconds of the quick worker's limit left before QUICK_FINAL_RESERVE."""
-    from .resolve_cli import MAX_SECONDS
+def _elapsed():
+    """Seconds since the outermost request of this context started."""
     started = _REQUEST_START.get()
-    elapsed = 0.0 if started is None else perf_counter() - started
-    return MAX_SECONDS - QUICK_FINAL_RESERVE - elapsed
+    return 0.0 if started is None else perf_counter() - started
 
 
-def quick_nearby_seconds():
-    """Seconds that a quick request gives the optional search for nearby strata now."""
-    return max(0.0, min(QUICK_NEARBY_SECONDS, _quick_seconds_left()))
+def _budget(request):
+    """The time budget in seconds that the limits of this quick request are shares of.
+
+    None for an exhaustive search and for a bounded attempt, whose limits
+    are the fixed ones. A solve inside a quick request has its budget.
+    """
+    if not safe_quick(request):
+        return None
+    outer = _REQUEST_BUDGET.get()
+    return quick_budget.request_seconds(request) if outer is None else outer
+
+
+def _quick_seconds_left():
+    """Seconds left to a bounded attempt before QUICK_FINAL_RESERVE."""
+    return quick_budget.BOUNDED_SECONDS - QUICK_FINAL_RESERVE - _elapsed()
+
+
+def quick_nearby_seconds(request):
+    """Seconds that a quick request gives the optional search for nearby strata now.
+
+    The search comes after the zeta functions and never runs into the end of
+    the budget: the answer is written in the seconds kept for it.
+    """
+    seconds = _budget(request)
+    if seconds is None:
+        return max(0.0, min(QUICK_NEARBY_SECONDS, _quick_seconds_left()))
+    return max(0.0, min(quick_budget.NEARBY_SHARE * seconds, seconds - quick_budget.FINAL_SECONDS - _elapsed()))
+
+
+def quick_newton_seconds(request):
+    """Seconds that a quick request gives the point repairs of the Newton method."""
+    seconds = _budget(request)
+    return QUICK_NEWTON_SECONDS if seconds is None else quick_budget.NEWTON_SHARE * seconds
+
+
+def quick_tangent_seconds(request):
+    """Seconds that a quick request gives the repeated-tangent rule."""
+    seconds = _budget(request)
+    return QUICK_TANGENT_SECONDS if seconds is None else quick_budget.TANGENT_SHARE * seconds
+
+
+def quick_turn_seconds(request):
+    """Seconds of the first turn of each smooth-centre rule in a quick request."""
+    seconds = _budget(request)
+    return None if seconds is None else quick_budget.TURN_SHARE * seconds
 
 
 def safe_quick(request):
     """Whether this is a quick request whose search has no end of its own.
 
-    A quick request is bounded by its caller: the worker stops it at
-    MAX_SECONDS. Inside that bound the search does not give up. When the
+    A quick request is the same search as an exhaustive one under a time
+    budget (engine/quick_budget.py). Whoever runs it stops it when the
+    budget ends. Inside the budget the search does not give up. When the
     fast methods do not apply or decline, the smooth-centre rules are the
     safe method: they get no deadline of their own, and the projective
     search continues after them. The request ends with a certified answer,
-    or when the caller stops it.
+    or when its budget does.
 
     A request with `bounded` set is an attempt inside another computation,
     such as the zeta function of a transverse germ for a nearby stratum. It
@@ -507,8 +574,8 @@ def safe_quick(request):
 def quick_canonical_seconds():
     """Seconds that a bounded attempt gives the canonical smooth-centre rules now.
 
-    The rules get the rest of the worker's limit, less QUICK_FINAL_RESERVE,
-    and never less than QUICK_CANONICAL_SECONDS.
+    The rules get the rest of quick_budget.BOUNDED_SECONDS, less
+    QUICK_FINAL_RESERVE, and never less than QUICK_CANONICAL_SECONDS.
     """
     return max(QUICK_CANONICAL_SECONDS, _quick_seconds_left())
 
@@ -521,7 +588,7 @@ def canonical_applicable(p, variables):
 
 
 def canonical_record(p, variables, mode, start, *, verified=None, integrals=False,
-                     seconds=QUICK_CANONICAL_SECONDS, safe=False, diagnostics=None):
+                     seconds=QUICK_CANONICAL_SECONDS, safe=False, diagnostics=None, turn=None):
     """The canonical smooth-centre resolution as a solver record, or None.
 
     With `safe` and `seconds=None` this is the method that a quick request
@@ -530,7 +597,7 @@ def canonical_record(p, variables, mode, start, *, verified=None, integrals=Fals
     from .origin_backend import resolve_origin
     report("Resolving by blowups with smooth centres chosen by the canonical rule")
     r = resolve_origin(p, variables, mode, seconds=seconds, defer_outputs=True, verified=verified,
-                       integrals=integrals, safe=safe, diagnostics=diagnostics)
+                       integrals=integrals, safe=safe, diagnostics=diagnostics, turn=turn)
     if r is not None:
         r.update(schema_version=1, variables=variables, polynomial=format_poly(p, variables),
                  mode=mode, base_field='Q', geometric_field='algebraic closure of Q',
@@ -658,9 +725,10 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
         """
         from .origin_backend import resolve_origin
         why = {}
+        report("Resolving by blowups with smooth centres")
         found = resolve_origin(p, variables, mode, seconds=None if safe else seconds, defer_outputs=True,
                                verified=verified, integrals=bool(selected_zetas(request)), safe=safe,
-                               diagnostics=why, **options)
+                               turn=quick_turn_seconds(request), diagnostics=why, **options)
         if found is None:
             reason = why.get("reason") or "No reason was reported."
             fallback_details.append(declined)
@@ -680,10 +748,11 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
         """A proposal of the Newton method, or None with its reasons recorded for the hand-over."""
         from .newton_backend import resolve_newton
         proposal = None
+        report("Searching for a Newton modification" + (" in adapted coordinates" if frames == "adapted" else ""))
         try:
-            # A quick request is given 55 seconds in all by the worker.
+            # In a quick request the point repairs have a share of the budget.
             proposal = resolve_newton(p, variables, mode, compute=compute,
-                                      seconds=1200 if exhaustive else QUICK_NEWTON_SECONDS,
+                                      seconds=1200 if exhaustive else quick_newton_seconds(request),
                                       defer_outputs=True, verified=verified, integrals=bool(selected_zetas(request)),
                                       diagnostics=newton_declines, frames=frames)
             if proposal is None and frames is None:
@@ -734,8 +803,9 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
         # not apply, the smooth-centre rules choose the centres from the
         # order and the invariant.
         from .origin_backend import resolve_origin
-        r = resolve_origin(p, variables, mode, seconds=30, defer_outputs=True, tangent_only=True,
-                           verified=verified, integrals=bool(selected_zetas(request)))
+        report("Testing the repeated-tangent rule")
+        r = resolve_origin(p, variables, mode, seconds=quick_tangent_seconds(request), defer_outputs=True,
+                           tangent_only=True, verified=verified, integrals=bool(selected_zetas(request)))
         if r is None:
             fallback_details.append("The repeated-tangent search returned no certified atlas.")
             r = smooth_centres(quick_canonical_seconds(),

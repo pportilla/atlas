@@ -469,7 +469,9 @@ class NewtonHandOver(unittest.TestCase):
                 patch("engine.origin_backend.resolve_origin", side_effect=origin), face_search(False):
             with self.assertRaises(Reached):
                 _resolve_polynomial(parse(request["polynomial"], FOURFOLD), request, perf_counter())
-        self.assertEqual(calls, [(True, False, 30), (False, True, None)])
+        # The repeated-tangent rule has its share of the time budget; the safe method has no deadline.
+        from engine.quick_budget import QUICK_SECONDS, TANGENT_SHARE
+        self.assertEqual(calls, [(True, False, TANGENT_SHARE * QUICK_SECONDS), (False, True, None)])
 
 
 if __name__ == "__main__":

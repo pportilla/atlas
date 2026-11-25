@@ -2,15 +2,46 @@
 import argparse
 from contextlib import contextmanager
 import json
+import os
 import subprocess
 import sys
+import tempfile
+from time import monotonic
 
+from .quick_budget import QUICK_SECONDS, checked_seconds, expired, expired_line, read_progress, request_seconds
+
+# Seconds that a standard algebra request has, and the longest budget that a
+# quick resolution may ask for where a request holds a computation slot.
 MAX_SECONDS = 55
+# The file in which a search publishes its progress (engine/resolution_progress.py).
+PROGRESS_FILE = "ATLAS_PROGRESS_FILE"
+# Set by the command-line supervisor when it made that file for this run.
+PROGRESS_OWNED = "ATLAS_PROGRESS_OWNED"
 
 
-def _timed_out(data, timeout):
-    from .resolve import inconclusive
-    return 200, inconclusive(data, {'description':f'The quick worker reached its {timeout:g}-second wall-clock limit.'},1000*timeout)
+def _timed_out(data, timeout, elapsed=None, progress=None):
+    """The answer of a quick search stopped at its budget of `timeout` seconds."""
+    return expired(data, timeout, elapsed, progress)
+
+
+@contextmanager
+def _progress_file():
+    """A file for the progress of one search, removed afterwards: its path, and the worker's environment.
+
+    A file that the environment already names is used as it is and left in place.
+    """
+    if os.environ.get(PROGRESS_FILE):
+        yield os.environ[PROGRESS_FILE], None
+        return
+    handle, path = tempfile.mkstemp(prefix="atlas-progress-", suffix=".json")
+    os.close(handle)
+    try:
+        yield path, {**os.environ, PROGRESS_FILE: path}
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def needs_exhaustive_search(request, status, result):
@@ -34,14 +65,36 @@ def _stopped():
     return 503, {'error':'Worker stopped before it produced a certified result.', 'code':'worker_failure'}
 
 
-def run_job(data, timeout=MAX_SECONDS, *, owner=None):
+_OF_REQUEST = object()
+
+
+def run_job(data, timeout=_OF_REQUEST, *, owner=None):
+    """Run one resolution request in a worker of its own: (status, record).
+
+    A quick request has a time budget: `seconds` in the request, or
+    QUICK_SECONDS. When it ends the worker is stopped and the answer is the
+    record of `quick_budget.expired`, with the progress that the search had
+    published. `timeout` replaces the budget of the request when given.
+    """
     from .worker_process import run_worker
-    try:
-        return run_worker(['engine.worker'], data, timeout, owner=owner)
-    except subprocess.TimeoutExpired:
-        return _timed_out(data, timeout)
-    except RuntimeError:
-        return _stopped()
+    if timeout is _OF_REQUEST:
+        try:
+            timeout = request_seconds(data) if isinstance(data, dict) else None
+        except ValueError as error:
+            return 400, {'error': str(error)}
+    if timeout is None:
+        try:
+            return run_worker(['engine.worker'], data, None, owner=owner)
+        except RuntimeError:
+            return _stopped()
+    with _progress_file() as (path, env):
+        started = monotonic()
+        try:
+            return run_worker(['engine.worker'], data, timeout, owner=owner, env=env)
+        except subprocess.TimeoutExpired:
+            return _timed_out(data, timeout, monotonic() - started, read_progress(path))
+        except RuntimeError:
+            return _stopped()
 
 
 def show_zeta(zeta):
@@ -53,6 +106,14 @@ def show_zeta(zeta):
 
 
 def show(r, *, zetas_only=False):
+    if r.get('budget', {}).get('expired'):
+        # The budget ended: one line, and how to go on.
+        print(expired_line(r))
+        return
+    if (r.get('diagnostic') or {}).get('code') == 'input_limit':
+        # The search did not start: the input is beyond what a quick search reads.
+        print(f"{r['summary']} {r['diagnostic']['description']} Run without --quick to resolve it.")
+        return
     print(f"{r['status'].upper()}  {r['summary']}\n{r['engine']} · {r['mode']} · {r['elapsed_ms']:g} ms")
     print(f"{r['polynomial']} = 0 at the origin in ({', '.join(r['variables'])})")
     if 'monodromy_zeta' in r:
@@ -112,11 +173,13 @@ def add_resolution_options(calc):
                       "method applies to this surface and then uses it")
     policies=calc.add_mutually_exclusive_group()
     policies.add_argument('--quick',dest='search',action='store_const',const='quick',
-                          help=f'search for at most {MAX_SECONDS} seconds: exit code 3 when that limit ends the '
-                               'search before a certified result. Inside the limit the search does not give up')
+                          help=f'give the same search a time budget of {QUICK_SECONDS} seconds. When the budget ends '
+                               'the answer says so and the exit code is 3: not finished')
     policies.add_argument('--exhaustive',dest='search',action='store_const',const='exhaustive',
                           help='continue until certified or interrupted (default)')
-    calc.set_defaults(search='exhaustive')
+    calc.set_defaults(search=None)
+    calc.add_argument('--seconds',type=_seconds_argument,metavar='N',
+                      help='the time budget of a quick search in seconds; implies --quick')
     calc.add_argument('--json',action='store_true',help='print the full machine-readable atlas')
     calc.add_argument('--monodromy',action='store_true',help="compute the local monodromy zeta function of the complex Milnor fiber")
     calc.add_argument('--zetas-only', action='store_true',
@@ -127,18 +190,35 @@ def add_resolution_options(calc):
                          help='use available GPU kernels (equivalent to --compute gpu)')
 
 
+def _seconds_argument(text):
+    try:
+        value = float(text)
+        return checked_seconds(int(value) if value.is_integer() else value)
+    except (ValueError, OverflowError):
+        raise argparse.ArgumentTypeError("give a positive number of seconds") from None
+
+
 def calculate_resolution(polynomial, variables, *, mode, search, compute=None, monodromy=False, method="auto",
-                         zetas_only=False, job=run_job):
+                         zetas_only=False, seconds=None, job=run_job):
+    """Resolve in a worker: (status, record). `seconds` is the budget of a quick search and implies one."""
     if mode is None:
         mode = 'intrinsic' if method == 'jung' else 'embedded'
+    if seconds is not None:
+        try:
+            checked_seconds(seconds)
+        except ValueError as error:
+            return 400, {'error': str(error)}
+        search = 'quick'
     request = dict(polynomial=polynomial, variables=variables, mode=mode, search=search, compute=compute)
+    if seconds is not None:
+        request['seconds'] = seconds
     if monodromy:
         request['monodromy'] = True
     if zetas_only:
         request['zetas_only'] = True
     if method != 'auto':
         request['method'] = method
-    return job(request, timeout=MAX_SECONDS if search == 'quick' else None)
+    return job(request, timeout=request_seconds(request))
 
 
 @contextmanager
@@ -158,7 +238,7 @@ def session_decimals(unlimited):
 def resolution_arguments(argv):
     if '--' not in argv:
         # Protect a leading unary minus even when flags precede the polynomial.
-        options={'--vars','--mode','--method','--compute','--gpu','--quick','--exhaustive','--json','--monodromy','--zetas-only','--help','-h'}
+        options={'--vars','--mode','--method','--compute','--gpu','--quick','--exhaustive','--seconds','--json','--monodromy','--zetas-only','--help','-h'}
         for pos, token in enumerate(argv):
             if token.startswith('-') and token.partition('=')[0] not in options:
                 argv=[*argv[:pos],*argv[pos+1:],'--',token]
@@ -171,9 +251,15 @@ def run_resolution(args, calculate=calculate_resolution):
         options = {'method': args.method} if getattr(args, 'method', 'auto') != 'auto' else {}
         if args.zetas_only:
             options['zetas_only'] = True
+        seconds = getattr(args, 'seconds', None)
+        if seconds is not None:
+            if args.search == 'exhaustive':
+                print('An exhaustive search has no time budget: use --seconds without --exhaustive.', file=sys.stderr)
+                return 2
+            options['seconds'] = seconds
         status, r = calculate(args.polynomial, [v.strip() for v in args.vars.split(',')],
-                              mode=args.mode, search=args.search, compute=args.compute,
-                              monodromy=args.monodromy or args.zetas_only, **options)
+                              mode=args.mode, search=args.search or ('quick' if seconds is not None else 'exhaustive'),
+                              compute=args.compute, monodromy=args.monodromy or args.zetas_only, **options)
     except KeyboardInterrupt:
         print('Resolution interrupted.',file=sys.stderr)
         return 130
@@ -186,12 +272,31 @@ def run_resolution(args, calculate=calculate_resolution):
         (not args.monodromy or r.get('monodromy_zeta',{}).get('status')=='computed')) else 3
 
 
+def _owned_progress(remove=False):
+    """The progress file that the supervisor made for this run, or None; `remove` deletes it."""
+    path = os.environ.get(PROGRESS_FILE) if os.environ.get(PROGRESS_OWNED) else None
+    if path and remove:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        os.environ.pop(PROGRESS_FILE, None)
+    return path
+
+
 def _supervised_job(data, timeout, supervisor, worker_digits):
-    import os
     if supervisor == "timeout":
-        return _timed_out(data, timeout)
+        # The supervisor stopped the worker at the budget and started this
+        # process in its place, with the file of the worker's progress.
+        progress = read_progress(os.environ.get(PROGRESS_FILE, ""))
+        _owned_progress(remove=True)
+        return _timed_out(data, timeout, progress=progress)
     if supervisor == "stopped":
+        _owned_progress(remove=True)
         return _stopped()
+    if timeout is None:
+        # Only a search with a budget needs its progress afterwards.
+        _owned_progress(remove=True)
     from pathlib import Path
     fd = int(supervisor)
     os.set_inheritable(fd, False)

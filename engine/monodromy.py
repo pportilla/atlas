@@ -120,13 +120,24 @@ def _transverse_names(count, variables):
     return [f"_u{i}" for i in range(1, count + 1)]
 
 
-def _origin_factors(polynomial, variables):
-    """The origin zeta of a germ in fewer variables, from its own certified resolution."""
+def _origin_factors(polynomial, variables, seconds=None):
+    """The origin zeta of a germ in fewer variables, from its own certified resolution.
+
+    With `seconds` the attempt runs in a worker of its own and is stopped
+    after that long: the optional search it belongs to has a deadline.
+    """
     from .resolve import resolve
+    # An attempt inside the optional search for nearby strata: it keeps its bounds.
+    request = {"polynomial": polynomial, "variables": variables, "mode": "embedded",
+               "search": "quick", "bounded": True, "zetas": ["monodromy"]}
     try:
-        # An attempt inside the optional search for nearby strata: it keeps its bounds.
-        record = resolve({"polynomial": polynomial, "variables": variables, "mode": "embedded",
-                          "search": "quick", "bounded": True, "zetas": ["monodromy"]})
+        if seconds is None:
+            record = resolve(request)
+        else:
+            from .resolve_cli import run_job
+            status, record = run_job(request, timeout=seconds)
+            if status != 200:
+                return None
     except (InputError, LimitError, ArithmeticError, RuntimeError, OSError):
         return None
     zeta = record.get("monodromy_zeta") or {}
@@ -157,7 +168,17 @@ def _transverse_search(polynomial, variables):
         names = _transverse_names(len(equations), variables)
         germ = format_poly(decode_terms(row["germ"]), names)
         # The native search returns the zeta of a Brieskorn-Pham germ directly.
-        factors = _decode_factors(row["factors"]) if "factors" in row else _origin_factors(germ, names)
+        if "factors" in row:
+            factors = _decode_factors(row["factors"])
+        elif limit is None:
+            factors = _origin_factors(germ, names)
+        elif monotonic() >= limit:
+            # The resolution of this transverse germ would start after the deadline.
+            stopped = True
+            continue
+        else:
+            factors = _origin_factors(germ, names, limit - monotonic())
+            stopped = stopped or monotonic() >= limit
         if factors is None:
             continue
         result.append({"model": "transverse composition", "factors": factors, "expression": _quotient(factors),

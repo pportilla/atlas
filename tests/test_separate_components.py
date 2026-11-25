@@ -82,7 +82,7 @@ class SeparateStrictComponents(unittest.TestCase):
         for equation, names, planes, chi in cases:
             for engine, vertex, newton in routes:
               with self.subTest(planes=planes, variables=len(names), engine=engine):
-                with patch("engine.resolve.QUICK_NEARBY_SECONDS", 1):
+                with patch("engine.quick_budget.NEARBY_SHARE", 0.05):
                     request = {"polynomial": equation, "variables": names, "mode": "embedded",
                                "search": "quick", "compute": "cpu", "monodromy": True}
                     if newton:

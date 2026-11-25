@@ -953,8 +953,10 @@ function showResult(run) {
   selectionViews.length = 0;
   run.body.append(report);
   report.hidden = false;
-  const summary = result.status === "resolved" ? "" : result.summary || result.reason;
   const diagnostic = result.diagnostic?.description || result.diagnostic?.fast_path_limit;
+  // When a time budget ends, the description begins with the summary: show it once.
+  const repeated = diagnostic && result.summary && diagnostic.startsWith(result.summary);
+  const summary = result.status === "resolved" || repeated ? "" : result.summary || result.reason;
   $("result-summary").textContent = summary || "";
   $("result-summary").hidden = !summary;
   $("result-diagnostic").textContent = diagnostic || "";
@@ -1254,7 +1256,9 @@ function refreshRun(run) {
     }
   }
   if (run.result?.can_search && run.request.search !== "exhaustive") {
-    run.controls.append(action("Start exhaustive search", () => submitRun({...run.request, search: "exhaustive"})));
+    // An exhaustive search has no time budget.
+    const {seconds, ...request} = run.request;
+    run.controls.append(action("Start exhaustive search", () => submitRun({...request, search: "exhaustive"})));
   } else if (["failed", "cancelled"].includes(run.state)) {
     run.controls.append(action("Retry resolution", () => submitRun(run.request)));
   }

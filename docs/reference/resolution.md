@@ -63,7 +63,8 @@ The options of `resolve` choose the kind of resolution and how long Atlas may se
 | --- | --- |
 | `mode` | `"embedded"` (default) makes the total transform a divisor with simple normal crossings and records the multiplicity of each component. `"intrinsic"` resolves the singularities of the reduced hypersurface. |
 | `method` | `"auto"` (default) chooses the construction. `"weighted"` uses weighted blowups in embedded mode. |
-| `search` | `"exhaustive"` (default) continues until the resolution is certified or you interrupt it. `"quick"` searches in the same way for at most 55 seconds, and returns status `"inconclusive"` only when that deadline ends the search. A quick search reads at most eight variables, degree 128 and 4,096 expanded terms. |
+| `search` | `"exhaustive"` (default) continues until the resolution is certified or you interrupt it. `"quick"` gives the same search a time budget of 20 seconds, and returns status `"inconclusive"` only when the budget ends. A quick search reads at most eight variables, degree 128 and 4,096 expanded terms. |
+| `seconds` | The time budget of a quick search in seconds, a positive number. It makes the search a quick one. When the budget ends, `resolve` returns a value with status `"inconclusive"` and raises no error. Its `budget` field gives the seconds given and used and the last stage of the search. [Quick search](../thematic/resolution-pipeline.md#quick-search) |
 | `monodromy` | `True` computes both zeta functions during the call. With `False` (default) they are computed the first time you read one of them. |
 | `compute` | `"cpu"`, `"auto"` or `"gpu"`. Omit it to use the configured device, normally the CPU. [Select a device](http-and-compute.md#select-a-device) |
 
@@ -75,6 +76,7 @@ f = y^2 - x^3
 print(resolve(f).divisors)                     # [E1, E2, E3]
 print(resolve(f, mode="intrinsic").divisors)   # [P1]
 print(resolve(f, search="quick").status)       # resolved
+print(resolve(f, seconds=5).status)            # resolved
 ```
 
 The zeta functions are always computed on an embedded resolution. For an intrinsic or weighted resolution, Atlas resolves the same equation in embedded mode when you first read a zeta function. `monodromy_check(f)` needs only the zeta functions, so it can also use a certificate that avoids charts altogether. [Zeta functions and the monodromy conjecture](../thematic/zeta-functions.md)

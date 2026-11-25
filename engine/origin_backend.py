@@ -45,7 +45,7 @@ SAFE_TURN_SECONDS = 10
 
 
 def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, tangent_only=False,
-                   verified=None, integrals=False, skip_tangent=False, safe=False, diagnostics=None):
+                   verified=None, integrals=False, skip_tangent=False, safe=False, diagnostics=None, turn=None):
     """The record of the resolution, or None when the rule gives no answer in
     the time allowed. `poly` maps exponents to rational coefficients of the
     reduced equation.
@@ -59,13 +59,16 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
     and continue where they were, so with `seconds=None` it works until it
     has an answer, the process is interrupted, or every rule has stopped for
     a reason of its own. `diagnostics` receives that reason under "reason".
+    `turn` is the length of the first turn in seconds (SAFE_TURN_SECONDS
+    when it is not given): a search with a time budget makes it a share of
+    the budget.
     """
     from .polynomial import rational_text
     deadline = None if seconds is None else monotonic() + seconds
     request = json.dumps({"terms": [[list(exponents), rational_text(c)] for exponents, c in poly.items()],
                           "variables": list(variables), "mode": mode, "seconds": seconds,
                           "defer_outputs": defer_outputs, "tangent_only": tangent_only,
-                          "skip_tangent": skip_tangent, "safe": safe})
+                          "skip_tangent": skip_tangent, "safe": safe, "turn": turn})
 
     def declined(reason):
         if diagnostics is not None:
@@ -91,7 +94,7 @@ def resolve_origin(poly, variables, mode, seconds=120, *, defer_outputs=False, t
         if mode == "intrinsic":
             from .exhaustive_resolution import refine_intrinsic_boundary
             record, checked = refine_intrinsic_boundary(poly, variables, record, checked, deadline, integrals,
-                                                        safe=safe)
+                                                        safe=safe, turn=turn)
             if not defer_outputs:
                 record["dual_complex"] = checked[1]["dual_complex"]
         if verified is not None:
@@ -121,7 +124,7 @@ def strict_components(symbols, equation, factors, *, separate):
 
 
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False,
-             full_boundary=False, order_only=False, safe=False, reasons=None):
+             full_boundary=False, order_only=False, safe=False, reasons=None, turn=None):
     """The computation of `resolve_origin`, in this process.
 
     With `order_only`, only the maximal order rule runs, and only at an
@@ -170,7 +173,7 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
 
     def blowups(components, rules):
         # The repeated-tangent rule has five prescribed centres: it needs no turns.
-        turns = SAFE_TURN_SECONDS if safe and rules[0] != "tangent" else None
+        turns = (turn or SAFE_TURN_SECONDS) if safe and rules[0] != "tangent" else None
         return acampo_over(symbols, components, symbols, dimension=len(symbols), rules=rules, deadline=deadline,
                            budget=None if seconds is None or safe else 400,
                            count_strata=not (defer_outputs or intrinsic),
@@ -295,5 +298,5 @@ if __name__ == "__main__":
     answer = _resolve({tuple(exponents): kernel_fraction(c) for exponents, c in asked["terms"]}, asked["variables"],
                       asked["mode"], asked["seconds"], defer_outputs=asked.get("defer_outputs", False),
                       tangent_only=asked.get("tangent_only", False), skip_tangent=asked.get("skip_tangent", False),
-                      safe=asked.get("safe", False), reasons=why)
+                      safe=asked.get("safe", False), reasons=why, turn=asked.get("turn"))
     print(json.dumps({"gave_up": why[0]} if answer is None and why else answer))

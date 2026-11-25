@@ -82,11 +82,15 @@ class SearchJobs:
     def start(self, data):
         if not isinstance(data, dict):
             raise ValueError("Send a polynomial, its variables, and a resolution mode.")
-        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "zetas_only", "search", "method")
+        fields = ("polynomial", "variables", "mode", "compute", "monodromy", "zetas", "zetas_only", "search", "method",
+                  "seconds")
         request = {key: data[key] for key in fields if key in data}
-        request.setdefault("search", "exhaustive")
+        # A budget in seconds asks for a quick search.
+        request.setdefault("search", "exhaustive" if request.get("seconds") is None else "quick")
         if request["search"] not in ("auto", "quick", "exhaustive"):
             raise ValueError("Search must be auto, quick or exhaustive.")
+        from .quick_budget import request_seconds
+        request_seconds(request)
         if not isinstance(request.get("polynomial"), str) or not request["polynomial"].strip():
             raise ValueError("Enter a nonempty polynomial.")
         names = request.get("variables")
@@ -153,14 +157,19 @@ class SearchJobs:
             pass
 
     def _run_attempt(self, job, policy):
-        from .resolve_cli import MAX_SECONDS, _timed_out
-        timeout = MAX_SECONDS if policy == "quick" else None
+        from .quick_budget import expired, read_progress, request_seconds
+        # The quick attempt has the budget of the request. An exhaustive one has none.
+        request = {key: value for key, value in job.request.items() if policy == "quick" or key != "seconds"}
+        request["search"] = policy
+        timeout = request_seconds(request)
+        started = time.monotonic()
         try:
-            output, _ = job.child.communicate(json.dumps({**job.request, "search": policy}), timeout=timeout)
+            output, _ = job.child.communicate(json.dumps(request), timeout=timeout)
         except subprocess.TimeoutExpired:
             self._stop(job)
             job.child.communicate()
-            return _timed_out(job.request, timeout)
+            progress = read_progress(Path(self.progress_dir.name) / job.id) if self.progress_dir else None
+            return expired(request, timeout, time.monotonic() - started, progress)
         if job.child.returncode:
             raise RuntimeError("The search process exited before returning a result.")
         return json.loads(output, parse_int=integer_from_decimal)

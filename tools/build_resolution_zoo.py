@@ -13,12 +13,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from engine.polynomial import integer_from_decimal, parse_expression
+from engine.quick_budget import checked_seconds
 from engine.quotient_monomials import degree_bounds
 from engine.resolution_zetas import replay_zetas
 from engine.zoo_data import catalogue_directory
 
 
-def atlas(*arguments):
+class BudgetExpired(RuntimeError):
+    """A step of a record was not finished within its time budget.
+
+    This is not a failure of the germ or of Atlas: the same step with a
+    larger budget, or without one, can still finish. `step` names the step,
+    `seed` the record when it is known, and `budget` is the `budget` field
+    of the answer: the seconds given and used, and the stage and the number
+    of blowups that the search had reported last.
+    """
+
+    def __init__(self, step, budget, seed=None):
+        self.step, self.budget, self.seed = step, budget, seed
+        where = f"{seed}: " if seed else ""
+        doing = f" while {budget['stage'][:1].lower()}{budget['stage'][1:]}" if budget.get("stage") else ""
+        super().__init__(f"{where}the {step} was not finished within {budget['seconds']:g} seconds{doing}.")
+
+
+def atlas(*arguments, step=None):
+    """One Atlas command and its JSON answer. `step` names a resolution whose budget may end."""
     run = subprocess.run([str(ROOT / "atlas"), *arguments, "--json"], capture_output=True,
                          cwd=ROOT, encoding="utf-8")
     if run.returncode:
@@ -26,7 +45,9 @@ def atlas(*arguments):
             diagnostic = json.loads(run.stdout)
             detail = diagnostic.get("diagnostic") or diagnostic.get("error") or diagnostic.get("summary")
         except ValueError:
-            detail = None
+            diagnostic, detail = None, None
+        if step and isinstance(diagnostic, dict) and (diagnostic.get("budget") or {}).get("expired"):
+            raise BudgetExpired(step, diagnostic["budget"])
         raise RuntimeError(detail or run.stderr.strip() or f"Atlas exited with code {run.returncode}")
     return json.loads(run.stdout)
 
@@ -66,7 +87,13 @@ def origin_zeta(output):
     return {key: value for key, value in output.items() if key not in ("nearby_strata", "nearby_search")}
 
 
-def build_record(seed, dimension, variables):
+def build_record(seed, dimension, variables, seconds=None):
+    """The catalogue entry and the record of one seed.
+
+    A quick search has a time budget: `seconds` of the seed, else the
+    `seconds` given here, else the default of Atlas. Both resolutions get
+    it. A step that is not finished within it raises BudgetExpired.
+    """
     equation = seed["equation"]
     native_dimension = atlas("algebra", "local-dimension", "--gen=" + equation, "--vars", ",".join(variables),
                              "--compute", "cpu")["result"]["local_dimension"]
@@ -74,8 +101,14 @@ def build_record(seed, dimension, variables):
         raise ValueError(f"The requested collection has dimension {dimension}; the germ has dimension {native_dimension}")
     policy = seed.get("search", "quick")
     args = ("--vars", ",".join(variables), "--compute", "cpu", "--" + policy)
-    embedded = atlas("resolve", equation, *args, "--mode", "embedded", "--monodromy")
-    intrinsic = atlas("resolve", equation, *args, "--mode", "intrinsic")
+    budget = seed.get("seconds", seconds)
+    if budget is not None:
+        if policy != "quick":
+            raise ValueError("A time budget in seconds belongs to a quick search")
+        args += ("--seconds", str(checked_seconds(budget)))
+    embedded = atlas("resolve", equation, *args, "--mode", "embedded", "--monodromy",
+                     step="embedded resolution with zetas")
+    intrinsic = atlas("resolve", equation, *args, "--mode", "intrinsic", step="intrinsic resolution")
     for key in ("polynomial", "variables", "base_field", "geometric_field", "origin"):
         if embedded[key] != intrinsic[key]:
             raise ValueError(f"The intrinsic and embedded records disagree on {key}")
@@ -136,15 +169,19 @@ def seeds(source):
             yield seed, group["dimension"], group["variables"]
 
 
-def compute(item):
+def compute(item, seconds=None):
     seed, dimension, variables = item
     try:
-        return build_record(seed, dimension, variables)
+        return build_record(seed, dimension, variables, seconds)
+    except BudgetExpired as error:
+        # Not finished in time: the caller can tell this from a failure.
+        raise BudgetExpired(error.step, error.budget, seed["id"]) from None
     except (ValueError, RuntimeError, KeyError) as error:
         raise RuntimeError(f"Could not generate {seed['id']}: {error}") from error
 
 
-def generate(source, destination, jobs=1):
+def generate(source, destination, jobs=1, seconds=None):
+    """Compute every record of the seed file. `seconds` is the budget of each quick resolution."""
     if jobs < 1:
         raise ValueError("Use at least one job.")
     if (destination / "seeds.json").is_file() and source.resolve() != (destination / "seeds.json").resolve():
@@ -160,7 +197,7 @@ def generate(source, destination, jobs=1):
             ThreadPoolExecutor(max_workers=jobs) as pool:
         staging = Path(staged)
         try:
-            for entry, detail in pool.map(compute, work):
+            for entry, detail in pool.map(lambda item: compute(item, seconds), work):
                 print(entry["id"], flush=True)
                 entries.append(entry)
                 (staging / (entry["id"] + ".json")).write_text(json_text(detail), encoding="utf-8")
@@ -183,10 +220,17 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", type=Path, help="seed file (default: seeds.json in the catalogue checkout)")
     parser.add_argument("--out", type=Path, help="output directory (default: the catalogue checkout)")
     parser.add_argument("--jobs", type=int, default=1, help="number of records to compute at once")
+    parser.add_argument("--seconds", type=float, help="time budget of each quick resolution (default: that of Atlas); "
+                        "a seed can name its own")
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
     directory = catalogue_directory()
     if args.seeds and not args.out and args.seeds.resolve() != (directory / "seeds.json").resolve():
         parser.error("For a separate seed file, pass --out to choose the output directory.")
-    generate(args.seeds or directory / "seeds.json", args.out or directory, args.jobs)
+    try:
+        generate(args.seeds or directory / "seeds.json", args.out or directory, args.jobs, args.seconds)
+    except BudgetExpired as error:
+        # Not finished: the same exit code as an Atlas search whose budget ended.
+        print(error, file=sys.stderr)
+        sys.exit(3)

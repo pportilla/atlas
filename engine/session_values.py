@@ -246,13 +246,14 @@ class Resolution(_RecordView):
             self._computed_zetas = deepcopy((record["topological_zeta"], record["monodromy_zeta"]))
             self._local_bernstein_sato = deepcopy(record.get("monodromy_check", {}).get("local_bernstein_sato"))
 
-    def _zeta_pair(self, search="exhaustive", compute=None):
+    def _zeta_pair(self, search="exhaustive", compute=None, seconds=None):
         # Replay a saved certificate before using any zetas imported with it.
         # Only cache computed pairs so a quick limit leaves exhaustive work possible.
         if self._computed_zetas is None:
             from .resolution_zetas import replay_zetas
             outputs = replay_zetas({"record": self._record, "zetas": ["topological", "monodromy"],
-                                    "search": search, "compute": compute})
+                                    "search": search, "compute": compute,
+                                    **({} if seconds is None else {"seconds": seconds})})
             pair = outputs["topological_zeta"], outputs["monodromy_zeta"]
             if any(z.get("status") != "computed" for z in pair):
                 return pair

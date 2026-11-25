@@ -153,7 +153,7 @@ of the original polynomial and computes the selected zetas. The record's
 `requested_method` and `weighted_attempt.reason` identify the original
 method and the reason for switching.
 
-An explicit quick search bounds the weighted construction and its
-certificate to 40 seconds each within the outer worker deadline. After a
-decline it continues with the ordinary embedded resolution, as an exhaustive
-search does, and is `inconclusive` only when the worker deadline ends it. [Weighted resolution benchmark](../../benchmarks/weighted-resolution.md)
+An explicit quick search gives the weighted construction and its
+certificate 25% of its time budget each, and at most 40 seconds.
+After a decline it continues with the ordinary embedded resolution, as an
+exhaustive search does, and is `inconclusive` only when the budget ends. [Weighted resolution benchmark](../../benchmarks/weighted-resolution.md)

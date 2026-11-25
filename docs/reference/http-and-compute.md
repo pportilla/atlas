@@ -32,7 +32,8 @@ Choose `search` according to how your client will receive the result.
 
 | Request to `/api/resolve` | How to read the response |
 | --- | --- |
-| `"search": "quick"` | Searches for at most 55 seconds and returns the outcome directly. Read `status` to see whether the calculation resolved the input: it is `"inconclusive"` only when that deadline ended the search. |
+| `"search": "quick"` | Gives the search a time budget of 20 seconds and returns the outcome directly. Read `status` to see whether the calculation resolved the input: it is `"inconclusive"` only when the budget ended, and `budget` then says what the search was doing. |
+| `"seconds": N` | Names the budget of a quick search, at most 55 seconds on this endpoint, and implies `"search": "quick"`. A search job at `/api/searches` takes any budget. |
 | Omit `search` | Tries quick resolution first. If the attempt reaches a limit or a requested result still needs a certificate, Atlas returns HTTP 202 with the ID of an exhaustive background job. |
 | `"search": "exhaustive"` | Starts a background job immediately. Use its returned `id` to follow progress. |
 
@@ -79,7 +80,7 @@ Once the job has expired, use `POST /api/zetas`. Its JSON body takes the saved r
 
 Use `POST /api/algebra` for polynomial and ideal arithmetic. A request specifies the operation, an ordered ring and its operands. The result is returned directly. A Gröbner basis response can also include a reference for later normal forms or membership tests. [Worked algebra requests and complete operation tables](algebra-requests.md)
 
-The standard algebra and resolution endpoints accept up to 32,768 bytes per request. A standard algebra request and a quick resolution have a 55-second worker deadline. For a larger algebra calculation, post to `/api/algebra/exhaustive`, which keeps the connection open until the worker finishes. For a larger resolution request, use `/api/searches` to obtain a job ID. To check that your client can reach the server, `GET /api/health` returns `{"status":"ok"}`.
+The standard algebra and resolution endpoints accept up to 32,768 bytes per request. A standard algebra request has a 55-second worker deadline, and a quick resolution its time budget of 20 seconds. For a larger algebra calculation, post to `/api/algebra/exhaustive`, which keeps the connection open until the worker finishes. For a larger resolution request, use `/api/searches` to obtain a job ID. To check that your client can reach the server, `GET /api/health` returns `{"status":"ok"}`.
 
 ## Select a device
 

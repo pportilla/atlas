@@ -59,7 +59,7 @@ class QuickSearchHasNoEndOfItsOwn(unittest.TestCase):
                                      if call.kwargs.get("tangent_only")))
 
     def test_a_bounded_attempt_keeps_its_budgets_and_may_be_inconclusive(self):
-        from engine.resolve_cli import MAX_SECONDS
+        from engine.quick_budget import BOUNDED_SECONDS
         for names, equation in self.CASES:
             with self.subTest(variables=len(names)):
                 request = {"polynomial": equation, "variables": names, "mode": "embedded", "search": "quick",
@@ -70,22 +70,26 @@ class QuickSearchHasNoEndOfItsOwn(unittest.TestCase):
                 rules = [call for call in origin.call_args_list if not call.kwargs.get("tangent_only")]
                 self.assertEqual(len(rules), 1)
                 self.assertFalse(rules[0].kwargs["safe"])
-                self.assertTrue(0 < rules[0].kwargs["seconds"] <= MAX_SECONDS)
+                self.assertTrue(0 < rules[0].kwargs["seconds"] <= BOUNDED_SECONDS)
+                # Its turns are not shares of a budget.
+                self.assertIsNone(rules[0].kwargs["turn"])
 
-    def test_a_bounded_attempt_gets_the_rest_of_the_workers_limit(self):
+    def test_a_bounded_attempt_gets_the_rest_of_its_fixed_limit(self):
+        # The limits of a quick request are shares of its budget instead: tests/test_quick_budget.py.
         from engine import resolve as module
-        from engine.resolve_cli import MAX_SECONDS
+        from engine.quick_budget import BOUNDED_SECONDS
+        bounded = {"search": "quick", "bounded": True}
         token = module._REQUEST_START.set(1000.0)
         try:
             with patch("engine.resolve.perf_counter", return_value=1003.0):
-                self.assertEqual(quick_canonical_seconds(), MAX_SECONDS - module.QUICK_FINAL_RESERVE - 3)
-                self.assertEqual(quick_nearby_seconds(), QUICK_NEARBY_SECONDS)
+                self.assertEqual(quick_canonical_seconds(), BOUNDED_SECONDS - module.QUICK_FINAL_RESERVE - 3)
+                self.assertEqual(quick_nearby_seconds(bounded), QUICK_NEARBY_SECONDS)
             # Late in the request the rules keep their former share.
             with patch("engine.resolve.perf_counter", return_value=1048.0):
                 self.assertEqual(quick_canonical_seconds(), QUICK_CANONICAL_SECONDS)
-                self.assertEqual(quick_nearby_seconds(), MAX_SECONDS - module.QUICK_FINAL_RESERVE - 48)
+                self.assertEqual(quick_nearby_seconds(bounded), BOUNDED_SECONDS - module.QUICK_FINAL_RESERVE - 48)
             with patch("engine.resolve.perf_counter", return_value=1060.0):
-                self.assertEqual(quick_nearby_seconds(), 0)
+                self.assertEqual(quick_nearby_seconds(bounded), 0)
         finally:
             module._REQUEST_START.reset(token)
 
