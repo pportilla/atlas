@@ -1,5 +1,12 @@
 // Compute the normal fan of conv(support) + R^n_{>=0}, then a compatible
 // unimodular subdivision. The process is entirely in exact lattices.
+//
+// A singular simplicial cone is subdivided at a lattice point of its
+// fundamental parallelepiped. The point decides how many cones the regular
+// fan has, so it is chosen from all the points of the parallelepiped: by
+// enumerating them for a cone of small index, and among the Hilbert basis
+// of the cone for a larger one. The number of cones is bounded by the memory
+// the system has available, not by a fixed count.
 #ifndef ATLAS_SMALL_NEWTON_FAN
 #include <libnormaliz/libnormaliz.h>
 #endif
@@ -8,16 +15,27 @@
 #include <flint/fmpz_mat.h>
 #include <json/json.h>
 #include <algorithm>
+#include <fstream>
+#include <limits>
 #include <sstream>
 #include <cstdio>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <queue>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
+#include <sys/resource.h>
+#include <unistd.h>
+#include <csignal>
+#include <sys/time.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 namespace {
 using Z = mpz_class;
@@ -25,8 +43,46 @@ using Ray = std::vector<Z>;
 using Rays = std::vector<Ray>;
 using Face = std::vector<int>;
 using JsonValue = Json::Value;
-constexpr size_t max_rays = 16000, max_cone_records = 120000;
 constexpr long max_coordinate = 100000000;
+// Every lattice point of the fundamental parallelepiped is enumerated for a
+// cone of at most this index. A larger cone uses its Hilbert basis.
+constexpr long enumeration_limit = 4096;
+// A fan with at least this many cones is compared with the fan of the second
+// scoring rule, and the smaller of the two is kept.
+constexpr size_t comparison_threshold = 4096;
+// Memory taken by one cone record with its share of the rays, the incidence
+// sets and the answer, measured at about 1 kB on fans of 10^5 to 10^6 cones.
+constexpr size_t record_bytes = 2048;
+// Processor seconds one Hilbert basis may take. A basis is as large as the
+// arithmetic of its cone makes it, up to the index, and most take
+// milliseconds. Past this time the cone is subdivided at the sampled point
+// instead, which needs no basis. After this many such cones the fan stops
+// asking for Hilbert bases.
+constexpr long hilbert_seconds = 2;
+constexpr int hilbert_refusals = 3;
+
+#ifndef ATLAS_SMALL_NEWTON_FAN
+// Bytes that the fan may take: a quarter of the memory reported as available
+// when the program starts.
+size_t memory_allowance() {
+    static const size_t allowance=[] {
+        std::ifstream meminfo("/proc/meminfo");
+        for(std::string key; meminfo >> key;) {
+            unsigned long long kilobytes;
+            if(key=="MemAvailable:" && meminfo >> kilobytes) return static_cast<size_t>(kilobytes)*1024/4;
+            meminfo.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+        }
+        const long pages=sysconf(_SC_PHYS_PAGES), size=sysconf(_SC_PAGE_SIZE);
+        return pages>0 && size>0 ? static_cast<size_t>(pages)/8*static_cast<size_t>(size) : size_t(1)<<30;
+    }();
+    return allowance;
+}
+// Records that fit in the allowance. Two fans exist while they are compared.
+size_t record_allowance() {return memory_allowance()/record_bytes/2;}
+#else
+// The fixed-work fan declines at 64 records.
+size_t record_allowance() {return 64;}
+#endif
 
 Z dot(const Ray& a, const Ray& b) {
     Z value;
@@ -55,18 +111,62 @@ struct Matrix {
     Matrix& operator=(const Matrix&) = delete;
 };
 
-struct Cell { Face rays; Z index; bool active = true; };
-struct Candidate { Ray point; Face support; };
+// The candidates of a cell are lattice points of its half-open fundamental
+// parallelepiped, as indices into the fan's table of points. They are the
+// Hilbert basis of the cell (complete) or the ones inherited from its parent.
+// `sampled`: a Hilbert basis of this cell or of an ancestor took too long.
+struct Cell {
+    Face rays; Z index; bool active = true; std::vector<int> candidates; bool complete = false, sampled = false;
+};
+// A subdivision point with the face that carries it. The children that
+// replace a ray of that face have the indices `sum` adds up, `largest` among them.
+struct Candidate { Ray point; Face support; Z sum, largest; };
+// The second scoring rule produced more cones than the fan it is compared with.
+struct Larger {};
+
+#ifndef ATLAS_SMALL_NEWTON_FAN
+// Normaliz leaves a computation with an exception once this flag is set.
+// The timer counts the processor time of this program, not the wall clock,
+// so a busy machine does not change which bases are computed.
+void interrupt_normaliz(int) {libnormaliz::nmz_interrupted=1;}
+struct HilbertTime {
+    HilbertTime() {
+        libnormaliz::nmz_interrupted=0;
+        std::signal(SIGVTALRM,interrupt_normaliz);
+        itimerval timer{};
+        timer.it_value.tv_sec=hilbert_seconds;
+        setitimer(ITIMER_VIRTUAL,&timer,nullptr);
+    }
+    ~HilbertTime() {
+        itimerval off{};
+        setitimer(ITIMER_VIRTUAL,&off,nullptr);
+        libnormaliz::nmz_interrupted=0;
+    }
+};
+#endif
 
 class Fan {
     int n;
     bool exhaustive;
+    // Rule 0 minimizes the sum of the indices of the children. Rule 1 first
+    // multiplies that sum by the number of children, which favours a point on
+    // a face of low dimension.
+    int rule;
+    size_t cone_cap, record_limit;
+    size_t active = 0;
     Rays rays;
     std::map<Ray,int> index;
     std::vector<Cell> cells;
     std::vector<std::set<int>> incident;
     std::priority_queue<std::pair<Z,int>> singular;
     int newton_ray_count = 0, newton_vertices = 0;
+    Rays points;
+    std::map<Ray,int> point_index;
+#ifndef ATLAS_SMALL_NEWTON_FAN
+    // Shared by the fans of one request: the second fan does not wait again
+    // for the bases the first one gave up.
+    static inline int refusals = 0;
+#endif
 
     int id(const Ray& r) {
 #ifdef ATLAS_SMALL_NEWTON_FAN
@@ -75,10 +175,7 @@ class Fan {
         if(!exhaustive && *std::max_element(r.begin(),r.end())>max_coordinate)
             throw std::runtime_error("Newton fan exceeded its ray-coordinate budget.");
         auto [it, fresh]=index.emplace(r,static_cast<int>(rays.size()));
-        if (fresh) {
-            if (rays.size()>=max_rays) throw std::runtime_error("Newton fan exceeded its ray budget.");
-            rays.push_back(r); incident.emplace_back();
-        }
+        if (fresh) {rays.push_back(r); incident.emplace_back();}
         return it->second;
     }
     void matrix(Matrix& m,const Face& c) const {
@@ -89,7 +186,8 @@ class Fan {
 #ifdef ATLAS_SMALL_NEWTON_FAN
         if (cells.size() >= 64) throw std::length_error("small fan budget");
 #endif
-        if(cells.size()>=max_cone_records) throw std::runtime_error("Newton fan exceeded its cone budget.");
+        if(cells.size()>=record_limit)
+            throw std::runtime_error("The regular Newton fan needs more memory than is available.");
         Matrix m(n); matrix(m,c); fmpz_t det; fmpz_init(det); fmpz_mat_det(det,m.a);
         Z d=integer(det); fmpz_clear(det);
         if(!d) throw std::logic_error("Triangulation produced a zero-volume cone.");
@@ -99,9 +197,18 @@ class Fan {
 #endif
         const int k=static_cast<int>(cells.size());
         for(int i:c) incident[i].insert(k);
-        cells.push_back({std::move(c),d,true});
+        Cell cell; cell.rays=std::move(c); cell.index=d;
+        cells.push_back(std::move(cell));
         if(d>1) singular.emplace(d,-k);
+        // Subdivisions only add cones, so a fan above the cap stays above it.
+        if(++active>cone_cap) throw Larger{};
         return d;
+    }
+    void retire(int k) {
+        Cell& cell=cells[k];
+        cell.active=false; --active;
+        for(int i:cell.rays) incident[i].erase(k);
+        std::vector<int>().swap(cell.candidates);
     }
 
     // Pulling triangulation. A face uses its own first ray in the same global
@@ -141,14 +248,36 @@ class Fan {
         }
     }
 
-    Candidate interior_lattice_point(const Cell& cell) const {
+    // index * A^{-1}, where the columns of A are the rays of the cell. Row j
+    // gives the numerator over the index of the coordinate along ray j.
+    void scaled_inverse(Matrix& inv,const Cell& cell) const {
+        Matrix a(n); matrix(a,cell.rays);
+        fmpz_t denominator,factor; fmpz_init(denominator); fmpz_init(factor);
+        const int ok=fmpz_mat_inv(inv.a,denominator,a.a);
+        if(ok) {
+            // The denominator divides the determinant and can be smaller.
+            fmpz_set_mpz(factor,cell.index.get_mpz_t());
+            fmpz_divexact(factor,factor,denominator);
+            fmpz_mat_scalar_mul_fmpz(inv.a,inv.a,factor);
+        }
+        fmpz_clear(denominator); fmpz_clear(factor);
+        if(!ok) throw std::logic_error("Singular lattice basis.");
+    }
+    // Smaller is better. The rule's leading entry, then the sum of the child
+    // indices and the largest of them.
+    std::tuple<Z,Z,Z> key(const Z& sum,const Z& largest,size_t children) const {
+        return {rule==1 ? Z(sum*static_cast<unsigned long>(children)) : sum,sum,largest};
+    }
+    std::tuple<Z,Z,Z> key(const Candidate& c) const {return key(c.sum,c.largest,c.support.size());}
+
+    Candidate sampled_point(const Cell& cell) const {
         Matrix a(n), inv(n); matrix(a,cell.rays);
         fmpz_t denominator; fmpz_init(denominator);
         const int ok=fmpz_mat_inv(inv.a,denominator,a.a);
         Z den=integer(denominator); fmpz_clear(denominator);
         if(!ok) throw std::logic_error("Singular lattice basis.");
         if(den<0) {den=-den; fmpz_mat_neg(inv.a,inv.a);}
-        Candidate best; Z best_sum,best_max;
+        Candidate best;
         // Images of the coordinate vectors generate Z^n/<rays>. If index>1
         // at least one has a nonzero residue. Its fractional coordinates give
         // a lattice point in the half-open fundamental parallelepiped. Sampling
@@ -176,20 +305,194 @@ class Fan {
                 // not be primitive when the inverse denominator is reduced.
                 Z scale=cell.index/den;
                 Z score=sum*scale/common, maximum=largest*scale/common;
-                if(!best.point.empty() && (score>best_sum || (score==best_sum && maximum>=best_max))) continue;
+                if(!best.point.empty() && (score>best.sum || (score==best.sum && maximum>=best.largest))) continue;
                 Ray r(n); Face support;
                 for(int j=0;j<n;++j) {
                     r[j]=point[j]/common;
                     if(num[j]!=0) support.push_back(cell.rays[j]);
                 }
-                best={r,support}; best_sum=score; best_max=maximum;
+                best={r,support,score,maximum};
             }
         }
         if(best.support.size()<2) throw std::logic_error("No nontrivial lattice residue.");
         return best;
     }
+
+    // The best point among all the lattice points of the half-open
+    // fundamental parallelepiped of a cell of small index. The row lattice of
+    // the rays has a triangular Hermite basis, so the vectors x with
+    // 0 <= x_i < h_ii represent Z^n/<rays> once each. The numerators of the
+    // coordinates of x are index*A^{-1}x reduced modulo the index.
+    void enumerated_point(Candidate& best,const Cell& cell) const {
+        const long modulus=cell.index.get_si();
+        Matrix inv(n); scaled_inverse(inv,cell);
+        fmpz_mat_t generators,hermite; fmpz_mat_init(generators,n,n); fmpz_mat_init(hermite,n,n);
+        for(int row=0;row<n;++row) for(int col=0;col<n;++col)
+            fmpz_set_mpz(fmpz_mat_entry(generators,row,col),rays[cell.rays[row]][col].get_mpz_t());
+        fmpz_mat_hnf(hermite,generators);
+        std::vector<long> period(n);
+        for(int i=0;i<n;++i) period[i]=fmpz_get_si(fmpz_mat_entry(hermite,i,i));
+        fmpz_mat_clear(generators); fmpz_mat_clear(hermite);
+        std::vector<std::vector<long>> step(n,std::vector<long>(n));
+        fmpz_t reduced; fmpz_init(reduced);
+        for(int i=0;i<n;++i) for(int j=0;j<n;++j) {
+            fmpz_mod_ui(reduced,fmpz_mat_entry(inv.a,j,i),modulus);
+            step[i][j]=fmpz_get_si(reduced);
+        }
+        fmpz_clear(reduced);
+        auto point_of=[&](const std::vector<long>& numerators) {
+            Ray point(n);
+            for(int row=0;row<n;++row) {
+                for(int j=0;j<n;++j) if(numerators[j]) point[row]+=rays[cell.rays[j]][row]*numerators[j];
+                if(!mpz_divisible_p(point[row].get_mpz_t(),cell.index.get_mpz_t()))
+                    throw std::logic_error("A lattice residue yielded a nonintegral point.");
+                point[row]/=cell.index;
+            }
+            return point;
+        };
+        // The sampled point is the incumbent. Only a better key replaces it.
+        long best_sum=best.sum.get_si(),best_largest=best.largest.get_si();
+        long best_lead=rule==1 ? best_sum*static_cast<long>(best.support.size()) : best_sum;
+        // partial[i] is the residue of the digits x_i, x_{i+1}, ...
+        std::vector<std::vector<long>> partial(n+1,std::vector<long>(n));
+        std::vector<long> digit(n),chosen;
+        Ray chosen_point;
+        while(true) {
+            int i=0;
+            while(i<n && digit[i]+1==period[i]) {digit[i]=0; ++i;}
+            if(i==n) break;
+            ++digit[i];
+            for(int j=0;j<n;++j) {
+                partial[i][j]+=step[i][j];
+                if(partial[i][j]>=modulus) partial[i][j]-=modulus;
+            }
+            for(int lower=i-1;lower>=0;--lower) partial[lower]=partial[i];
+            const auto& numerators=partial[0];
+            long sum=0,largest=0,children=0;
+            for(long v:numerators) {sum+=v; largest=std::max(largest,v); children+=v!=0;}
+            if(children<2) continue;
+            const long lead=rule==1 ? sum*children : sum;
+            if(lead>best_lead || (lead==best_lead && (sum>best_sum || (sum==best_sum && largest>best_largest))))
+                continue;
+            if(lead==best_lead && sum==best_sum && largest==best_largest) {
+                // Equal keys: keep the sampled point, or the smallest point found here.
+                if(chosen.empty()) continue;
+                Ray point=point_of(numerators);
+                if(!(point<chosen_point)) continue;
+                chosen_point=std::move(point);
+            } else chosen_point=point_of(numerators);
+            chosen=numerators; best_lead=lead; best_sum=sum; best_largest=largest;
+        }
+        if(chosen.empty()) return;
+        // A point with a minimal key is primitive: the primitive vector on
+        // its ray lies in the same parallelepiped with a smaller key.
+        Z common=0;
+        for(const auto& v:chosen_point) mpz_gcd(common.get_mpz_t(),common.get_mpz_t(),v.get_mpz_t());
+        if(common!=1) throw std::logic_error("A minimal lattice point was not primitive.");
+        best.point=std::move(chosen_point); best.support.clear();
+        for(int j=0;j<n;++j) if(chosen[j]) best.support.push_back(cell.rays[j]);
+        best.sum=best_sum; best.largest=best_largest;
+    }
+
+    // The listed points that lie in the half-open parallelepiped of the cell.
+    std::vector<int> inside(const std::vector<int>& list,const Cell& cell) const {
+        std::vector<int> kept;
+        if(list.empty()) return kept;
+        Matrix inv(n); scaled_inverse(inv,cell);
+        Rays rows(n,Ray(n));
+        for(int j=0;j<n;++j) for(int i=0;i<n;++i) rows[j][i]=integer(fmpz_mat_entry(inv.a,j,i));
+        for(int p:list) {
+            bool within=true;
+            for(int j=0;j<n && within;++j) {
+                const Z numerator=dot(rows[j],points[p]);
+                within=numerator>=0 && numerator<cell.index;
+            }
+            if(within) kept.push_back(p);
+        }
+        return kept;
+    }
+#ifndef ATLAS_SMALL_NEWTON_FAN
+    int point_id(const Ray& point) {
+        auto [it,fresh]=point_index.emplace(point,static_cast<int>(points.size()));
+        if(fresh) points.push_back(point);
+        return it->second;
+    }
+    // A lattice point of a simplicial cone with a coordinate >= 1 is the sum
+    // of a ray and a lattice point of the cone. So the Hilbert basis consists
+    // of the rays and of points of the half-open parallelepiped, and it
+    // contains every point there that minimizes a positive linear form.
+    void hilbert_candidates(Cell& cell) {
+        Matrix inv(n); scaled_inverse(inv,cell);
+        Rays inequalities(n,Ray(n));
+        for(int j=0;j<n;++j) {
+            Z common=0;
+            for(int i=0;i<n;++i) {
+                inequalities[j][i]=integer(fmpz_mat_entry(inv.a,j,i));
+                mpz_gcd(common.get_mpz_t(),common.get_mpz_t(),inequalities[j][i].get_mpz_t());
+            }
+            for(auto& entry:inequalities[j]) entry/=common;
+        }
+        // The dual algorithm works from the n facets. It never enumerates
+        // the parallelepiped, whose size is the index.
+        std::vector<int> basis;
+        try {
+            HilbertTime limited;
+            libnormaliz::Cone<Z> cone(libnormaliz::Type::inequalities,inequalities);
+            cone.compute(libnormaliz::ConeProperty::HilbertBasis,libnormaliz::ConeProperty::DualMode);
+            for(const auto& element:cone.getHilbertBasis()) basis.push_back(point_id(element));
+        } catch(const libnormaliz::InterruptException&) {
+            // The sampled point subdivides this cone and the large cones inside it.
+            cell.sampled=true; ++refusals;
+            return;
+        }
+        cell.candidates=inside(basis,cell);
+        cell.complete=true;
+    }
+    // The best Hilbert basis element of a cell of large index.
+    void basis_point(Candidate& best,int k) {
+        if(cells[k].candidates.empty() && !cells[k].complete) {
+            if(cells[k].sampled || refusals>=hilbert_refusals) return;
+            hilbert_candidates(cells[k]);
+        }
+        const Cell& cell=cells[k];
+        Matrix inv(n); scaled_inverse(inv,cell);
+        Rays rows(n,Ray(n));
+        for(int j=0;j<n;++j) for(int i=0;i<n;++i) rows[j][i]=integer(fmpz_mat_entry(inv.a,j,i));
+        auto best_key=key(best);
+        int chosen=-1; Ray chosen_numerators,numerators(n);
+        for(int p:cell.candidates) {
+            Z sum=0,largest=0; size_t children=0;
+            for(int j=0;j<n;++j) {
+                numerators[j]=dot(rows[j],points[p]);
+                sum+=numerators[j]; largest=std::max(largest,numerators[j]); children+=numerators[j]!=0;
+            }
+            if(children<2) continue;
+            const auto here=key(sum,largest,children);
+            // Equal keys: keep the sampled point, or the smallest point found here.
+            if(here>best_key || (here==best_key && (chosen<0 || !(points[p]<points[chosen])))) continue;
+            chosen=p; best_key=here; chosen_numerators=numerators;
+            best.sum=sum; best.largest=largest;
+        }
+        if(chosen<0) return;
+        Z common=0;
+        for(const auto& v:points[chosen]) mpz_gcd(common.get_mpz_t(),common.get_mpz_t(),v.get_mpz_t());
+        if(common!=1) throw std::logic_error("A Hilbert basis element was not primitive.");
+        best.point=points[chosen]; best.support.clear();
+        for(int j=0;j<n;++j) if(chosen_numerators[j]!=0) best.support.push_back(cell.rays[j]);
+    }
+#endif
+    // The sampled point is kept unless the complete search finds a point
+    // with a strictly better key, so a fan the samples already served is unchanged.
+    Candidate subdivision_point(int k) {
+        Candidate best=sampled_point(cells[k]);
+        if(cells[k].index<=enumeration_limit) enumerated_point(best,cells[k]);
+#ifndef ATLAS_SMALL_NEWTON_FAN
+        else basis_point(best,k);
+#endif
+        return best;
+    }
     void subdivide(int k) {
-        auto cand=interior_lattice_point(cells[k]);
+        auto cand=subdivision_point(k);
         size_t old_size=rays.size(); const int new_ray=id(cand.point);
         if(rays.size()==old_size) throw std::logic_error("A subdivision ray was already in the fan.");
         auto smallest=std::min_element(cand.support.begin(),cand.support.end(),[&](int a,int b){
@@ -205,19 +508,31 @@ class Fan {
         // boundary. Each replacement index is the old index times a positive
         // barycentric coefficient <1, hence all affected indices decrease.
         for(int chart:star) {
-            Cell old=cells[chart]; cells[chart].active=false;
-            for(int i:old.rays) incident[i].erase(chart);
+            const Face old_rays=cells[chart].rays; const Z old_index=cells[chart].index;
+            const std::vector<int> inherited=std::move(cells[chart].candidates);
+            const bool sampled=cells[chart].sampled;
+            retire(chart);
             for(int s:cand.support) {
-                Face child=old.rays;
+                Face child=old_rays;
                 *std::find(child.begin(),child.end(),s)=new_ray;
-                if(add_cell(child)>=old.index) throw std::logic_error("Stellar subdivision failed to decrease index.");
+                const Z child_index=add_cell(child);
+                if(child_index>=old_index) throw std::logic_error("Stellar subdivision failed to decrease index.");
+                // A large child starts from the parent's points that it contains.
+                if(child_index>enumeration_limit) {
+                    cells.back().candidates=inside(inherited,cells.back());
+                    cells.back().sampled=sampled;
+                }
             }
         }
     }
 public:
-    Fan(int dimension,bool exhaustive):n(dimension),exhaustive(exhaustive) {
+    // rule: the scoring rule. cone_cap: stop with Larger once the fan has more cones.
+    Fan(int dimension,bool exhaustive,int rule=0,size_t cone_cap=std::numeric_limits<size_t>::max()):
+            n(dimension),exhaustive(exhaustive),rule(rule),cone_cap(cone_cap),
+            record_limit(record_allowance()) {
         for(int j=0;j<n;++j) {Ray e(n);e[j]=1;id(e);}
     }
+    size_t cones() const {return active;}
 #ifndef ATLAS_SMALL_NEWTON_FAN
     void build(const Rays& support) {
         // The positive-height section of this pointed cone is the Newton
@@ -452,13 +767,61 @@ JsonValue compute(const JsonValue& obj) {
         }), support.end());
     }
     std::sort(support.begin(),support.end());support.erase(std::unique(support.begin(),support.end()),support.end());
-    Fan fan(n,exhaustive); fan.build(support); return fan.report();
+    // The caller builds one chart on every cone and says how many fit in its
+    // memory. A fan past that number is of no use to it, so it stops there.
+    size_t cone_limit=std::numeric_limits<size_t>::max();
+    if(obj.isMember("cone_limit")) {
+        if(!obj["cone_limit"].isUInt64()) throw std::invalid_argument("Expected a nonnegative cone limit.");
+        cone_limit=obj["cone_limit"].asUInt64();
+    }
+    std::unique_ptr<Fan> fan;
+    try {
+        fan=std::make_unique<Fan>(n,exhaustive,0,cone_limit); fan->build(support);
+    } catch(const Larger&) {fan.reset();}
+    if(!fan || fan->cones()>=comparison_threshold) {
+        // The number of cones depends on the scoring rule in a way no single
+        // rule wins. Building a fan costs far less than its charts, so a
+        // large fan is compared with the fan of the second rule, which stops
+        // as soon as it has more cones.
+        try {
+            Fan other(n,exhaustive,1,fan ? fan->cones()-1 : cone_limit); other.build(support);
+            return other.report();
+        } catch(const Larger&) {
+        } catch(const std::runtime_error&) {  // a resource bound the first fan stayed within
+            if(!fan) throw;
+        } catch(const std::bad_alloc&) {
+            if(!fan) throw;
+        }
+    }
+    if(!fan) throw std::runtime_error("The regular Newton fan has more than "+std::to_string(cone_limit)+
+                                      " cones, the number whose charts fit in the available memory.");
+    return fan->report();
 }
 } // namespace
 namespace {
+// An allocation beyond the allowance fails in this process. It cannot
+// exhaust the memory of the machine: a Hilbert basis can be as large as the
+// index of its cone.
+void bound_memory() {
+    std::ifstream statm("/proc/self/statm");
+    unsigned long long pages=0;
+    const long size=sysconf(_SC_PAGE_SIZE);
+    if(!(statm >> pages) || size<=0) return;
+    struct rlimit limit;
+    if(getrlimit(RLIMIT_AS,&limit)) return;
+    const rlim_t bound=static_cast<rlim_t>(pages)*static_cast<rlim_t>(size)+memory_allowance();
+    if(limit.rlim_cur!=RLIM_INFINITY && limit.rlim_cur<=bound) return;
+    limit.rlim_cur=bound;
+    setrlimit(RLIMIT_AS,&limit);
+}
 int program() {
     JsonValue input,output; int rc=0;
-    try {std::cin>>input;output=compute(input);}
+#ifdef __linux__
+    // A fan has no time limit of its own. It stops with the solver that asked for it.
+    prctl(PR_SET_PDEATHSIG,SIGKILL);
+#endif
+    try {bound_memory();std::cin>>input;output=compute(input);}
+    catch(const std::bad_alloc&) {output["error"]="The regular Newton fan needs more memory than is available.";rc=1;}
     catch(const std::exception& e) {output["error"]=e.what();rc=1;}
     Json::StreamWriterBuilder writer; writer["indentation"]="";
     std::cout<<Json::writeString(writer,output)<<"\n"; return rc;

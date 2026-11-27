@@ -458,7 +458,8 @@ def _run(method, payload):
                        "Blowing up loci of maximal order over the origin")
                 full_boundary = payload.get("full_boundary", False)
                 record = _resolve(terms, payload["variables"], payload["mode"], payload.get("seconds"),
-                                  defer_outputs=True, full_boundary=full_boundary, order_only=method == "order")
+                                  defer_outputs=True, full_boundary=full_boundary, order_only=method == "order",
+                                  safe=payload.get("safe", False), turn=payload.get("turn"))
                 if record is not None:
                     certified = certified_outputs(record, payload["variables"], payload["mode"],
                                                   payload.get("integrals", False))
@@ -493,10 +494,12 @@ def _run(method, payload):
         return {"record": None, "replay": replay.report()}
 
 
-def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals, method="origin"):
+def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals, method="origin", safe=False,
+                              turn=None):
     """Keep the smooth model unless continuing to total normal crossings certifies its boundary.
 
     `method` is the lane whose rules continue: "origin", or "order" for the maximal order rule alone.
+    With `safe` the rules take turns without a budget, as in `origin_backend.resolve_origin`.
     """
     from .centres import GiveUp
     if checked[1]["dual_complex"]["status"] == "complete":
@@ -506,7 +509,7 @@ def refine_intrinsic_boundary(poly, names, record, checked, deadline, integrals,
     if remaining is not None and remaining <= 0:
         return record, checked
     payload = dict(terms=[[list(e), rational_text(c)] for e, c in poly.items()], variables=names, mode="intrinsic",
-                   full_boundary=True, seconds=remaining, integrals=integrals,
+                   full_boundary=True, seconds=remaining, integrals=integrals, safe=safe, turn=turn,
                    replay=scope.settings() if scope else {"compute": "cpu"})
     if remaining is None:
         try:

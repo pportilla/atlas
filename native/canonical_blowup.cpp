@@ -12,7 +12,9 @@
 // divisor gets its numerical data ("exceptional_data"), every ideal gets few
 // generators, and the coordinates that a linear chart equation with a
 // scalar coefficient determines are eliminated ("pullbacks"). With
-// `retains` the blown-up chart stays for its points off the centre.
+// `retains` the blown-up chart stays for its points off the centre, and a
+// chart may list the prime "parts" of its centre to be blown up one by one
+// when they meet only inside the centres already removed from it.
 //
 // "failures": for every chart, whether it still owns a point over the fibre
 // and, when asked, the loci over the fibre where the divisors fail normal
@@ -1125,9 +1127,30 @@ V stage(const V& request) {
             for (const auto& child : step.blow_up(chart, centre, codimension)) append(child);
             continue;
         }
-        Ideal owned = joined(joined(joined(chart.ambient, chart.fibre), chart.region), centre);
-        if (call.present(chart.ring, owned, chart.removed)) {
-            for (auto& child : step.blow_up(chart, centre, codimension)) {
+        // The prime parts of a centre can meet inside the centres removed
+        // from a retained chart, where the chart is no longer its own. Their
+        // union is then singular in the chart although the centre is smooth
+        // at every point that the chart owns, and the blowup of the union
+        // has no uniform orders over the removed points. With "parts" each
+        // part is blown up on its own: near the points of one part that the
+        // chart owns, the blowup of the centre is the blowup of that part.
+        // The other parts join the centres removed from its charts. Parts
+        // that meet outside the removed centres are refused.
+        std::vector<Ideal> parts;
+        if (data.isMember("parts") && data["parts"].isArray())
+            for (const auto& rows : data["parts"]) parts.push_back(read_ideal(chart.ring, rows));
+        if (parts.size() < 2) parts = {centre};
+        for (size_t a = 0; a < parts.size(); ++a)
+            for (size_t b = a + 1; b < parts.size(); ++b)
+                if (call.present(chart.ring, joined(joined(chart.ambient, parts[a]), parts[b]), chart.removed))
+                    throw Raise{"Uneven", "Parts of a centre meet at a point of a chart outside the centres removed from it."};
+        for (size_t k = 0; k < parts.size(); ++k) {
+            Chart local = chart;
+            for (size_t other = 0; other < parts.size(); ++other)
+                if (other != k) local.removed.push_back(parts[other]);
+            Ideal owned = joined(joined(joined(chart.ambient, chart.fibre), chart.region), parts[k]);
+            if (!call.present(chart.ring, owned, local.removed)) continue;
+            for (auto& child : step.blow_up(local, parts[k], codimension)) {
                 auto found = std::find_if(child.components.begin(), child.components.end(),
                                           [&](const Component& c) { return c.label == label; });
                 if (found == child.components.end()) continue;

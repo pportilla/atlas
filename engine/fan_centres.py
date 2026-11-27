@@ -41,3 +41,32 @@ def singular_ray_images(equation, names, rays, linear=None, field=None):
     if len(found) != len(targets):
         return None
     return [[names[i] for i in axes] for axes in targets]
+
+
+def smooth_ray_images(equation, names, rays):
+    """The least coordinate subspaces outside the singular locus inside the images of the rays.
+
+    Each subspace is the list of its free coordinates. An image that leaves
+    the singular locus can contain smaller coordinate subspaces that also
+    leave it. Those inside an image contained in the hypersurface are in the
+    hypersurface too.
+    """
+    from itertools import combinations
+    names = tuple(names)
+    n = len(names)
+    support = _reduced_equation(names, equation)
+
+    def singular(subspaces):
+        targets = [" ".join(str(j) for j in range(n) if j not in free) for free in subspaces]
+        return set(map(int, affine_request(["singular_subspaces", " ".join(names), support, *targets])))
+
+    images = list(dict.fromkeys(tuple(j for j, value in enumerate(ray) if not value) for ray in rays))
+    images = [free for free in images if free]
+    found = singular(images) if images else set()
+    smooth = [free for k, free in enumerate(images) if k not in found]
+    inside = list(dict.fromkeys(part for free in smooth for size in range(1, len(free) + 1)
+                                for part in combinations(free, size)))
+    found = singular(inside) if inside else set()
+    outside = [set(part) for k, part in enumerate(inside) if k not in found]
+    least = [part for part in outside if not any(other < part for other in outside)]
+    return sorted((sorted(part) for part in least), key=lambda part: (len(part), part))

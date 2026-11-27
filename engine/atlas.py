@@ -204,8 +204,20 @@ def _use_native(native):
 def _translation_tuple(translation):
     if translation is None:
         return ()
+    if "steps" in translation:
+        # A sequence of triangular steps: its marker, the steps and the method.
+        return ("steps", tuple((step["coordinate"], step["offset"]) for step in translation["steps"]),
+                translation.get("method"))
     required = (translation["coordinate"], translation["offset"])
     return (*required, translation["method"]) if "method" in translation else required
+
+
+def _translation_record(translation):
+    """The saved form of a chart's coordinate translation."""
+    if translation[0] == "steps" and isinstance(translation[1], tuple):
+        record = {"method": translation[2]} if translation[2] is not None else {}
+        return {**record, "steps": [{"coordinate": coordinate, "offset": offset} for coordinate, offset in translation[1]]}
+    return dict(zip(("coordinate", "offset", "method"), translation))
 
 
 def from_record(record, polynomial, *, native=None):
@@ -347,7 +359,7 @@ def to_json(charts):
              "removed": [[_record_text(g, c.variables) for g in z] for z in c.removed],
              "map": {name: _record_text(expr, c.variables) for name, expr in c.coordinates},
              **({"torus": {"rays": c.torus[0], "linear_map": c.torus[1],
-                           **({"coordinate_translation": dict(zip(("coordinate", "offset", "method"), c.coordinate_translation))}
+                           **({"coordinate_translation": _translation_record(c.coordinate_translation)}
                               if c.coordinate_translation else {})}} if c.torus else {}),
              **({"arrangement_chart": dict(c.arrangement_chart)} if c.arrangement_chart else {}),
              **({"split_cone": c.split_cone} if c.split_cone else {}),

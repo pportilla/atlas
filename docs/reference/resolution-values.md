@@ -29,7 +29,8 @@ print(Z.topological_zeta.expression)  # (4*s + 5)/((s + 1)*(6*s + 5))
 | `Z.polynomial` | The input equation as a polynomial in the ring of `Z.coordinates`. |
 | `Z.coordinates` | The ordered generators of the input ring. Chart maps refer to these names. |
 | `Z.mode` | `"embedded"` or `"intrinsic"`, as passed to `resolve`. [Resolution modes](../thematic/resolution-records.md#resolution-modes) |
-| `Z.status` | `"resolved"` when the search certified the resolution, `"inconclusive"` when a quick search stopped first. A zeta calculation by `monodromy_check` that needed no charts has `"zetas_computed"`. |
+| `Z.status` | `"resolved"` when the search certified the resolution, `"inconclusive"` when the time budget of a quick search ended first. A zeta calculation by `monodromy_check` that needed no charts has `"zetas_computed"`. |
+| `Z.budget` | Only when a time budget ended: `seconds` given, `elapsed_seconds`, `expired`, the last `stage` of the search and its `blowups` when the stage counts them. [Quick search](../thematic/resolution-pipeline.md#quick-search) |
 | `Z.summary` | One sentence describing the modification. An inconclusive record explains its stop in `Z.diagnostic`. |
 | `Z.charts`, `Z.chart(id)` | The affine charts, as a list or by ID. [Charts](#charts) |
 | `Z.divisors`, `Z.divisor(id)` | The exceptional divisors, as a list or by ID. [Exceptional divisors](#exceptional-divisors) |

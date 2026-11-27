@@ -13,8 +13,9 @@ A fork copies only the calling thread. The child runs system calls and the
 native entry, never Python objects of other threads, and it resolves no
 symbols: the parent loads the entry, the C stream reset and the thread-count
 setters first. Atlas's other threads wait on pipes (a lane's coordinator
-watch, a verifier's reader). Without the library, or off Linux, the program
-is started as before.
+watch, a verifier's reader). Without the library, off Linux, or in a process
+that has native threads of its own, such as an OpenMP team left by an
+earlier computation, the program is started as before.
 """
 from functools import lru_cache
 import ctypes
@@ -101,9 +102,28 @@ def preload():
         _entry(name)
 
 
+def _native_threads():
+    """Whether this process has threads that Python did not start, such as an OpenMP team.
+
+    A fork copies only the calling thread. A helper that enters a parallel
+    region in the child then waits for the team of its parent, which is not
+    there. The fan program does so when it computes a Hilbert basis.
+    """
+    try:
+        with open("/proc/self/status") as status:
+            for line in status:
+                if line.startswith("Threads:"):
+                    return int(line.split()[1]) > threading.active_count()
+    except (OSError, ValueError, IndexError):
+        pass
+    return False
+
+
 def available(name):
-    return _entry(name) is not None and all(
+    """Whether the helper can run in a fork of this process. Otherwise its program is started."""
+    return (_entry(name) is not None and all(
         thread.daemon for thread in threading.enumerate() if thread is not threading.current_thread())
+        and not _native_threads())
 
 
 def _start(name, args, stdin, stdout, stderr, env):

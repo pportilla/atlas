@@ -90,7 +90,9 @@ class CanonicalReplayTests(unittest.TestCase):
         for mode in ("embedded", "intrinsic"):
             with self.subTest(mode=mode):
                 bad = dict(good, mode=mode, charts=good["charts"][-1:], atlas=good["atlas"][-1:])
+                # A bounded attempt reports the rejection. A quick request goes on after it,
+                # with the projective search: the smooth-centre rules made this proposal.
                 with patch("engine.resolve._resolve_polynomial", return_value=bad):
-                    result = resolve(dict(self.request, mode=mode))
+                    result = resolve(dict(self.request, mode=mode, bounded=True))
                 self.assertEqual(result["status"], "inconclusive")
                 self.assertIn("complete reconstructed cover", result["diagnostic"]["description"])

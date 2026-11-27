@@ -5,7 +5,7 @@ from .kernel_json import kernel_json
 from .chart_batch import transform_atlas
 from .binomial_kernel import _newton, signed_powers
 from .newton_faces import certify_face, edge_polynomial, exhaustive_faces
-from .newton_fan import build_fan
+from .newton_fan import build_fan, require_chart_memory
 from .polynomial import format_poly, integer_from_decimal, integer_text, LimitError
 
 
@@ -120,19 +120,19 @@ def _boundary_centres(poly, variables, fan):
     return singular_ray_images(format_poly(poly, variables), variables, (fan["rays"][i] for i in fan["boundary_rays"]))
 
 
-def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False,
-              diagnostics=None, before_repair=None, clean_fans=None, graph_fallback=None):
-    n=len(variables)
+def fan_faces(poly, fan):
+    """The orders of the rays and the face of common minimizers on every stratum of the fan.
+
+    Every cone maps to a Newton vertex. Its strata have initial forms given
+    by the common minimizers of their rays. A positive sum of the rays picks
+    exactly this common face, including strata over the origin with some
+    original coordinate rays as generators.
+    """
+    n = len(fan['rays'][0])
     exponents=sorted(poly)
     rays, cones=fan['rays'],fan['cones']
-    if len(cones)*(2**n-1)>750_000 or len(rays)*len(exponents)>500_000:
-        raise LimitError('The Newton fan exceeds the stratum or valuation budget.')
-    if len(exponents)*len(cones)>400_000:
-        raise LimitError('The Newton atlas exceeds the chart expansion budget.')
-    # Every cone maps to a Newton vertex. Its strata have initial forms given
-    # by the common minimizers of their rays. A positive sum of the rays picks
-    # exactly this common face, including strata over the origin with some
-    # original coordinate rays as generators.
+    # One chart per cone: the atlas is bounded by the memory it needs.
+    require_chart_memory(fan, len(exponents))
     valuations = _valuations(rays, exponents)
     rows = _newton("face_orders", n, (len(rays), len(cones), len(exponents)), *valuations, *cones)
     orders, exceptional_orders, minima, face_masks = [], [], [], {}
@@ -144,6 +144,14 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
     for row in rows[len(rays):]:
         count, *fields = map(int, row.split())
         face_masks[tuple(fields[:count])] = frozenset(fields[count:])
+    return exponents, valuations, orders, exceptional_orders, minima, face_masks
+
+
+def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, original, defer_outputs=False,
+              diagnostics=None, before_repair=None, repair_points=True, clean_fans=None, graph_fallback=None):
+    n=len(variables)
+    rays, cones=fan['rays'],fan['cones']
+    exponents, valuations, orders, exceptional_orders, minima, face_masks = fan_faces(poly, fan)
     faces={}
     families={}
     degenerate=False
@@ -165,6 +173,8 @@ def _assemble(poly, variables, mode, fan, matrix, compute, deadline=None, *, ori
         faces[mask]=proof
     repair = None
     if degenerate:
+        if not repair_points:
+            return None
         if not fan['isomorphism_off_origin']:
             if diagnostics is not None:
                 diagnostics.setdefault("relative_repair", "A degenerate face needs repair on a fan with centres extending beyond the origin.")
@@ -285,79 +295,163 @@ def _repaired_boundary(record, polynomial):
     record['dual_complex'] = boundary_complex(charts, len(record['variables']), record['mode'] == 'intrinsic')
 
 
+def _decline_reason(error):
+    text = str(error).strip() or type(error).__name__
+    return text if text.endswith(".") else text + "."
+
+
+# From this number of variables on the search for adapted coordinates is part
+# of the Newton search. With fewer the blowups from the origin are tried
+# first: there they take under a second on the germs concerned and give the
+# smaller model, as one blowup for a cusp cylinder in sheared coordinates.
+# The dispatcher asks for the adapted frames after them.
+ADAPTED_FRAMES_DIMENSION = 4
+
+
 def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_outputs=False, verified=None, integrals=False,
-                   construct=True, diagnostics=None):
+                   construct=True, diagnostics=None, frames=None):
     """A regular Newton modification, completed by blowups where a face is
     degenerate. Those blowups may use `seconds` in all, over the coordinate
-    choices tried; past that the degenerate choices give no answer."""
+    choices tried; past that the degenerate choices give no answer.
+
+    `frames` selects the constructions: "linear" for the fans in linear
+    frames with their point repairs, "adapted" for the triangular changes of
+    coordinates alone, "all" for both in that order. By default the adapted
+    frames are included from ADAPTED_FRAMES_DIMENSION variables on.
+
+    Returns None when the Newton method does not apply to this germ, for the
+    caller to hand it over to another method. Each construction is tried on
+    its own: one that declines leaves its reason in `diagnostics` and the
+    next one runs. Nothing a declined construction built is returned or
+    added to `verified`. A LimitError is raised at the end only if a budget
+    was reached and no construction applied.
+    """
+    if frames is None:
+        frames = "all" if len(variables) >= ADAPTED_FRAMES_DIMENSION else "linear"
+    if frames not in ("all", "linear", "adapted"):
+        raise ValueError("The Newton frames are all, linear or adapted.")
+    import subprocess
     from time import monotonic
+    from .centres import GiveUp
+    from .polynomial import InputError, NonReducedError
     deadline = monotonic()+seconds
     last_limit = None
-    nonconvenient = not all(_axial_data(poly)[1])
+    kept = len(verified) if verified is not None else 0
+    # Trial fans too large to try before the other candidates of this method.
+    deferred = []
+
+    def fan_of(terms):
+        # The fan is bounded by the memory that its charts need, not by a time.
+        return build_fan(terms, exhaustive=exhaustive_faces(), seconds=None, chart_terms=len(terms))
+
+    def attempt(name, construct_record):
+        """One construction: its record, or None after recording why it does not apply."""
+        nonlocal last_limit
+        try:
+            return construct_record()
+        except NonReducedError:
+            raise  # A property of the input, which no method resolves in this mode.
+        except LimitError as error:
+            last_limit = error
+        except (GiveUp, InputError, ArithmeticError, subprocess.TimeoutExpired) as error:
+            if diagnostics is not None:
+                diagnostics.setdefault(name, _decline_reason(error))
+        # A verified bundle of this construction belongs to a record that is not returned.
+        if verified is not None:
+            del verified[kept:]
+        return None
+
+    def adapted():
+        # A triangular polynomial substitution can take a boundary image off
+        # the smooth locus or straighten a factor of a degenerate face while
+        # the coordinate subspaces of the singular locus stay in place.
+        from .newton_frames import resolve_adapted
+        return resolve_adapted(poly, variables, mode, compute, deadline, defer_outputs=defer_outputs,
+                               diagnostics=diagnostics)
+
+    def declined():
+        if last_limit is not None:
+            raise last_limit
+        return None
+
+    if frames == "adapted":
+        return attempt("adapted_frame", adapted) or declined()
+    nonconvenient = attempt("support", lambda: not all(_axial_data(poly)[1]))
+    if nonconvenient is None:
+        return declined()
+    identity = tuple(tuple(int(i == j) for j in range(len(variables))) for i in range(len(variables)))
     if mode == 'embedded' and nonconvenient:
         # A subdivision on the boundary is permissible if it preserves the
         # smooth locus. Each exceptional ray maps onto the coordinate subspace
         # cut out by its positive entries. For a reduced polynomial, membership
         # in the square of each corresponding ideal certifies that inclusion.
-        try:
-            fan = build_fan(poly, exhaustive=exhaustive_faces())
-            if len(variables) == 4:
-                from .newton_trials import hyperplane_fan
-                trial = hyperplane_fan(poly, variables, fan, verified, integrals)
-                if trial is not None:
-                    return trial
+        fan = attempt("fan", lambda: fan_of(poly))
+
+        def hyperplanes():
+            from .newton_trials import hyperplane_fan
+            return hyperplane_fan(poly, variables, fan, verified, integrals)
+
+        def monomial_trials():
+            from .newton_trials import resolve_trials
+            return resolve_trials(poly, variables, verified=verified, integrals=integrals, construct=construct,
+                                  deferred=deferred)
+
+        def boundary_fan(centres):
+            result = _assemble(poly, variables, mode, fan, identity, compute, deadline, original=poly,
+                               defer_outputs=defer_outputs, diagnostics=diagnostics)
+            if result is not None:
+                proof = result['certificate']
+                proof['boundary_image_coordinate_ideals'] = centres
+                proof['description'] = ('The nontrivial coordinate images of the exceptional divisors '
+                    'lie in the singular locus. Every maximal cone has lattice determinant one. '
+                    'The strict transform is smooth and transverse to the toric strata over the origin.')
+                proof['exceptional_orbit_faces'] = proof.pop('compact_faces')
+            return result
+
+        if fan is None:
+            # The fan of the germ itself does not fit. Each trial fan is
+            # verified on its own charts and can be much smaller.
+            trial = attempt("monomial_trials", monomial_trials)
+            if trial is not None:
+                return trial
+        else:
+            trial = attempt("hyperplane_fan", hyperplanes) if 4 <= len(variables) <= 8 else None
+            if trial is not None:
+                return trial
             if fan['boundary_rays']:
-                centres = _boundary_centres(poly, variables, fan)
-                if centres is None:
-                    from .newton_trials import resolve_trials
-                    trial = resolve_trials(poly, variables, verified=verified, integrals=integrals,
-                                           construct=construct)
+                found = attempt("boundary_images", lambda: (_boundary_centres(poly, variables, fan),))
+                if found is not None:
+                    centres, = found
+                    trial = (attempt("monomial_trials", monomial_trials) if centres is None
+                             else attempt("boundary_fan", lambda: boundary_fan(centres)))
                     if trial is not None:
                         return trial
-                else:
-                    matrix = tuple(tuple(int(i == j) for j in range(len(variables))) for i in range(len(variables)))
-                    result = _assemble(poly, variables, mode, fan, matrix, compute, deadline, original=poly,
-                                       defer_outputs=defer_outputs, diagnostics=diagnostics)
-                    if result is not None:
-                        proof = result['certificate']
-                        proof['boundary_image_coordinate_ideals'] = centres
-                        proof['description'] = ('The nontrivial coordinate images of the exceptional divisors '
-                            'lie in the singular locus. Every maximal cone has lattice determinant one. '
-                            'The strict transform is smooth and transverse to the toric strata over the origin.')
-                        proof['exceptional_orbit_faces'] = proof.pop('compact_faces')
-                        return result
-        except LimitError as error:
-            last_limit = error
     # Failure of embedded transversality can still leave a smooth strict
     # transform. Test its own boundary before constructing point blowups.
     # All adapted-coordinate candidates share the same original equation.
     @cache
     def intrinsic_trial():
-        nonlocal last_limit
         from .newton_trials import resolve_trials
-        try:
-            return resolve_trials(poly, variables, mode=mode, verified=verified, integrals=integrals)
-        except LimitError as error:
-            last_limit = error
-            return None
+        return attempt("intrinsic_fan", lambda: resolve_trials(poly, variables, mode=mode, verified=verified,
+                                                               integrals=integrals, deferred=deferred))
 
     def graph_fallback(face):
         from .toric_graph import try_graphs
         return try_graphs(variables, format_poly(poly, variables), [format_poly(face, variables)], verified, integrals, mode)
 
     clean_fans = []
-    for transformed,matrix,_ in coordinate_choices(poly,len(variables)):
-        try:
-            fan=build_fan(transformed, exhaustive=exhaustive_faces())
-            if not fan['isomorphism_off_origin']:
-                continue
-            result=_assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
-                             defer_outputs=defer_outputs, diagnostics=diagnostics,
-                             before_repair=intrinsic_trial if mode == 'intrinsic' else None, clean_fans=clean_fans,
-                             graph_fallback=graph_fallback if transformed == poly else None)
-        except LimitError as error:
-            last_limit = error
-            continue
+    def linear_frame(transformed, matrix):
+        fan=fan_of(transformed)
+        if not fan['isomorphism_off_origin']:
+            return None
+        return _assemble(transformed,variables,mode,fan,matrix,compute,deadline,original=poly,
+                         defer_outputs=defer_outputs, diagnostics=diagnostics,
+                         before_repair=intrinsic_trial if mode == 'intrinsic' else None, clean_fans=clean_fans,
+                         graph_fallback=graph_fallback if transformed == poly else None)
+
+    choices = attempt("linear_frames", lambda: list(coordinate_choices(poly,len(variables)))) or ()
+    for transformed,matrix,_ in choices:
+        result = attempt("linear_frame", lambda: linear_frame(transformed, matrix))
         if result is not None:
             return result
     if mode == 'intrinsic' and nonconvenient:
@@ -365,24 +459,33 @@ def resolve_newton(poly, variables, mode, compute=None, seconds=120, *, defer_ou
         if trial is not None:
             return trial
     if len(variables) == 3:
-        from .quadratic_fan import resolve_translated
-        result = resolve_translated(poly, variables, mode, compute, ramification=True)
+        def translated():
+            from .quadratic_fan import resolve_translated
+            return resolve_translated(poly, variables, mode, compute, ramification=True)
+        result = attempt("translated_fan", translated)
         if result is not None:
             return result
-    # A degenerate face can leave all genuine exceptional intersections
-    # transverse. Verify such a fan after the usual adapted choices, using
-    # the original equation and the same chart checks as other monomial fans.
-    if clean_fans:
+    # A degenerate face can leave the actual exceptional intersections transverse.
+    # Verify those fans in their own frames before trying nonlinear substitutions.
+    for support, fan, matrix in clean_fans:
         from .newton_trials import _try
-        for adapted, fan, matrix in clean_fans:
-            try:
-                result = _try(poly, variables, adapted, mode=mode, fan=fan, linear=matrix,
-                              verified=verified, integrals=integrals)
-            except LimitError as error:
-                last_limit = error
-                continue
-            if result is not None:
-                return result
-    if last_limit is not None:
-        raise last_limit
-    return None
+        result = attempt("clean_fan", lambda: _try(poly, variables, support, mode=mode, fan=fan,
+                         linear=matrix, verified=verified, integrals=integrals, deferred=deferred))
+        if result is not None:
+            return result
+    # The adapted frames come after the linear ones: a germ that a linear
+    # frame resolves, with or without point repairs, keeps that resolution.
+    if frames == "all":
+        result = attempt("adapted_frame", adapted)
+        if result is not None:
+            return result
+    if deferred:
+        # Every cheaper candidate has declined. The large fans are still
+        # resolutions to try, as far as their charts fit in memory.
+        def deferred_trials():
+            from .newton_trials import resolve_deferred_trials
+            return resolve_deferred_trials(poly, variables, deferred)
+        trial = attempt("deferred_trials", deferred_trials)
+        if trial is not None:
+            return trial
+    return declined()

@@ -1,5 +1,9 @@
 // Isolate the standalone CLI's Python computation until its deadline. The
 // child parses arguments and renders records using the regular Atlas entry.
+// The search publishes its progress in a file that this process names. When
+// the time budget of a quick search ends, the worker is stopped and the
+// regular entry is started again to answer: it reads that file to say what
+// the search was doing.
 #include <sys/prctl.h>
 #include <sys/signalfd.h>
 #include <sys/wait.h>
@@ -14,6 +18,7 @@
 #include <climits>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -80,6 +85,19 @@ int main(int argc, char **argv) {
         sigprocmask(SIG_SETMASK, &old, nullptr);
         return python(argv + 1, nullptr);
     }
+    // The file belongs to this run unless the caller already named one.
+    std::string progress;
+    if (!getenv("ATLAS_PROGRESS_FILE")) {
+        const char *directory = getenv("TMPDIR");
+        std::string name = std::string(directory && *directory ? directory : "/tmp") + "/atlas-progress-XXXXXX";
+        const int handle = mkstemp(name.data());
+        if (handle >= 0) {
+            close(handle);
+            progress = name;
+            setenv("ATLAS_PROGRESS_FILE", progress.c_str(), 1);
+            setenv("ATLAS_PROGRESS_OWNED", "1", 1);
+        }
+    }
     pid_t child = fork();
     if (child == 0) {
         close(control[0]);
@@ -92,6 +110,11 @@ int main(int argc, char **argv) {
         close(control[0]);
         close(notices);
         sigprocmask(SIG_SETMASK, &old, nullptr);
+        if (!progress.empty()) {
+            unlink(progress.c_str());
+            unsetenv("ATLAS_PROGRESS_FILE");
+            unsetenv("ATLAS_PROGRESS_OWNED");
+        }
         return python(argv + 1, nullptr);
     }
 
@@ -160,12 +183,15 @@ int main(int argc, char **argv) {
     close(notices);
     sigprocmask(SIG_SETMASK, &old, nullptr);
     if (interrupted) {
+        if (!progress.empty()) unlink(progress.c_str());
         if (interrupted == SIGINT) std::fputs("Resolution interrupted.\n", stderr);
         return 128 + interrupted;
     }
     // No record is printed before the worker sends its completion notice.
     // Let the regular CLI handle its original arguments and report failure.
+    // It reads the progress file and removes it.
     if (failure) return python(argv + 1, failure);
+    if (!progress.empty()) unlink(progress.c_str());
     if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
     return WIFEXITED(status) ? WEXITSTATUS(status) : 2;
 }

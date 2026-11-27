@@ -360,8 +360,10 @@ class GeneralNewton(unittest.TestCase):
             boundaries.append(DomainMatrix(entries,(len(lower),len(upper)),ZZ))
         d1,d2 = boundaries
         self.assertTrue((d1*d2).is_zero_matrix)
-        self.assertEqual([len(layer) for layer in layers],[99,251,153])
-        self.assertEqual((d1.rank(),d2.rank()),(98,153))
+        # The counts of edges and triangles belong to the regular fan the
+        # solver chose. The 99 components and the homology do not.
+        self.assertEqual([len(layer) for layer in layers],[99,252,154])
+        self.assertEqual((d1.rank(),d2.rank()),(98,154))
         # The image of d2 is saturated, so H1 has no torsion either.
         self.assertEqual({abs(s) for s in invariant_factors(d2)},{1})
 

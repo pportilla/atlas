@@ -773,10 +773,13 @@ def fan_outputs(record, polynomial, *, complex=True, intrinsic=False, integrals=
         translation = next((c["torus"]["coordinate_translation"] for c in record.get("atlas", ())
                             if "coordinate_translation" in c.get("torus", {})), None)
     if translation is not None:
+        options = dict(complex=complex, intrinsic=intrinsic, integrals=integrals, bounded=bounded,
+                       local_sections=local_sections)
+        if isinstance(translation, dict) and "steps" in translation:
+            from .newton_frames import adapted_outputs
+            return adapted_outputs(record, polynomial, translation, fan_outputs, options)
         from .quadratic_fan import translated_outputs
-        return translated_outputs(record, polynomial, translation, fan_outputs,
-                                  dict(complex=complex, intrinsic=intrinsic, integrals=integrals, bounded=bounded,
-                                       local_sections=local_sections))
+        return translated_outputs(record, polynomial, translation, fan_outputs, options)
     if record.get("input_divisor") and not record.get("atlas"):
         return None
     charts = _charts(record, n)

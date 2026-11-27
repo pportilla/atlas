@@ -102,9 +102,9 @@ def finish_pole_check(check, record, *, cached=None):
     return check
 
 
-def check_resolution(resolution, *, check_isolation, compute, search="exhaustive", zetas=None):
+def check_resolution(resolution, *, check_isolation, compute, search="exhaustive", zetas=None, seconds=None):
     record = resolution._record
-    topological, monodromy = deepcopy(zetas if zetas is not None else resolution._zeta_pair(search, compute))
+    topological, monodromy = deepcopy(zetas if zetas is not None else resolution._zeta_pair(search, compute, seconds))
     for zeta in (topological, monodromy):
         if zeta.get("status") != "computed":
             reason = (record.get("diagnostic") or {}).get("description") or zeta.get("reason") or record["summary"]

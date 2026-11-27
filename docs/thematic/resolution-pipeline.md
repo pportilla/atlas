@@ -46,11 +46,14 @@ A particular family often admits a short construction. If its hypotheses
 fail, the search moves on to a more general method. Any candidate must still
 supply the charts and satisfy the checks for the requested mode.
 
-On an inconclusive quick search, a singular tangent direction explains why
-the single ordinary blowup test declined. The diagnostic also reports the
-outcome of the Newton and successive blowup searches when these ran. The
-general search records how many candidate certificates it rejected and how
-many it left undecided within the search budget.
+A quick search is the same search under a time budget, 20 seconds unless
+you name another. When the budget ends the answer says so, and nothing else
+ends a quick search. [Quick search](#quick-search) A bounded
+attempt that Atlas makes inside another computation can still end early. Its
+diagnostic names a singular tangent direction that made the ordinary blowup
+test decline, the outcome of the Newton and successive blowup searches, the
+reason the smooth-centre rules gave, and how many candidate certificates the
+general search rejected or left undecided.
 
 ### Structured inputs
 
@@ -134,6 +137,87 @@ makes the strict transform smooth. Embedded resolution takes three ordinary
 blowups to give the total divisor simple normal crossings.
 [Dispatch and size checks](../../engine/resolve.py) · [Binomial charts](../../native/binomial_fan.cpp) · [Recovering multiplicities](../../engine/weighted_record.py)
 
+### Coordinates adapted to the singular locus
+
+A Newton fan is certified only if every exceptional ray maps into the
+singular locus and every face on a stratum over the origin is nondegenerate.
+Both conditions depend on the coordinates. Take $x^2y+z^2+t^3+u^4$, which
+is singular along the $y$-axis. Its Newton polyhedron has the facet normal
+$(0,12,6,4,3)$, and a fan with this ray modifies the $x$-axis. The $x$-axis
+lies on the hypersurface because no monomial is a power of $x$, but its
+points away from the origin are smooth. The substitution $y=Y+x$ gives
+$x^3+x^2Y+z^2+t^3+u^4$. The only boundary ray left is $(6,0,6,4,3)$, over
+the singular $y$-axis, and every face is nondegenerate.
+
+In general, let $L$ be a coordinate subspace with free coordinates $x_I$
+that lies on the hypersurface and outside its singular locus. The equation
+then has terms $x_j\,n(x_I)$ with $j\notin I$, and Atlas substitutes
+$x_j=X_j+\bigl(\prod_{i\in I}x_i\bigr)^k$. This fixes every coordinate
+subspace that does not contain $L$, in particular those of the singular
+locus, and the new terms $n(x_I)\prod x_i^k$ take $L$ off the hypersurface.
+The exponent $k$ is the least one for which the new terms have larger value
+than the old ones on every normal of the polyhedron that does not vanish on
+$x_I$, so that the polyhedron changes only towards $L$. A smaller $k$ with
+equality on some normal is also proposed. The image
+of a boundary ray can contain smaller coordinate subspaces that also leave
+the singular locus. Atlas takes the least ones, in order of dimension, since
+a subspace that contains a treated one has left the hypersurface with it.
+For $xyz+t^2+u^3$, singular along three axes, three steps adapt $z$, $y$
+and $x$ in turn, starting with $z=Z+xy$.
+
+The second step concerns a degenerate face whose polynomial has a factor
+$c\,x_j+m$, where $m$ does not involve $x_j$. A repeated factor makes the
+face singular along its zeros, and two factors make it singular where both
+vanish. The substitution $x_j=X_j-m/c$ makes the factor a coordinate, whose
+zeros lie outside the torus. For $t^4+u^4+y^3+z^3+x^2+2xy+y^2$ the face
+$(x+y)^2$ gives $x=X-y$ and the Brieskorn–Pham germ $X^2+y^3+z^3+t^4+u^4$.
+
+A substitution of the first kind can bring a singular point of a face into
+its torus: in $x(x+y-z^2)$ the step $x=X+y$ gives $(X+y)(X+2y-z^2)$, whose
+factors meet. The search therefore goes depth first. From each frame it
+tries first the step that leaves the fewest degenerate faces, and it returns
+to the other steps at a dead end. It stops at the first frame whose fan has
+neither obstruction, after at most twelve steps on a path, 64 frames and
+eight seconds.
+
+Each step is a triangular automorphism of affine space that fixes the origin
+and has Jacobian determinant one, so the composite preserves the origin
+fibre and the orders of the volume form. From four variables on the search
+is part of the Newton method and runs after its linear frames and their
+point repairs have declined, so that a germ they resolve keeps that
+resolution. In three variables the blowups from the origin come first, and a quick
+search asks for adapted coordinates after them: on these germs the blowups
+take under a second and give the smaller model, as the single blowup of the
+sheared cusp cylinder [below](#where-the-resolution-decisions-run). The fan
+and its charts are then verified in the adapted
+coordinates, and every chart map is composed with the steps. The certificate
+lists them in order under `coordinate_translation.steps`, with the adapted
+equation in `adapted_polynomial`: the first step is substituted into the
+input equation first. Replay checks that each offset avoids its own
+coordinate and vanishes at the origin, computes the adapted equation again,
+undoes the steps on every chart map and verifies the fan.
+[Frame search](../../engine/newton_frames.py) · [Substitutions](../../native/resolution_candidate.cpp) · [Tests](../../tests/test_newton_frames.py)
+
+A frame of this kind does not exist for every germ. A face can be degenerate
+along a subvariety of its torus that no substitution straightens, as for
+$(x^3-y^4)^2+z^2+t^3+u^3$, and the singular locus can have more components
+through the origin than there are coordinate subspaces to hold them.
+
+### When the Newton method does not apply
+
+The Newton method tries its constructions one after another: a fan of
+hyperplanes, the fan of the input with its boundary rays, monomial ideals,
+linear frames with point repairs, and from four variables on adapted
+coordinates. A construction that
+declines, reaches a budget or has its charts rejected leaves its reason in
+`diagnostic.newton_declines` and the next one runs. Nothing it built is kept.
+When none applies the germ goes to the smooth-centre rules, the safe method
+of a [quick search](#quick-search), and a proposal that the verifier rejects
+is replaced by theirs in the same way. The reasons appear in a result only
+when a bounded attempt ends without an atlas. The point repairs have the
+20 seconds that a quick request gives the method. A fan is bounded by the
+memory that its charts need. [Constructions](../../engine/newton_backend.py) · [Dispatch](../../engine/resolve.py)
+
 ### Bounded centre proofs
 
 A natural centre to try is the reduced singular locus. Consider
@@ -173,21 +257,125 @@ centres in order. The shortcut succeeds when only the third centre works.
 
 ### Quick search
 
-Use `--quick` for a bounded attempt. The search tries an eligible regular
-Newton modification, including available coordinate changes and repairs of
-failed crossings. For unresolved singularities in three to eight variables
-it can start blowups from the origin. In four to eight variables the
-repeated-tangent rule comes first, then the smooth-centre rules described
-below, for 20 seconds. The final attempt tests priority ideals. When the
-verifier rejects the charts that a faster method proposed, the quick search
-does not stop there. The smooth-centre rules make their own proposal, whose
-charts are verified in the same way. Verifying a proposal replays its
-blowups, which can take longer than constructing them, so the first
-verification must finish while 25 seconds of the worker's limit remain.
-The replayed blowups share that deadline between their rules, and if it
-passes, the smooth-centre rules take over. The CLI worker has 55 seconds. If it
-exhausts its budget, its diagnostic reports an inconclusive calculation and
-the reasons for each rejection. [Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
+`--quick` gives the search a time budget. The search itself is the one that
+runs without it: the fast methods first, then the smooth-centre rules as the
+safe method, then projective ideal blowups. It never stops for a reason of a
+method. The budget is 20 seconds. `--seconds N` names another and implies
+`--quick`. The session functions take `seconds=N` and an HTTP request takes
+`"seconds": N`.
+
+When the budget ends, the process of the search is stopped and the answer is
+a normal record. It says how long the search ran and what it was doing:
+
+```json
+{
+  "status": "inconclusive",
+  "can_search": true,
+  "summary": "Not resolved within 20 seconds.",
+  "budget": {
+    "seconds": 20,
+    "elapsed_seconds": 20,
+    "expired": true,
+    "stage": "Blowing up centre B7 (order method)",
+    "blowups": 6
+  },
+  "diagnostic": {
+    "code": "budget_expired",
+    "description": "Not resolved within 20 seconds. Stopped while blowing up centre B7 (order method), after 6 blowups."
+  }
+}
+```
+
+`status` and `can_search` are those of every answer without a certified
+resolution. `budget.stage` is the stage that the search reported last, and
+`budget.blowups` the number of blowups it had made when the stage counts
+them. The record has no charts and no reason of a method. On the command
+line the answer is one line and the exit code is 3, which means not
+finished:
+
+```text
+Not resolved within 20 seconds. Stopped while blowing up centre B7 (order method), after 6 blowups. Run without --quick to continue the search.
+```
+
+A quick search also reads an input of bounded size. An input beyond those
+limits gets the same kind of record before any search, with
+`diagnostic.code` equal to `"input_limit"`.
+[Budget and record](../../engine/quick_budget.py) · [Command line](../reference/command-line.md#resolve-a-germ)
+
+The fast methods have limits of their own, and each is a share of the
+budget. A search with any budget therefore reaches the safe method and still
+has time to certify what it finds.
+
+| Limit | Share of the budget | With 20 seconds |
+| --- | --- | --- |
+| Point repairs of the Newton method, over all its coordinate choices | 20% | 4 s |
+| The five centres of the repeated-tangent rule (four to eight variables) | 25% | 5 s |
+| First turn of each smooth-centre rule; the turns double | 25% | 5 s |
+| Kept for the smooth-centre rules when the verification of an unverified first proposal has not finished | 45% | from 11 s on |
+| Optional search for nearby strata, after the zeta functions | 15% | 3 s |
+| Weighted construction, and again its certificate (`--method weighted`) | 25% | 5 s |
+| Kept at the end for writing the answer | 1.5 s | 1.5 s |
+
+The shares come from measurements. In a screen of 2,000 fourfolds and
+fivefolds with 50 seconds for each germ, 57% of the embedded steps that
+finished took at most 1 second, 79% at most 5, 86% at most 10 and 94% at
+most 20. Nine certified records in ten came from the Newton method, with
+medians of 0.6 and 1.3 seconds for its two kinds of record, and 34 of the 36
+records of the smooth-centre rules needed at most 5 blowups. A sample of 114
+germs of that screen, whose steps had taken 2 to 50 seconds or had not
+finished, was then run with a budget of 20 seconds under six settings of
+the shares: 20% to 60% for the point repairs, 15% to 30% for the first
+turn, 25% to 50% kept for the smooth-centre rules. Between 84 and 86 of the
+114 finished under each of the three settings that ran the whole sample, and
+two runs with the same shares differ by as much: the time of one germ
+varies by a second in the median.
+No germ needed more than 4 seconds of point repairs, while a germ that a
+later construction or the smooth-centre rules resolve waits for that limit.
+One germ took 4.9, 7.8 and 13.0 seconds with 20%, 35% and 60%. Hence the
+small share of the point repairs. None of the 24 germs that the screen had
+not finished in 50 seconds finished in 20.
+
+When the fast methods do not apply or decline, the smooth-centre rules
+described below are the safe method, in three to eight variables. They
+have no deadline of their own and no budget of charts, and the complete rule
+has no limit of stages. The rules take turns, and each continues from the
+blowup it had reached, so no rule loses its work to another. A turn can run
+over: the check of crossings at the start of a stage and parts of the
+invariant do not read the deadline yet. A rule leaves only when it stops for
+a reason of its own: the maximal order rule and the short rule are not
+guaranteed to end and have guards, and a reason of the complete rule is a
+defect of its implementation. The last rule left runs without turns. Each
+reason is shown in the progress of the request, and a bounded attempt
+returns it in `diagnostic.canonical_reason`. When every rule has left, the
+search continues with projective ideal blowups, which return only with a
+certificate.
+
+The same holds for the outputs. A resolved record whose dual complex is
+partial, or which lacks a requested zeta function, is not the answer of a
+quick search: the search continues as above. In intrinsic mode the
+smooth-centre rules first go on to total normal crossings, which gives the
+exceptional complex on the smooth strict transform.
+
+A fast method can also stop on an internal error. A quick search rejects its
+proposal like a failed check and continues with the safe method. The certified
+answer then lists each such error in `defects`, with the method and the
+message, so that it can be repaired. An exhaustive search and a bounded
+attempt report the error of a method other than Newton, as before.
+
+When the verifier rejects the charts that a faster method proposed, the
+smooth-centre rules make their own proposal, whose charts are verified in
+the same way. Verifying a proposal replays its blowups, which can take
+longer than constructing them, so the first verification must finish while
+45% of the budget remains, and then the smooth-centre rules
+take over. Once no such time is left, a verification runs to its end.
+[Newton modifications](../../engine/newton_backend.py) · [Origin blowups](../../engine/origin_backend.py) · [Quick fallback](../../engine/resolve.py) · [Ideal search](../../engine/general_resolution.py)
+
+Atlas also solves smaller problems inside a computation, such as the zeta
+function of a transverse germ for a nearby stratum. These are bounded
+attempts (`bounded` in the request). They have fixed limits in place of a
+budget: 20 seconds for the Newton point repairs, 30 for the repeated-tangent
+rule, the rest of 55 seconds less 7 for the smooth-centre rules, and they
+may return inconclusive with the reasons of the methods.
 
 ### Exhaustive search
 
@@ -220,13 +408,15 @@ in that record. [Termination conditions](#what-the-exhaustive-search-can-certify
 One tangent-cone test changes this order. Suppose an embedded ternary input
 has a higher-order term and initial form $cL^d$, with $d\ge2$ and all three
 coefficients of $L$ nonzero. Its axial intercepts all have degree $d$. In
-the coordinate choices available to this search the Newton modification is
+the linear coordinate choices of the Newton search the modification is
 the ordinary origin blowup. The exceptional plane meets the strict transform
 along a repeated line whose intersection with the dense torus is a curve.
 Newton's finite-point repair cannot resolve that curve. For degree at most
 16, at most 128 terms and 64-bit rational numerators and denominators, Atlas
 can detect this case and start origin blowups immediately. Ideal certification
-joins on failure or after 250 ms. [Tangent test](../../native/resolution_candidate.cpp) · [Newton repair](../../engine/newton_repair.py)
+joins on failure or after 250 ms. [Adapted coordinates](#coordinates-adapted-to-the-singular-locus)
+can make $L$ a coordinate. In three variables a quick search tries them
+after the origin blowups. [Tangent test](../../native/resolution_candidate.cpp) · [Newton repair](../../engine/newton_repair.py)
 
 ### Workers and deadlines
 
@@ -237,13 +427,19 @@ server is available, a single-threaded CPU solver can fork its own search
 workers. Each starts with fresh verification state. Changed engine sources,
 changes to startup-only settings, or multithreading can require a fresh
 interpreter. Helper programs for plane curves, fans and graph charts use the
-same deadlines in forked mode. [Fork server](../../engine/fork_server.py) · [Native helper processes](../../engine/native_process.py)
+same deadlines in forked mode. A process that has native threads, such as
+the team of an earlier parallel computation, starts these programs instead:
+a fork copies only the calling thread, and the fan program would wait for a
+team that is not there. [Fork server](../../engine/fork_server.py) · [Native helper processes](../../engine/native_process.py)
 
 A rule's deadline also reaches the exact computations inside a native centre
 choice. A Gröbner basis, its modular lifting and its verification stop within
 milliseconds of the deadline, and the rule gives up so that the next rule can
 start. Before, one such computation could overrun a 7-second share by
-14 seconds. [Kernel deadlines](../../native/KERNEL.md#deadlines)
+14 seconds. The radical and the prime components of a locus of maximal order
+stop in the same way: for the twenty planes where three of
+$xyztu(x+y+z+t+u)=0$ meet, that decomposition alone ran for two minutes.
+[Kernel deadlines](../../native/KERNEL.md#deadlines)
 
 When enough processors are available the other workers may start alongside
 Newton, holding their answers until its head start ends. Otherwise a forked
@@ -257,6 +453,33 @@ For a **Newton modification**, each maximal cone of a regular fan gives an
 affine chart. The rays specify a monomial substitution. Removing the
 exceptional monomial from the pullback gives the strict-transform equation.
 [Newton chart construction](../../engine/newton_backend.py)
+
+The regular fan refines the normal fan of the Newton polyhedron by star
+subdivisions. Each one adds a lattice point of the fundamental parallelepiped
+of a singular cone, and that choice decides how many charts the atlas has.
+Atlas takes the point with the smallest total index of the new cones among
+all the points of the parallelepiped. It enumerates them for a cone of index
+at most 4,096 and searches the Hilbert basis of a larger cone. For
+`x^3+y^5+z^8+t^9+u^9+x*y*z*t*u` the fan has 24,295 cones. Points sampled from
+multiples of the coordinate residues gave 339,349. A fan with at least 4,096
+cones is also built with a second rule, which weighs that total by the number
+of new cones, and the smaller fan is kept. A Hilbert basis can be very large.
+One that takes more than two seconds of processor time is dropped, and its
+cone is subdivided at a sampled point instead.
+[Fan subdivision](../../native/newton_fan.cpp) · [Fan timings](../../benchmarks/resolution-timings.md#regular-newton-fans-in-five-and-six-variables)
+
+The fan of the germ has no limit on its cones, rays or construction time.
+Its size is bounded by memory. Every cone becomes a chart that is assembled,
+verified and saved, so the fan program stops once it has more cones than
+charts fit in half the memory the system reports as available. The fan of a
+monomial modification proposed for a germ without all its axial terms
+follows the same bound. One with more than 32,768 cones waits until the
+other candidates of the Newton method have declined, so that it does not
+hold up a cheaper one. Past the memory bound the Newton method stops and the
+search continues with the
+[smooth-centre rules](#where-the-resolution-decisions-run). No fixed count
+of cones, rays or strata stops the Newton method.
+[Memory bound](../../engine/newton_fan.py) · [Deferred fans](../../engine/newton_trials.py)
 
 An embedded divisor with several rational factors through the origin can
 have normal crossings although the union of their strict transforms is
@@ -304,9 +527,14 @@ why the intrinsic record has one blowup and the embedded record has three.
 
 Some germs have a curve or surface of singular points through the origin,
 and on these the invariant can be slow or find no hypersurface of maximal
-contact. Under a deadline the complete rule therefore keeps 60% of the
-remaining time, and then a **maximal order rule** starts again from the
-original germ. An exhaustive search has no deadline to share, so there the
+contact. A **maximal order rule** therefore works beside the complete rule,
+from the original germ. In a quick search the two take turns, as described
+under [Quick search](#quick-search). In a bounded attempt the complete rule
+keeps 60% of the remaining time and the maximal order rule follows. A rule
+stopped at its share keeps its charts. When the rules after it give up
+before the deadline, it continues from the stage it had reached, and the
+rule that completed a blowup most recently goes first.
+An exhaustive search has no deadline to share, so there the
 maximal order rule races in a worker of its own. It can also be the faster
 rule at an isolated point: for
 `x^9+x^4*y*z+1/8*x^3*y^3-3/2*x^3*z^2-1/32*x*y^4+1/2*x*y*z^2+y^2*z^2-z^3`
@@ -330,6 +558,20 @@ given ones. For `x*y^4+z^2+t^2` the rule blows up the singular $x$-axis
 twice. The first entry of the invariant comes from the same native
 calculation. [Order locus](../../native/centre_maximum.cpp) · [Maximal order rule](../../engine/local_blowups.py)
 
+An embedded resolution asks for normal crossings of the total transform,
+and smooth branches that cross normally already have them. In embedded mode
+the blowups therefore carry each factor of the equation over $\mathbb Q$ as
+a component S1, S2, … of its own, and stop when these and the exceptional
+divisors cross normally. For the six hyperplanes $xyztu(x+y+z+t+u)=0$ the
+blowup of the origin is enough: on its exceptional $\mathbb P^4$ the
+hyperplanes are in general position. A factor that splits over
+$\overline{\mathbb Q}$ stays one component, which must become smooth, so its
+conjugate branches still come apart. Intrinsic mode asks for a smooth strict
+transform and keeps the whole hypersurface as one component: there every
+pair of branches has to be separated. A record made with separate components
+says so in `certificate.strict_components`, and its replay derives the same
+factors from the equation. [Components](../../engine/origin_backend.py)
+
 The components of a smooth centre can lie on different earlier divisors, so
 that the new exceptional divisor gets different data $(N,\nu)$ on them. A
 curve centre is first divided by the divisor that contains part of it. The
@@ -340,6 +582,17 @@ $\mathbb Q$ gives its new divisor one value of $(N,\nu)$. Conjugate points
 and the generic point of a curve have the same orders. The components with
 the largest value are blown up first. Disjoint centres blown up at
 successive stages give the same space. [Split rules](../../native/centre_weights.cpp)
+
+A chart that has been blown up stays for its points off the centre. Later
+the prime components of a smooth centre can meet in such a chart, inside a
+centre already removed from it. For $xyztu(x+y)$ the planes where three
+hyperplanes meet do so in the first chart of the origin blowup, along the
+lines blown up before. Their union is singular there, and its blowup in
+that chart has no uniform orders. The components are then blown up one by
+one: near the points of one component that the chart owns, this is the
+blowup of the whole centre. The other components join the centres removed
+from the new charts. Components that meet outside the removed centres are
+refused. [Blowup stage](../../native/canonical_blowup.cpp)
 
 When a finite centre must be split, the exceptional divisors through a
 point can identify its class across charts. If several points have the
@@ -454,8 +707,16 @@ Given the certified strata, their Euler characteristics are computable by
 projection one coordinate at a time. On each constructible piece of the
 base, polynomial gcd calculations give the number of distinct roots in a
 finite fibre or identify an affine-line fibre. Additivity then reduces the
-calculation to fewer coordinates. A’Campo's product and the Denef–Loeser
-sum are exact finite arithmetic once these counts are known. [Euler kernel](../../native/euler.cpp) · [Denef and Loeser](https://webusers.imj-prg.fr/~francois.loeser/jams92.pdf)
+calculation to fewer coordinates. The points lying on exactly a set $J$ of
+components are counted from closed strata. By additivity their Euler
+characteristic is the alternating sum, over the sets $K\supseteq J$ with a
+common point, of that of the common points of the components of $K$. A
+closed stratum is counted with no component left out, which matters when
+several components are not coordinates of the chart: on the origin blowup of
+seven hyperplanes in general position in $\mathbb C^5$ each chart has two
+such planes, and the sum takes a twentieth of a second. A’Campo's product
+and the Denef–Loeser sum are exact finite arithmetic once these counts are
+known. [Euler kernel](../../native/euler.cpp) · [Strata](../../native/ideal.cpp) · [Denef and Loeser](https://webusers.imj-prg.fr/~francois.loeser/jams92.pdf)
 
 With terminating exact tests for chart regularity, geometric components,
 their gluing and divisor orders, the theoretical algorithm eventually

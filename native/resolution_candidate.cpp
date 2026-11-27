@@ -8,6 +8,7 @@
 #include "sparse_flint.hpp"
 #include <numeric>
 #include <set>
+#include <tuple>
 
 namespace {
 using namespace atlas::sparse_json;
@@ -449,9 +450,218 @@ Json::Value ramification_translations(const Terms& f, size_t n) {
     return result;
 }
 
+// The pullback of f by x_axis = X_axis + shift, where shift does not involve
+// x_axis. Declines an expansion beyond the term budget of the fan engines.
+bool translated_polynomial(Terms& adapted, const Terms& f, size_t n, size_t axis, const Terms& shift) {
+    Z degree = 0, growth = 0;
+    for (const auto& [e, c] : f) degree = std::max(degree, e[axis]);
+    for (const auto& [e, c] : shift) growth = std::max(growth, Z(std::accumulate(e.begin(), e.end(), Z(0))));
+    if (degree > 128 || degree*growth > 4096) return false;
+    atlas::local::SparseLexRing ring(n);
+    atlas::PolyValue source(ring.ctx), image(ring.ctx);
+    ring.write(source.p, f);
+    Powers unit(n);
+    unit[axis] = 1;
+    Terms graph = shift;
+    graph[unit] += 1;
+    std::vector<atlas::PolyValue> coordinates;
+    std::vector<fmpq_mpoly_struct*> images;
+    coordinates.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        coordinates.emplace_back(ring.ctx);
+        auto p = coordinates.back().p;
+        if (i == axis) ring.write(p, graph);
+        else fmpq_mpoly_gen(p, i, ring.ctx);
+        images.push_back(p);
+    }
+    if (!fmpq_mpoly_compose_fmpq_mpoly(image.p, source.p, images.data(), ring.ctx, ring.ctx)) return false;
+    if (fmpq_mpoly_length(image.p, ring.ctx) > 4096) return false;
+    adapted = ring.read(image.p);
+    return true;
+}
+
+Json::Value translation_choice(size_t axis, const Terms& shift, const Terms& adapted) {
+    Json::Value choice;
+    choice["axis"] = Json::UInt64(axis);
+    choice["shift"] = atlas::local::encode_row(shift);
+    choice["adapted"] = atlas::local::encode_row(adapted);
+    return choice;
+}
+
+// A Newton fan has a boundary ray over the coordinate subspace L with free
+// coordinates I only if f vanishes on L. When L is not in the singular locus,
+// f has terms x_j*n(x_I) with j outside I. The substitution
+// x_j = X_j + m, with m = (prod_{i in I} X_i)^k, is a triangular automorphism
+// with Jacobian determinant one. It fixes every coordinate subspace that
+// does not contain L, hence every coordinate subspace of the singular locus,
+// and the pullback has the terms n(x_I)*m, so that it no longer vanishes on L.
+//
+// A term x_j^a*r of f gives the new terms x_j^b*m^(a-b)*r. Their value on a
+// normal w of the Newton polyhedron is at least that of the original term
+// when w(m) >= w_j. With strict inequality on every normal that does not
+// vanish on I the initial forms on those normals are kept, so that the
+// substitution changes the polyhedron only towards L. The least such k is
+// always proposed. A smaller k with equality on some normal changes the
+// face of that normal by the same substitution, which can be degenerate
+// there: it is proposed first and marked as a tie for the caller to test.
+// The subspaces are treated in order of dimension: one that contains a
+// treated subspace has left the hypersurface with it.
+Json::Value boundary_translations(const Terms& f, size_t n, const Json::Value& subspaces, const Json::Value& normals) {
+    Json::Value candidates(Json::arrayValue);
+    std::vector<Powers> rays;
+    for (const auto& ray : normals) rays.push_back(read_exponents(ray, n));
+    std::vector<std::vector<size_t>> ordered;
+    for (const auto& subspace : subspaces) {
+        std::vector<size_t> axes;
+        for (const auto& index : subspace) {
+            if (index.asUInt64() >= n) throw std::invalid_argument("Invalid coordinate subspace.");
+            axes.push_back(index.asUInt64());
+        }
+        std::sort(axes.begin(), axes.end());
+        axes.erase(std::unique(axes.begin(), axes.end()), axes.end());
+        if (!axes.empty()) ordered.push_back(std::move(axes));
+    }
+    std::stable_sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a.size() < b.size(); });
+    for (const auto& axes : ordered) {
+        std::vector<bool> free(n);
+        for (size_t i : axes) free[i] = true;
+        // The least order on L of the coefficient of each normal coordinate.
+        std::vector<bool> seen(n);
+        std::vector<Z> order(n);
+        bool vanishes = true;
+        for (const auto& [e, c] : f) {
+            size_t outside = n, count = 0;
+            Z degree = 0;
+            for (size_t i = 0; i < n; ++i) {
+                if (free[i]) degree += e[i];
+                else if (e[i] != 0) { count += e[i] == 1 ? 1 : 2; outside = i; }
+            }
+            if (count == 0) { vanishes = false; break; }
+            if (count != 1) continue;
+            if (!seen[outside] || degree < order[outside]) order[outside] = degree;
+            seen[outside] = true;
+        }
+        if (!vanishes) continue;
+        struct Choice { Z degree, power; size_t axis; bool tie; };
+        std::vector<Choice> choices;
+        for (size_t j = 0; j < n; ++j) {
+            if (!seen[j]) continue;
+            Z strict = 1, weak = 1;
+            for (const auto& w : rays) {
+                Z value = 0;
+                for (size_t i : axes) value += w[i];
+                if (value <= 0) continue;
+                strict = std::max(strict, Z(w[j]/value + 1));
+                weak = std::max(weak, Z((w[j] + value - 1)/value));
+            }
+            const Z size = static_cast<unsigned long>(axes.size());
+            if (weak < strict) choices.push_back({order[j] + weak*size, weak, j, true});
+            choices.push_back({order[j] + strict*size, strict, j, false});
+        }
+        std::stable_sort(choices.begin(), choices.end(), [](const Choice& a, const Choice& b) {
+            return std::tie(a.axis, a.degree) < std::tie(b.axis, b.degree);
+        });
+        std::stable_sort(choices.begin(), choices.end(), [&](const Choice& a, const Choice& b) {
+            return order[a.axis] < order[b.axis];
+        });
+        for (const auto& choice : choices) {
+            if (choice.power > 64) continue;
+            Powers product(n);
+            for (size_t i : axes) product[i] = choice.power;
+            const Terms shift{{product, 1}};
+            Terms adapted;
+            if (!translated_polynomial(adapted, f, n, choice.axis, shift)) continue;
+            // The new terms on L could cancel against higher powers of x_j.
+            if (std::none_of(adapted.begin(), adapted.end(), [&](const auto& term) {
+                    for (size_t i = 0; i < n; ++i) if (!free[i] && term.first[i] != 0) return false;
+                    return true;
+                })) continue;
+            Json::Value item = translation_choice(choice.axis, shift, adapted);
+            item["tie"] = choice.tie;
+            for (size_t i : axes) item["subspace"].append(Json::UInt64(i));
+            candidates.append(std::move(item));
+        }
+        // The first subspace with a substitution decides this step.
+        if (!candidates.empty()) break;
+    }
+    return candidates;
+}
+
+// A face polynomial with a repeated factor h is singular along h = 0 in its
+// torus, and one with two factors is singular where both vanish. When
+// h = c*x_j + m with m free of x_j, the substitution x_j = X_j - m/c turns h
+// into the coordinate c*X_j, whose zeros are outside the torus. The face
+// polynomial is quasihomogeneous of positive degree, so m vanishes at the
+// origin. Repeated factors are proposed first.
+Json::Value face_translations(const Terms& f, size_t n, const Terms& face) {
+    Json::Value candidates(Json::arrayValue);
+    if (face.size() < 3 || face.size() > 4096) return candidates;
+    atlas::local::SparseLexRing ring(n);
+    atlas::PolyValue source(ring.ctx);
+    ring.write(source.p, face);
+    struct Factors {
+        fmpq_mpoly_factor_t v;
+        const fmpq_mpoly_ctx_struct* ctx;
+        explicit Factors(const fmpq_mpoly_ctx_struct* c) : ctx(c) { fmpq_mpoly_factor_init(v, c); }
+        ~Factors() { fmpq_mpoly_factor_clear(v, ctx); }
+    } factors(ring.ctx);
+    if (!fmpq_mpoly_factor(factors.v, source.p, ring.ctx)) return candidates;
+    std::set<std::pair<size_t, Terms>> found;
+    if (factors.v->num < 2 && (factors.v->num < 1 || fmpz_cmp_ui(factors.v->exp, 2) < 0)) return candidates;
+    for (const bool repeated : {true, false})
+    for (slong k = 0; k < factors.v->num; ++k) {
+        if ((fmpz_cmp_ui(factors.v->exp + k, 2) >= 0) != repeated) continue;
+        const Terms factor = ring.read(factors.v->poly + k);
+        if (factor.size() < 2 || factor.count(Powers(n))) continue;
+        for (size_t axis = 0; axis < n; ++axis) {
+            Powers unit(n);
+            unit[axis] = 1;
+            const auto leading = factor.find(unit);
+            if (leading == factor.end()) continue;
+            Terms shift = factor;
+            shift.erase(unit);
+            if (std::any_of(shift.begin(), shift.end(), [&](const auto& term) { return term.first[axis] != 0; }))
+                continue;
+            for (auto& [e, c] : shift) c /= -leading->second;
+            if (!found.emplace(axis, shift).second) continue;
+            Terms adapted;
+            if (!translated_polynomial(adapted, f, n, axis, shift)) continue;
+            candidates.append(translation_choice(axis, shift, adapted));
+        }
+    }
+    return candidates;
+}
+
+// The pullback of f by a sequence of triangular substitutions, each given by
+// its axis and a shift that does not involve that axis and vanishes at the origin.
+Json::Value translation_chain(Terms f, size_t n, const Json::Value& steps) {
+    for (const auto& step : steps) {
+        const size_t axis = step["axis"].asUInt64();
+        if (axis >= n) throw std::invalid_argument("Invalid translated coordinate.");
+        const Terms shift = atlas::local::decode_row(step["shift"].asString(), n);
+        if (shift.empty() || shift.count(Powers(n)) ||
+            std::any_of(shift.begin(), shift.end(), [&](const auto& term) { return term.first[axis] != 0; }))
+            return Json::Value();
+        Terms adapted;
+        if (!translated_polynomial(adapted, f, n, axis, shift)) return Json::Value();
+        f = std::move(adapted);
+    }
+    Json::Value result;
+    result["adapted"] = atlas::local::encode_row(f);
+    return result;
+}
+
 Json::Value decode(const Json::Value& request) {
     const auto n = request["width"].asUInt64();
     const auto op = request["operation"].asString();
+    if (op == "boundary_translations")
+        return boundary_translations(atlas::local::decode_row(request["row"].asString(), n), n,
+                                     request["subspaces"], request["normals"]);
+    if (op == "face_translations")
+        return face_translations(atlas::local::decode_row(request["row"].asString(), n), n,
+                                 atlas::local::decode_row(request["face"].asString(), n));
+    if (op == "translation_chain")
+        return translation_chain(atlas::local::decode_row(request["row"].asString(), n), n, request["steps"]);
     if (op == "quadratic_translations")
         return quadratic_translations(atlas::local::decode_row(request["row"].asString(), n), n);
     if (op == "ramification_translations")

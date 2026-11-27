@@ -393,7 +393,7 @@ V resolve_arrangement(const V &request) {
     if (request["operation"] == "hyperplanes") {
         std::vector<std::string> names;
         for (const auto& name : request["variables"]) names.push_back(name.asString());
-        if (names.size() != 4) return {};
+        if (names.size() < 4 || names.size() > 8) return {};
         auto f = atlas::sparse_json::read_terms(request["terms"], names.size());
         Q unit;
         const auto factors = rational_hyperplanes(f, names.size(), 3, &unit);

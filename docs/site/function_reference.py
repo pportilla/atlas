@@ -64,7 +64,11 @@ RESOLUTION_INPUT = dict(
     ring='For a formula string, the polynomial ring over `QQ` in which to read it. Without `variables` or `ring`, '
          'a string is read in the ring selected with `use_ring`. A polynomial already knows its ring.',
     search='`"exhaustive"` (default) continues until the result is certified or you interrupt it. '
-           '`"quick"` stops at a bound and reports an inconclusive result instead.',
+           '`"quick"` gives the same search a time budget of 20 seconds. When the budget ends the result is '
+           'inconclusive and says so; no error is raised.',
+    seconds='The time budget of a quick search in seconds, a positive number such as `5` or `0.5`. Giving it '
+            'makes the search a quick one. With `None` (default) a quick search has 20 seconds and an exhaustive '
+            'search has no budget.',
     compute=COMPUTE + ' With `None`, resolution uses the configured backend, normally the CPU.',
 )
 
@@ -272,8 +276,9 @@ FUNCTIONS = {
                      '`Z.monodromy_zeta.expression`, the poles as `Z.topological_zeta.poles` and the pole check as '
                      '`Z.monodromy_check`. The geometry is in `Z.charts`, `Z.divisors`, `Z.branches` and '
                      '`Z.dual_complex`, and the input in `Z.polynomial` and `Z.coordinates`. `Z.status` is '
-                     '`"resolved"` once the resolution is certified and `"inconclusive"` when a quick search stopped '
-                     'first. `Z.record` is the complete record. '
+                     '`"resolved"` once the resolution is certified and `"inconclusive"` when the time budget of a '
+                     'quick search ended first; `Z.budget` then gives the seconds used and the last stage of '
+                     'the search. `Z.record` is the complete record. '
                      '[Every field of a resolution](resolution-values.md#the-resolution)',
                      polynomial='The equation of the hypersurface, vanishing at the origin: a polynomial over `QQ`, '
                                 'or a formula string together with `variables` or `ring`. Move another rational point '
