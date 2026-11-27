@@ -27,6 +27,8 @@
 // engine/native_polynomial.py. A packed operation that is out of range
 // declines the whole call; the caller then takes the arbitrary-width route.
 #include "chart_expr.hpp"
+#include "membership_certificate.hpp"
+#include "monomial_square.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -1184,6 +1186,112 @@ V stage(const V& request) {
     return result;
 }
 
+// If the fibre is monomial, discard strict-transform terms in the square of
+// its radical. Their values and first derivatives vanish on the entire fibre,
+// including the parts owned by other charts. Only a positive answer can
+// shortcut the tests that determine the exact failure loci and multiplicities.
+bool certified_origin_crossings(const Chart& chart, long dimension) {
+    const size_t n = chart.ring.size();
+    if (!atlas::certificate::enabled() || n == 0 || n > 32 || chart.ring.theta >= 0 ||
+        dimension != static_cast<long>(n) || !chart.ambient.empty() || chart.fibre.size() > 32) return false;
+    auto parts = [](const Powers& e) {
+        uint64_t positive = 0, repeated = 0;
+        for (size_t i = 0; i < e.size(); ++i) {
+            if (e[i] > 0) positive |= uint64_t(1) << i;
+            if (e[i] > 1) repeated |= uint64_t(1) << i;
+        }
+        return std::make_pair(positive, repeated);
+    };
+    uint64_t boundary = 0;
+    const Polynomial* strict = nullptr;
+    for (const auto& divisor : chart.components) {
+        if (divisor.ideal.size() != 1) return false;
+        const auto& g = divisor.ideal.front();
+        if (g.size() == 1) {
+            const auto [s, t] = parts(g.begin()->first);
+            if (s && !t && !(s & (s - 1))) {
+                if (boundary & s) return false;
+                boundary |= s;
+                continue;
+            }
+        }
+        if (strict) return false;
+        strict = &g;
+    }
+    if (!strict) return true;
+    atlas::MonomialSquare square;
+    for (const auto& g : chart.fibre) {
+        if (g.empty()) continue;
+        if (g.size() != 1) return false;
+        square.add_support(parts(g.begin()->first).first);
+    }
+    if (square.supports.empty()) return false;
+    square.find_products();
+    const atlas::certificate::CertificateCaps caps{2, 32, 64, 64, 256, 32};
+    // The constant term of f or a free partial must survive at the
+    // origin before an identity for the whole fibre is possible. If its
+    // other terms all lie in the radical, it already proves the identity.
+    const auto vanishes = [&](uint64_t mask) {
+        return std::any_of(square.supports.begin(), square.supports.end(),
+                           [&](uint64_t s) { return (s & mask) == s; });
+    };
+    Powers monomial(n);
+    bool scalar = strict->count(monomial);
+    uint64_t partials = 0;
+    for (size_t j = 0; j < n; ++j) if (!(boundary & (uint64_t(1) << j))) {
+        monomial[j] = 1;
+        if (strict->count(monomial)) partials |= uint64_t(1) << j;
+        monomial[j] = 0;
+    }
+    if (!scalar && !partials && !vanishes(0))
+        return atlas::certificate::trace("canonical_crossing", false);
+    for (const auto& [e, h] : *strict) {
+        const auto [s,t] = parts(e);
+        if (!s) continue;
+        if (!vanishes(s)) scalar = false;
+        for (size_t j = 0; j < n; ++j) {
+            const auto axis = uint64_t(1) << j;
+            if (!(s & partials & axis)) continue;
+            auto derivative = t & axis ? s : s & ~axis;
+            if (derivative && !vanishes(derivative)) partials &= ~axis;
+        }
+        if (!scalar && !partials) break;
+    }
+    if (scalar || partials || vanishes(0)) return atlas::certificate::trace("canonical_crossing", true);
+    Polynomial jet;
+    for (const auto& [e, h] : *strict) {
+        const auto [s, t] = parts(e);
+        if (!square.contains(s, t)) {
+            if (jet.size() == caps.max_cols) return false;
+            jet.emplace(e, h);
+        }
+    }
+    if (jet.size() == strict->size()) return false;
+    // Nilpotent factors of a fibre equation change neither the locus nor
+    // its canonical centre. The tangent fields along each exceptional stratum are
+    // the partials in the free axes and x_j * d/dx_j on exceptional axes.
+    atlas::chart::Variables variables;
+    for (size_t i = 0; i < n; ++i) variables.push_back({chart.ring.names[i], chart.ring.identities[i]});
+    atlas::chart::Ideal products;
+    for (auto s : square.supports) {
+        Powers a(n);
+        for (size_t j = 0; j < n; ++j) a[j] = (s >> j) & 1;
+        products.push_back(atlas::chart::normal(variables, {{a, 1}}));
+    }
+    products.push_back(atlas::chart::normal(variables, jet));
+    for (size_t j = 0; j < n; ++j) {
+        Polynomial derivative;
+        for (const auto& [e, h] : jet) if (e[j] > 0) {
+            auto a = e;
+            if (!(boundary & (uint64_t(1) << j))) --a[j];
+            derivative.emplace(std::move(a), h * e[j]);
+        }
+        if (!derivative.empty()) products.push_back(atlas::chart::normal(variables, derivative));
+    }
+    return atlas::certificate::trace("canonical_crossing", atlas::certificate::certify_unit(
+        variables, products, caps).certified);
+}
+
 // engine/local_blowups.py `_failures` and `_own_failures` for many charts.
 V failures(const V& request) {
     Call call(request["packed_present"].asBool());
@@ -1209,7 +1317,8 @@ V failures(const V& request) {
         }
         const Ring& R = c.ring;
         std::optional<Strings> found;
-        if (R.size() >= 1 && R.size() <= MAX_VARIABLES) {
+        if (certified_origin_crossings(c, dimension)) found = Strings{"none"};
+        if (!found && R.size() >= 1 && R.size() <= MAX_VARIABLES) {
             std::string header = "crossings " + std::to_string(R.size()) + " " + std::to_string(dimension) + " " +
                                  std::to_string(c.ambient.size()) + " " + std::to_string(c.components.size());
             Ideal lines = c.ambient;

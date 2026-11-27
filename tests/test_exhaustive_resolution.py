@@ -109,6 +109,116 @@ class ExhaustiveFallback(unittest.TestCase):
         with patch("engine.native_library._kernel", return_value=None):
             self.assertFalse(exhaustive._canonical_head_start(parse("(x+y+z)^2-z*(x-y)^2",names),names,"embedded"))
 
+    def test_non_snc_line_excludes_only_proven_fans(self):
+        from engine.native_library import _kernel
+        if not hasattr(_kernel(), "atlas_canonical_obstruction"):
+            self.skipTest("Canonical obstruction kernel unavailable.")
+        names = list("xyz")
+        s15 = "-2*y^3*z^2+3*x*y*z^3+3*x*y^3*z^4-2*x*y^4+x^2*y^2*z^4"
+        # A simple root of 3*t^3-2 gives a tangency on an unrepaired
+        # trial for S15. Its linear frames still have isolated orbit
+        # defects, so their point patches must keep their priority.
+        for source in (s15, s15.translate(str.maketrans("xyz", "yzx"))):
+            self.assertFalse(exhaustive._canonical_head_start(parse(source,names),names,"embedded"))
+        for source in ("x*y^3+y^2*z+z^4", "x^2*y^3+y^2*z+z^2"):
+            poly = parse(source,names)
+            with self.subTest(source=source):
+                self.assertTrue(exhaustive._canonical_head_start(poly,names,"embedded"))
+                self.assertFalse(exhaustive._canonical_head_start(poly,names,"intrinsic"))
+                with patch.dict(os.environ,ATLAS_LINEAR_ALGEBRA="0"):
+                    self.assertFalse(exhaustive._canonical_head_start(poly,names,"embedded"))
+        # The ordinary coordinate blowup resolves three transverse plane
+        # branches; a weighted trial separates three tangent branches.
+        for source in ("(1+x)*(y^3-y*z^2)", "(1+x)*(y^3-y*z^4)", "(1+x)*(y^2-z^3)^2",
+                       "x*y^2+z^2+y^4"):
+            self.assertFalse(exhaustive._canonical_head_start(parse(source,names),names,"embedded"))
+        with patch("engine.newton_fan.bounded_fan",return_value=None):
+            self.assertFalse(exhaustive._canonical_head_start(parse(s15,names),names,"embedded"))
+        # This winning Newton germ has no inadmissible original boundary
+        # ray. Detect that on the two-dimensional projected supports.
+        fast = "-2*y^4*z^2+3*x^2*z^3-2*x^2*y^2*z-x^4*y^3"
+        with patch("engine.newton_fan.build_fan",side_effect=AssertionError("unexpected fan build")):
+            self.assertFalse(exhaustive._canonical_head_start(parse(fast,names),names,"embedded"))
+
+
+    def test_quadratic_cones_require_an_irreducible_singular_line_and_degenerate_relative_face(self):
+        from engine.kernel_json import kernel_json
+        from engine.native_library import _kernel
+        from engine.newton_backend import _boundary_centres, fan_faces
+        from engine.newton_faces import certify_face, face_search
+        from engine.newton_fan import build_fan
+        from engine.point_geometry import encode_terms
+        if not hasattr(_kernel(), "atlas_quadratic_cone_obstruction_abi"):
+            self.skipTest("Native quadratic-cone proof unavailable.")
+        names = list("xyz")
+        cone = "(x^2+y^2)^2-z^2*(x^2-y^2)"
+        for source in (cone, cone.translate(str.maketrans("xyz", "zxy"))):
+            p = parse(source, names)
+            with self.subTest(source=source), face_search(True):
+                # Its squarefree projective tangent cone has isolated
+                # orbit defects in a convenient frame. Keep point patches.
+                self.assertFalse(exhaustive._canonical_head_start(p, names, "embedded"))
+                self.assertFalse(exhaustive._canonical_head_start(p, names, "intrinsic"))
+                with patch.dict(os.environ, ATLAS_LINEAR_ALGEBRA="0"):
+                    self.assertFalse(exhaustive._canonical_head_start(p, names, "embedded"))
+                # The Newton source fan is admissible, so rejection really
+                # requires the singular initial form on an orbit over the fibre.
+                fan = build_fan(p, exhaustive=True)
+                self.assertFalse(fan["isomorphism_off_origin"])
+                self.assertIsNotNone(_boundary_centres(p, names, fan))
+                exponents, *_, masks = fan_faces(p, fan)
+                self.assertTrue(any(certify_face({exponents[i]: p[exponents[i]] for i in mask})["status"]
+                                    == "degenerate" for mask in masks.values()))
+        # In this ordinary z-chart the strict equation is X²+z. It is
+        # tangent to the exceptional divisor and smooth at every point.
+        data = dict(terms=encode_terms(parse("x^2+z^3", names)),
+                    rays=[[1,0,0], [0,1,0], [1,1,1]], cones=[[0,1,2]])
+        self.assertTrue(kernel_json("atlas_canonical_obstruction", "unresolved_chart", **data))
+        self.assertFalse(kernel_json("atlas_canonical_obstruction", "unresolved_chart", intrinsic=True, **data))
+        for source in ("(x^2+y^2)^2-z^2*(x+y)^2", "(x+y)^2*(x^2+y^2)-z^2*(x^2-y^2)",
+                       "x^4+y^4-z^2*(x^2-y^2)", cone+"+y^5"):
+            with self.subTest(source=source):
+                self.assertFalse(kernel_json("atlas_canonical_obstruction", "quadratic_cone_prefix",
+                                             terms=encode_terms(parse(source, names))))
+
+    def test_degenerate_relative_fans_require_a_bad_axis_blowup_and_all_trial_obstructions(self):
+        from engine.native_library import _kernel
+        from engine.kernel_json import kernel_json
+        from engine.newton_faces import face_search
+        from engine.point_geometry import encode_terms
+        if not hasattr(_kernel(), "atlas_relative_source_obstruction_abi"):
+            self.skipTest("Relative-source obstruction unavailable.")
+        names = list("xyz")
+        for equation in ("(x*y)^2+(y*z)^2+(z*x)^2+2*x^2*y*z",
+                         "(x*y)^2+(y*z)^2+(z*x)^3+2*x*y*z*(x+y+z)"):
+            with self.subTest(equation=equation), face_search(True):
+                p = parse(equation, names)
+                for mode in ("intrinsic", "embedded"):
+                    self.assertFalse(exhaustive._canonical_head_start(p, names, mode))
+                    self.assertTrue(kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                                terms=encode_terms(p), intrinsic=mode == "intrinsic"))
+                square = encode_terms(parse(f"({equation})^2", names))
+                self.assertFalse(kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                             terms=square, intrinsic=True))
+        # Preserve the previous point-patch search for a single bad axis
+        # and for the tricuspidal cone, where all three axes are bad.
+        for equation in ("(y-x)*(y^2*z-x^3-x^2*z)", "x^2*y^2+y^2*z^2+z^2*x^2-2*x*y*z*(x+y+z)"):
+            self.assertFalse(kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                         terms=encode_terms(parse(equation, names)), intrinsic=False))
+        # The ordinary double curves of a union of three planes have
+        # independent transverse tangents at their generic points.
+        normal = encode_terms(parse("x*y*z", names))
+        self.assertFalse(kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                     terms=normal, intrinsic=False))
+
+    def test_repaired_newton_records_with_curve_centres_keep_priority(self):
+        names = list("xyz")
+        # Each archived Newton repair starts at isolated orbit points
+        # and then uses curve centres in its local patch.
+        for equation in ("(y^2-x^3)^3+(z^2-y^3)^2", "(x*y-z^2)^3+(x^2-y^3)^2"):
+            with self.subTest(equation=equation):
+                self.assertFalse(exhaustive._canonical_head_start(parse(equation, names), names, "intrinsic"))
+
     def test_obstructed_newton_releases_certificates_on_origin_decline_failure_and_timeout(self):
         from subprocess import Popen
         from pathlib import Path
@@ -414,7 +524,8 @@ def scripted(method, payload):
 
 e.fork_server.popen = interpreter
 e._run = scripted
-e._canonical_head_start = lambda *args: False
+e._canonical_head_start = lambda *args: "newton" not in plan
+e.ORIGIN_GRACE_SECONDS = grace
 e.NEWTON_GRACE_SECONDS = grace
 # An inheritable descriptor and a working directory that lanes must not keep.
 os.set_inheritable(os.open(os.devnull, os.O_RDONLY), True)
@@ -508,6 +619,20 @@ class ForkedLanes(unittest.TestCase):
                     self.assertGreaterEqual(lanes[method]["begin"] - newton["begin"], min(plan["newton"][0], grace) - .05)
                 self.assertTrue(lanes["certificates"]["defer"])
                 self.assertLess(result["end"] - result["begin"], 4)
+
+    def test_one_processor_reserves_the_first_canonical_turn(self):
+        cpu = min(os.sched_getaffinity(0))
+        for delay, response, winner in [(0.03, "record", "origin"), (0.03, "none", "certificates"),
+                                         (4, "none", "certificates")]:
+            with self.subTest(delay=delay, response=response):
+                plan = {"origin": (delay, response), "certificates": (0.03, "record"), "order": (4, "none")}
+                result, lanes = self.coordinate(plan, cpu=cpu, grace=0.15)
+                self.assertEqual(result["record"], {"engine": winner})
+                if winner == "origin":
+                    self.assertEqual(set(lanes), {"origin"})
+                else:
+                    self.assertGreaterEqual(lanes["certificates"]["begin"] - lanes["origin"]["begin"],
+                                            min(delay, 0.15) - 0.03)
 
     def test_forked_lanes_stop_with_their_coordinator(self):
         import os

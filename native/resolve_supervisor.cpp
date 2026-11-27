@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include "preloaded_cli.hpp"
 
 using Clock = std::chrono::steady_clock;
 
@@ -98,7 +99,12 @@ int main(int argc, char **argv) {
             setenv("ATLAS_PROGRESS_OWNED", "1", 1);
         }
     }
-    pid_t child = fork();
+    // A borrowed worker has its own subreaper beside the preloaded interpreter.
+    int remote = atlas_cli::borrow(argv + 1, control);
+    const char *trace = getenv("ATLAS_PRELOADED_CLI");
+    if (trace && !strcmp(trace, "trace"))
+        fprintf(stderr, "Atlas CLI worker: %s\n", remote >= 0 ? "preloaded" : "fresh interpreter");
+    pid_t child = remote < 0 ? fork() : -1;
     if (child == 0) {
         close(control[0]);
         if (setsid() < 0) _exit(127);
@@ -106,7 +112,7 @@ int main(int argc, char **argv) {
         _exit(python(argv + 1, std::to_string(control[1]).c_str()));
     }
     close(control[1]);
-    if (child < 0) {
+    if (child < 0 && remote < 0) {
         close(control[0]);
         close(notices);
         sigprocmask(SIG_SETMASK, &old, nullptr);
@@ -119,7 +125,7 @@ int main(int argc, char **argv) {
     }
 
     fcntl(control[0], F_SETFL, O_NONBLOCK);
-    pollfd fds[] = {{notices, POLLIN, 0}, {control[0], POLLIN, 0}};
+    pollfd fds[] = {{notices, POLLIN, 0}, {control[0], POLLIN, 0}, {remote, POLLIN, 0}};
     auto deadline = Clock::time_point::max();
     bool started = false, finished = false, reaped = false;
     int status = 0, interrupted = 0;
@@ -130,7 +136,7 @@ int main(int argc, char **argv) {
             const auto left = std::chrono::ceil<std::chrono::milliseconds>(deadline - Clock::now()).count();
             timeout = static_cast<int>(std::clamp<decltype(left)>(left, 0, INT_MAX));
         }
-        int ready = poll(fds, 2, timeout);
+        int ready = poll(fds, 3, timeout);
         if (ready < 0 && errno == EINTR) continue;
         if (ready < 0) { failure = "stopped"; break; }
         if (fds[0].revents & POLLIN) {
@@ -143,7 +149,7 @@ int main(int argc, char **argv) {
         // Peek, leaving the PID reserved until any remaining children
         // from the worker's session have been signalled.
         siginfo_t exit_info{};
-        const int result = waitid(P_PID, child, &exit_info, WEXITED | WNOHANG | WNOWAIT);
+        const int result = remote >= 0 ? 0 : waitid(P_PID, child, &exit_info, WEXITED | WNOHANG | WNOWAIT);
         if (fds[1].fd >= 0 && (exit_info.si_pid == child || fds[1].revents & (POLLIN | POLLHUP))) {
             // Each start notice is one atomic pipe write. The two notices
             // together are at most ten bytes, including the quick interval.
@@ -167,6 +173,13 @@ int main(int argc, char **argv) {
                 fds[1].fd = -1;
             }
         }
+        if (remote >= 0 && fds[2].revents) {
+            // The remote guardian replies only after reaping the whole tree.
+            if (recv(remote, &status, sizeof(status), 0) != sizeof(status) || (started && !finished))
+                failure = "stopped";
+            reaped = true;
+            break;
+        }
         if (exit_info.si_pid == child) {
             kill(-child, SIGKILL);
             while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
@@ -178,7 +191,16 @@ int main(int argc, char **argv) {
         if (Clock::now() >= deadline) { failure = "timeout"; break; }
     }
 
-    cleanup(child, reaped);
+    if (remote < 0) {
+        cleanup(child, reaped);
+    } else {
+        if (!reaped) {
+            shutdown(remote, SHUT_WR);
+            pollfd done{remote, POLLIN, 0};
+            while (poll(&done, 1, -1) < 0 && errno == EINTR) {}
+        }
+        close(remote);
+    }
     close(control[0]);
     close(notices);
     sigprocmask(SIG_SETMASK, &old, nullptr);

@@ -1,6 +1,7 @@
 // Incidences of exceptional intersections and compatible branch labels in saved atlases.
 #include "rational_sparse_json.hpp"
 #include "local_io.hpp"
+#include "membership_certificate.hpp"
 #include "polynomial_graph.hpp"
 #include <algorithm>
 #include <cctype>
@@ -119,7 +120,8 @@ struct Intersections {
 
 // Does the union of the proposed divisors cover the intersection on every
 // owned origin fibre? Test the complement as a locally closed ideal locus.
-bool covers_fibre(const Value& charts, const Names& intersection, const Names& cover) {
+std::optional<bool> meets_fibre(const Value& charts, const Names& intersection, const Names& cover) {
+    bool unknown = false;
     for (const auto& chart : charts) {
         std::map<std::string, Names> ideals;
         for (const auto& component : chart["components"])
@@ -143,9 +145,11 @@ bool covers_fibre(const Value& charts, const Names& intersection, const Names& c
         const auto input = wire.str();
         std::unique_ptr<char, decltype(&atlas_groebner_release)> answer(
             atlas_ideal(input.data(), input.size()), atlas_groebner_release);
-        if (!answer || std::string_view(answer.get()) != "no\n") return false;
+        if (answer && std::string_view(answer.get()) == "yes\n") return true;
+        if (!answer || std::string_view(answer.get()) != "no\n") unknown = true;
     }
-    return true;
+    if (unknown) return {};
+    return false;
 }
 
 void certify_relative_intersections(Intersections& data, const Value& charts) {
@@ -179,9 +183,55 @@ void certify_relative_intersections(Intersections& data, const Value& charts) {
                     connected.push_back(witness);
             }
         }
-        if (connected.size() == witnesses.size() && covers_fibre(charts, data.vertices(key), data.vertices(connected)))
+        if (connected.size() == witnesses.size() && !meets_fibre(charts, data.vertices(key), data.vertices(connected)).value_or(true))
             data.counts[key] = "1";
     }
+}
+
+// The first exceptional divisor is a projective bundle over a polynomial
+// graph. Blowing up one rational point on it preserves irreducibility and
+// cuts the new exceptional projective space in its tangent hyperplane.
+// The independent fibre test must see that intersection. Only centres from
+// the actual construction, or from its verified reconstruction, enter here.
+Value graph_then_point(const Value& r) {
+    const auto& steps = r["steps"];
+    const int n = r["dimension"].asInt();
+    if (!atlas::certificate::enabled() || steps.size() != 2 || n < 2 || n > 8) return {};
+    Names labels;
+    for (unsigned i = 0; i < 2; ++i) {
+        const auto& step = steps[i];
+        if (step["center_charts"].size() != 1) return {};
+        const auto& chart = step["center_charts"][0];
+        const auto coords = names(chart["coordinates"]);
+        const auto& ideal = chart["ideal"];
+        if (coords.size() != size_t(n) || chart["history"].size() != i || ideal.size() < 2 ||
+            ideal.size() > coords.size() || (i ? ideal.size() != coords.size() : ideal.size() == coords.size()) ||
+            step["dimension"].asInt() != n-static_cast<int>(ideal.size())) return {};
+        atlas::local::Basis equations;
+        for (const auto& row : ideal) {
+            const auto text = row.asString();
+            if (text.size() > 256) return {};
+            equations.push_back(atlas::local::parse_expression(coords, text));
+        }
+        if (!atlas::local::polynomial_graph(equations, coords.size())) return {};
+        labels.push_back(step["id"].asString());
+    }
+    std::sort(labels.begin(), labels.end());
+    if (labels[0].empty() || labels[0] == labels[1]) return {};
+    if (!meets_fibre(r["charts"], labels, {}).value_or(false)) return {};
+    Value result;
+    result["vertices"] = Value(Json::arrayValue);
+    for (const auto& label : labels) {
+        Value vertex;
+        vertex["id"] = label;
+        vertex["dimension"] = n-1;
+        result["vertices"].append(vertex);
+    }
+    result["cells"] = Value(Json::arrayValue);
+    result["cells"].append(cell("C"+join(labels,"-")+".1", labels, labels));
+    result["convention"] = "Ambient exceptional divisor in the germ over the origin over Qbar.";
+    result["status"] = "complete";
+    return result;
 }
 
 // For a curve or surface, a single rational orbit opposite an unsplit
@@ -545,6 +595,7 @@ Value execute(const Value& r) {
     if (op=="coordinate_exceptional") return coordinate_exceptional(r, false);
     if (op=="polynomial_graph_exceptional") return coordinate_exceptional(r, true);
     if (op=="cells") return Intersections(r).cells();
+    if (op=="graph_then_point") return graph_then_point(r);
     if (op=="boundary") {
         Intersections data(r);
         if (!r["charts"].empty()) certify_relative_intersections(data, r["charts"]);
@@ -559,3 +610,4 @@ extern "C" const char* atlas_incidence(const char* input) { return atlas::sparse
 extern "C" int atlas_coordinate_exceptional_abi() noexcept { return 1; }
 
 extern "C" int atlas_polynomial_graph_exceptional_abi() noexcept { return 1; }
+extern "C" int atlas_graph_then_point_abi() noexcept { return 1; }

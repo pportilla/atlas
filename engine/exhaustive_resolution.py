@@ -37,8 +37,16 @@ ORDER_PATIENCE_SECONDS = 5
 
 
 def _canonical_head_start(poly, variables, mode):
+    from .polynomial import InputError
+    if mode == "intrinsic":
+        from .resolve import _intrinsic_torus_curve
+        if _intrinsic_torus_curve(poly, variables, mode):
+            try:
+                return _unrepairable_linear_frames(poly, variables, torus_curve=True)
+            except (LimitError, InputError, OSError):
+                return False
     from .native_library import Unavailable, _kernel
-    if (mode != "embedded" or len(variables) != 3 or not 6 <= len(poly) <= 128
+    if (mode not in ("embedded", "intrinsic") or len(variables) != 3 or not 3 <= len(poly) <= 128
             or not hasattr(_kernel(), "atlas_newton_tangent_obstruction_abi")):
         return False
     # Bound decimal transport even for unbounded exhaustive caller inputs.
@@ -48,9 +56,111 @@ def _canonical_head_start(poly, variables, mode):
     from .kernel_json import kernel_json
     from .point_geometry import encode_terms
     try:
-        return kernel_json("atlas_resolution_candidate", "repeated_tangent_obstruction",
-                           width=len(variables), terms=encode_terms(poly))
-    except (Unavailable, OSError):
+        terms = encode_terms(poly)
+        if mode == "embedded" and len(poly) >= 6 and kernel_json("atlas_resolution_candidate", "repeated_tangent_obstruction",
+                                           width=len(variables), terms=terms):
+            # Its only frame is the identity. The ordinary fan has just
+            # one interior ray, with a repeated fully supported linear
+            # form on its 2D orbit. That triangular face cannot yield a
+            # repeated-binomial graph proposal. Check the later shifts.
+            from .quadratic_fan import translations
+            return next(translations(poly, variables, ramification=True), None) is None
+        if not hasattr(_kernel(), "atlas_canonical_obstruction"):
+            return False
+        return _obstructed_monomial_fans(poly, variables, terms, intrinsic=mode == "intrinsic")
+    except (LimitError, InputError, Unavailable, OSError):
+        return False
+
+
+def _unrepairable_linear_frames(poly, variables, *, torus_curve=False):
+    """Return whether every repaired linear frame has a positive-dimensional defect orbit."""
+    from .native_library import _kernel
+    if not hasattr(_kernel(), "atlas_nonisolated_repair_orbit_abi"):
+        return False
+    from .kernel_json import kernel_json
+    from .newton_backend import ADAPTED_FRAMES_DIMENSION, coordinate_choices
+    from .newton_fan import build_fan
+    from .point_geometry import encode_terms
+    if len(variables) >= ADAPTED_FRAMES_DIMENSION:
+        return False
+    for transformed, _, _ in coordinate_choices(poly, len(variables)):
+        # A positive-dimensional orbit on the identity frame can also
+        # send a repeated binomial Newton face to the graph solver.
+        # A curve in the dense original torus still has at most one
+        # vanishing coordinate after the single auxiliary graph lift.
+        if transformed == poly and not torus_curve:
+            return False
+        terms = encode_terms(transformed)
+        ordinary = kernel_json("atlas_canonical_obstruction", "nonisolated_repair_orbit",
+                               terms=terms, ordinary=True, rays=[])
+        if ordinary is not None:
+            if not ordinary:
+                return False
+            continue
+        fan = build_fan(transformed, exhaustive=True, seconds=0.1, chart_terms=len(transformed))
+        if fan["isomorphism_off_origin"] and not kernel_json(
+                "atlas_canonical_obstruction", "nonisolated_repair_orbit",
+                terms=terms, rays=fan["rays"]):
+            return False
+    return True
+
+
+def _obstructed_monomial_fans(poly, variables, terms, *, intrinsic=False):
+    from .kernel_json import kernel_json
+    reduced = None if intrinsic else kernel_json("atlas_canonical_obstruction", "ordinary_prefix", terms=terms)
+    degenerate_relative_face = False
+    if not reduced:
+        from .native_library import _kernel
+        if not hasattr(_kernel(), "atlas_quadratic_cone_obstruction_abi"):
+            return False
+        if intrinsic and not hasattr(_kernel(), "atlas_strict_fan_obstruction_abi"):
+            return False
+        if hasattr(_kernel(), "atlas_relative_source_obstruction_abi"):
+            degenerate_relative_face = kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                                   terms=terms, intrinsic=intrinsic)
+        else:
+            degenerate_relative_face = kernel_json("atlas_canonical_obstruction", "quadratic_cone_prefix", terms=terms)
+        if not degenerate_relative_face:
+            return False
+        reduced = terms  # Both relative-source proofs require a squarefree equation.
+
+    from .newton_backend import ADAPTED_FRAMES_DIMENSION
+    from .newton_fan import bounded_fan, build_fan, trial_supports
+    from .quadratic_fan import translations
+    from .polynomial import InputError
+
+    # Preserve the untouched Newton search wherever it could use nonlinear
+    # adapted frames. In dimension three it also tries ramification shifts.
+    if (len(variables) >= ADAPTED_FRAMES_DIMENSION
+            or next(translations(poly, variables, ramification=True), None) is not None):
+        return False
+    # An unrepaired origin-supported fan preserves the generic bad line.
+    # A point patch may use curve centres, so inspect each linear frame's
+    # actual Newton fan before skipping its repair worker.
+    try:
+        if not _unrepairable_linear_frames(poly, variables):
+            return False
+        # The ordinary prefix already excluded the source fan by its
+        # two-coordinate Newton projections. A quadratic cone uses a
+        # degenerate face instead and needs a genuinely relative fan.
+        if degenerate_relative_face:
+            source = build_fan(poly, exhaustive=True, seconds=0.1, chart_terms=len(poly))
+            if not any(i < source["newton_ray_count"] for i in source["boundary_rays"]):
+                return False
+            if intrinsic and not kernel_json("atlas_canonical_obstruction", "unresolved_chart",
+                                             terms=reduced, rays=source["rays"], cones=source["cones"], intrinsic=True):
+                return False
+        # Convenient trial supports cannot change the punctured line.
+        # The remaining small fans must fail at an actual chart point;
+        # leave any unsupported or larger candidate to the normal race.
+        trials = kernel_json("atlas_canonical_obstruction", "relative_supports", supports=trial_supports(poly))
+        for support in trials:
+            fan = bounded_fan(support)
+            if fan is None or not kernel_json("atlas_canonical_obstruction", "unresolved_chart",
+                                               terms=reduced, rays=fan["rays"], cones=fan["cones"], intrinsic=intrinsic):
+                return False
+        return True
+    except (LimitError, InputError, OSError):
         return False
 
 
@@ -157,7 +267,7 @@ class _ForkedLane:
                 self._reap(0)
         return self.returncode
 
-    def communicate(self, message):
+    def send(self, message):
         data = memoryview(message.encode())
         try:
             while data:
@@ -165,6 +275,10 @@ class _ForkedLane:
         except BrokenPipeError:
             pass  # The lane stopped early; its exit status reports why.
         self.stdin.close()
+
+    def communicate(self, message):
+        if message is not None:
+            self.send(message)
         output = self.stdout.read()
         self.stdout.close()
         self.wait()
@@ -300,16 +414,17 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
 
     # When each racing lane received its request, and the lanes that answered.
     began, answered = {}, set()
+    first_sent = False
 
     def start(method):
         """Send a lane its request, starting it unless it is waiting. Return whether it races."""
         child = waiting.pop(method) if method in waiting else spawn(method, False)
         if child is None:
             return False
-        message = payload
+        message = None if method == first and first_sent else payload
         if method == "certificates" and any(peer.poll() is None for peer in started):
             message = result_json(dict(request, defer_spare=True))
-        began[method] = time.monotonic()
+        began.setdefault(method, time.monotonic())
         started.append(child)
         reader = threading.Thread(target=collect, args=(method, child, message), daemon=True)
         reader.start()
@@ -367,11 +482,35 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
             return record
 
         forked = _forkable(scope, compute)
+        first_done = False
         if forked:
+            # The ambient and the maximum-order searches both use normal
+            # blowups. Import their shared module once before forking.
+            from . import local_blowups
             # Fork every lane while this is the process's only thread.
             for method in (first, *others):
                 waiting[method] = spawn(method, True)
-        head_start = start(first)
+                # With a single scheduled lane the coordinator can wait for
+                # the preferred answer before allocating the two spare forks.
+                # A deadline or decline starts them while it is still single-threaded.
+                if (method == first == "origin" and len(_processors()) <= len(others)
+                        and isinstance(waiting[first], _ForkedLane)):
+                    import select
+                    primary = waiting[first]
+                    began[first] = time.monotonic()
+                    primary.send(payload)
+                    first_sent = True
+                    poll = select.poll()
+                    poll.register(primary.stdout, select.POLLIN)
+                    if poll.poll(max(0, round(1000 * grace))):
+                        collect(first, primary, None)
+                        _, reply = replies.get()
+                        record = consider(first, reply)
+                        if record is not None:
+                            return record
+                        first_done = True
+                        del waiting[first]
+        head_start = not first_done and start(first) and not first_sent
         speculative = (head_start and SPECULATIVE_LANES and len(_processors()) > len(others)
                        and (forked or fork_server.available()))
         if not head_start or speculative:
@@ -457,12 +596,13 @@ def _run(method, payload):
                 report("Searching for smooth blow-up centres over the origin" if method == "origin" else
                        "Blowing up loci of maximal order over the origin")
                 full_boundary = payload.get("full_boundary", False)
+                live_charts = []
                 record = _resolve(terms, payload["variables"], payload["mode"], payload.get("seconds"),
                                   defer_outputs=True, full_boundary=full_boundary, order_only=method == "order",
-                                  safe=payload.get("safe", False), turn=payload.get("turn"))
+                                  safe=payload.get("safe", False), turn=payload.get("turn"), live_charts=live_charts)
                 if record is not None:
                     certified = certified_outputs(record, payload["variables"], payload["mode"],
-                                                  payload.get("integrals", False))
+                                                  payload.get("integrals", False), live_charts=live_charts)
                     if payload["mode"] == "intrinsic" and not full_boundary:
                         record, certified = refine_intrinsic_boundary(terms, payload["variables"], record, certified,
                                                                       None, payload.get("integrals", False),

@@ -19,6 +19,7 @@ public:
 };
 
 bool member_lex(const Polynomial& f, const Basis& lex_basis);
+Polynomial reduce_cyclic_powers(const Polynomial& f, const Basis& relations);
 Basis contract(const Basis& generators, const Basis& prime_lex, size_t width);
 std::optional<Basis> contract_factored(Basis rows, const Basis& prime_lex, size_t width);
 std::optional<Basis> special_contraction(const Basis& generators, const Basis& prime_lex, size_t width);

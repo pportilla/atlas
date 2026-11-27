@@ -9,6 +9,7 @@ beyond the packed kernel. The two routes must give the same charts, centres
 and errors.
 """
 import unittest
+import os
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -97,6 +98,28 @@ class NativeCanonicalStageTests(unittest.TestCase):
             self.assertEqual(exceptional[:3], ("E1", 2, 2))
             mapping = dict(child.coordinates)
             self.assertEqual(strict[3][0]*exceptional[3][0]**2, mapping["x"]*mapping["y"])
+
+    def test_first_order_crossings_keep_nilpotent_fibres_and_tangencies(self):
+        x, y, z = variables = np.symbols("x y z")
+        # The tests of the boundary and of the strict transform refer to
+        # the same pair of chart coordinates even when a matrix guard fires.
+        for equation, fibre, empty in (
+            (y + (x*z)**8, (x*z,), True),
+            (y + x**(2**41), (x**3,), True),
+            (x + y**2 + (x*y)**5, (x**3,), False),
+            (x*y, (x*z,), False),
+        ):
+            with self.subTest(equation=equation):
+                chart = lb.Chart(variables, (), (("E", 1, 1, (x,)), ("X", 1, 1, (equation,))),
+                                 fibre, (), (), ())
+                fields = lb._chart_fields(chart, coordinates=False, own=True, crossings=True, check=False)
+                def compute(active):
+                    with patch.dict(os.environ, ATLAS_LINEAR_ALGEBRA=active):
+                        return lb._native_stage("failures", dimension=3, packed_present=True, charts=[fields])
+                actual = compute("1")
+                self.assertEqual(actual, compute("0"))
+                self.assertEqual(not actual[0]["loci"], empty)
+                self.assertEqual(not actual[0]["own"], empty)
 
     def test_retained_charts_keep_the_older_centres_that_still_meet_them(self):
         x, y, z = variables = np.symbols("x y z")

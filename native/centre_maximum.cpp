@@ -10,7 +10,11 @@
 // a ring outside the packed kernel, declines the call; the caller then runs
 // the arbitrary-width route.
 #include "chart_expr.hpp"
+#include "membership_certificate.hpp"
+#include "finite_locus.hpp"
+#include "point_jet.hpp"
 #include "groebner.hpp"
+#include "centre_record.hpp"
 
 #include <chrono>
 #include <functional>
@@ -82,7 +86,11 @@ V strings(const Strings& values) {
 
 // ---------------------------------------------------------------- the kernel
 
+namespace recording = atlas::centre_record;
 struct Settings {
+    const char* record = nullptr;
+    std::map<std::string, std::pair<unsigned, recording::Clock::duration>> timings;
+    V dimensions{Json::arrayValue};
     bool packed_present = true;
     std::optional<std::chrono::steady_clock::time_point> deadline;
     long long dummies = 0;
@@ -96,6 +104,48 @@ void check_time() {
         throw Raise{"GiveUp", "The time allowed for the blowups is over."};
 }
 
+// Aggregate inclusive native times. An operation which hits a deadline is
+// still accounted for as its stack unwinds.
+struct MeasuredCall {
+    using Counter = std::pair<unsigned, recording::Clock::duration>;
+    Counter* counter = nullptr;
+    recording::Clock::time_point start;
+    explicit MeasuredCall(const std::string& name) {
+        if (settings->record) {
+            counter = &settings->timings[name.substr(0, name.find(' '))];
+            start = recording::Clock::now();
+        }
+    }
+    ~MeasuredCall() {
+        if (counter) {
+            ++counter->first;
+            counter->second += recording::Clock::now() - start;
+        }
+    }
+};
+Strings measured_ideal(const std::string& head, const Strings& lines) {
+    MeasuredCall measure(head);
+    return atlas::chart::ideal_request(head, lines);
+}
+Strings measured_affine(const Strings& lines) {
+    MeasuredCall measure(lines.at(0));
+    return atlas::chart::affine_request(lines);
+}
+
+// Only serialize operands after an opt-in recorded call. Production callers
+// pay one branch and do not read a clock or construct a JSON object here.
+template<class Compute>
+bool record_predicate(const char* kind, const Variables& variables, const Ideal& equations,
+                      const Ideal& extra, Compute compute) {
+    if (!settings->record) return compute();
+    auto start = recording::Clock::now();
+    const bool value = compute();
+    auto elapsed = recording::Clock::now() - start;
+    recording::inner(settings->record, recording::inputs(kind, variables, equations, extra),
+                     settings->packed_present, value, elapsed);
+    return value;
+}
+
 // engine/groebner.py `groebner` and its native basis.
 struct Basis {
     void* handle = nullptr;
@@ -107,6 +157,7 @@ struct Basis {
 
     bool contains(const Expr& f) const {
         const std::string query = row(gens, f) + "\n";
+        MeasuredCall measure("contains");
         const int answer = atlas_groebner_contains(handle, query.data(), query.size());
         if (answer < 0) {
             if (out_of_range(atlas_groebner_error())) throw Declined{atlas_groebner_error()};
@@ -116,6 +167,7 @@ struct Basis {
     }
     Expr remainder(const Expr& f) const {
         const std::string query = row(gens, f) + "\n";
+        MeasuredCall measure("remainder");
         char* answer = atlas_groebner_reduce(handle, query.data(), query.size());
         if (!answer) {
             if (out_of_range(atlas_groebner_error())) throw Declined{atlas_groebner_error()};
@@ -138,6 +190,7 @@ Held groebner(const Ideal& ideal, const Variables& gens, const std::string& orde
     std::string payload = std::to_string(gens.size()) + " " + std::to_string(orders.at(order)) + " " +
                           std::to_string(known) + "\n";
     for (const auto& f : ideal) payload += row(gens, f) + "\n";
+    MeasuredCall measure(order);
     void* handle = atlas_groebner(payload.data(), payload.size());
     if (!handle) {
         if (out_of_range(atlas_groebner_error())) throw Declined{atlas_groebner_error()};
@@ -188,19 +241,34 @@ Ideal ideal_basis(const Variables& variables, const Ideal& ideal) {
     return held(variables, distinct(ideal))->exprs;
 }
 
-bool ideal_subset(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
+// Bound the cost of testing a radical on an open fibre with few unknowns.
+// The full locus computation accounts for all remaining strata.
+const atlas::certificate::CertificateCaps local_caps{2, 32, 64, 72, 640, 48, check_time};
+bool ideal_subset_impl(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
     require(variables);
+    if (atlas::certificate::enabled()) {
+        const bool certified = std::all_of(smaller.begin(), smaller.end(), [&](const Expr& h) {
+            return atlas::certificate::certify_member(variables, larger, h, local_caps).certified;
+        });
+        if (atlas::certificate::trace("ideal_subset", certified)) return true;
+    }
     const auto basis = held(variables, distinct(larger));
     for (const auto& f : distinct(smaller))
         if (!basis->contains(f)) return false;
     return true;
 }
 
+bool ideal_subset(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
+    return record_predicate("ideal_subset", variables, smaller, larger, [&] {
+        return ideal_subset_impl(variables, smaller, larger);
+    });
+}
+
 // engine/kernel.py `present_outside` without holes.
 std::optional<bool> packed_present(const Variables& variables, const Ideal& ideal) {
     if (variables.size() < 1 || variables.size() > MAX_VARIABLES) return std::nullopt;
     try {
-        const auto answer = ideal_request("open_locus " + std::to_string(variables.size()) + " " +
+        const auto answer = measured_ideal("open_locus " + std::to_string(variables.size()) + " " +
                                           std::to_string(ideal.size()) + " 0", rows(variables, ideal));
         if (answer == Strings{"yes"}) return true;
         if (answer == Strings{"no"}) return false;
@@ -209,28 +277,48 @@ std::optional<bool> packed_present(const Variables& variables, const Ideal& idea
     return std::nullopt;
 }
 
-bool empty_locus(const Variables& variables, const Ideal& ideal) {
+bool empty_locus_impl(const Variables& variables, const Ideal& ideal) {
     require(variables);
     const Ideal equations = distinct(ideal);
+    if (atlas::certificate::enabled() && atlas::certificate::trace("empty_locus",
+        atlas::certificate::certify_unit(variables, equations, local_caps).certified)) return true;
     if (settings->packed_present)
         if (auto present = packed_present(variables, equations)) return !*present;
     const Held basis = held(variables, equations);
     return basis->exprs.size() == 1 && basis->exprs[0] == constant(1);
 }
 
+bool empty_locus(const Variables& variables, const Ideal& ideal) {
+    return record_predicate("empty_locus", variables, ideal, {}, [&] {
+        return empty_locus_impl(variables, ideal);
+    });
+}
+
 // engine/blowup_ideal.py `radical_subset` (engine/kernel.py `radical_subset`).
-bool radical_subset(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
+bool radical_subset_impl(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
     require(variables);
     if (variables.size() + 1 > MAX_VARIABLES) throw Declined{"The radical test exceeds the packed variable range."};
+    if (atlas::certificate::enabled()) {
+        const bool certified = std::all_of(smaller.begin(), smaller.end(), [&](const Expr& h) {
+            return atlas::certificate::certify_radical_member(variables, larger, h, local_caps).certified;
+        });
+        if (atlas::certificate::trace("radical_subset", certified)) return true;
+    }
     try {
         auto small = rows(variables, smaller);
         const size_t count = small.size();
         for (const auto& line : rows(variables, larger)) small.push_back(line);
-        return ideal_request("radical " + std::to_string(variables.size()) + " " + std::to_string(count), small) ==
+        return measured_ideal("radical " + std::to_string(variables.size()) + " " + std::to_string(count), small) ==
                Strings{"1"};
     } catch (const Unavailable& error) {
         throw Declined{error.message};
     }
+}
+
+bool radical_subset(const Variables& variables, const Ideal& smaller, const Ideal& larger) {
+    return record_predicate("radical_subset", variables, smaller, larger, [&] {
+        return radical_subset_impl(variables, smaller, larger);
+    });
 }
 
 // engine/blowup_ideal.py `saturate` (engine/kernel.py `saturate`).
@@ -239,7 +327,7 @@ Ideal saturate(const Variables& variables, const Ideal& ideal, const Expr& by) {
     if (variables.size() + 1 > MAX_VARIABLES) throw Declined{"The saturation exceeds the packed variable range."};
     try {
         auto lines = rows(variables, joined(ideal, {by}));
-        return decode_all(variables, ideal_request("saturate " + std::to_string(variables.size()) + " " +
+        return decode_all(variables, measured_ideal("saturate " + std::to_string(variables.size()) + " " +
                                                    std::to_string(lines.size() - 1), lines));
     } catch (const Unavailable& error) {
         throw Declined{error.message};
@@ -253,7 +341,7 @@ Ideal saturate_grevlex(const Variables& variables, const Ideal& ideal, const Exp
     if (variables.size() + 1 > MAX_VARIABLES) throw Declined{"The saturation exceeds the packed variable range."};
     try {
         auto lines = rows(variables, joined(ideal, {by}));
-        return decode_all(variables, ideal_request("saturate_grevlex " + std::to_string(variables.size()) + " " +
+        return decode_all(variables, measured_ideal("saturate_grevlex " + std::to_string(variables.size()) + " " +
                                                    std::to_string(lines.size() - 1), lines));
     } catch (const Unavailable& error) {
         throw Declined{error.message};
@@ -278,11 +366,11 @@ Ideal frame_polys(const std::string& operation, const Variables& variables, cons
         lines.push_back(line);
     }
     for (const auto& f : functions) lines.push_back(text(variables, f));
-    return decode_all(variables, affine_request(lines));
+    return decode_all(variables, measured_affine(lines));
 }
 
 std::optional<std::pair<Expr, Expr>> frame_linear(const Variables& variables, const Expr& f, const Coord& k) {
-    const auto answer = affine_request({"linear", header(variables), std::to_string(index(variables, k)),
+    const auto answer = measured_affine({"linear", header(variables), std::to_string(index(variables, k)),
                                         text(variables, f)});
     if (answer == Strings{"none"}) return std::nullopt;
     return std::make_pair(decode(variables, answer.at(0)), decode(variables, answer.at(1)));
@@ -318,7 +406,7 @@ Expr frame_restrict(const Variables& variables, const Expr& f, const Coord& k, c
 
 // engine/affine_kernel.py `frame_locus`: emptiness or the contracted basis on an open frame.
 Ideal frame_basis(const Variables& variables, const Ideal& equations, const Ideal& units);
-bool frame_empty(const Variables& variables, const Ideal& equations, const Ideal& units) {
+bool frame_empty_impl(const Variables& variables, const Ideal& equations, const Ideal& units) {
     if (variables.empty())
         return std::any_of(equations.begin(), equations.end(), [](const Expr& f) { return !f.zero(); }) ||
                std::any_of(units.begin(), units.end(), [](const Expr& u) { return u.zero(); });
@@ -327,9 +415,30 @@ bool frame_empty(const Variables& variables, const Ideal& equations, const Ideal
     auto found = cache.find(k);
     if (found != cache.end()) return found->second;
     std::optional<bool> answer;
-    if (variables.size() <= MAX_VARIABLES) {
+    if (atlas::certificate::enabled()) {
+        // D(u_1 ... u_k) ignores nonzero scalar factors. Bound the product
+        // itself before attempting a test of the additional Rabinowitsch equation.
+        const auto& caps = local_caps;
+        bool certified = false;
+        if (units.empty()) certified = atlas::certificate::certify_unit(variables, equations, caps).certified;
+        else {
+            Expr unit = constant(1);
+            bool within = true;
+            for (const auto& u : units) {
+                if (u.number() && !u.zero()) continue;
+                if (!unit.zero() && u.terms().size() > caps.max_nonzeros / unit.terms().size()) {
+                    within = false;
+                    break;
+                }
+                unit = unit * u;
+            }
+            if (within) certified = atlas::certificate::certify_empty_on_open(variables, equations, unit, caps).certified;
+        }
+        if (atlas::certificate::trace("frame_empty", certified)) answer = true;
+    }
+    if (!answer && variables.size() <= MAX_VARIABLES) {
         try {
-            const auto result = ideal_request("frame_empty " + std::to_string(variables.size()) + " " +
+            const auto result = measured_ideal("frame_empty " + std::to_string(variables.size()) + " " +
                                               std::to_string(equations.size()) + " " + std::to_string(units.size()),
                                               rows(variables, joined(equations, units)));
             if (result == Strings{"1"} || result == Strings{"0"}) answer = result == Strings{"1"};
@@ -341,18 +450,24 @@ bool frame_empty(const Variables& variables, const Ideal& equations, const Ideal
     if (!answer) {
         Strings lines{"frame_empty", header(variables), std::to_string(equations.size())};
         for (const auto& f : joined(equations, units)) lines.push_back(text(variables, f));
-        answer = affine_request(lines) == Strings{"1"};
+        answer = measured_affine(lines) == Strings{"1"};
     }
     if (cache.size() > 16384) cache.clear();
     cache.emplace(std::move(k), *answer);
     return *answer;
 }
 
+bool frame_empty(const Variables& variables, const Ideal& equations, const Ideal& units) {
+    return record_predicate("frame_empty", variables, equations, units, [&] {
+        return frame_empty_impl(variables, equations, units);
+    });
+}
+
 Ideal frame_basis(const Variables& variables, const Ideal& equations, const Ideal& units) {
     if (variables.empty()) return frame_empty(variables, equations, units) ? Ideal{constant(1)} : Ideal{};
     if (variables.size() <= MAX_VARIABLES) {
         try {
-            return decode_all(variables, ideal_request("frame_basis " + std::to_string(variables.size()) + " " +
+            return decode_all(variables, measured_ideal("frame_basis " + std::to_string(variables.size()) + " " +
                                                        std::to_string(equations.size()) + " " +
                                                        std::to_string(units.size()),
                                                        rows(variables, joined(equations, units))));
@@ -363,7 +478,7 @@ Ideal frame_basis(const Variables& variables, const Ideal& equations, const Idea
     }
     Strings lines{"frame_basis", header(variables), std::to_string(equations.size())};
     for (const auto& f : joined(equations, units)) lines.push_back(text(variables, f));
-    return decode_all(variables, affine_request(lines));
+    return decode_all(variables, measured_affine(lines));
 }
 
 // engine/native_polynomial.py `count_ops` (native/point_geometry.cpp, "expression_size").
@@ -552,7 +667,7 @@ public:
         for (auto& line : implicit_input(f)) lines.push_back(std::move(line));
         lines.push_back(std::to_string(degree));
         for (auto& line : field_lines(k)) lines.push_back(std::move(line));
-        const auto answer = affine_request(lines);
+        const auto answer = measured_affine(lines);
         Ideal chain{f};
         for (size_t i = 1; i < answer.size(); ++i) chain.push_back(decode(variables, answer[i]));
         return chain;
@@ -573,12 +688,32 @@ public:
         if (known_scalar_unit(f)) return true;
         auto found = regular_.find(f);
         if (found != regular_.end()) return found->second;
-        const auto answer = ideal_request("graph_regular " + std::to_string(variables.size()) + " " +
+        const auto answer = measured_ideal("graph_regular " + std::to_string(variables.size()) + " " +
                                           std::to_string(rows.size()), atlas::chart::rows(variables, joined(rows, {f})));
         return regular_[f] = answer.at(0) == "yes";
     }
 
     bool known_scalar_unit(const Expr& f) const { return scalar_units_.count(f) != 0; }
+
+    std::optional<std::vector<atlas::certificate::GaloisOrbit>> working_orbits(
+            const Ideal& locus, const std::vector<Ideal>& working) {
+        if (!atlas::certificate::enabled() || variables.size() > 8) return std::nullopt;
+        const atlas::certificate::CertificateCaps caps{4, 32, 96, 96, 12288, 8, check_time};
+        std::vector<atlas::certificate::GaloisOrbit> out;
+        for (const auto& piece : working) {
+            const auto key = joined(locus, piece);
+            auto found = finite_loci_.find(key);
+            if (found == finite_loci_.end()) {
+                auto centre = atlas::certificate::finite_locus(variables, joined(rows, key), units, caps);
+                atlas::certificate::trace("finite_locus", centre.certified);
+                found = finite_loci_.emplace(key, std::move(centre)).first;
+            }
+            if (!found->second.certified) return std::nullopt;
+            for (const auto& orbit : found->second.orbits)
+                out.push_back(orbit);
+        }
+        return out;
+    }
 
     std::optional<Strings> working_points(const Ideal& locus, const std::vector<Ideal>& working) {
         Strings points;
@@ -590,12 +725,25 @@ public:
             auto found = point_supports_.find(k);
             if (found == point_supports_.end()) {
                 const Ideal equations = joined(rows, k);
-                const auto answer = ideal_request("frame_points " + std::to_string(variables.size()) + " " +
+                const auto answer = measured_ideal("frame_points " + std::to_string(variables.size()) + " " +
                                                   std::to_string(equations.size()) + " " +
                                                   std::to_string(units.size()),
                                                   atlas::chart::rows(variables, joined(equations, units)));
                 std::optional<Strings> support;
                 if (answer.at(0) == "points") support = Strings(answer.begin() + 1, answer.end());
+                else if (auto found = working_orbits(locus, {piece})) {
+                    // The locus can be sent to the rational smooth-frame tests
+                    // only if it contains no orbits outside QQ.
+                    if (std::all_of(found->begin(), found->end(), [](const auto& g) { return g.mu.size() == 2; })) {
+                        support = Strings{};
+                        for (const auto& orbit : *found) {
+                            std::string p;
+                            for (const auto& coord : orbit.coordinates)
+                                p += (p.empty() ? "" : " ") + (coord.empty() ? std::string("0") : rational_text(coord[0]));
+                            support->push_back(std::move(p));
+                        }
+                    }
+                }
                 found = point_supports_.emplace(k, support).first;
                 if (support && !support->empty()) {
                     known_nonempty_ = true;
@@ -608,6 +756,79 @@ public:
         return points;
     }
 
+    std::optional<atlas::certificate::PointJet> orbit_jet(const Expr& f,
+            const atlas::certificate::GaloisOrbit& point, unsigned degree) {
+        Variables dependent;
+        for (const auto& v : variables)
+            if (std::find(coords.begin(), coords.end(), v) == coords.end()) dependent.push_back(v);
+        const atlas::certificate::CertificateCaps caps{2, 16, 1024, 1024, 131072, 32, check_time};
+        return atlas::certificate::frame_jet(variables, rows, dependent, f, point, degree, caps);
+    }
+
+    // A single nonzero tangential Taylor coefficient at any known point
+    // on x=0 proves that f has order zero along the whole divisor ideal.
+    // This can avoid constructing even the cut basis on large frames.
+    bool nonzero_on_divisor(const Expr& f, const Coord& x) const {
+        if (witness_points_.empty() && finite_loci_.empty()) return false;
+        if (std::find(coords.begin(), coords.end(), x) == coords.end()) return false;
+        const size_t axis = index(variables, x);
+        Variables dependent{x};
+        for (const auto& v : variables)
+            if (std::find(coords.begin(), coords.end(), v) == coords.end()) dependent.push_back(v);
+        const auto equations = joined(rows, {symbol(x)});
+        const atlas::certificate::CertificateCaps caps{0, 2, 32, 512, 16384, 8, check_time};
+        size_t tried = 0;
+        auto proves = [&](const atlas::certificate::GaloisOrbit& point) {
+            if (point.coordinates.size() != variables.size()) return false;
+            for (const auto& c : point.coordinates[axis]) if (c != 0) return false;
+            ++tried;
+            const auto jet = atlas::certificate::frame_jet(variables, equations, dependent, f, point, 2, caps);
+            return jet && !jet->coefficients.empty();
+        };
+        for (const auto& text : witness_points_) {
+            atlas::certificate::GaloisOrbit point{{0, 1}, {}};
+            std::istringstream input(text);
+            for (Q c; input >> c;) point.coordinates.push_back({c});
+            if (proves(point)) return true;
+            if (tried >= 3) return false;
+        }
+        for (const auto& stored : finite_loci_)
+            for (const auto& point : stored.second.orbits) {
+                if (proves(point)) return true;
+                if (tried >= 3) return false;
+            }
+        return false;
+    }
+
+    std::optional<unsigned> orbit_order(const Ideal& functions, const atlas::certificate::GaloisOrbit& point) {
+        for (unsigned degree : {2u, 4u, 8u, 16u}) {
+            unsigned order = degree + 1;
+            for (const auto& f : functions) {
+                if (f.zero()) continue;
+                const auto jet = orbit_jet(f, point, degree);
+                if (!jet) return {};
+                order = std::min(order, atlas::certificate::jet_order(*jet));
+            }
+            if (order <= degree) return order;
+        }
+        return {};  // vanishing through the cap is only a lower bound
+    }
+
+    std::optional<unsigned> finite_order(const Ideal& functions, const std::vector<Ideal>& working) {
+        if (rows.empty()) return {};
+        const auto points = working_orbits({}, working);
+        if (!points || points->empty()) return {};
+        unsigned maximum = 0;
+        for (const auto& point : *points) {
+            const auto order = orbit_order(functions, point);
+            if (!order) return {};
+            maximum = std::max(maximum, *order);
+        }
+        // The original search starts at order one. Its subsequent live-locus
+        // test handles a working piece disjoint from the strict transform.
+        return std::max(maximum, 1u);
+    }
+
     std::optional<long> point_order(const Expr& f, const std::string& point) {
         const auto k = std::make_pair(f, point);
         auto found = point_orders_.find(k);
@@ -616,7 +837,7 @@ public:
         const auto count = lines.size();
         lines.push_back(point);
         lines.push_back(row(variables, f));
-        const auto answer = ideal_request("smooth_point_order " + std::to_string(variables.size()) + " " +
+        const auto answer = measured_ideal("smooth_point_order " + std::to_string(variables.size()) + " " +
                                           std::to_string(count) + " 64", lines);
         std::optional<long> value;
         if (answer.at(0) != "unknown") value = std::stol(answer.at(0));
@@ -637,7 +858,33 @@ public:
             lines.push_back(point);
             lines.push_back(query);
             lines.push_back(free);
-            if (ideal_request(head, lines) != Strings{"yes"}) return false;
+            if (measured_ideal(head, lines) != Strings{"yes"}) return false;
+        }
+        return true;
+    }
+
+    bool orbit_direction_vanishes(const Expr& f, const Coord& k, unsigned degree,
+                                  const std::vector<atlas::certificate::GaloisOrbit>& points,
+                                  const Ideal& open) {
+        const size_t axis = index(coords, k);
+        for (const auto& point : points) {
+            // Each open factor here is one of the original chart coordinates.
+            // Coordinates are their reduced representatives modulo mu.
+            if (std::any_of(open.begin(), open.end(), [&](const Expr& factor) {
+                const auto& value = point.coordinates[index(variables, factor.coords().at(0))];
+                return std::all_of(value.begin(), value.end(), [](const Q& c) { return c == 0; });
+            })) continue;
+            const auto jet = orbit_jet(f, point, degree);
+            if (!jet) return false;
+            // Restrict to the free k-axis by setting all other increments to
+            // zero. A surviving coefficient requires the ordinary direction
+            // test, which also checks the chosen contact on the whole frame.
+            for (const auto& term : jet->coefficients) {
+                bool on_axis = true;
+                for (size_t j = 0; j < term.first.size(); ++j)
+                    if (j != axis && term.first[j] != 0) on_axis = false;
+                if (on_axis) return false;
+            }
         }
         return true;
     }
@@ -651,12 +898,12 @@ public:
         }
         Strings lines{axes};
         lines.insert(lines.end(), points.begin(), points.end());
-        const auto answer = ideal_request("contact_open_points " + std::to_string(variables.size()), lines);
+        const auto answer = measured_ideal("contact_open_points " + std::to_string(variables.size()), lines);
         return Strings(answer.begin() + 1, answer.end());
     }
 
     std::string membership(const Ideal& equations, const Expr& f, bool known) const {
-        return ideal_request("frame_membership " + std::to_string(variables.size()) + " " +
+        return measured_ideal("frame_membership " + std::to_string(variables.size()) + " " +
                              std::to_string(equations.size()) + " " + std::to_string(int(known)),
                              atlas::chart::rows(variables, joined(equations, {f}))).at(0);
     }
@@ -700,6 +947,25 @@ public:
     }
 
     Ideal jet(const Expr& f, unsigned order) {
+        if (!settings->record || rows.empty()) return compute_jet(f, order);
+        auto start = recording::Clock::now();
+        auto answer = compute_jet(f, order);
+        auto elapsed = recording::Clock::now() - start;
+        auto r = frame_request("implicit_jet", f);
+        r["order"] = order;
+        recording::inner(settings->record, r, settings->packed_present, json_rows(variables, answer), elapsed);
+        return answer;
+    }
+
+    V frame_request(const char* kind, const Expr& f) const {
+        auto r = recording::inputs(kind, variables, rows, units);
+        r["coordinates"] = V(Json::arrayValue);
+        for (const auto& c : coords) r["coordinates"].append(Json::UInt(index(variables, c)));
+        r["poly"] = row(variables, f);
+        return r;
+    }
+
+    Ideal compute_jet(const Expr& f, unsigned order) {
         const auto k = std::make_pair(f, order);
         auto found = jets_.find(k);
         if (found != jets_.end()) return found->second;
@@ -715,11 +981,11 @@ public:
             lines.push_back(std::to_string(coords.size()));
             for (const auto& c : coords)
                 for (auto& line : field_lines(c)) lines.push_back(std::move(line));
-            answer = affine_request(lines);
+            answer = measured_affine(lines);
         } else {
             std::string axes;
             for (const auto& c : coords) axes += (axes.empty() ? "" : " ") + std::to_string(index(variables, c));
-            answer = affine_request({"affine_jet", header(variables), std::to_string(order), axes, text(variables, f)});
+            answer = measured_affine({"affine_jet", header(variables), std::to_string(order), axes, text(variables, f)});
         }
         Ideal result{f};
         for (size_t i = 1; i < answer.size(); ++i) result.push_back(decode(variables, answer[i]));
@@ -817,6 +1083,7 @@ private:
     std::optional<Expr> unit_;
     std::unordered_map<std::pair<Expr, unsigned>, Ideal, ExprOrderHash> jets_;
     std::unordered_map<Ideal, std::optional<Strings>, IdealHash> point_supports_;
+    std::unordered_map<Ideal, atlas::certificate::FiniteLocus, IdealHash> finite_loci_;
     std::unordered_map<std::pair<Expr, std::string>, std::optional<long>, ExprTextHash> point_orders_;
     std::vector<Ideal> witness_pieces_;
     Strings witness_points_;
@@ -858,7 +1125,7 @@ struct Presentation {
         Strings all{operation};
         all.insert(all.end(), lines.begin(), lines.end());
         all.insert(all.end(), extra.begin(), extra.end());
-        return affine_request(all);
+        return measured_affine(all);
     }
     std::vector<Exponents> residual() const {
         std::vector<Exponents> out;
@@ -982,19 +1249,35 @@ Element settle(const Element& element, const Frame& frame, const std::vector<std
 }
 
 // engine/centres.py `_remove_coordinate_powers`.
-std::pair<std::vector<Z>, Expr> remove_coordinate_powers(Frame& frame, const Expr& poly, const Variables& divisors) {
+std::pair<std::vector<Z>, Expr> coordinate_powers(Frame& frame, const Expr& poly, const Variables& divisors, bool scalar_unit) {
     Strings answer;
-    if (!frame.rows.empty() && !frame.known_scalar_unit(poly)) {
+    if (!frame.rows.empty() && !scalar_unit) {
         Strings lines{"implicit_coordinates"};
         for (auto& line : frame.implicit_input(poly)) lines.push_back(std::move(line));
         lines.push_back(row(frame.variables, frame.unit()));
         lines.push_back(std::to_string(divisors.size()));
+        bool unchanged = atlas::certificate::enabled() && !poly.zero();
         for (const auto& v : divisors) {
+            if (unchanged && frame.nonzero_on_divisor(poly, v)) {
+                lines.push_back("absent");
+                continue;
+            }
             const auto& cut = frame.cut(v);
             if (cut.kind == Frame::Cut::Absent) {
                 lines.push_back("absent");
                 continue;
             }
+            // Until a division takes place the residual is still poly. Its
+            // first coefficient on this divisor is the class modulo (R,v)
+            // on the specified open set. A nonzero class proves order zero,
+            // exactly the stopping test of implicit_coordinates. In that
+            // case no inverse-variable elimination basis is needed.
+            if (unchanged && !cut.first->contains(poly) &&
+                (cut.kind == Frame::Cut::Constant || !cut.second->contains(poly))) {
+                lines.push_back("absent");
+                continue;
+            }
+            unchanged = false;
             const auto [t, over] = frame.over(v);
             lines.push_back("present");
             for (auto& line : Frame::basis_lines(frame.variables, *cut.first)) lines.push_back(std::move(line));
@@ -1004,17 +1287,66 @@ std::pair<std::vector<Z>, Expr> remove_coordinate_powers(Frame& frame, const Exp
             extended.insert(extended.end(), frame.variables.begin(), frame.variables.end());
             for (auto& line : Frame::basis_lines(extended, *over)) lines.push_back(std::move(line));
         }
-        answer = affine_request(lines);
+        answer = measured_affine(lines);
         if (answer == Strings{"quotient_unavailable"})
             throw Raise{"GiveUp", "A quotient by the equation of a divisor was not found."};
     } else {
         std::string axes;
         for (const auto& v : divisors) axes += (axes.empty() ? "" : " ") + std::to_string(index(frame.variables, v));
-        answer = affine_request({"coordinate_residual", header(frame.variables), axes, text(frame.variables, poly)});
+        answer = measured_affine({"coordinate_residual", header(frame.variables), axes, text(frame.variables, poly)});
     }
     std::vector<Z> orders;
     for (size_t i = 0; i + 1 < answer.size(); ++i) orders.emplace_back(answer[i]);
     return {orders, decode(frame.variables, answer.back())};
+}
+
+V powers_result(const Variables& vars, const std::pair<std::vector<Z>, Expr>& answer) {
+    V value;
+    value["orders"] = atlas::sparse_json::strings(answer.first);
+    value["residual"] = row(vars, answer.second);
+    return value;
+}
+
+std::pair<std::vector<Z>, Expr> remove_coordinate_powers(Frame& frame, const Expr& poly, const Variables& divisors) {
+    bool scalar = frame.known_scalar_unit(poly);
+    if (!settings->record) return coordinate_powers(frame, poly, divisors, scalar);
+    auto start = recording::Clock::now();
+    auto answer = coordinate_powers(frame, poly, divisors, scalar);
+    auto elapsed = recording::Clock::now() - start;
+    auto r = frame.frame_request("remove_coordinate_powers", poly);
+    r["scalar_unit"] = scalar;
+    r["divisors"] = V(Json::arrayValue);
+    for (const auto& v : divisors) r["divisors"].append(Json::UInt(index(frame.variables, v)));
+    recording::inner(settings->record, r, settings->packed_present, powers_result(frame.variables, answer), elapsed);
+    return answer;
+}
+
+V replay_inner(const V& r) {
+    Variables vars;
+    for (Json::ArrayIndex i = 0; i < r["names"].size(); ++i)
+        vars.push_back({r["names"][i].asString(), r["identities"][i].asInt64()});
+    auto read = [&](const V& lines) {
+        Ideal out;
+        for (const auto& line : lines) out.push_back(decode(vars, line.asString()));
+        return out;
+    };
+    const auto eq = read(r["equations"]), extra = read(r["extra"]);
+    const std::string kind = r["kind"].asString();
+    if (kind == "empty_locus") return empty_locus(vars, eq);
+    if (kind == "frame_empty") return frame_empty(vars, eq, extra);
+    if (kind == "ideal_subset") return ideal_subset(vars, eq, extra);
+    if (kind == "radical_subset") return radical_subset(vars, eq, extra);
+    auto axes = [&](const V& indices) {
+        Variables selected;
+        for (const auto& i : indices) selected.push_back(vars.at(i.asUInt()));
+        return selected;
+    };
+    Frame frame(vars, axes(r["coordinates"]), eq, extra);
+    auto poly = decode(vars, r["poly"].asString());
+    if (kind == "implicit_jet") return json_rows(vars, frame.jet(poly, r["order"].asUInt()));
+    if (kind == "remove_coordinate_powers")
+        return powers_result(vars, coordinate_powers(frame, poly, axes(r["divisors"]), r["scalar_unit"].asBool()));
+    throw std::invalid_argument("Unknown recorded centre operation.");
 }
 
 // engine/centres.py `_contact`: each state on an open set with maximal
@@ -1061,9 +1393,11 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
                                                                          ? candidate["degree"].asString()
                                                                          : std::to_string(candidate["degree"].asUInt64())));
             std::optional<Strings> points;
+            std::optional<std::vector<atlas::certificate::GaloisOrbit>> orbits;
             if (!frame->rows.empty() && candidate["probe_direction"].asBool()) {
                 points = frame->working_points({}, remaining);
                 if (!points) points = frame->working_points(current.locus, remaining);
+                if (!points) orbits = frame->working_orbits(current.locus, remaining);
             }
             const Variables coords = frame->coords;
             for (const auto& k : coords) {
@@ -1071,11 +1405,13 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
                 bool absent = false;
                 std::vector<std::string> absent_labels;
                 for (const auto& [h, v] : fresh) if (v == k) { absent = true; absent_labels.push_back(h); }
-                if (points) {
+                if (points || orbits) {
                     Ideal open = factors;
                     if (absent) open.push_back(symbol(k));
-                    const auto active = frame->contact_open_points(*points, open);
-                    if (active.empty() || frame->direction_vanishes(poly, k, degree, active)) continue;
+                    if (points) {
+                        const auto active = frame->contact_open_points(*points, open);
+                        if (active.empty() || frame->direction_vanishes(poly, k, degree, active)) continue;
+                    } else if (frame->orbit_direction_vanishes(poly, k, degree, *orbits, open)) continue;
                 }
                 const Ideal chain = frame->derivative_chain(poly, k, degree);
                 const Expr z = chain[chain.size() - 2], top = chain.back();
@@ -1261,8 +1597,16 @@ std::vector<std::pair<std::vector<Ideal>, std::vector<Element>>> groups(const St
         if (operation == "working_orders") {
             auto points = frame.working_points({}, work);
             if (!points && !st.locus.empty()) points = frame.working_points(st.locus, work);
-            if (!points) return V();
             V orders(Json::arrayValue);
+            if (!points) {
+                const auto orbits = frame.working_orbits(st.locus, work);
+                if (!orbits) return V();
+                for (const auto& point : *orbits) {
+                    const auto order = frame.orbit_order({f}, point);
+                    orders.append(order ? V(*order) : V());
+                }
+                return orders;
+            }
             for (const auto& p : *points) {
                 const auto order = frame.point_order(f, p);
                 orders.append(order ? V(Json::Int64(*order)) : V());
@@ -1471,8 +1815,22 @@ std::vector<Found> residue(const State& st, Context& ctx) {
             check_time();
             Ideal divisor;
             for (const auto& h : strata[s]) divisor.push_back(symbol(*lookup(fresh, h)));
-            const auto points = frame.working_points(joined(st.locus, divisor), st.working);
-            if (!points) return std::nullopt;
+            const Ideal support = joined(st.locus, divisor);
+            const auto points = frame.working_points(support, st.working);
+            if (!points) {
+                auto orbits = frame.working_orbits(support, st.working);
+                if (!orbits) return std::nullopt;
+                for (const auto& point : *orbits) {
+                    std::vector<long> row;
+                    for (const auto& item : rest) {
+                        const auto order = frame.orbit_order({item.poly}, point);
+                        if (!order) return std::nullopt;
+                        row.push_back(*order);
+                    }
+                    orders.emplace_back(indices[s], std::move(row));
+                }
+                continue;
+            }
             for (const auto& point : *points) {
                 std::vector<long> row;
                 for (const auto& item : rest) {
@@ -1688,6 +2046,7 @@ std::optional<V> affine_maximum(const V& request, const Variables& variables, co
         if (records.isMember(divisors[0].first) && !records[divisors[0].first].isNull())
             fields["birth"] = records[divisors[0].first];
     }
+    MeasuredCall measure("affine_maximum");
     const V result = kernel_json(atlas_affine_centre_maximum, "maximum", fields);
     if (result.isNull()) return std::nullopt;
     V out;
@@ -1698,6 +2057,46 @@ std::optional<V> affine_maximum(const V& request, const Variables& variables, co
     out["centre"] = V(Json::arrayValue);
     for (const auto& line : result["ideal"]) out["centre"].append(row(variables, decode(variables, line.asString())));
     return out;
+}
+
+// Dimensions of constructible sets on the current smooth frame. The graph
+// t*u=1 is isomorphic to the open u!=0, even for a reducible locus.
+void record_dimensions(Frame& frame, const Ideal& locus, const std::vector<Ideal>& working,
+                       unsigned order) {
+    V data;
+    data["order"] = order;
+    try {
+        // Profiling a very large localized ideal can be harder than solving
+        // its actual centre. Log partial metadata if this extra query declines.
+        atlas::DeadlineScope budget(recording::Clock::now() + std::chrono::milliseconds(30));
+        Variables variables = frame.variables;
+        Ideal base = frame.rows;
+        if (!frame.units.empty()) {
+            Coord inverse{"_atlas_measure", 0};
+            while (std::find(variables.begin(), variables.end(), inverse) != variables.end()) ++inverse.identity;
+            variables.push_back(inverse);
+            base.push_back(symbol(inverse) * product(frame.units) - constant(1));
+        }
+        auto dimension = [&](const Ideal& equations) {
+            return std::stoi(atlas::chart::ideal_request("dimension " + std::to_string(variables.size()),
+                             rows(variables, joined(base, equations))).at(0));
+        };
+        data["order_locus"] = dimension(locus);
+        int work = -1, intersection = -1;
+        for (const auto& piece : working) {
+            work = std::max(work, dimension(piece));
+            intersection = std::max(intersection, dimension(joined(piece, locus)));
+        }
+        data["working"] = work;
+        data["order_locus_on_working"] = intersection;
+    } catch (const atlas::Expired&) {
+        data["dimension_status"] = "timeout";
+    } catch (const Declined&) {
+        data["dimension_status"] = "outside packed range";
+    } catch (const Unavailable&) {
+        data["dimension_status"] = "unavailable";
+    }
+    settings->dimensions.append(std::move(data));
 }
 
 // engine/centres.py `maximum`.
@@ -1722,6 +2121,11 @@ V maximum(const V& request) {
         (!settings->deadline || std::chrono::steady_clock::now() <= *settings->deadline)) {
         if (auto direct = affine_maximum(request, original, chart, dimension, strict, divisors, working, away)) {
             check_time();
+            if (settings->record) {
+                Frame affine(original, original);
+                const auto order = static_cast<unsigned>(std::stoul((*direct)["value"][0].asString()));
+                record_dimensions(affine, affine.jet(strict[0], order), working, order);
+            }
             return *direct;
         }
     }
@@ -1814,7 +2218,8 @@ V maximum(const V& request) {
         for (const auto& [label, v] : names)
             if (std::find(frame.variables.begin(), frame.variables.end(), v) != frame.variables.end())
                 present.emplace_back(label, v);
-        const unsigned order = jet_order(1, [&](unsigned k) {
+        const auto known = frame.finite_order(own, pieces_live);
+        const unsigned order = known ? *known : jet_order(1, [&](unsigned k) {
             Ideal jets;
             for (const auto& g : own) for (auto& d : frame.jet(g, k)) jets.push_back(std::move(d));
             for (const auto& w : pieces_live) if (!frame.empty(joined(jets, w))) return true;
@@ -1824,6 +2229,7 @@ V maximum(const V& request) {
         for (const auto& g : own) for (auto& d : frame.jet(g, order)) locus.push_back(std::move(d));
         std::vector<Ideal> live_pieces;
         for (const auto& w : pieces_live) if (!frame.empty(joined(locus, w))) live_pieces.push_back(w);
+        if (settings->record) record_dimensions(frame, locus, pieces_live, order);
         State state;
         state.frame = piece.frame;
         for (const auto& g : own) state.coll.push_back({Exponents{}, g, Q(long(order))});
@@ -2107,7 +2513,7 @@ std::vector<SurfaceStep> on_model(const Model& model) {
     }
     Strings answer;
     try {
-        answer = ideal_request("surface " + std::to_string(variables.size()) + " " + std::to_string(model.threefold) +
+        answer = measured_ideal("surface " + std::to_string(variables.size()) + " " + std::to_string(model.threefold) +
                                " " + std::to_string(model.left.size()) + " " + std::to_string(functions.size()) + " " +
                                std::to_string(model.units.size()) + " " + std::to_string(model.work.size()) + sizes,
                                rows(variables, lines));
@@ -2232,6 +2638,10 @@ V surface(const V& request) {
 
 V execute(const V& request) {
     Settings local;
+    if (request["operation"] != "replay_inner") {
+        local.record = std::getenv("ATLAS_RECORD_REQUESTS");
+        if (local.record && !*local.record) local.record = nullptr;
+    }
     local.packed_present = request["packed_present"].asBool();
     if (!request["seconds"].isNull())
         local.deadline = std::chrono::steady_clock::now() +
@@ -2258,36 +2668,53 @@ V execute(const V& request) {
     auto timed_out = [&] {
         return limit && (limit->expired() || std::chrono::steady_clock::now() > *local.deadline);
     };
-    V out;
-    try {
-        if (request["operation"].asString() == "maximum")
-            out["maximum"] = maximum(request);
-        else if (request["operation"].asString() == "surface_step")
-            out["step"] = surface(request);
-        else
-            throw std::invalid_argument("Unknown centre maximum operation.");
-    } catch (const atlas::Expired&) {
-        return out_of_time();
-    } catch (const NoModel& error) {
-        return timed_out() ? out_of_time() : failure("NoModel", error.message);
-    } catch (const NoContact& error) {
-        return timed_out() ? out_of_time() : failure("NoContact", error.message);
-    } catch (const Raise& error) {
-        return timed_out() ? out_of_time() : failure(error.kind, error.message);
-    } catch (const Unavailable& error) {
-        return timed_out() ? out_of_time() : failure("Unavailable", error.message);
-    } catch (const Declined& error) {
-        // Past the deadline the stepwise route in Python must not start over.
-        if (timed_out()) return out_of_time();
-        V declined;
-        declined["declined"] = error.reason;
-        return declined;
-    } catch (const std::exception&) {
-        if (timed_out()) return out_of_time();
-        throw;
+    auto compute = [&]() -> V {
+        V out;
+        try {
+            if (request["operation"].asString() == "maximum")
+                out["maximum"] = maximum(request);
+            else if (request["operation"] == "replay_inner")
+                out = replay_inner(request);
+            else if (request["operation"].asString() == "surface_step")
+                out["step"] = surface(request);
+            else
+                throw std::invalid_argument("Unknown centre maximum operation.");
+        } catch (const atlas::Expired&) {
+            return out_of_time();
+        } catch (const NoModel& error) {
+            return timed_out() ? out_of_time() : failure("NoModel", error.message);
+        } catch (const NoContact& error) {
+            return timed_out() ? out_of_time() : failure("NoContact", error.message);
+        } catch (const Raise& error) {
+            return timed_out() ? out_of_time() : failure(error.kind, error.message);
+        } catch (const Unavailable& error) {
+            return timed_out() ? out_of_time() : failure("Unavailable", error.message);
+        } catch (const Declined& error) {
+            // Past the deadline the stepwise route in Python must not start over.
+            if (timed_out()) return out_of_time();
+            V declined;
+            declined["declined"] = error.reason;
+            return declined;
+        } catch (const std::exception&) {
+            if (timed_out()) return out_of_time();
+            throw;
+        }
+        if (limit && limit->expired()) return out_of_time();
+        return out;
+    };
+    V result = compute();
+    if (local.record && request["operation"] == "maximum") {
+        V stats;
+        stats["request"] = request;
+        stats["dimensions"] = std::move(local.dimensions);
+        stats["response"] = result;
+        for (const auto& [name, measure] : local.timings) {
+            stats["operations"][name]["calls"] = measure.first;
+            stats["operations"][name]["us"] = Json::Int64(std::chrono::duration_cast<std::chrono::microseconds>(measure.second).count());
+        }
+        recording::append(local.record, "centre-profile", stats);
     }
-    if (limit && limit->expired()) return out_of_time();
-    return out;
+    return result;
 }
 }  // namespace
 

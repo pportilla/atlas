@@ -6,6 +6,7 @@ ifeq ($(shell uname -s),Darwin)
 else
   LIBRARY := build/libresolution.so
   SHARED := -shared
+  SHARED_LDFLAGS := -Wl,--as-needed,-O1
 endif
 
 .PHONY: all clean
@@ -15,13 +16,14 @@ ifeq ($(shell uname -s),Linux)
 all: build/resolve_supervisor
 endif
 
-build/resolve_supervisor: resolve_supervisor.cpp
+build/resolve_supervisor: resolve_supervisor.cpp preloaded_cli.hpp
 	mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 $(LIBRARY): ordinary.cpp chart_batch.cpp chart_equation.hpp
 	mkdir -p build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC $(SHARED) $(filter %.cpp,$^) -o $@ $(LDFLAGS) -lgmpxx -lgmp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(SHARED) $(filter %.cpp,$^) -o $@.tmp $(LDFLAGS) $(SHARED_LDFLAGS) -lgmpxx -lgmp
+	mv $@.tmp $@
 
 $(ZOO_LIBRARY): zoo_search.cpp
 	mkdir -p build

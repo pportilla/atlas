@@ -12,6 +12,7 @@ import platform
 from queue import Empty, Queue
 import re
 import shutil
+import signal
 from statistics import median
 import subprocess
 import sys
@@ -86,11 +87,12 @@ class Solver:
 
 
 class Session:
-    def __init__(self, solver, env, timeout):
+    def __init__(self, solver, env, timeout, *, isolated=False):
         self.solver = solver
+        self.isolated = isolated
         self.timeout = timeout
         self.proc = subprocess.Popen(solver.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT, text=True, env=env)
+                                     stderr=subprocess.STDOUT, text=True, env=env, start_new_session=isolated)
         self.output = Queue()
         self.reader = Thread(target=read_output, args=(self.proc.stdout, self.output), daemon=True)
         self.reader.start()
@@ -123,10 +125,19 @@ class Session:
             self.__exit__(*sys.exc_info())
             raise
 
-    def __exit__(self, *_):
+    def stop(self):
         if self.proc.poll() is None:
-            self.proc.kill()
+            if self.isolated:
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                self.proc.kill()
         self.proc.wait()
+
+    def __exit__(self, *_):
+        self.stop()
         self.reader.join()
         self.proc.stdin.close()
         self.proc.stdout.close()

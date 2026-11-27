@@ -73,7 +73,7 @@ def canonical_outputs(record, polynomial, *, complex, intrinsic, integrals):
     from .general_atlas import native_general_outputs
     output = native_general_outputs(record, expected, complex=complex or sheets, intrinsic=intrinsic,
                                     integrals=integrals, factor_fibre=rules == {"repeated tangent"},
-                                    canonical_cover=True)
+                                    canonical_cover=True, canonical_steps=rebuilt["steps"])
     if raw is not None:
         actual = rebuilt["charts"]
         if sheets:

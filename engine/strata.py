@@ -2,6 +2,7 @@
 import re
 
 from .polynomial import InputError, format_poly, parse, saved_polynomial_input
+from .resolution_errors import GiveUp
 
 
 class InvalidZetaCertificate(InputError):
@@ -65,7 +66,6 @@ def rational_chart_outputs(record, polynomial, *, complex=True, intrinsic=False,
 
 def proposal_chart_outputs(record, polynomial, *, integrals):
     """Verify the owned chart bundle of an ordinary solver proposal."""
-    from .local_blowups import GiveUp
     intrinsic = record["mode"] == "intrinsic"
     certified = rational_chart_outputs(record, polynomial, intrinsic=intrinsic, integrals=integrals,
                                        replay_canonical=True)
@@ -140,7 +140,6 @@ def resolution_strata(record, polynomial=None, *, computed=None, strict=False):
                     return None  # A certified intrinsic resolution may still require an embedded companion.
             else:
                 from . import atlas
-                from .local_blowups import GiveUp
                 try:
                     if strict:
                         # Older sources may need a new calculation. A claimed

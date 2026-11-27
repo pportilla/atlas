@@ -12,7 +12,6 @@ from contextvars import ContextVar
 import os
 from fractions import Fraction
 from pathlib import Path
-import subprocess
 from time import monotonic
 
 from .fan_geometry import lattice_pivots as _pivot_axes
@@ -51,6 +50,7 @@ class _FaceWorker:
                         self.proc = native_process.start("face_gb", ["--serve"], stdin=child.fileno(),
                                                          stdout=child.fileno(), stderr=devnull.fileno())
                     if self.proc is None:
+                        import subprocess
                         self.proc = subprocess.Popen([str(_KERNEL), "--serve"], stdin=child,
                                                      stdout=child, stderr=subprocess.DEVNULL)
             except BaseException:
@@ -123,6 +123,7 @@ def edge_polynomial(edge):
 
 
 def _kernel(terms, dimension, timeout):
+    import subprocess
     # Clearing rational denominators changes the generator by a torus unit.
     coefficients = list(terms.values())
     rows = _newton("coefficients", dimension, (len(coefficients),),

@@ -30,13 +30,14 @@ def _text(expr):
     return str(expr).replace("**", "^")
 
 
-def certified_outputs(record, names, mode, integrals):
+def certified_outputs(record, names, mode, integrals, *, live_charts=None):
     """Verify the owned outputs of the charts just constructed by the native blowups."""
     from .general_atlas import native_general_outputs
     charts = record["atlas"]
     repeated = any(step.get("rule") == "repeated tangent" for step in record["steps"])
     output = native_general_outputs({"variables": names}, charts, intrinsic=mode == "intrinsic",
-                                    integrals=integrals, factor_fibre=repeated, canonical_cover=True)
+                                    integrals=integrals, factor_fibre=repeated, canonical_cover=True, canonical_steps=record["steps"],
+                                    live_charts=live_charts)
     return charts, output
 
 
@@ -124,7 +125,7 @@ def strict_components(symbols, equation, factors, *, separate):
 
 
 def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_only=False, skip_tangent=False,
-             full_boundary=False, order_only=False, safe=False, reasons=None, turn=None):
+             full_boundary=False, order_only=False, safe=False, reasons=None, turn=None, live_charts=None):
     """The computation of `resolve_origin`, in this process.
 
     With `order_only`, only the maximal order rule runs, and only at an
@@ -197,6 +198,8 @@ def _resolve(poly, variables, mode, seconds, *, defer_outputs=False, tangent_onl
         return None
     record = _record(names, charts, centres, data, strata, defer_outputs=defer_outputs or intrinsic,
                      intrinsic=intrinsic)
+    if live_charts is not None and record is not None:
+        live_charts.extend(charts)
     if record is not None and len(parts) > 1:
         record["certificate"]["strict_components"] = RATIONAL_FACTORS
     if record is not None and intrinsic and not defer_outputs:

@@ -325,7 +325,7 @@ std::string compute(const char* input, Accelerator gpu) {
 // A positive result certifies the smooth projective tangent section over
 // Qbar. An unsupported input or inconclusive rank test leaves chart checks
 // to the caller. No producer metadata or previously supplied minor is used.
-extern "C" int resolution_smooth_tangent(const char* input) noexcept {
+extern "C" __attribute__((visibility("default"))) int resolution_smooth_tangent(const char* input) noexcept {
     if (!input) return 0;
     try {
         int n, order;
@@ -339,7 +339,7 @@ extern "C" int resolution_smooth_tangent(const char* input) noexcept {
     }
 }
 
-extern "C" void* resolution_ordinary(const char* input, RankKernel kernel, int device, int minimum_columns) noexcept {
+extern "C" __attribute__((visibility("default"))) void* resolution_ordinary(const char* input, RankKernel kernel, int device, int minimum_columns) noexcept {
     if (!input) return nullptr;
     try {
         const std::string report = compute(input,{kernel,device,minimum_columns});
@@ -350,4 +350,4 @@ extern "C" void* resolution_ordinary(const char* input, RankKernel kernel, int d
         return nullptr;
     }
 }
-extern "C" void resolution_free(void* result) { std::free(result); }
+extern "C" __attribute__((visibility("default"))) void resolution_free(void* result) { std::free(result); }

@@ -34,7 +34,7 @@ void transform(const int32_t* exps,const int32_t* rays,const int32_t* cones,
 }
 }
 
-extern "C" void resolution_chart_cpu_nd(const int32_t* exps,const int32_t* rays,
+extern "C" __attribute__((visibility("default"))) void resolution_chart_cpu_nd(const int32_t* exps,const int32_t* rays,
                                         const int32_t* cones,const int32_t* orders,
                                         int terms,int charts,int dimension,int32_t* out) noexcept {
     using Kernel = decltype(&transform<2>);
@@ -45,18 +45,18 @@ extern "C" void resolution_chart_cpu_nd(const int32_t* exps,const int32_t* rays,
 }
 
 // The original three-dimensional ABI is retained for external callers.
-extern "C" void resolution_chart_cpu(const int32_t* exps,const int32_t* rays,
+extern "C" __attribute__((visibility("default"))) void resolution_chart_cpu(const int32_t* exps,const int32_t* rays,
                                      const int32_t* cones,const int32_t* orders,
                                      int terms,int charts,int32_t* out) noexcept {
     transform<3>(exps,rays,cones,orders,terms,charts,out);
 }
-extern "C" int resolution_chart_valid(const int32_t* output, int length) noexcept {
+extern "C" __attribute__((visibility("default"))) int resolution_chart_valid(const int32_t* output, int length) noexcept {
     for(int i=0;i<length;++i) if(output[i]<0) return 0;
     return 1;
 }
 
 // Nonnegative dot products and their partial sums fit if this upper bound fits.
-extern "C" bool resolution_chart_packed(const int32_t* exponents, const int32_t* rays,
+extern "C" __attribute__((visibility("default"))) bool resolution_chart_packed(const int32_t* exponents, const int32_t* rays,
                                         int terms, int ray_count, int dimension) noexcept {
     if (dimension < 2 || dimension > 8 || terms < 1 || ray_count < 1) return false;
     int32_t largest_ray = *std::max_element(rays, rays + size_t(ray_count) * dimension);
@@ -157,7 +157,7 @@ char* owned_text(const std::string& text) {
 } // namespace
 
 // Read the transformed buffer produced by the selected CPU or GPU kernel.
-extern "C" char* resolution_chart_equations(const char* input, const int32_t* powers,
+extern "C" __attribute__((visibility("default"))) char* resolution_chart_equations(const char* input, const int32_t* powers,
                                           size_t terms, size_t charts, size_t dimension) noexcept {
     try {
         if (!input || !powers || !terms || !charts || dimension < 2 || dimension > 8 ||
@@ -180,7 +180,7 @@ extern "C" char* resolution_chart_equations(const char* input, const int32_t* po
 // Reuse the exact ray/term valuations from the fan. A requested device
 // recomputes them with packed digit products; certify its entire result
 // before exposing the transformed exponents. Returned text uses resolution_free.
-extern "C" char* resolution_chart_wide(const char* input, size_t terms, size_t ray_count,
+extern "C" __attribute__((visibility("default"))) char* resolution_chart_wide(const char* input, size_t terms, size_t ray_count,
                                        size_t dimension, ChartDevice run) noexcept {
     try {
         if (!input || !terms || !ray_count || !dimension)

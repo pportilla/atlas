@@ -56,11 +56,14 @@ def _process_symbols():
             function.argtypes, function.restype = [ctypes.c_void_p], None
             calls += [(function, stream) for stream in streams]
     setters = {}
-    for variable, setter in _THREAD_SETTINGS.items():
-        for library in ("libgomp.so.1", "libopenblas.so.0"):
-            try:
-                function = getattr(ctypes.CDLL(library, mode=os.RTLD_NOLOAD | os.RTLD_LAZY), setter)
-            except (OSError, AttributeError):
+    for library in ("libgomp.so.1", "libopenblas.so.0"):
+        try:
+            loaded = ctypes.CDLL(library, mode=os.RTLD_NOLOAD | os.RTLD_LAZY)
+        except OSError:
+            continue
+        for variable, setter in _THREAD_SETTINGS.items():
+            function = getattr(loaded, setter, None)
+            if function is None:
                 continue
             function.argtypes = [ctypes.c_int]
             setters.setdefault(variable, []).append(function)
@@ -86,7 +89,11 @@ def _entry(name):
         return None
     library, symbol = HELPERS[name]
     try:
-        loaded = ctypes.CDLL(str(BUILD / (library + _SUFFIX)))
+        if library == "libgroebner":
+            from .native_library import _kernel
+            loaded = _kernel()
+        else:
+            loaded = ctypes.CDLL(str(BUILD / (library + _SUFFIX)))
         function = getattr(loaded, symbol)
     except (OSError, AttributeError):
         return None
@@ -97,9 +104,10 @@ def _entry(name):
 
 
 def preload():
-    """Load every helper entry, for a process that will fork solvers."""
+    """Warm cheap helper entries. Load Normaliz only for a full Newton fan."""
     for name in HELPERS:
-        _entry(name)
+        if name != "newton_fan":
+            _entry(name)
 
 
 def _native_threads():

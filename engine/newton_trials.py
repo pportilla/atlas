@@ -1,5 +1,4 @@
 """Try regular monomial ideal blowups and verify the original equation in every chart."""
-from .newton_fan import bounded_fan, build_fan, require_chart_memory, trial_supports
 from .polynomial import LimitError, parse_expression
 from .strata import InvalidChart
 
@@ -48,6 +47,7 @@ def _hyperplane_model(poly, names, fan=None, *, factor_original=False):
     from . import atlas
     from .kernel_json import kernel_json
     from .newton_backend import _boundary_centres
+    from .newton_fan import build_fan
     from .newton_faces import exhaustive_faces
     from .point_geometry import encode_terms
     from .polynomial import format_poly
@@ -176,14 +176,20 @@ DEFERRED_CONES = 32768
 
 
 def _try(poly, names, support, *, mode="embedded", fan=None, bounded=False, verified=None, integrals=False,
-         construct=True, deferred=None, defer=True, linear=None):
+         construct=True, deferred=None, defer=True, linear=None, obstruction_terms=None):
     """One monomial modification. With `defer`, a fan above DEFERRED_CONES is
     not tried now: it is appended to `deferred` with the options of this
     call, for resolve_deferred_trials, or dropped when there is no such list."""
     from .newton_backend import _boundary_centres
+    from .newton_fan import build_fan, require_chart_memory
     from .newton_faces import exhaustive_faces
     if fan is None:
         fan = build_fan(support, exhaustive=exhaustive_faces(), chart_terms=len(poly))
+    if obstruction_terms is not None:
+        from .kernel_json import kernel_json
+        if kernel_json("atlas_canonical_obstruction", "unresolved_chart", terms=obstruction_terms,
+                       rays=fan["rays"], cones=fan["cones"], intrinsic=mode == "intrinsic"):
+            return None
     if defer and len(fan["cones"]) > DEFERRED_CONES:
         if deferred is not None:
             deferred.append((support, fan, dict(mode=mode, bounded=bounded, verified=verified, integrals=integrals,
@@ -242,6 +248,23 @@ def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=Fal
     A fan above DEFERRED_CONES is kept in `deferred` for the end of the
     Newton method, so one very large fan does not hold up cheaper candidates.
     """
+    from .newton_fan import trial_supports
+    obstruction_terms = None
+    if (len(names) == 3 and 3 <= len(poly) <= 24 and
+            all(c.numerator.bit_length() <= 64 and c.denominator.bit_length() <= 64 and
+                all(v <= 16 for v in e) for e, c in poly.items())):
+        from .native_library import _kernel
+        if hasattr(_kernel(), "atlas_relative_source_obstruction_abi"):
+            from .kernel_json import kernel_json
+            from .point_geometry import encode_terms
+            if all(c.numerator.bit_length() <= 64 and c.denominator.bit_length() <= 64 and max(e) <= 16
+                   for e, c in poly.items()):
+                terms = encode_terms(poly)
+                if ((mode == "embedded" and kernel_json("atlas_canonical_obstruction", "ordinary_prefix", terms=terms))
+                        or kernel_json("atlas_canonical_obstruction", "relative_source_prefix",
+                                       terms=terms, intrinsic=mode == "intrinsic")):
+                    obstruction_terms = terms
+
     def supports():
         if mode == "intrinsic":
             yield poly  # The original fan has not yet been tested on the strict transform.
@@ -250,7 +273,7 @@ def resolve_trials(poly, names, *, mode="embedded", verified=None, integrals=Fal
     for support in supports():
         try:
             result = _try(poly, names, support, mode=mode, verified=verified, integrals=integrals, construct=construct,
-                          deferred=deferred)
+                          deferred=deferred, obstruction_terms=obstruction_terms)
         except LimitError as error:
             if deferred is not None:
                 deferred.append((support, None, error))  # no fan: the limit it reached
@@ -291,6 +314,7 @@ def bounded_first_trial(poly, names, *, verified=None, integrals=False):
             or not all(hasattr(native_library._library(), name) for name in
                        ("atlas_bounded_crossings_abi", "atlas_fan_charts_abi"))):
         return None
+    from .newton_fan import bounded_fan
     from .newton_backend import _boundary_centres
     support = list(poly)
     source_fan = bounded_fan(support)

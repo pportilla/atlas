@@ -3,6 +3,9 @@
 // kernels. All geometric decisions and the ordered face map are made here.
 #include "component_partition.hpp"
 #include "local_io.hpp"
+#include "local_monomial.hpp"
+#include "groebner.hpp"
+#include "membership_certificate.hpp"
 #include "primary_decomposition.hpp"
 #include "quotient_ring.hpp"
 #include "rational_sparse_json.hpp"
@@ -204,6 +207,28 @@ struct Driver {
         return call("present", i, q).asBool();
     }
     mpz_class euler(unsigned i, const Basis &ideal) {
+        // Most proposed intersections of separate branches in a marked
+        // surface chart have empty closed support. A unit ideal already
+        // gives their Euler characteristic on every open and every sheet.
+        const auto &c = charts[i];
+        if (intrinsic && dimension == 2 && c.theta >= 0 && c.width <= 6 &&
+            ideal.size() <= 32 && atlas::certificate::enabled()) {
+            Basis small;
+            for (const auto &f : ideal) {
+                if (f.size() <= 16 && std::all_of(f.begin(), f.end(), [](const auto& term) {
+                        return total_degree(term.first) <= 8 &&
+                               mpz_sizeinbase(term.second.get_num_mpz_t(), 2) <= 128 &&
+                               mpz_sizeinbase(term.second.get_den_mpz_t(), 2) <= 128;
+                    })) small.push_back(f);
+            }
+            try {
+                atlas::DeadlineScope trial(std::chrono::steady_clock::now() + std::chrono::milliseconds(1));
+                primary::CertificateBudget work(4096);
+                if (primary::reduced(small, c.width, false) == Basis{unit(c.width)}) return 0;
+            } catch (const std::runtime_error &) {
+                atlas::check_deadline();
+            }
+        }
         V q;
         q["ideal"] = rows(ideal);
         return mpz_class(call("euler", i, q).asString());
@@ -1056,6 +1081,86 @@ V exercise(const V &request, Callback callback) {
         return {};
     }
 }
+// In this chart presentation the reduced ideal is the graph of polynomials
+// in one free coordinate. The same presentation over Qbar proves smoothness
+// and geometric irreducibility without splitting into individual primes.
+bool affine_line_graph(const Basis &radical, size_t width) {
+    if (radical.size() + 1 != width) return false;
+    for (size_t free = 0; free < width; ++free) {
+        std::set<size_t> solved;
+        for (const auto &f : radical) {
+            size_t pivot = width;
+            bool graph = true;
+            for (const auto &[e, c] : f) {
+                for (size_t j = 0; j < width; ++j) {
+                    if (j == free || e[j] == 0) continue;
+                    if (pivot != width || total_degree(e) != 1) graph = false;
+                    pivot = j;
+                }
+            }
+            if (!graph || pivot == width || !solved.insert(pivot).second) break;
+        }
+        if (solved.size() + 1 == width) return true;
+    }
+    return false;
+}
+
+V single_curve(const V &input) {
+    const auto &charts = input["charts"];
+    if (!atlas::certificate::enabled() || charts.empty() || charts.size() > 4) return {};
+    std::string label;
+    try {
+        atlas::DeadlineScope deadline(std::chrono::steady_clock::now() + std::chrono::milliseconds(10));
+        primary::CertificateBudget work(4096);
+        for (const auto &raw : charts) {
+            const size_t n = raw["width"].asUInt();
+            if (n < 3 || n > 4 || raw["components"].size() != 2 || raw["maps"].size() != 3 ||
+                raw["theta"].asInt() >= 0 || !raw["holes"].empty()) return {};
+            const auto &components = raw["components"];
+            const unsigned s = components[0][2].asBool() ? 0 : 1;
+            if (!components[s][2].asBool() || components[1-s][2].asBool()) return {};
+            const auto &divisor = components[1-s];
+            const auto &ambient = raw["ambient"], &maps = raw["maps"], &strict = components[s][1];
+            const auto &exceptional = divisor[1];
+            if (ambient.size() + maps.size() + strict.size() + exceptional.size() > 12) return {};
+            for (const auto *encoded : {&ambient, &maps, &strict, &exceptional})
+                for (const auto &row : *encoded)
+                    if (row.asString().size() > 1024) return {};
+            auto carrier = append(parse(ambient, n), parse(strict, n));
+            auto section = append(carrier, parse(exceptional, n));
+            auto projections = parse(maps, n);
+            auto rows = append(section, projections);
+            for (const auto &f : rows) {
+                if (f.size() > 16) return {};
+                for (const auto &[e, a] : f)
+                    if (total_degree(e) > 6 || mpz_sizeinbase(a.get_num_mpz_t(), 2) > 128 ||
+                        mpz_sizeinbase(a.get_den_mpz_t(), 2) > 128) return {};
+            }
+            const Basis empty_fibre{unit(n)};
+            if (primary::reduced(append(carrier, projections), n, true) == empty_fibre) continue;
+            if (!label.empty() || divisor[0].asString().empty() ||
+                primary::reduced(rows, n, true) == empty_fibre) return {};
+            // The canonical cover certifies the smooth strict transform.
+            // Test the whole reduced divisor here. Using just its fibre or
+            // the owned part can hide another branch or a self-intersection.
+            if (!affine_line_graph(primary::radical_lex(section, n), n)) return {};
+            label = divisor[0].asString();
+        }
+        if (label.empty() || deadline.expired()) return {};
+    } catch (const std::runtime_error &) {
+        atlas::check_deadline();
+        return {};
+    }
+    V vertex, result;
+    vertex["id"] = label;
+    vertex["dimension"] = 1;
+    result["vertices"] = array();
+    result["vertices"].append(std::move(vertex));
+    result["cells"] = array();
+    result["status"] = "complete";
+    result["convention"] = "Exceptional divisor on the smooth strict transform in the germ over the origin over Qbar.";
+    return result;
+}
 } // namespace
 
 extern "C" const char *atlas_chart_gluing(const char *input, Callback callback) noexcept {
@@ -1077,6 +1182,10 @@ extern "C" const char *atlas_chart_geometry(const char *input) noexcept {
             return character_field(request);
         if (op == "prime_plan")
             return prime_plan(request);
+        if (op == "single_curve")
+            return single_curve(request);
         throw std::invalid_argument("Unknown affine chart geometry operation.");
     });
 }
+
+extern "C" int atlas_single_curve_abi() noexcept { return 1; }

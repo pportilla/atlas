@@ -1,0 +1,105 @@
+{
+  "cpu": 9,
+  "batch": 64,
+  "trials": 5,
+  "conditions": "Warm QQ, actual interior ray (1,1,1), 2D orbit; Atlas includes JSON and face extraction. Singular includes face extraction and dimension of the Laurent Jacobian ideal on the original 3-torus. Alternating order.",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "cases": {
+    "repeated_linear": {
+      "equation": "(x+y+z)^3+z^5",
+      "expected": true,
+      "samples_us": {
+        "atlas": [
+          122.28715625,
+          129.56528125,
+          119.183953125,
+          123.511984375,
+          130.115390625
+        ],
+        "singular": [
+          61.078125,
+          55.515625,
+          55.34375,
+          53.640625,
+          60.8125
+        ]
+      },
+      "median_us": {
+        "atlas": 123.511984375,
+        "singular": 55.515625
+      }
+    },
+    "repeated_conic": {
+      "equation": "(x^2+y^2+z^2)^2+x*y*z^3",
+      "expected": true,
+      "samples_us": {
+        "atlas": [
+          108.656421875,
+          110.057515625,
+          107.642328125,
+          104.109703125,
+          111.660546875
+        ],
+        "singular": [
+          70.0625,
+          69.15625,
+          67.5625,
+          69.453125,
+          67.71875
+        ]
+      },
+      "median_us": {
+        "atlas": 108.656421875,
+        "singular": 69.15625
+      }
+    },
+    "isolated_nodes": {
+      "equation": "x^3+y^3+z^3-3*x*y*z",
+      "expected": false,
+      "samples_us": {
+        "atlas": [
+          79.239796875,
+          76.0756875,
+          79.840140625,
+          78.118921875,
+          83.074203125
+        ],
+        "singular": [
+          60.640625,
+          56.421875,
+          58.234375,
+          59.53125,
+          60.828125
+        ]
+      },
+      "median_us": {
+        "atlas": 79.239796875,
+        "singular": 59.53125
+      }
+    },
+    "monomial_factor": {
+      "equation": "z^2*(x^2+y^2+z^2)",
+      "expected": false,
+      "samples_us": {
+        "atlas": [
+          68.42734375,
+          64.59696875,
+          69.37678125,
+          66.128,
+          67.72428125
+        ],
+        "singular": [
+          65.234375,
+          66.40625,
+          65.40625,
+          67.15625,
+          68.796875
+        ]
+      },
+      "median_us": {
+        "atlas": 67.72428125,
+        "singular": 66.40625
+      }
+    }
+  }
+}

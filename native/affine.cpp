@@ -1,4 +1,5 @@
 // Pullbacks, Jacobians and transitions of affine charts over Q. See KERNEL.md §9.5.
+#include "monomial_square.hpp"
 #include "chart_equation.hpp"
 #include "groebner.hpp"
 #include "local_dimension.hpp"
@@ -11,6 +12,7 @@
 #include "ideal_powers.hpp"
 #include "quotient_ring.hpp"
 #include "resolution_tangents.hpp"
+#include "sparse_flint.hpp"
 #include <flint/mpoly.h>
 #include <flint/fmpq_mpoly.h>
 #include <flint/fmpq_mpoly_factor.h>
@@ -314,20 +316,13 @@ Polynomial crossing_jet(const Polynomial& strict, const std::string& supports) {
     const auto& ring = strict.ring;
     if (ring.n >= 64) throw Limit("Too many axes for a monomial support mask.");
     std::istringstream input(supports);
-    std::vector<uint64_t> masks;
+    MonomialSquare square;
     for (uint64_t m; input >> m;) {
         if (m >> ring.n) throw std::invalid_argument("Invalid owned monomial support.");
-        if (std::none_of(masks.begin(), masks.end(), [m](uint64_t a){ return (a & m) == a; })) {
-            masks.erase(std::remove_if(masks.begin(), masks.end(), [m](uint64_t a){ return (a & m) == m; }),
-                        masks.end());
-            masks.push_back(m);
-        }
+        square.add_support(m);
     }
-    if (!input.eof() || masks.empty()) throw std::invalid_argument("Expected owned monomial supports.");
-    std::vector<std::pair<uint64_t,uint64_t>> square;
-    for (size_t i = 0; i < masks.size(); ++i)
-        for (size_t j = i; j < masks.size(); ++j)
-            square.emplace_back(masks[i] | masks[j], masks[i] & masks[j]);
+    if (!input.eof() || square.supports.empty()) throw std::invalid_argument("Expected owned monomial supports.");
+    square.find_products();
 
     Polynomial jet(ring);
     std::vector<Z> powers(ring.n);
@@ -343,9 +338,7 @@ Polynomial crossing_jet(const Polynomial& strict, const std::string& supports) {
                 if (!fmpz_is_one(exponents[j])) repeated |= uint64_t(1) << j;
             }
         }
-        if (std::any_of(square.begin(), square.end(), [&](const auto& divisor) {
-                return !(divisor.first & ~positive) && !(divisor.second & ~repeated);
-            })) continue;
+        if (square.contains(positive, repeated)) continue;
         fmpz_mpoly_get_term_coeff_fmpz(&coefficient.v, strict.p->zpoly, i, ring.ctx->zctx);
         fmpz_mpoly_push_term_fmpz_fmpz(jet.p->zpoly, &coefficient.v, exponents.data(), ring.ctx->zctx);
     }
@@ -726,6 +719,14 @@ Polynomial compose(const Polynomial& f, const Variables& chart,
 
 void reduce_mod(Polynomial& f, const Polynomial& modulus) {
     if (fmpq_mpoly_is_zero(modulus.p, modulus.ring.ctx)) return;
+    if (f.p->zpoly->bits > FLINT_BITS) {
+        // Division by a cyclotomic field equation can otherwise construct
+        // a quotient with exponentially many terms just to discard it.
+        local::SparseFlintRing converter(f.ring.n, fmpq_mpoly_ctx_ord(f.ring.ctx));
+        auto terms = converter.read(f.p);
+        auto reduced = localization::reduce_cyclic_powers(terms, {converter.read(modulus.p)});
+        if (reduced != terms) converter.write(f.p, reduced);
+    }
     Polynomial q(f.ring), rem(f.ring);
     fmpq_mpoly_divrem(q.p, rem.p, f.p, modulus.p, f.ring.ctx);
     fmpq_mpoly_swap(f.p, rem.p, f.ring.ctx);

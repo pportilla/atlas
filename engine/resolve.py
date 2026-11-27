@@ -2,11 +2,11 @@
 from contextvars import ContextVar
 from pathlib import Path
 from time import perf_counter
-import subprocess
 import sys
 from .polynomial import InputError, LimitError, NonReducedError, parse, format_poly, rational_text, saved_polynomial_input
 from . import quick_budget
 from .native_backend import resolve_native
+from .resolution_errors import GiveUp, computation_limits, rejected_proposals
 from .resolution_progress import recorded_blowups, report
 from .resolution_zetas import attach_companion, finish_requested_check, selected_zetas, zetas_from_strata
 
@@ -170,7 +170,6 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         if contact is not None:
             contact["elapsed_ms"] = round((perf_counter() - start) * 1000, 3)
             return contact
-    from .local_blowups import GiveUp
     from .strata import annotate_complex, proposal_chart_outputs, resolution_strata
     verified = []
 
@@ -304,7 +303,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
                 return record, finish(record)
             except NonReducedError:
                 raise
-            except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as second:
+            except rejected_proposals() as second:
                 reasons.append(f"After that proposal was rejected: {second}")
         return inconclusive(request, {"description": " ".join(reasons)}, (perf_counter()-start)*1000,
                             format_poly(p, variables)), None
@@ -328,7 +327,7 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
                 proposed["canonical_reason"] = why.get("reason")
             except NonReducedError:
                 raise
-            except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired) as second:
+            except rejected_proposals() as second:
                 proposed["canonical_reason"] = str(second)
             except INTERNAL_ERRORS as second:
                 # A defect of the smooth-centre rules is recorded for repair.
@@ -348,13 +347,12 @@ def _resolve_parsed(p, variables, mode, request, kinds, start, proofs):
         outputs = finish(result, verification_deadline())
     except NonReducedError:
         raise  # Intrinsic resolution requires a reduced source.
-    except (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired,
-            *INTERNAL_ERRORS) as error:
+    except (*rejected_proposals(), *INTERNAL_ERRORS) as error:
         # The input equation, mode and origin have been validated. These
         # failures concern a solver-generated proposal, never a saved proof.
         # The rejected proposal and its atlas are dropped here: the record
         # and the outputs below come from the method that replaces it.
-        if not isinstance(error, (GiveUp, LimitError, InputError, ArithmeticError, subprocess.TimeoutExpired)):
+        if not isinstance(error, rejected_proposals()):
             # An internal error while a Newton proposal is verified rejects
             # that proposal like a failed check. A quick search treats every
             # fast method in this way: the defect is recorded in the result
@@ -607,6 +605,34 @@ def canonical_record(p, variables, mode, start, *, verified=None, integrals=Fals
     return r
 
 
+def _intrinsic_torus_curve(poly, variables, mode):
+    if mode != "intrinsic" or len(variables) != 3 or not 3 <= len(poly) <= 24:
+        return False
+    if any(c.numerator.bit_length() > 64 or c.denominator.bit_length() > 64
+           or any(k > 12 for k in e) for e, c in poly.items()):
+        return False
+    from .native_library import _kernel
+    if not hasattr(_kernel(), "atlas_singular_torus_curve_abi"):
+        return False
+    from .kernel_json import kernel_json
+    from .polynomial import encode_sparse_row
+    return kernel_json("atlas_resolution_candidate", "singular_torus_curve",
+                       width=len(variables), row=encode_sparse_row(poly))
+
+
+def _inclined_toric_obstruction(poly, terms, order, degree):
+    # The sparse degree and coefficient limits bound synchronous transport.
+    if order != 2 or degree != 3 or len(terms) > 16 or any(len(c) > 43 for _, c in terms):
+        return False
+    from .native_library import _kernel
+    if not hasattr(_kernel(), "atlas_inclined_toric_obstruction_abi"):
+        return False
+    from .kernel_json import kernel_json
+    from .polynomial import encode_sparse_row
+    return kernel_json("atlas_resolution_candidate", "inclined_toric_obstruction",
+                       width=3, row=encode_sparse_row(poly))
+
+
 def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
     report("Checking the singularity at the origin", 0)
     variables = request['variables']
@@ -680,7 +706,8 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
             r = resolve_chain(p,variables,mode) if singular and len(variables)==3 else None
             if r is None:
                 r = resolve_native(terms,variables,mode,compute=compute,diagnostics=diagnostic)
-            if r is None and len(variables)==3:
+            if (r is None and len(variables)==3 and not _inclined_toric_obstruction(p, terms, order, degree)
+                    and not _intrinsic_torus_curve(p, variables, mode)):
                 from .toric_backend import resolve_toric
                 r = resolve_toric(p,variables,mode,compute=compute)
             elif r is None and len(variables) == 4:
@@ -689,7 +716,7 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
         if r is None and len(p)==2 and 2 <= len(variables) <= 8 and 'plane_limit' not in diagnostic:
             from .binomial_backend import resolve_binomial
             r = resolve_binomial(p,variables,mode,compute=compute)
-    except (LimitError,subprocess.TimeoutExpired) as error:
+    except computation_limits() as error:
         diagnostic['fast_path_limit']=str(error)
     if r is None and native_range and len(variables) == 3:
         from .plane_arrangement import resolve_arrangement
@@ -761,7 +788,7 @@ def _resolve_polynomial(p, request, start, *, verified=None, notes=None):
                 fallback_details.append("The Newton search returned no certified atlas.")
         except NonReducedError:
             raise
-        except (LimitError,subprocess.TimeoutExpired) as error:
+        except computation_limits() as error:
             diagnostic['fast_path_limit']=str(error)
             fallback_details.append(f"The Newton search reached a limit ({error}).")
         except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, AssertionError) as error:

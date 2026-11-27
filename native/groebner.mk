@@ -77,14 +77,15 @@ KERNEL_SOURCES := trace_levels.cpp groebner.cpp f4_trace.cpp ideal.cpp ideal_ari
   triton_kernels.cpp triton_rank.cpp triton_trace.cpp triton_polynomial.cpp monodromy.cpp point_geometry.cpp \
   quotient_ring.cpp quotient_ideal.cpp quotient_packed.cpp quotient_inverse.cpp quotient_finite_inverse.cpp ideal_powers.cpp ideal_power_principal.cpp ideal_powers_packed.cpp ideal_powers_dense.cpp ideal_powers_echelon.cpp ideal_powers_content.cpp ideal_powers_monomial.cpp localization.cpp localization_membership.cpp localization_special.cpp normalization.cpp normalization_content.cpp normalization_special.cpp primary_decomposition.cpp primary_special.cpp polynomial_factors.cpp resolution_tangents.cpp \
   ae_codimension.cpp ae_special.cpp ae_graded.cpp ae_graded_surface.cpp ae_weighted_ranks.cpp ae_weighted_quotient.cpp ae_surface_coordinates.cpp \
-  resolution_candidate.cpp smooth_point_order.cpp graph_verify_entry.cpp fan_verification.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
+  resolution_candidate.cpp canonical_obstruction.cpp smooth_point_order.cpp graph_verify_entry.cpp fan_verification.cpp local_operations.cpp local_basis.cpp local_division.cpp local_io.cpp local_power_coordinates.cpp local_dimension_graph.cpp \
   local_point_basis.cpp local_point_normal_form.cpp local_parameter_basis.cpp local_quotient_initial.cpp local_quotient_jets.cpp local_point_quotient.cpp
 # The canonical blowup stage composes the operations above in one call.
-KERNEL_SOURCES += canonical_blowup.cpp centre_maximum.cpp conjugate_plane_crossing.cpp
+KERNEL_SOURCES += finite_locus.cpp membership_certificate.cpp canonical_blowup.cpp centre_maximum.cpp conjugate_plane_crossing.cpp
 KERNEL_SOURCES += weighted_resolution.cpp plane_arrangement.cpp
 KERNEL_SOURCES += monodromy_local_b.cpp monodromy_weyl.cpp monodromy_transverse.cpp
 KERNEL_SOURCES += triton_factor_division.cpp hensel_factors.cpp modular_batch.cpp finite_field_batch.cpp
 KERNEL_SOURCES += absolute_factorization.cpp polynomial_gcd.cpp polynomial_gcd_image.cpp rational_factor_fallback.cpp
+KERNEL_SOURCES += point_jet.cpp
 KERNEL_OBJECTS := $(patsubst %.cpp,build/kernel/%.o,$(KERNEL_SOURCES))
 
 build/kernel/%.o: %.cpp
@@ -100,13 +101,22 @@ $(GROEBNER_LIB): $(KERNEL_OBJECTS)
 
 
 .PHONY: test-verify
-test-verify: build/test_groebner_verify build/test_f4_trace build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient build/test_chart_expr
+test-verify: build/test_point_jet build/bench_point_jet build/test_finite_locus build/test_membership_certificate build/test_groebner_verify build/test_f4_trace build/test_local_dimension_graph build/test_small_prime_rank build/test_ae_weighted_quotient build/test_chart_expr
 	./build/test_groebner_verify
 	./build/test_f4_trace
 	./build/test_local_dimension_graph
 	./build/test_small_prime_rank
 	./build/test_ae_weighted_quotient
 	./build/test_chart_expr
+	./build/test_membership_certificate
+	./build/test_finite_locus
+	./build/test_point_jet
+
+build/test_finite_locus: test_finite_locus.cpp finite_locus.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs flint jsoncpp)
+
+build/test_membership_certificate: test_membership_certificate.cpp membership_certificate.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs flint jsoncpp)
 
 build/test_chart_expr: test_chart_expr.cpp chart_expr.hpp local_io.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags flint jsoncpp) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lflint -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp)
@@ -147,4 +157,13 @@ $(GROEBNER_GPU_LIB): opencl_groebner.cpp trace_levels.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPENCL_CFLAGS) -fPIC $(GROEBNER_SHARED) $< -o $@ $(LDFLAGS) $(OPENCL_LIBS)
 
 build/bench_quotient_ring: ../benchmarks/quotient_ring_kernel.cpp quotient_ring.hpp local_io.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/test_point_jet: test_point_jet.cpp point_jet.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/bench_point_jet: ../benchmarks/point_jet_kernel.cpp point_jet.hpp $(GROEBNER_LIB)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)
+
+build/bench_finite_locus: ../benchmarks/finite_locus_kernel.cpp finite_locus.hpp $(GROEBNER_LIB)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags jsoncpp flint) -I. $< -o $@ $(LDFLAGS) -Lbuild $(LOCAL_RPATH) -lgroebner -lgmpxx -lgmp $(shell pkg-config --libs jsoncpp flint)

@@ -1,0 +1,113 @@
+{
+  "cpu": 9,
+  "batch": 16,
+  "trials": 5,
+  "conditions": "Warm QQ; Atlas JSON including pullback vs Singular rtimer including pullback, coordinate-factor removal and Jacobian plus origin fibre ideal. Every certified chart cross-checked, same rays, alternated order, microseconds per chart.",
+  "singular": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "cases": {
+    "cone": {
+      "equation": "(x^2+y^2)^2-z^2*(x^2-y^2)",
+      "charts": 18,
+      "certified": 16,
+      "singular_charts": 16,
+      "samples_us": {
+        "atlas": [
+          38.4285625,
+          38.10625347222222,
+          38.75842361111111,
+          38.23931597222222,
+          38.41983333333334
+        ],
+        "singular": [
+          74.59722222222223,
+          76.03819444444444,
+          74.58333333333333,
+          74.71180555555556,
+          74.66319444444444
+        ]
+      },
+      "median_us": {
+        "atlas": 38.41983333333334,
+        "singular": 74.66319444444444
+      }
+    },
+    "quartic": {
+      "equation": "(x*y)^2+(y*z)^2+(z*x)^2+2*x^2*y*z",
+      "charts": 48,
+      "certified": 44,
+      "singular_charts": 44,
+      "samples_us": {
+        "atlas": [
+          35.3461953125,
+          35.316934895833334,
+          35.384484375,
+          35.274251302083336,
+          35.294953125
+        ],
+        "singular": [
+          74.609375,
+          74.09765625,
+          73.6796875,
+          74.13411458333333,
+          74.81119791666667
+        ]
+      },
+      "median_us": {
+        "atlas": 35.316934895833334,
+        "singular": 74.13411458333333
+      }
+    },
+    "sextic": {
+      "equation": "(x*y)^2+(y*z)^2+(z*x)^3+2*x*y*z*(x+y+z)",
+      "charts": 54,
+      "certified": 44,
+      "singular_charts": 44,
+      "samples_us": {
+        "atlas": [
+          42.34388773148148,
+          41.332452546296295,
+          41.59888078703704,
+          41.011916666666664,
+          41.8647662037037
+        ],
+        "singular": [
+          86.42476851851852,
+          89.00694444444444,
+          86.20370370370371,
+          86.47800925925925,
+          86.07060185185185
+        ]
+      },
+      "median_us": {
+        "atlas": 41.59888078703704,
+        "singular": 86.42476851851852
+      }
+    },
+    "smooth_tangency": {
+      "equation": "x^2+z^3",
+      "charts": 1,
+      "certified": 0,
+      "singular_charts": 0,
+      "samples_us": {
+        "atlas": [
+          40.283625,
+          30.60025,
+          37.577875,
+          31.255875,
+          37.8884375
+        ],
+        "singular": [
+          60.75,
+          60.1875,
+          60.875,
+          61.0,
+          61.5
+        ]
+      },
+      "median_us": {
+        "atlas": 37.577875,
+        "singular": 60.875
+      }
+    }
+  }
+}

@@ -10,6 +10,18 @@ from engine.field_polynomial import lift, lower, modulus
 
 
 class NumberFieldPolynomials(unittest.TestCase):
+    def test_compose_in_the_existing_marked_field_with_wide_data(self):
+        from engine import native_polynomial as np
+        from engine.candidate_field import indexed_field
+        from engine.field_factors import compose
+        field, theta = indexed_field((1, 0, 1), 0)
+        x = np.Dummy("coefficient_root")
+        a = np.Dummy("a")
+        power, coefficient = 2**72 + 1, 2**90 + 3
+        source = np.from_terms((a, theta), {(power, 0): 1, (0, 2): coefficient})
+        value, = compose((x,), (theta*x,), (a,), (source,), field)
+        self.assertEqual(np.terms((x, theta), value), {(power, 1): 1, (0, 0): -coefficient})
+
     def test_missing_native_field_factorization_on_a_symbolic_input(self):
         from engine import field_factors
         x = sp.Symbol("external")

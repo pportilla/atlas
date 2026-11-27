@@ -18,6 +18,11 @@ def smooth_reduced_graph(poly, names, mode, *, seconds=0.25):
         raise ValueError("Expected distinct polynomial coordinates.")
     if any(len(e) != len(names) for e, c in poly.items() if c):
         raise ValueError("Invalid polynomial exponent vector.")
+    if len(names) == 3 and 6 <= len(poly) <= 128 and hasattr(_kernel(), "atlas_reduced_graph_tangent_obstruction_abi"):
+        from .kernel_json import kernel_json
+        from .point_geometry import encode_terms
+        if kernel_json("atlas_resolution_candidate", "reduced_graph_tangent_obstruction", width=3, terms=encode_terms(poly)):
+            return None
     equation = encode_sparse_row(poly)
     from . import native_process
     try:

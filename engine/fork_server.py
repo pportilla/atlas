@@ -23,7 +23,6 @@ import os
 from pathlib import Path
 import select
 import signal
-import socket
 import struct
 import subprocess
 import sys
@@ -51,6 +50,7 @@ _PRELOAD = (
 
 
 def supported():
+    import socket
     return (sys.platform.startswith("linux") and hasattr(os, "pidfd_open") and hasattr(socket, "send_fds")
             and hasattr(socket, "SOCK_SEQPACKET"))
 
@@ -154,6 +154,7 @@ class _Connection:
 
     @classmethod
     def start(cls):
+        import socket
         ours, theirs = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         env = dict(os.environ)
         try:
@@ -176,6 +177,7 @@ class _Connection:
 
     def spawn(self, request, fds):
         """Return (pid, status_fd), or a reason why this server declines."""
+        import socket
         with self.lock:
             if self.broken:
                 return "unavailable"
@@ -199,6 +201,7 @@ class _Connection:
         return reply["pid"], received[0]
 
     def retire(self):
+        import socket
         with self.lock:
             try:
                 socket.send_fds(self.sock, [json.dumps({"op": "retire"}).encode()], [])
@@ -551,9 +554,11 @@ def _preload():
 
 
 def _serve(root_fd):
+    import socket
     root = socket.socket(fileno=root_fd)
-    _preload()
+    from . import preloaded_cli
     signature = _code_signature()
+    _preload()
     startup = _startup_env(os.environ)
     try:
         root.send(_READY)
@@ -561,6 +566,11 @@ def _serve(root_fd):
         return
     poller = select.poll()
     connections = {root.fileno(): root}
+    listener = preloaded_cli.listener(ROOT)
+    visitors = {}
+    guardians = {}
+    if listener is not None:
+        poller.register(listener, select.POLLIN)
     owners = {}        # connection fd -> set of child pids
     children = {}      # pidfd -> (pid, status write fd, connection fd)
     retired = False
@@ -576,8 +586,45 @@ def _serve(root_fd):
                 pass
         connection.close()
 
-    while connections and not (retired and not children):
+    while (connections or guardians) and not (retired and not children and not guardians):
         for fd, _ in poller.poll():
+            if listener is not None and fd == listener.fileno():
+                try:
+                    connection, _ = listener.accept()
+                except BlockingIOError:
+                    continue
+                # Never wait on another user's socket or admit it to the pool.
+                _, uid, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                if retired or uid != os.geteuid() or len(visitors) >= 16:
+                    connection.close()
+                    continue
+                visitors[connection.fileno()] = connection
+                poller.register(connection, select.POLLIN)
+                continue
+            if fd in visitors:
+                connection = visitors.pop(fd)
+                poller.unregister(fd)
+                received = []
+                try:
+                    data, received, flags, _ = socket.recv_fds(connection, _MESSAGE, 5)
+                    pid = preloaded_cli.accept(connection, ROOT, data, received, flags,
+                                               lambda: not retired and _code_signature() == signature)
+                    if pid is not None:
+                        pidfd = os.pidfd_open(pid)
+                        guardians[pidfd] = pid
+                        poller.register(pidfd, select.POLLIN)
+                except OSError:
+                    pass
+                finally:
+                    connection.close()
+                    for extra in received:
+                        os.close(extra)
+                continue
+            if fd in guardians:
+                poller.unregister(fd)
+                os.waitpid(guardians.pop(fd), 0)
+                os.close(fd)
+                continue
             if fd in children:
                 pid, status, owner = children.pop(fd)
                 poller.unregister(fd)
@@ -661,6 +708,7 @@ def _serve(root_fd):
 
 def _child(request, received, connection_fd, ready):
     """Become the requested module's __main__. Never returns."""
+    import socket
     import fcntl
     code = 1
     try:

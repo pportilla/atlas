@@ -3,7 +3,6 @@
 The C++ kernel constructs a regular fan. Cone exponents give all pullbacks
 and orbit strata exactly by integer pairings, without solving chart equations.
 """
-import subprocess
 from .polynomial import LimitError, integer_text, rational_text
 from .resolve import BUILD
 import json
@@ -102,6 +101,7 @@ def _diagonal(p, variables, mode, compute):
     binary=BUILD/'toricfan'
     if not binary.is_file():
         raise RuntimeError('Toric engine is not built. Run make.')
+    import subprocess
     proc=subprocess.run([str(binary)],input=' '.join(map(integer_text,w))+'\n',text=True,capture_output=True,timeout=35)
     if not proc.stdout or proc.returncode:
         raise LimitError('Toric fan refinement exceeded its computation budget.')

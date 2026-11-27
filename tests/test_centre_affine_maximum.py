@@ -1,5 +1,6 @@
 """The batched affine descent and the general maximal-contact chart algorithm."""
 from fractions import Fraction
+import os
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -41,6 +42,31 @@ class AffineCentreMaximum(TestCase):
                 self.assertIs(type(direct[0][1]), int)
                 with patch.object(centres, "_affine_maximum", return_value=None):
                     self.assertEqual(direct, centres.maximum(*args, list(records)))
+
+    def test_transverse_double_point_and_global_line(self):
+        x, y, z = variables = np.symbols("x y z")
+        a, b = x - 2, y + 3
+        point = (a, b, z)
+        for f, birth, expected in (
+            (a*b + z**3, None, point),
+            (a*b + z**3, (2, 0, 2), point),
+            (a*b, (2, 0, 1, 0, centres.INFINITE), (a, b)),
+            # A different singular point on the boundary prevents using a
+            # single global maximal ideal to represent this contact.
+            (a*(a-1)*b + z**3, None, None),
+            # A degenerate tangent section must follow the full descent.
+            (a**2 + b**3 + z**3, None, None),
+        ):
+            with self.subTest(f=f, birth=birth):
+                args = variables, (), 3, (f,), [("E", (z,))], [point], {"E": birth}
+                with patch.dict(os.environ, ATLAS_LINEAR_ALGEBRA="0"):
+                    reference = centres.maximum(*args, ["E"])
+                self.assertEqual(centres.maximum(*args, ["E"]), reference)
+                if expected is not None:
+                    direct = centres._affine_maximum(*args, ())
+                    self.assertEqual(direct, reference)
+                    self.assertEqual(direct[2], expected)
+                    self.assertIs(type(direct[0][1]), int)
 
     def test_ownership_of_conjugate_points(self):
         x, y, z = variables = np.symbols("x y z")

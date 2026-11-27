@@ -137,14 +137,49 @@ class ResolutionZooTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("Singular"), "Singular is required for the independent local algebra check")
     def test_local_invariants_agree_with_singular(self):
+        # Local std can spend its whole deadline on an infinite quotient.
+        # Let Singular first exhibit a positive-dimensional germ contained
+        # in both Jacobian loci. Every restriction and factorization is over
+        # QQ and independent of the invariant stored in the catalogue.
+        dimensions = """
+ideal T=J,f;
+int i,j,positive,branches;
+ideal L;
+for(i=1; i<=nvars(r); i++) {
+    L=T;
+    for(j=1; j<=nvars(r); j++) { if(j!=i) { L=subst(L,var(j),0); } }
+    if(size(L)==0) { positive=1; break; }
+}
+if(!positive && nvars(r)>=3) {
+    list fac=factorize(f);
+    for(i=1; i<=size(fac[1]); i++) {
+        if(jet(fac[1][i],0)==0) { branches=branches+fac[2][i]; }
+    }
+    // Two factors through zero meet in dimension at least n-2.
+    // Both f and all its partials vanish on that intersection.
+    if(branches>=2) { positive=1; }
+}
+if(positive) { print(-1); print(-1); }
+else { print(vdim(std(J))); print(vdim(std(T))); }
+quit;
+"""
+        def singular(source):
+            run = subprocess.run(["Singular", "-q", "--no-rc"], input=source, text=True,
+                                 capture_output=True, check=True, timeout=10)
+            return list(map(int, run.stdout.splitlines()))
+
         for ident, record in self.records.items():
             with self.subTest(record=ident):
-                source = (f"ring r=0,({','.join(record['variables'])}),ds;\n"
-                          f"poly f={record['equation']}; ideal J=jacob(f);\n"
-                          "print(vdim(std(J))); print(vdim(std(J+ideal(f)))); quit;")
-                done = subprocess.run(["Singular", "-q", "--no-rc"], input=source, text=True,
-                                      capture_output=True, check=True, timeout=10)
-                actual = list(map(int, done.stdout.splitlines()))
+                setup = (f"ring r=0,({','.join(record['variables'])}),ds;\n"
+                         f"poly f={record['equation']}; ideal J=jacob(f);\n")
+                try:
+                    actual = singular(setup + dimensions)
+                except subprocess.TimeoutExpired:
+                    # Singular's locstd homogenizes in an extra variable.
+                    # A global standard basis then dehomogenizes to a local
+                    # degree standard basis, giving the same exact lengths.
+                    actual = singular('LIB "sing.lib";\n' + setup
+                                      + "print(vdim(locstd(J))); print(vdim(locstd(J+ideal(f)))); quit;")
                 expected = [record["invariants"][key] for key in ("milnor_number", "tjurina_number")]
                 self.assertEqual(actual, [n["value"] if n["finite"] else -1 for n in expected])
 

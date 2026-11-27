@@ -1,10 +1,10 @@
 """One isolated worker per local API request or CLI invocation."""
 import json
 import sys
-from subprocess import TimeoutExpired
 from time import perf_counter
 from .resolve import resolve
-from .polynomial import InputError, LimitError
+from .polynomial import InputError
+from .resolution_errors import computation_limits
 
 
 def _response(read_request, *, replay=False):
@@ -24,7 +24,7 @@ def _response(read_request, *, replay=False):
         status = 200
     except InputError as exc:
         data, status = {'error':str(exc)}, 400
-    except (LimitError,TimeoutExpired) as exc:
+    except computation_limits() as exc:
         reason = str(exc) or 'Computation budget exceeded.'
         if not replay and isinstance(request, dict) and request.get("search") == "quick":
             from .resolve import inconclusive

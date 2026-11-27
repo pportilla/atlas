@@ -1,0 +1,18 @@
+name,variables,equation,atlas_engine,atlas_ms,singular_ms
+zoo_S15_open,x y z,-2*y^3*z^2+3*x*y*z^3+3*x*y^3*z^4-2*x*y^4+x^2*y^2*z^4,canonical-blowups,2123,227
+shared_boundary,x y z,x^5+(y^2-z^3)^2,canonical-blowups,514,4594
+D4,x y z,(x+y)^2+z^3+x^3,canonical-blowups,280,>100000
+odp,x y z,x^2+y^2+z^2,native-a-series,28,37
+cubic_cone,x y z,x^3+y^3+z^3,native-ordinary,24,38
+random_order2_4var,x y z t,-6*t^2+2*z*t+8*z^2+8*y*t-6*y*z-2*y^2+9*x*t+5*x*z+9*x*y+7*x^2-7*x^2*y-6*x*y*z+1*y^2*t-6*t^3,native-ordinary,62,59
+random_order3_3var,x y z,6*z^3-9*y*z^2+7*y^2*z+2*y^3-3*x*z^2+4*x*y*z-1*x*y^2+3*x^2*z+3*x^2*y+4*x^3-7*x^2*y^2+2*x*y^3-7*x^2*y*z,native-ordinary,21,41
+inclined_pinch,x y z,(x+y+z)^2-z*(x-y)^2,verified-ideal-blowup,101,42
+pinch,x y z,x^2-z*y^2,binomial-coordinate-blowups,46,33
+A6,x y z,x^7+y^2-z^2,native-a-series,28,252
+E8,x y z,x^2+y^3+z^5,native-toric,32,2493
+T444_cusp,x y z,x*y*z+x^4+y^4+z^4,newton-polyhedron,80,562
+random_sparse_3var,x y z,9*x^4+9*y^5+1*z^6+1*x^2*y^2+6*x*y*z^2-5*y^3*z+1*x*y^2*z^2,newton-polyhedron,131,202
+zoo_T05,x y z t,x^2+y^4+z^4+t^3-2*z*t+3*z^2*t,newton-polyhedron,69,88
+random_sparse_4var,x y z t,-9*x^3+3*y^4+3*z^5+6*t^6+5*x*y*z-7*y^2*t^2+4*x*z*t^2+9*z^2*t^3,newton-polyhedron,134,>100000
+zoo_S15_fast,x y z,-2*y^4*z^2+3*x^2*z^3-2*x^2*y^2*z-x^4*y^3,newton-polyhedron,59,>120000
+repeated_nongraph,x y z,(x^3-y^4)^2+z^2,newton-polyhedron,223,2610

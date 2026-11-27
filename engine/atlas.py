@@ -407,8 +407,13 @@ def from_json(data, *, native=None):
             from .affine_kernel import prefetch
             prefetch(tuple(symbols.values()), _record_texts(item))
 
+        axis_names = tuple(names)
+        def expression(text):
+            # A saved chart declares these exact named generators.
+            return _read_polynomial(str(text), axis_names, api is np)
+
         def ideal(gens):
-            return tuple(_expression(g, symbols) for g in gens)
+            return tuple(expression(g) for g in gens)
 
         field = item.get("coefficient_field")
         coefficient_field = ()
@@ -436,7 +441,7 @@ def from_json(data, *, native=None):
         charts.append(Chart(tuple(symbols.values()), ambient,
                             tuple((c["id"], c["multiplicity"], c["nu"], ideal(c["ideal"])) for c in item["components"]),
                             ideal(item["fibre"]), ideal(item["region"]),
-                            tuple((name, _expression(expr, symbols)) for name, expr in item["map"].items()), (),
+                            tuple((name, expression(expr)) for name, expr in item["map"].items()), (),
                             tuple(ideal(z) for z in item["removed"]), coefficient_field,
                             (tuple(map(tuple, item["torus"]["rays"])), tuple(map(tuple, item["torus"]["linear_map"])))
                             if item.get("torus") else (),
@@ -458,7 +463,7 @@ def _field_relation(t, relation, degree):
 
 
 def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True, factor_fibre=False,
-            allow_partial_complex=False, canonical_cover=False):
+            allow_partial_complex=False, canonical_cover=False, canonical_steps=()):
     """What the atlas determines, by the same computations for every engine.
 
     Returns numerical data, strata, and, if requested, the full dual complex
@@ -510,7 +515,7 @@ def outputs(charts, dimension, complex=True, *, intrinsic=False, integrals=True,
     found, reason = None, None
     if complex:
         boundary = boundary_complex(charts, dimension, intrinsic, canonical_cover=canonical_cover,
-                                    verified_embedded=not intrinsic)
+                                    verified_embedded=not intrinsic, canonical_steps=canonical_steps)
         answer["dual_complex"] = boundary
         found, reason = boundary["cells"], boundary.get("reason")
         if reason:
@@ -598,11 +603,12 @@ def _intrinsic_product(charts, dimension, canonical_cover=False):
     return {**boundary, "vertices": [{**v, "dimension": d} for v,d in zip(boundary["vertices"], dimensions)]}
 
 
-def boundary_complex(charts, dimension, intrinsic=False, *, canonical_cover=False, verified_embedded=False):
+def boundary_complex(charts, dimension, intrinsic=False, *, canonical_cover=False, verified_embedded=False, canonical_steps=()):
     """The exceptional intersections meeting the origin. Restriction to each
     smooth strict component computes its boundary in intrinsic mode."""
     from dataclasses import replace
     from .local_blowups import _is_strict
+    from .native_library import _kernel
     verified = charts if canonical_cover else _checked_repair_maps(charts)
     incomplete_repair = verified is None
     if verified is not None:
@@ -623,9 +629,16 @@ def boundary_complex(charts, dimension, intrinsic=False, *, canonical_cover=Fals
                   for c in charts for name, _, _, ideal in c.components if _is_strict(name)]
     ambient_dimension = dimension
     dimension = stratum_dimension(ambient_dimension, int(intrinsic))
+    marked = any(c.coefficient_field for c in charts)
+    if (canonical_cover and verified_embedded and not marked and len(canonical_steps) == 2
+            and hasattr(_kernel(), "atlas_graph_then_point_abi")):
+        from .chart_gluing_kernel import chart_input
+        first_pair = incidence("graph_then_point", steps=canonical_steps, dimension=dimension,
+                               charts=[chart_input(c) for c in charts])
+        if first_pair is not None:
+            return first_pair
     orbits = {}
     counts = cells(charts, dimension, rational_counts=orbits)
-    marked = any(c.coefficient_field for c in charts)
     certify_relative = (canonical_cover and verified_embedded and not marked and
                         not incomplete_repair and None in counts.values())
     incidence_data = counted_boundary(counts, orbits, ambient_dimension, intrinsic, marked,
@@ -648,6 +661,13 @@ def boundary_complex(charts, dimension, intrinsic=False, *, canonical_cover=Fals
         reason = _INCOMPLETE_REPAIR
         edges = []
     elif reason:
+        if (intrinsic and canonical_cover and ambient_dimension == 3 and len(canonical_steps) == 1 and not marked
+                and hasattr(_kernel(), "atlas_single_curve_abi")):
+            from .chart_gluing_kernel import chart_input
+            from .kernel_json import kernel_json
+            curve = kernel_json("atlas_chart_geometry", "single_curve", charts=[chart_input(c) for c in ambient_charts])
+            if curve is not None:
+                return curve
         from .atlas_gluing import glued_complex
         glued = glued_complex(ambient_charts, ambient_dimension, intrinsic,
                               counts=None if intrinsic else counts, global_boundary_labels=canonical_cover,

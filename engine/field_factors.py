@@ -36,7 +36,13 @@ def compose(variables, mapping, base, functions, field):
     """Substitute polynomials over K in the common presentation Q[theta]/m."""
     if field == QQ:
         return pullbacks(variables, mapping, base, functions)
+    from .candidate_field import NativeField
     from .field_polynomial import lift, lower, modulus
+    if isinstance(field, NativeField):
+        # The inputs already use the live field parameter. The native
+        # pullback reduces all images modulo its minimal polynomial.
+        theta = field.parameter
+        return pullbacks((*variables, theta), (*mapping, theta), (*base, theta), functions, modulus(field, theta))
     theta = chart_expressions(variables).Dummy("field_map")
     equations = tuple(lift(f, base, field, theta) for f in functions)
     images = tuple(lift(f, variables, field, theta) for f in mapping)

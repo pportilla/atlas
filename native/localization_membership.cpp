@@ -63,13 +63,17 @@ bool binomial_member(const Polynomial& f, const Basis& basis) {
     });
 }
 
+} // namespace
+
 // If Phi_k(x_i) belongs to the ideal then x_i^k=1 in its quotient. Dense
 // FLINT cyclotomic recognition is only attempted on small univariate basis
 // rows. The input powers reduced modulo the certified period remain unbounded.
 Polynomial reduce_cyclic_powers(const Polynomial& f, const Basis& basis) {
+    if (f.empty()) return f;
     const size_t n = f.begin()->first.size();
     std::vector<unsigned long> periods(n);
     for (const auto& g : basis) {
+        if (g.empty()) continue;
         const auto& head = g.rbegin()->first;
         const auto first = std::find_if(head.begin(),head.end(),[](const auto& e) { return e != 0; });
         if (first == head.end() || *first > 4096) continue;
@@ -101,8 +105,6 @@ Polynomial reduce_cyclic_powers(const Polynomial& f, const Basis& basis) {
     }
     return reduced;
 }
-} // namespace
-
 bool member_lex(const Polynomial& f, const Basis& g) {
     // Ordinary sparse reduction is cheaper on small inputs. The batch path
     // never converts exponents to machine integers.

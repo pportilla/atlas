@@ -155,6 +155,11 @@ class KernelIdealTests(unittest.TestCase):
     def test_charts_of_a_blowup(self):
         h = y - x**2
         cases = [((x, y, z), (), (z - h**2,), (h, z), ()), ((x, y), (), (y**2 - x**3,), (x, y), ()),
+                 ((x, y, z), (), None, (y-x**2, z-x*y), ()),
+                 ((x, y, z), (), None, (2**100*y-x**2, 3*z+7*x*y), ()),
+                 ((x, y, z), (), None, (y+z-x**2, 2*y-z+x**3), ()),
+                 ((x, y, z), (), None, (y+z-x**2, 2*y+2*z-2*x**2), ()),
+                 ((x, y, z), (), None, (x**2+y**2-1,z), ()),
                  ((x, y), (x,), (), (x, y), ((y,),)), ((x, y), (), (x*y,), (x**3, x*y, y**2), ((x,), (x - y,))),
                  ((x, y, z), (), (x**2 - y**2*z,), (x, sp.Integer(0), y), ())]
         for variables, ambient, strict, center, exceptional in cases:

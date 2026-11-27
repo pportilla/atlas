@@ -1,5 +1,7 @@
 """Regression cases for discovering and proving a single blowup along the reduced singular locus."""
+import os
 import unittest
+from unittest.mock import patch
 
 from engine import native_polynomial as np
 from engine.blowup_ideal import ideal_basis
@@ -15,6 +17,36 @@ class ReducedCentreGeometry(unittest.TestCase):
     parabola = "(y-x^2)^2-x*z^2"
     insufficient = "(y-x^2)^2-z^5"
     remote_crossing = "(y-x^2)^2-x*(x-1)^3*z^2"
+
+    def test_separated_binary_tail_needs_more_than_the_reduced_graph(self):
+        from engine.kernel_json import kernel_json
+        from engine.point_geometry import encode_terms
+        for equation, obstructed in [
+            ("(x+y+z)^2+x^2*y^2+y^4", True),
+            ("(x+y+z)^3+y^2*(x+y)^3", True),
+            ("(x+y+z)^2+x*y^2", False),
+            ("(x+y+z)^2+x^2*y^2+y^4+z^4", False),
+            ("x^2+y^2+z^2+x^4", False),
+        ]:
+            with self.subTest(equation=equation), patch.dict(os.environ, ATLAS_LINEAR_ALGEBRA="1"):
+                value = kernel_json("atlas_resolution_candidate", "reduced_graph_tangent_obstruction",
+                                    width=3, terms=encode_terms(parse(equation, self.names)))
+                self.assertEqual(value, obstructed)
+
+    def test_exceptional_intersection_after_blowing_up_a_curve_then_one_point(self):
+        from engine.canonical_replay import canonical_outputs
+        equation = "x^2*y^2+y^4+(x+y+z)^2"
+        terms = parse(equation, self.names)
+        record = resolve(dict(polynomial=equation, variables=self.names, mode="embedded", compute="cpu"))
+        self.assertEqual(record["engine"], "canonical-blowups")
+        self.assertEqual(record["dual_complex"]["cells"],
+                         [dict(id="CB1-B2.1", dimension=1, vertices=["B1", "B2"], faces=["B1", "B2"])])
+        _, output = canonical_outputs(record, terms, complex=True, intrinsic=False, integrals=False)
+        self.assertEqual(output["dual_complex"], record["dual_complex"])
+        # The old global gluing independently supplies the cell orientation.
+        with patch.dict(os.environ, ATLAS_LINEAR_ALGEBRA="0"):
+            _, reference = canonical_outputs(record, terms, complex=True, intrinsic=False, integrals=False)
+        self.assertEqual(output, reference)
 
     def proposal(self, polynomial, mode="embedded"):
         return smooth_reduced_graph(parse(polynomial, self.names), self.names, mode, seconds=2)

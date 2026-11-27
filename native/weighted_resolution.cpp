@@ -31,6 +31,7 @@
 
 #include "groebner.hpp"
 #include "primary_decomposition.hpp"
+#include "separating_form.hpp"
 #include "rational_sparse_json.hpp"
 
 #include <flint/fmpq.h>
@@ -835,8 +836,7 @@ std::vector<Orbit> orbits_by_form(const std::vector<P>& equations, const std::ve
     }
     for (long attempt = 0; attempt < 12; ++attempt) {
         // A separating form L = theta + sum c_j v_j with small coefficients.
-        std::vector<long> c(all.size());
-        for (size_t j = 0; j < all.size(); ++j) c[j] = 1 + static_cast<long>((attempt + 1) * (j + 1) * 7 % (2 * attempt + 5));
+        auto c = atlas::separating_weights(all.size(), attempt);
         Ring R;
         R.init(k, 1);
         std::vector<Poly> input;

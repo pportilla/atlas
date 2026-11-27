@@ -2,6 +2,9 @@
 // Each accepted contact is a global affine coordinate change, except the
 // last one, which may be an etale univariate coordinate on the whole locus.
 #include "local_io.hpp"
+#include "local_division.hpp"
+#include "membership_certificate.hpp"
+#include "groebner.hpp"
 #include "local_monomial.hpp"
 #include "primary_decomposition.hpp"
 #include "rational_sparse_json.hpp"
@@ -62,14 +65,14 @@ struct Descent {
     int divisor=-1;
     V birth;
 
-    Basis read(const V& rows) const {
+    Basis read(const V& rows, size_t max_terms = 32, unsigned max_degree = 8) const {
         check(rows.isArray() && rows.size()<=20);
         Basis result;
         for (const auto& item:rows) {
             const auto s=item.asString();
             check(s.size()<=3000);
             auto f=atlas::local::decode_row(s,width);
-            check(f.size()<=32 && max_total_degree(f)<=8);
+            check(f.size()<=max_terms && max_total_degree(f)<=max_degree);
             for(const auto& term:f)
                 check(mpz_sizeinbase(term.second.get_num_mpz_t(),2)<=160 &&
                       mpz_sizeinbase(term.second.get_den_mpz_t(),2)<=160);
@@ -122,15 +125,19 @@ struct Descent {
         check(std::any_of(working.begin(),working.end(),[&](const Basis& w) {
             return std::all_of(w.begin(),w.end(),[&](const Polynomial& f){return ideal::member_lex(f,lex);});
         }));
+        return result(prefix, ideal::reduced(lex,width,false));
+    }
+
+    static V result(const std::vector<Q>& values, const Basis& centre) {
         V out;
         out["value"]=V(Json::arrayValue);
-        for(size_t i=0;i<prefix.size();++i) {
-            if(i%2) out["value"].append(static_cast<unsigned>(prefix[i].get_num().get_ui()));
-            else out["value"].append(prefix[i].get_str());
+        for(size_t i=0;i<values.size();++i) {
+            if(i%2) out["value"].append(static_cast<unsigned>(values[i].get_num().get_ui()));
+            else out["value"].append(values[i].get_str());
         }
         out["value"].append("inf");
         out["ideal"]=V(Json::arrayValue);
-        for(const auto& f:ideal::reduced(lex,width,false)) out["ideal"].append(atlas::local::encode_row(f));
+        for(const auto& f:centre) out["ideal"].append(atlas::local::encode_row(f));
         return out;
     }
 
@@ -277,12 +284,109 @@ struct Descent {
         if(value<1) rows.push_back({{{Powers(width),1}},1-value,common});
         return descend(std::move(rows));
     }
+    // At a double point on E in a threefold, a nonsingular quadratic
+    // section on T(E) supplies two independent contact directions. An old E
+    // supplies the third, with mark one. The coefficient presentation has
+    // residual orders 1, 1: after the first section its transverse square
+    // still has mark two, and after the second the remaining parameter has
+    // mark one (or a square of mark two). There is no common E factor.
+    // Once all parameters are used the coefficient ideal is zero. Higher
+    // Taylor terms cannot affect any of these orders. If E has not become
+    // old by level two, higher coefficients along its normal *can* matter.
+    std::optional<V> transverse_double(const Polynomial& f) const {
+        if (width != 3 || divisor < 0 || working.empty()) return {};
+        atlas::check_deadline();
+        for (const auto& w : working)
+            if (w.size() != width || std::any_of(w.begin(), w.end(), [](const auto& g) {
+                    return max_total_degree(g) != 1;
+                })) return {};
+        const Basis point_ideal = ideal::reduced(working.front(), width, true);
+        if (point_ideal.size() != width) return {};
+        std::vector<Q> point(width);
+        std::vector<bool> fixed(width);
+        for (const auto& row : point_ideal) {
+            if (row.empty() || max_total_degree(row) != 1) return {};
+            auto lead = row.rbegin();
+            const auto& e = lead->first;
+            auto pos = std::find(e.begin(), e.end(), 1);
+            if (pos == e.end() || row.size() > 1 + row.count(Powers(width))) return {};
+            size_t axis = pos - e.begin();
+            if (fixed[axis]) return {};
+            fixed[axis] = true;
+            auto at = row.find(Powers(width));
+            if (at != row.end()) point[axis] = -at->second / lead->second;
+        }
+        if (point[divisor] != 0) return {};
+        for (const auto& w : working) {
+            if (w != working.front() && ideal::reduced(w, width, true) != point_ideal) return {};
+        }
+
+        const auto jet = atlas::local::point_jet_below(3, f, point);
+        if (jet.count(Powers(width))) return {};
+        for (size_t i = 0; i < width; ++i)
+            if (jet.count(coordinate(width, i).begin()->first)) return {};
+        const size_t x = (divisor + 1) % width, y = (divisor + 2) % width;
+        auto term = [&](unsigned a, unsigned b) -> Q {
+            Powers e(width);
+            e[x] = a;
+            e[y] = b;
+            auto it = jet.find(e);
+            return it == jet.end() ? Q(0) : it->second;
+        };
+        if (4 * term(2, 0) * term(0, 2) == term(1, 1) * term(1, 1)) return {};
+
+        Descent history;
+        history.birth = birth;
+        history.prefix = {2};
+        bool first = history.old();
+        history.prefix.push_back(first ? 1 : 0);
+        history.prefix.push_back(1);
+        const bool second = !first && history.old();
+        if (!first && !second) {
+            // If the entire Jacobian ideal is an affine line, f vanishes
+            // to order two along that line (in linear coordinates the
+            // constant and linear normal coefficients vanish). Its two
+            // transverse contact parameters cut out this same smooth line
+            // near p. All remaining coefficient functions there are zero.
+            // The closure is the entire line: no other component exists.
+            // A readily checked family of parallel lines suffices for this
+            // proposal. The untouched divisor coordinate is its parameter.
+            // Bound the translation box by the input limits above.
+            auto shifted = atlas::local::translate({f}, point);
+            for (const auto& term : shifted[0])
+                if (term.first[x] + term.first[y] < 2) return {};
+            Basis jacobian{f};
+            for (unsigned i = 0; i < width; ++i) jacobian.push_back(derivative(f, i));
+            const auto line = ideal::reduced(jacobian, width, false);
+            if (line.size() != 2 || std::any_of(line.begin(), line.end(), [](const Polynomial& g) {
+                    return max_total_degree(g) != 1;
+                })) return {};
+            atlas::check_deadline();
+            return result({2, 0, 1, 0}, line);
+        }
+
+        // The centre is in the *whole chart*. Its ideal contains E and
+        // the first jet of f. Prove these already generate the reduced
+        // maximal ideal globally, so lifting the jet answer adds no other
+        // component. The opposite inclusion follows from evaluation at p.
+        Basis locus_on_boundary{coordinate(width, divisor)};
+        auto restrict = [&](Polynomial g) {
+            for (auto it = g.begin(); it != g.end();)
+                if (it->first[divisor] != 0) it = g.erase(it);
+                else ++it;
+            if (!g.empty()) locus_on_boundary.push_back(std::move(g));
+        };
+        restrict(f);
+        for (unsigned j = 0; j < width; ++j) restrict(derivative(f, j));
+        if (ideal::reduced(locus_on_boundary, width, true) != point_ideal) return {};
+        atlas::check_deadline();
+        return result({2, first ? 1 : 0, 1, first ? 0 : 1, 1, 0}, ideal::reduced(point_ideal, width, false));
+    }
+
     V run(const V& input) {
         width=input["width"].asUInt();
         check(input["operation"]=="maximum" && width>0 && width<=3 &&
               input["working"].isArray() && input["working"].size()<=8);
-        auto strict=read(input["strict"]);
-        check(strict.size()==1);
         for(const auto& w:input["working"]) working.push_back(read(w));
         if(!input["divisor"].isNull()) {
             auto eq=read(input["divisor"]);
@@ -292,6 +396,29 @@ struct Descent {
             birth=input["birth"];
             check(birth.isNull() || (birth.isArray() && birth.size()<=16));
         }
+        if (divisor >= 0 && atlas::certificate::enabled()) {
+            // An optional global closure check must not consume the enclosing
+            // deadline. The normal kernel validates its optimized basis exactly.
+            // A local timeout declines this proposal and restores the caller's
+            // deadline; the ordinary descent then gets its original work budget.
+            try {
+                atlas::DeadlineScope trial(std::chrono::steady_clock::now() + std::chrono::milliseconds(12));
+                auto strict = read(input["strict"], 64, 12);
+                if (strict.size() == 1) {
+                    auto result = transverse_double(strict[0]);
+                    if (result && !trial.expired()) return *result;
+                }
+            } catch (const Decline&) {
+                // A proposal outside its caps still gets the original descent.
+            } catch (const atlas::Expired&) {
+            } catch (const std::runtime_error&) {
+                // A bounded basis can decline through the packed C interface.
+            }
+            atlas::check_deadline();
+        }
+        atlas::primary::CertificateBudget budget(16000);
+        auto strict=read(input["strict"]);
+        check(strict.size()==1);
         axes.resize(width);
         std::iota(axes.begin(),axes.end(),0);
         auto& f=strict.front();
@@ -309,7 +436,6 @@ struct Descent {
 extern "C" const char* atlas_affine_centre_maximum(const char* input) noexcept {
     return atlas::sparse_json::invoke(input,[](const V& r)->V {
         try {
-            atlas::primary::CertificateBudget budget(16000);
             return Descent{}.run(r);
         } catch(const Decline&) { return {}; }
           catch(const std::runtime_error&) { return {}; } // Limited Groebner or coefficient work.

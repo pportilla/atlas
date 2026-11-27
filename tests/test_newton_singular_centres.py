@@ -167,10 +167,10 @@ class NewtonSingularCentres(unittest.TestCase):
 
         names = list("xyzt")
         support = {(2, 0, 0, 0), (0, 1, 0, 0)}
-        for expression, fan_calls, general_calls, expected in (
-            ("x^2-y^2*(z+t)", 0, 0, "(s + 2)/(2*(s + 1)^2)"),
-            ("(x-y)*(x-2*y)-y^2*(z+t)", 1, 0, "(s + 1)^(-2)"),
-            ("(x-y)^2-y^2*(z+t)", 1, 2, "(s + 2)/(2*(s + 1)^2)"),
+        for expression, fan_calls, expected in (
+            ("x^2-y^2*(z+t)", 0, "(s + 2)/(2*(s + 1)^2)"),
+            ("(x-y)*(x-2*y)-y^2*(z+t)", 1, "(s + 1)^(-2)"),
+            ("(x-y)^2-y^2*(z+t)", 1, "(s + 2)/(2*(s + 1)^2)"),
         ):
             with self.subTest(expression=expression):
                 p = parse(expression, names)
@@ -180,7 +180,15 @@ class NewtonSingularCentres(unittest.TestCase):
                     with patch.object(monomial_atlas, "strata_rows", wraps=monomial_atlas.strata_rows) as rows:
                         strata = resolution_strata(record, p)
                 self.assertEqual(fan.call_count, fan_calls)
-                self.assertEqual(sum(not call.kwargs.get("monomial_only") for call in rows.call_args_list), general_calls)
+                self.assertEqual(sum(not call.kwargs.get("monomial_only") for call in rows.call_args_list), 0)
+                # Force the global orbit formula to decline, so the general
+                # chart fallback remains covered as the formula improves.
+                if fan_calls:
+                    with patch.object(monomial_atlas, "_fan_orbit_strata", return_value=None), \
+                         patch.object(monomial_atlas, "strata_rows", wraps=monomial_atlas.strata_rows) as rows:
+                        alternative = resolution_strata(record, p)
+                    self.assertGreater(sum(not c.kwargs.get("monomial_only") for c in rows.call_args_list), 0)
+                    self.assertEqual(alternative, strata)
                 self.assertEqual(topological_zeta(record, strata=strata)["expression"], expected)
 
     def test_intrinsic_fan_replay_checks_a_singular_exceptional_section(self):

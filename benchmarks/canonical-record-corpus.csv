@@ -1,0 +1,25 @@
+name,equation,variables,mode,policy
+smooth,x-y^2,x y z,intrinsic,exhaustive
+normal-crossing,x*y*z,x y z,embedded,exhaustive
+repeated-crossing,x^3*y^2,x y z,embedded,exhaustive
+plane-cusp,y^2-x^3,x y,embedded,exhaustive
+plane-conjugate,(y^2+2*x^2)^2+x^5,x y,embedded,exhaustive
+a6,x^7+y^2-z^2,x y z,intrinsic,exhaustive
+ordinary,x^3+y^3+z^3+x^4,x y z,intrinsic,exhaustive
+toric,x^2+y^3+z^5,x y z,intrinsic,exhaustive
+binomial-ambient,x*y^2*z^3-t^6,x y z t,embedded,exhaustive
+binomial-intrinsic,x*y^2*z^3-t^6,x y z t,intrinsic,exhaustive
+curved-centre,(y-x^2)^2-x*z^2,x y z,embedded,exhaustive
+crossing-sheets,(y-x^2)^2-z^2,x y z,intrinsic,exhaustive
+inclined-centre,(x+y+z)^2-z*(x-y)^2,x y z,intrinsic,exhaustive
+repaired-triangle,x^3+y^3+z^3-3*x*y*z+x^4+y^4+z^4,x y z,intrinsic,quick
+quartic,x^4-x^2+y^2*z^2,x y z,intrinsic,exhaustive
+quartic-permuted,x^4-x^2+y^2*z^2,z x y,intrinsic,exhaustive
+quartic-rescaled,9*x^4-9*x^2+4*y^2*z^2,x y z,intrinsic,exhaustive
+quartic-embedded,x^4-x^2+y^2*z^2,x y z,embedded,exhaustive
+mixed-cubic,x*y*z+x^4+y^4+z^4,x y z,intrinsic,exhaustive
+canonical-sheared,(x+y)^2+z^3+x^3,x y z,embedded,quick
+canonical-tangent,(x*y-z^2)^2+x^5+y^5,x y z,embedded,quick
+canonical-double-cone,x^2+(y+z)^3+y^4,x y z,embedded,quick
+canonical-intrinsic,(x+y)^2+z^3+x^3,x y z,intrinsic,quick
+canonical-double-cone-intrinsic,x^2+(y+z)^3+y^4,x y z,intrinsic,quick

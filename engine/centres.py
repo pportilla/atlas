@@ -78,15 +78,12 @@ from .centre_weights import (Presentation, centre_rows, centre_search, cover_pro
                              level_weights, maximum_indices)
 from .polynomial import integer_from_decimal, integer_text, rational_text
 from .rational_point import coordinate_fraction
+from .resolution_errors import GiveUp
 
 from .affine_kernel import frame_function, frame_linear, frame_minor
 from .blowup_ideal import empty_locus, ideal_basis, ideal_subset, radical_subset, saturate, saturate_grevlex
 
 INFINITE = float("inf")
-
-
-class GiveUp(Exception):
-    """The procedure cannot continue; nothing is claimed."""
 
 
 class NoContact(GiveUp):

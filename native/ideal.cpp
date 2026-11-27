@@ -5,6 +5,8 @@
 //
 // Every routine follows engine/blowup_ideal.py step by step and returns the
 // same generators, so the two implementations can be compared exactly.
+#include "membership_certificate.hpp"
+#include "centre_graph.hpp"
 #include "groebner.hpp"
 #include "graph_centre_incidence.hpp"
 #include "graph_regular.hpp"
@@ -27,6 +29,43 @@
 
 namespace atlas {
 namespace {
+
+// Inspect the equalities over the (possibly time-limited) chart only after the
+// fibre no longer carries the origin as an exact point.
+static bool certify_packed_unit(const Ring& R, const std::vector<Poly>& generators, const char* site) {
+    if (!certificate::enabled()) return false;
+    // The exact cofactor for a constant generator g is 1/g.
+    for (const auto& f : generators)
+        if (f.size() == 1 && f.m[0] == 0 && fmpz_sgn(&f.c[0].v))
+            return certificate::trace(site, true);
+    const certificate::CertificateCaps caps{1, 16, 12, 16, 64, 12};
+    if (generators.empty() || generators.size() > 4 ||
+        !std::any_of(generators.begin(), generators.end(), [&](const Poly& g) {
+            if (g.empty()) return false;
+            return g.m[(g.size() - 1) * R.stride] == 0;
+        })) return certificate::trace(site, false);
+    size_t terms = 0;
+    for (const auto& g : generators) {
+        if (g.size() > 16 - terms || (!g.empty() && g.m[0] > caps.max_degree))
+            return certificate::trace(site, false);
+        terms += g.size();
+    }
+    chart::Variables frame;
+    for (int i = 0; i < R.n; ++i) frame.push_back({std::to_string(i), 0});
+    certificate::Ideal values;
+    for (const auto& g : generators) {
+        std::map<chart::Powers, chart::Q> row;
+        long degree[MAX_VARIABLES];
+        for (size_t k = 0; k < g.size(); ++k) {
+            R.unpack(g.m.data() + k * R.stride, degree);
+            chart::Z coefficient;
+            fmpz_get_mpz(coefficient.get_mpz_t(), &g.c[k].v);
+            row.emplace(chart::Powers(degree, degree + R.n), chart::Q(coefficient));
+        }
+        values.push_back(chart::normal(frame, row));
+    }
+    return certificate::trace(site, certificate::certify_unit(frame, values, caps).certified);
+}
 
 // The polynomial p*num/den. p is primitive with a positive leading
 // coefficient in the grevlex order and num/den is in lowest terms, so equal
@@ -673,6 +712,7 @@ bool full_rank(const Ring& R, const std::vector<Poly>& generators, const std::ve
         std::vector<Poly> input = basis->elements();
         const size_t known = input.size();
         input.insert(input.end(), fresh.begin(), fresh.end());
+        if (certify_packed_unit(R, input, "full_rank")) return true;
         basis = std::make_unique<Basis>(R, input, known);
         if (basis->unit()) return true;
     } while (minors.next());
@@ -861,7 +901,7 @@ struct Chart {
 // The centre keeps its zero generators; they give empty charts. `lex` asks
 // for the generators that engine/blowup_ideal.blowup_charts returns.
 Chart blowup_chart(const Ring& R, const Ideal& ambient, const Ideal* strict, const Ideal& center,
-                   const std::vector<Ideal>& exceptional, int i, bool lex) {
+                   const std::vector<Ideal>& exceptional, int i, bool lex, bool triangular = false) {
     const int n = R.n, k = static_cast<int>(center.size());
     Chart chart;
     chart.ring.init(n + k - 1, 0);
@@ -888,7 +928,11 @@ Chart blowup_chart(const Ring& R, const Ideal& ambient, const Ideal* strict, con
         merge(C, relation, f.p, 0, &left.v, nullptr, chart.pivot.p, 0, &right.v, ratio);
         graph.push_back(normal(std::move(relation)));
     }
-    chart.ambient = saturate(C, graph, chart.pivot, lex);
+    // In coordinates given by the centre generators and the free parameters
+    // the graph is f_j = r_j*f_i. Its quotient is a polynomial ring in
+    // f_i, the parameters and the ratios. Thus f_i is a nonzerodivisor.
+    // Retain the original chart variables and its reduced basis on the wire.
+    chart.ambient = triangular ? lexicographic(C, polys(graph)) : saturate(C, graph, chart.pivot, lex);
     auto transform = [&](const Ideal& ideal) {
         Ideal total = chart.ambient;
         const Ideal lifted = up(expressions(ideal));
@@ -1420,10 +1464,12 @@ std::string op_charts(Reader& in) {
     const Ideal center = in.rest(R);
     if (center.empty()) return "";
     if (R.n + static_cast<long>(center.size()) > MAX_VARIABLES) throw Limit("Unsupported number of variables.");
+    const bool triangular = given.ambient.empty() && certificate::enabled() &&
+        triangular_centre(R, center.size(), [&](size_t i) -> const Poly& { return center[i].p; });
     std::string out;
     for (size_t i = 0; i < center.size(); ++i) {
         const Chart chart = blowup_chart(R, given.ambient, given.has_strict ? &given.strict : nullptr, center,
-                                         given.exceptional, static_cast<int>(i), true);
+                                         given.exceptional, static_cast<int>(i), true, triangular);
         out += std::to_string(chart.ambient.size());
         out += ' ';
         out += given.has_strict ? std::to_string(chart.strict.size()) : "-1";
@@ -2547,7 +2593,7 @@ std::optional<bool> coordinate_crossings_on_fibre(const Ring& R,
     }
     if (monomial_only) return std::nullopt;
     try {
-        return unit_basis(R, bad);
+        return certify_packed_unit(R, bad, "crossings") || unit_basis(R, bad);
     } catch (const Limit&) {
         // The ordinary subset tests can still succeed on smaller ideals.
         return std::nullopt;
@@ -2645,6 +2691,7 @@ struct OwnedCrossings {
                 locus.push_back(std::move(g));
             }
         } while (minors.next());
+        if (certify_packed_unit(R, locus, "owned_crossings")) return true;
         Basis bad(R, present(locus));
         return !outside_holes(R, bad, removed, one(R));
     }
@@ -2843,8 +2890,11 @@ std::string op_crossings(Reader& in) {
                                     if (!m.empty()) locus.push_back(std::move(m));
                             } while (minors.next());
                         }
-                        with_minors = std::make_unique<Basis>(R, locus, known);
-                        failing = !with_minors->unit();
+                        failing = false;
+                        if (!certify_packed_unit(R, locus, "crossings")) {
+                            with_minors = std::make_unique<Basis>(R, locus, known);
+                            failing = !with_minors->unit();
+                        }
                     }
                     if (failing) {
                         const Basis& bad = with_minors ? *with_minors : basis;

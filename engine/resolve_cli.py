@@ -3,9 +3,7 @@ import argparse
 from contextlib import contextmanager
 import json
 import os
-import subprocess
 import sys
-import tempfile
 from time import monotonic
 
 from .quick_budget import QUICK_SECONDS, checked_seconds, expired, expired_line, read_progress, request_seconds
@@ -33,6 +31,7 @@ def _progress_file():
     if os.environ.get(PROGRESS_FILE):
         yield os.environ[PROGRESS_FILE], None
         return
+    import tempfile
     handle, path = tempfile.mkstemp(prefix="atlas-progress-", suffix=".json")
     os.close(handle)
     try:
@@ -77,6 +76,7 @@ def run_job(data, timeout=_OF_REQUEST, *, owner=None):
     published. `timeout` replaces the budget of the request when given.
     """
     from .worker_process import run_worker
+    from subprocess import TimeoutExpired
     if timeout is _OF_REQUEST:
         try:
             timeout = request_seconds(data) if isinstance(data, dict) else None
@@ -91,7 +91,7 @@ def run_job(data, timeout=_OF_REQUEST, *, owner=None):
         started = monotonic()
         try:
             return run_worker(['engine.worker'], data, timeout, owner=owner, env=env)
-        except subprocess.TimeoutExpired:
+        except TimeoutExpired:
             return _timed_out(data, timeout, monotonic() - started, read_progress(path))
         except RuntimeError:
             return _stopped()

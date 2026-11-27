@@ -558,7 +558,6 @@ _EXPIRED = "The time allowed for the computation is over."
 def affine_request(lines, seconds=None):
     """One request of the affine kernel. With `seconds` its exact computations
     stop at that deadline and the request raises Expired."""
-    data = ("\n".join(lines) + "\n").encode("utf-8")
     lib = _library()
     if lines[0].startswith("lattice_") and not hasattr(lib, "atlas_lattice_abi"):
         raise Unavailable("The installed kernel predates the torus lattice operations.")
@@ -566,6 +565,15 @@ def affine_request(lines, seconds=None):
         raise Unavailable("The installed kernel predates the public input parser.")
     if lines[0] == "parse_field_input" and (not hasattr(lib, "atlas_input_abi") or lib.atlas_input_abi() < 2):
         raise Unavailable("Rebuild the native kernel to parse division by algebraic chart coefficients.")
+    data = ("\n".join(lines) + "\n").encode("utf-8")
+    return _affine_reply(lib, data, seconds).decode("ascii").splitlines()
+
+
+def _affine_reply(lib, data, seconds):
+    directory = os.environ.get("ATLAS_RECORD_REQUESTS")
+    if directory:
+        from .request_recording import PendingRequest
+        trace = PendingRequest(directory, "affine", data.decode("utf-8"), seconds=seconds)
     if seconds is None or not hasattr(lib, "atlas_affine_until"):
         answer = lib.atlas_affine(data, len(data))
     else:
@@ -574,15 +582,20 @@ def affine_request(lines, seconds=None):
         answer = lib.atlas_affine_until(data, len(data), max(0.0, seconds))
     if not answer:
         message = lib.atlas_groebner_error().decode("utf-8")
+        if directory:
+            trace.finish(None, error=message)
         if message in ("Unsupported number of variables.", "Degree out of range.", "Exponent out of range."):
             raise Unavailable(message)
         if message == _EXPIRED:
             raise Expired(message)
         raise ArithmeticError(message)
     try:
-        return ctypes.string_at(answer).decode("ascii").splitlines()
+        reply = ctypes.string_at(answer)
     finally:
         lib.atlas_groebner_release(answer)
+    if directory:
+        trace.finish(reply.decode("ascii"))
+    return reply
 
 
 def ideal_request(header, rows):

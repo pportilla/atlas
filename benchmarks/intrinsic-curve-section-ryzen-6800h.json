@@ -1,0 +1,27 @@
+{
+  "cpu": 3,
+  "batch": 16,
+  "trials": 5,
+  "samples_us": {
+    "atlas": [
+      226.594125,
+      221.577125,
+      204.481125,
+      228.8740625,
+      214.624625
+    ],
+    "singular": [
+      4174.6875,
+      4196.125,
+      4178.375,
+      4221.0625,
+      4203.25
+    ]
+  },
+  "median_us": {
+    "atlas": 221.577125,
+    "singular": 4196.125
+  },
+  "singular_version": "Singular for x86_64-Linux version 4.4.1 (44105, 64 bit) Dec  6 2025 11:10:58",
+  "conditions": "Intrinsic reduced section of s2-developable-123 over QQ. Atlas JSON call in process; Singular radical, two ideal inclusions and fibre checks in fresh sessions, timed internally after startup."
+}

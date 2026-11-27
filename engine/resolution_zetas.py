@@ -1,5 +1,5 @@
 """Select local zeta functions and evaluate them on the same resolution strata."""
-from subprocess import TimeoutExpired
+from .resolution_errors import computation_limits
 
 from .polynomial import InputError, LimitError, parse, parse_expression, saved_polynomial_input
 
@@ -157,7 +157,7 @@ def _replay_zetas(request):
         # bounded choice of centres. Recover it before enumerating ideals.
         try:
             fresh = resolve(dict(calculation, search="quick", bounded=True))
-        except (LimitError, TimeoutExpired):
+        except computation_limits():
             fresh = {}
         if all(fresh.get(k + "_zeta", {}).get("status") == "computed" for k in kinds):
             return _selected_outputs(fresh, kinds, companion=companion)

@@ -1,11 +1,15 @@
 // Exact, prefix-skipping decoding of the exhaustive resolution certificate syntax.
 #include "local_io.hpp"
+#include "local_monomial.hpp"
+#include "groebner.hpp"
+#include "membership_certificate.hpp"
 #include "primary_decomposition.hpp"
 #include "polynomial_factors.hpp"
 #include "quotient_ring.hpp"
 #include "rational_sparse_json.hpp"
 #include "resolution_tangents.hpp"
 #include "sparse_flint.hpp"
+#include <array>
 #include <numeric>
 #include <set>
 #include <tuple>
@@ -13,6 +17,14 @@
 namespace {
 using namespace atlas::sparse_json;
 struct InvalidCode {};
+
+struct Factors {
+    fmpq_mpoly_factor_t v;
+    const fmpq_mpoly_ctx_struct* ctx;
+    explicit Factors(const fmpq_mpoly_ctx_struct* c) : ctx(c) { fmpq_mpoly_factor_init(v, c); }
+    ~Factors() { fmpq_mpoly_factor_clear(v, ctx); }
+    Factors(const Factors&) = delete;
+};
 
 struct Reader {
     std::string bits;
@@ -182,7 +194,7 @@ Json::Value transverse_pencil(const Json::Value& rows) {
 // identity nor this ordinary blowup resolves it. The origin worker checks
 // reducedness before computing any blowups. Every proper coordinate-centre
 // candidate misses a pure axial term on a free axis. Later certificate candidates still race a longer canonical solve.
-bool repeated_tangent_obstruction(const Json::Value& rows, unsigned n) {
+bool repeated_tangent_obstruction(const Json::Value& rows, unsigned n, bool reduced_graph = false) {
     constexpr unsigned max_degree=16, max_rows=128;
     if (n!=3 || !rows.isArray() || rows.size()<6 || rows.size()>max_rows) return false;
     for (const auto& row : rows) {
@@ -231,7 +243,229 @@ bool repeated_tangent_obstruction(const Json::Value& rows, unsigned n) {
         const auto found=lowest.find(monomial);
         if (found==lowest.end() || found->second!=leading*coefficient) return false;
     }
-    return true;
+    if (!reduced_graph) return true;
+    // Write F=c*L^d+H in coordinates (L,u,v). A homogeneous binary H
+    // has as its singular locus off zero exactly its repeated factor lines.
+    // No such line leaves only the origin. Two distinct lines give a
+    // singular reduced centre. With one line M=0 of multiplicity m, the
+    // M-chart of the blowup (L,M) contains L=M*t and has strict equation
+    // c*M^(d-b)*t^d + H/M^b for b=min(d,m). Both summands have order
+    // at least two at (t,u,v)=0 since deg(H)>=d+2, so that graph fails.
+    if (degree < order + 2) return false;
+    std::vector<bool> used(n);
+    for (const auto& [e, c] : terms) {
+        if (lowest.count(e)) continue;
+        if (atlas::local::total_degree(e) != degree) return false;
+        for (unsigned j=0; j<n; ++j) if (e[j] != 0) used[j] = true;
+    }
+    return std::find(used.begin(), used.end(), false) != used.end();
+}
+
+// On L=M=0 the irreducible pinch A*L^2+B*M^2*C is singular. If all
+// components of the direction of this line are nonzero, at least two
+// coordinates remain generically nonzero after any *single* triangular
+// translation. A toric subdivision is an isomorphism over those strata
+// (cones of dimension at most one). The strict transform is still singular
+// along that punctured curve, whose closure meets the origin fibre by
+// properness. This excludes both the diagonal fan and each one-axis
+// translated fan. A composition of translations needs its own test.
+bool inclined_toric_obstruction(const std::string& row) {
+    if (!atlas::certificate::enabled() || row.size() > 1024) return false;
+    const auto input = atlas::local::decode_row(row, 3);
+    if (input.size() > 16) return false;
+    std::array<Terms, 2> parts;
+    for (const auto& [e, c] : input) {
+        const Z degree = e[0]+e[1]+e[2];
+        if ((degree != 2 && degree != 3) || mpz_sizeinbase(c.get_num_mpz_t(), 2) > 64 ||
+            mpz_sizeinbase(c.get_den_mpz_t(), 2) > 64) return false;
+        parts[degree.get_ui()-2].emplace(e, c);
+    }
+    using Linear = std::array<Q, 3>;
+    Linear L{}, M{}, C{};
+    atlas::local::SparseLexRing ring(3);
+    atlas::PolyValue source(ring.ctx), expanded(ring.ctx);
+    for (unsigned j = 0; j < 2; ++j) {
+        atlas::check_deadline();
+        if (parts[j].empty()) return false;
+        ring.write(source.p, parts[j]);
+        Factors factors(ring.ctx);
+        if (!fmpq_mpoly_factor_squarefree(factors.v, source.p, ring.ctx) ||
+            factors.v->num != static_cast<slong>(j+1)) return false;
+        for (slong i = 0; i < factors.v->num; ++i) {
+            const auto exponent = factors.v->exp+i;
+            Linear* form;
+            if (fmpz_equal_ui(exponent, 2)) form = j ? &M : &L;
+            else if (j && fmpz_is_one(exponent)) form = &C;
+            else return false;
+            for (const auto& [e, c] : ring.read(factors.v->poly+i)) {
+                if (e[0]+e[1]+e[2] != 1) return false;
+                (*form)[std::find(e.begin(), e.end(), 1)-e.begin()] = c;
+            }
+        }
+        if (!fmpq_mpoly_factor_expand(expanded.p, factors.v, ring.ctx) ||
+            !fmpq_mpoly_equal(expanded.p, source.p, ring.ctx)) return false;
+    }
+    Q det = 0;
+    for (size_t i = 0; i < 3; ++i) {
+        const size_t j = (i+1)%3, k = (i+2)%3;
+        const Q direction = L[j]*M[k] - L[k]*M[j];
+        if (!direction) return false;
+        det += C[i]*direction;
+    }
+    // Independent L,M,C are coordinates over the geometric field. As a
+    // polynomial linear in C, A*L^2+B*M^2*C is primitive, hence irreducible.
+    return det != 0;
+}
+
+// Two binomial squares can contribute parallel, equally spaced triples in
+// the support of f. Their normals suggest weights only. Direct substitution
+// into f and all three logarithmic derivatives proves the entire curve is
+// singular, including when the summands have *different* weighted degrees.
+bool singular_curve_from_triples(const Terms& f) {
+    using Triple = std::array<long, 3>;
+    if (f.size() < 5 || f.size() > 16) return false;
+    std::map<Triple, Q> support;
+    for (const auto& [e, c] : f)
+        support.emplace(Triple{e[0].get_si(), e[1].get_si(), e[2].get_si()}, c);
+    std::set<Triple> directions;
+    for (auto a = support.begin(); a != support.end(); ++a) {
+        for (auto b = std::next(a); b != support.end(); ++b) {
+            Triple mid{}, step{};
+            for (unsigned j = 0; j < 3; ++j) {
+                step[j] = b->first[j] - a->first[j];
+                mid[j] = a->first[j] + step[j]/2;
+            }
+            if (std::any_of(step.begin(), step.end(), [](long v) { return v % 2; }) ||
+                !support.count(mid)) continue;
+            const long g = std::gcd(std::gcd(step[0], step[1]), step[2]);
+            for (auto& v : step) v /= g;
+            directions.insert(step);
+            if (directions.size() > 12) return false;
+        }
+    }
+    for (auto a = directions.begin(); a != directions.end(); ++a) {
+        for (auto b = std::next(a); b != directions.end(); ++b) {
+            atlas::check_deadline();
+            Triple w{};
+            for (unsigned j = 0; j < 3; ++j)
+                w[j] = (*a)[(j+1)%3] * (*b)[(j+2)%3] - (*a)[(j+2)%3] * (*b)[(j+1)%3];
+            if (w[0] < 0) for (auto& v : w) v = -v;
+            if (*std::min_element(w.begin(), w.end()) <= 0 ||
+                w[0] == w[1] || w[1] == w[2] || w[2] == w[0]) continue;
+            std::map<long, std::array<Q, 4>> coefficients;
+            for (const auto& [e, c] : support) {
+                auto& values = coefficients[std::inner_product(w.begin(), w.end(), e.begin(), 0L)];
+                values[0] += c;
+                for (unsigned j = 0; j < 3; ++j) values[j+1] += c * e[j];
+            }
+            if (!std::all_of(coefficients.begin(), coefficients.end(), [](const auto& row) {
+                    return row.second == std::array<Q, 4>{};
+                })) continue;
+            // Smoothness of the whole intrinsic strict transform excludes
+            // intersections of distinct geometric branches. Squarefreeness
+            // keeps nonreduced-input handling with the existing dispatcher.
+            atlas::local::SparseLexRing ring(3);
+            atlas::PolyValue source(ring.ctx);
+            ring.write(source.p, f);
+            Factors factors(ring.ctx);
+            if (!fmpq_mpoly_factor_squarefree(factors.v, source.p, ring.ctx)) return false;
+            for (slong i = 0; i < factors.v->num; ++i)
+                if (!fmpz_is_one(factors.v->exp+i)) return false;
+            return factors.v->num > 0;
+        }
+    }
+    return false;
+}
+
+// A singular monomial curve with three distinct positive weights is
+// contained in no plane through zero. In any linear coordinates it meets
+// the dense torus, and changing a single coordinate still leaves at least
+// two nonzero there. A monomial modification is an isomorphism at its
+// generic point. Properness brings the closure of the strict singular
+// locus back to the origin fibre. This obstructs the unrepaired intrinsic
+// fan; starting a repair at a fibre point can subsequently change a curve.
+// The scheduler tests the exceptional defect orbits before skipping repairs.
+bool singular_torus_curve(const std::string& row) {
+    if (!atlas::certificate::enabled() || row.size() > 1600) return false;
+    const Terms f = atlas::local::decode_row(row, 3);
+    if (f.size() < 3 || f.size() > 24) return false;
+    using Triple = std::array<long, 3>;
+    Triple intercept{};
+    std::vector<Triple> exponents;
+    for (const auto& [e, c] : f) {
+        if (mpz_sizeinbase(c.get_num_mpz_t(), 2) > 64 || mpz_sizeinbase(c.get_den_mpz_t(), 2) > 64 ||
+            std::any_of(e.begin(), e.end(), [](const auto& k) { return k < 0 || k > 12; })) return false;
+        Triple a{e[0].get_si(), e[1].get_si(), e[2].get_si()};
+        for (unsigned j = 0; j < 3; ++j)
+            if (a[j] && !a[(j+1)%3] && !a[(j+2)%3]) intercept[j] = a[j];
+        exponents.push_back(a);
+    }
+    // Even the identity-frame polynomial graph adds only one coordinate.
+    // Over the dense original torus its image therefore belongs to strata
+    // of codimension at most one, where any fan subdivision is an isomorphism.
+    if (singular_curve_from_triples(f)) return true;
+    if (intercept[0] && intercept[1] && intercept[2]) return false;
+    auto difference = [&](const Triple& b) -> Triple {
+        return {b[0]-exponents[0][0], b[1]-exponents[0][1], b[2]-exponents[0][2]};
+    };
+    const auto first = difference(exponents[1]);
+    Triple weight{};
+    for (size_t i = 2; i < exponents.size(); ++i) {
+        auto v = difference(exponents[i]);
+        for (unsigned j = 0; j < 3; ++j)
+            weight[j] = first[(j+1)%3]*v[(j+2)%3] - first[(j+2)%3]*v[(j+1)%3];
+        if (weight != Triple{}) break;
+    }
+    if (weight[0] < 0) for (auto& k : weight) k = -k;
+    for (unsigned j = 0; j < 3; ++j)
+        if (weight[j] <= 0 || weight[j] == weight[(j+1)%3]) return false;
+    for (const auto& e : exponents) {
+        const auto v = difference(e);
+        if (std::inner_product(weight.begin(), weight.end(), v.begin(), 0L)) return false;
+    }
+    // At a sign vector test f and x_j*df/dx_j. Homogeneity extends each
+    // vanishing to the entire parametrized curve sign_j*t^weight_j.
+    bool singular = false;
+    for (unsigned mask = 0; mask < 8 && !singular; ++mask) {
+        std::array<Q, 4> values{};
+        for (const auto& [e, c] : f) {
+            Q term = c;
+            for (unsigned j = 0; j < 3; ++j)
+                if ((mask & (1u << j)) && mpz_odd_p(e[j].get_mpz_t())) term = -term;
+            values[0] += term;
+            for (unsigned j = 0; j < 3; ++j) values[j+1] += term*e[j];
+        }
+        singular = values == std::array<Q, 4>{};
+    }
+    if (!singular) return false;
+
+    // Certify geometric irreducibility of a primitive quadratic over the
+    // other two variables. A monic discriminant square over Qbar already
+    // has its unique monic square root over QQ, by Galois descent.
+    for (unsigned axis = 0; axis < 3; ++axis) {
+        Q leading = 0;
+        Terms linear, constant;
+        bool quadratic = true;
+        for (const auto& [e, c] : f) {
+            auto v = e;
+            v[axis] = 0;
+            if (e[axis] == 2 && v == Powers(3)) leading = c;
+            else if (e[axis] == 1) linear.emplace(std::move(v), c);
+            else if (e[axis] == 0) constant.emplace(e, c);
+            else { quadratic = false; break; }
+        }
+        if (!quadratic || leading == 0) continue;
+        auto disc = atlas::primary::multiply(linear, linear);
+        for (const auto& [e, c] : constant)
+            if ((disc[e] -= 4*leading*c) == 0) disc.erase(e);
+        if (disc.empty()) continue;
+        atlas::local::SparseLexRing ring(3);
+        atlas::PolyValue value(ring.ctx);
+        ring.write(value.p, disc);
+        fmpq_mpoly_make_monic(value.p, value.p, ring.ctx);
+        if (!fmpq_mpoly_is_square(value.p, ring.ctx)) return true;
+    }
+    return false;
 }
 
 Json::Value jacobian_support(const Terms& f, size_t n) {
@@ -599,12 +833,7 @@ Json::Value face_translations(const Terms& f, size_t n, const Terms& face) {
     atlas::local::SparseLexRing ring(n);
     atlas::PolyValue source(ring.ctx);
     ring.write(source.p, face);
-    struct Factors {
-        fmpq_mpoly_factor_t v;
-        const fmpq_mpoly_ctx_struct* ctx;
-        explicit Factors(const fmpq_mpoly_ctx_struct* c) : ctx(c) { fmpq_mpoly_factor_init(v, c); }
-        ~Factors() { fmpq_mpoly_factor_clear(v, ctx); }
-    } factors(ring.ctx);
+    Factors factors(ring.ctx);
     if (!fmpq_mpoly_factor(factors.v, source.p, ring.ctx)) return candidates;
     std::set<std::pair<size_t, Terms>> found;
     if (factors.v->num < 2 && (factors.v->num < 1 || fmpz_cmp_ui(factors.v->exp, 2) < 0)) return candidates;
@@ -672,6 +901,11 @@ Json::Value decode(const Json::Value& request) {
         if (op=="jacobian_support") return jacobian_support(f,n);
         return two_blowups(f,n,request["first"].asUInt64(),request["second"].asUInt64());
     }
+    if (op == "singular_torus_curve") return n == 3 && singular_torus_curve(request["row"].asString());
+    if (op == "inclined_toric_obstruction")
+        return atlas::certificate::trace("inclined_toric_obstruction",
+                                        n == 3 && inclined_toric_obstruction(request["row"].asString()));
+    if (op == "reduced_graph_tangent_obstruction") return atlas::certificate::enabled() && n==3 && repeated_tangent_obstruction(request["terms"],3,true);
     if (op == "repeated_tangent_obstruction") return n==3 && repeated_tangent_obstruction(request["terms"],3);
     if (op == "transverse_pencil") return n==3 ? transverse_pencil(request["terms"]) : Json::Value();
     if (op == "first") {
@@ -699,6 +933,11 @@ extern "C" const char* atlas_resolution_candidate(const char* input) noexcept {
     return atlas::sparse_json::invoke(input,decode);
 }
 
+extern "C" int atlas_singular_torus_curve_abi() noexcept { return 1; }
+extern "C" int atlas_inclined_toric_obstruction_abi() noexcept { return 1; }
+
 extern "C" int atlas_transverse_pencil_abi() noexcept { return 1; }
+
+extern "C" int atlas_reduced_graph_tangent_obstruction_abi() noexcept { return 1; }
 
 extern "C" int atlas_newton_tangent_obstruction_abi() noexcept { return 1; }

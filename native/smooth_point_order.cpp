@@ -14,7 +14,9 @@ constexpr size_t height_limit = 16384;
 struct Inconclusive {};
 struct Budget {
     size_t work = 350000;
+    void (*check_time)() = nullptr;
     void spend(size_t n) {
+        if (check_time) check_time();
         if (n > work) throw Inconclusive{};
         work -= n;
     }
@@ -140,7 +142,7 @@ Monomial monomial(const Powers& powers, const std::vector<size_t>& pivots) {
 // Thus the first surviving pure-parameter monomial certifies the exact order.
 unsigned jet_order(const Basis& frame, const std::vector<mpq_class>& point,
                    const Polynomial& f, unsigned d, const std::vector<bool>& fixed,
-                   const std::vector<bool>& allowed, Budget& budget) {
+                   const std::vector<bool>& allowed, Budget& budget, Polynomial* full = nullptr) {
     const size_t width = point.size();
     Basis rows;
     for (const auto& row : frame) {
@@ -163,7 +165,14 @@ unsigned jet_order(const Basis& frame, const std::vector<mpq_class>& point,
     while (!pending.empty()) {
         auto term = pending.extract(pending.begin());
         auto& m = term.key();
-        if (m.pivot_degree == 0) return m.degree;
+        if (m.pivot_degree == 0) {
+            if (!full) return m.degree;
+            Powers parameters;
+            for (size_t i = 0; i < width; ++i)
+                if (!allowed[i]) parameters.emplace_back(m.powers[i]);
+            full->emplace(std::move(parameters), std::move(term.mapped()));
+            continue;
+        }
         size_t j = 0;
         while (!m.powers[pivots[j]]) ++j;
         --m.powers[pivots[j]];
@@ -234,6 +243,22 @@ std::optional<unsigned> smooth_point_order(const Basis& frame, const std::vector
     } catch (const Inconclusive&) {
         return std::nullopt;
     }
+}
+
+std::optional<Polynomial> smooth_point_jet(const Basis& frame, const std::vector<mpq_class>& point,
+                                           const Polynomial& f, const std::vector<bool>& dependent,
+                                           unsigned degree, size_t work, void (*check_time)()) {
+    if (!suitable(frame, point) || degree > degree_limit || dependent.size() != point.size() ||
+        static_cast<size_t>(std::count(dependent.begin(), dependent.end(), true)) != frame.size())
+        return std::nullopt;
+    Budget budget{work, check_time};
+    Polynomial result;
+    try {
+        jet_order(frame, point, f, degree, std::vector<bool>(point.size()), dependent, budget, &result);
+    } catch (const Inconclusive&) {
+        return std::nullopt;
+    }
+    return result;
 }
 
 bool smooth_point_direction_zero(const Basis& frame, const std::vector<mpq_class>& point,
