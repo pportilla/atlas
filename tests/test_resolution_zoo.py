@@ -1,7 +1,10 @@
 """Cross-check an installed Resolution Zoo checkout against its native sources."""
+import argparse
 from collections import Counter
 import contextlib
+from copy import deepcopy
 from fractions import Fraction
+from functools import partial
 import io
 import json
 from pathlib import Path
@@ -9,11 +12,17 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from jsonschema import Draft202012Validator
 
 from engine.polynomial import parse_expression
+from engine import newton_fan
+from engine.resolve_cli import add_resolution_options, calculate_resolution, resolution_arguments, run_resolution
+from engine.worker import evaluate
 from engine.zoo_data import catalogue_directory
+from tests.test_newton_fan import check_fan
+from tools import build_resolution_zoo
 from tools.build_resolution_zoo import build_record, generate, seeds
 
 DATA = catalogue_directory()
@@ -22,6 +31,18 @@ SEEDS = DATA / "seeds.json"
 
 def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def subdivision_independent_zetas(zetas):
+    """Omit exceptional-divisor labels, strata and candidate poles of this subdivision."""
+    results = deepcopy(zetas)
+    del results["monodromy"]["contributions"]
+    del results["topological"]["strata"], results["topological"]["numerical_data"]
+    del results["pole_check"]["candidate_poles"]
+    for kind in ("topological", "pole_check"):
+        for pole in results[kind]["poles"]:
+            del pole["components"]
+    return results
 
 
 class ZooGenerationTests(unittest.TestCase):
@@ -209,4 +230,76 @@ quit;
             if seed["id"] in fixtures:
                 with self.subTest(record=seed["id"]):
                     _, detail = build_record(seed, dimension, variables)
-                    self.assertEqual(detail, self.records[seed["id"]])
+                    archived = self.records[seed["id"]]
+                    changed = {mode for mode in ("intrinsic", "embedded")
+                               if detail[mode].get("fan") != archived[mode].get("fan")}
+                    if not changed:
+                        self.assertEqual(detail, archived)
+                        continue
+
+                    # A new regular subdivision can change every exceptional divisor ID.
+                    # Check both covers independently and reproduce every archived field
+                    # with the archived subdivision as the only input from that record.
+                    supports = {}
+                    for mode in changed:
+                        before, after = archived[mode], detail[mode]
+                        dependent = {"fan", "summary", "chart_count", "dual_complex"}
+                        self.assertEqual({k: v for k, v in before.items() if k not in dependent},
+                                         {k: v for k, v in after.items() if k not in dependent})
+                        for key in ("status", "convention"):
+                            self.assertEqual(before["dual_complex"][key], after["dual_complex"][key])
+                        proof = after["certificate"]
+                        if "fan_ideal_exponents" in proof:
+                            support = proof["fan_ideal_exponents"]
+                        else:
+                            support = list(parse_expression(proof["adapted_polynomial"], proof["face_coordinates"]))
+                        supports[mode] = frozenset(map(tuple, support))
+                        for result in (before, after):
+                            fan = result["fan"]
+                            self.assertEqual(result["chart_count"], len(fan["cones"]))
+                            self.assertEqual({i for cone in fan["cones"] for i in cone}, set(range(len(fan["rays"]))))
+                            check_fan(self, fan, support)
+
+                    # Compare everything independent of those exceptional divisors directly.
+                    dependent = changed | ({"zeta"} if "embedded" in changed else set())
+                    self.assertEqual({k: v for k, v in detail.items() if k not in dependent},
+                                     {k: v for k, v in archived.items() if k not in dependent})
+                    self.assertEqual(subdivision_independent_zetas(detail["zeta"]),
+                                     subdivision_independent_zetas(archived["zeta"]))
+                    for expected in (archived, detail):
+                        self.assertEqual(self._rebuild_with_fans(seed, dimension, variables, expected, supports),
+                                         expected)
+
+    def _rebuild_with_fans(self, seed, dimension, variables, expected, supports):
+        ordinary_atlas = build_resolution_zoo.atlas
+        ordinary_fan = newton_fan.bounded_fan
+        parser = argparse.ArgumentParser()
+        add_resolution_options(parser)
+
+        def atlas(operation, *arguments, **options):
+            if operation != "resolve":
+                return ordinary_atlas(operation, *arguments, **options)
+            args = parser.parse_args(resolution_arguments([*arguments, "--json"]))
+            if args.mode not in supports:
+                return ordinary_atlas(operation, *arguments, **options)
+            used = False
+
+            def subdivision(exponents, *, trials=False):
+                nonlocal used
+                if not trials and frozenset(map(tuple, exponents)) == supports[args.mode]:
+                    used = True
+                    return deepcopy(expected[args.mode]["fan"])
+                return ordinary_fan(exponents, trials=trials)
+
+            # Use the CLI parser, worker and JSON boundary in-process so only fan
+            # selection changes. Chart construction and verification use the germ.
+            calculate = partial(calculate_resolution, job=lambda request, timeout: evaluate(request))
+            with patch.object(newton_fan, "bounded_fan", subdivision), contextlib.redirect_stdout(io.StringIO()) as out:
+                status = run_resolution(args, calculate)
+            self.assertEqual(status, 0, out.getvalue()[:500])
+            self.assertTrue(used)
+            return json.loads(out.getvalue())
+
+        with patch.object(build_resolution_zoo, "atlas", atlas):
+            _, detail = build_record(seed, dimension, variables)
+        return detail
