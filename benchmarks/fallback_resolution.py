@@ -9,6 +9,9 @@ With $before pointing to the reference, e.g. a built git worktree, run
     python3 tools/replay_requests.py benchmarks/canonical-requests.jsonl.gz
 
 Add --zoo ../resolution-zoo to include all recorded fallback modes on its screens.
+Alternatively, --measured-suite benchmarks/fallback-resolution-ryzen-6800h.json.gz
+selects the 244 original measured cases, independent of later catalogue additions.
+Use --atlas-only --atlas-root "$before" for fresh and warm reference-build timings.
 --cases selects names such as zoo/s2b-newton-17/embedded. Default runs alternate
 five trials of each solver and stop a series at the first 120-second timeout.
 JSON includes raw compute and wall samples, hashes, and independently verified
@@ -24,6 +27,7 @@ Read it with gzip.open(..., "rt") and json.load().
 import argparse
 from contextlib import ExitStack
 import csv
+import gzip
 import hashlib
 import json
 import os
@@ -110,8 +114,15 @@ def run(command, payload, root, timeout):
         try:
             stdout, stderr = p.communicate(payload, timeout=timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(p.pid, signal.SIGKILL)
-            p.communicate()
+            # The Atlas supervisor reaps workers in separate process groups
+            # when it receives TERM. Killing the supervisor first can leave
+            # those workers holding the benchmark's output pipes open.
+            os.killpg(p.pid, signal.SIGTERM)
+            try:
+                p.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                os.killpg(p.pid, signal.SIGKILL)
+                p.wait()
             raise
         if p.returncode:
             raise subprocess.CalledProcessError(p.returncode, command, stdout, stderr)
@@ -192,12 +203,13 @@ def run_case(name, case, args, env):
     samples = {f"{a}_{b}": [] for a in ("atlas", "singular") for b in ("fresh", "warm")}
     solved = None
     warm_only = getattr(args, "atlas_warm_only", False)
+    atlas_only = warm_only or getattr(args, "atlas_only", False)
     for phase in (("warm",) if warm_only else ("fresh", "warm")):
         with ExitStack() as stack:
             active = {}
             for trial in range(-1 if phase == "warm" else 0, args.trials):
                 order = ("atlas", "singular") if trial % 2 == 0 else ("singular", "atlas")
-                for tool in (("atlas",) if warm_only else order):
+                for tool in (("atlas",) if atlas_only else order):
                     key = f"{tool}_{phase}"
                     if samples[key] and "timeout_s" in samples[key][-1]:
                         # A censored solve has no finite median. Leave each subsequent
@@ -258,6 +270,8 @@ def main():
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--cases", nargs="+")
     parser.add_argument("--zoo", type=Path, help="Add all recorded fallback cases in these Resolution Zoo screens")
+    parser.add_argument("--measured-suite", type=Path,
+                        help="Use the exact case names, modes and equations in a previous .json.gz comparison archive")
     parser.add_argument("--atlas-root", type=Path, default=ROOT, help="Built Atlas checkout to measure")
     parser.add_argument("--reference", type=Path, help="Check complete records and saved replay against an earlier report")
     parser.add_argument("--record-corpus", type=Path,
@@ -267,6 +281,8 @@ def main():
     parser.add_argument("--singular", default="Singular")
     parser.add_argument("--atlas-warm-only", action="store_true",
                         help="Repeat only the warm Atlas series when a Singular comparison was censored.")
+    parser.add_argument("--atlas-only", action="store_true",
+                        help="Measure Atlas fresh and warm as a reference for a later comparison with Singular.")
     parser.add_argument("--replay", action="store_true", help="Also recompute the dual complex and zetas from saved charts")
     args = parser.parse_args()
     args.atlas_root = args.atlas_root.resolve()
@@ -280,7 +296,14 @@ def main():
     env = os.environ.copy()
     if env.get("ATLAS_RECORD_REQUESTS"):
         parser.error("Disable corpus recording during timing measurements")
-    suite = cases(args.zoo)
+    if args.measured_suite:
+        if args.zoo:
+            parser.error("Choose either the archived measured suite or the installed Zoo screens")
+        with gzip.open(args.measured_suite, "rt") as stream:
+            suite = {k: (r["equation"], r["variables"], r["mode"])
+                     for k, r in json.load(stream)["comparison"].items()}
+    else:
+        suite = cases(args.zoo)
     selected = args.cases or list(suite)
     unknown = set(selected) - suite.keys()
     if unknown:
@@ -297,6 +320,9 @@ def main():
                   "Atlas elapsed_ms and Singular microsecond rtimer around resolve(ideal(f)). All processes "
                   "pinned to one logical CPU. Timed-out series are censored. Atlas wall time for warm runs "
                   "covers resolve(request). Fresh wall time includes JSON output and process exit.", cases={})
+    if args.atlas_only:
+        report["conditions"] = ("Fresh Atlas CLI and warm in-process calls after an untimed warm-up, "
+                                "all pinned to one CPU. No Singular timing series.")
     if args.atlas_warm_only:
         report["conditions"] = ("Five Atlas in-process measurements by default after an untimed warm-up. "
                                 "One pinned CPU, no concurrent Singular process.")

@@ -1,0 +1,64 @@
+{
+  "cpu": 14,
+  "kernel": "7.0.0-43-generic",
+  "clock": "native ABI wall ms",
+  "reference_linear_algebra": "1",
+  "corpus": "canonical-split-maxima.jsonl.gz",
+  "conditions": "One fresh process per mode and trial. Calls in archive order. Alternating solver order. Native deadlines are stored in the requests.",
+  "trials_ms": {
+    "reference": [
+      [
+        1523.819828,
+        1532.509178
+      ],
+      [
+        1474.696684,
+        1518.311363
+      ],
+      [
+        1471.522191,
+        1494.482753
+      ],
+      [
+        1458.507566,
+        1585.924562
+      ],
+      [
+        1519.873518,
+        1582.418432
+      ]
+    ],
+    "candidate": [
+      [
+        151.953068,
+        294.776155
+      ],
+      [
+        166.294093,
+        282.606474
+      ],
+      [
+        148.316443,
+        289.130112
+      ],
+      [
+        154.469482,
+        278.24356
+      ],
+      [
+        164.086181,
+        298.702317
+      ]
+    ]
+  },
+  "median_ms": {
+    "reference": [
+      1474.696684,
+      1532.509178
+    ],
+    "candidate": [
+      154.469482,
+      289.130112
+    ]
+  }
+}

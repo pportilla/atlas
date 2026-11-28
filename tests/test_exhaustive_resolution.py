@@ -80,6 +80,35 @@ class ExhaustiveFallback(unittest.TestCase):
         self.assertEqual(reply["certified"], list(bundle))
         verify.assert_called_once_with(record, parse("x^2", list("xyz")), integrals=False)
 
+    def test_only_the_racing_newton_worker_requests_reference_group_splits(self):
+        from engine.centres import _native_maximum
+        from engine.native_polynomial import symbols
+        from engine.newton_faces import racing_newton
+
+        variables = symbols("x y")
+        strict = (variables[0] ** 2,)
+        payload = dict(terms=[[[2, 0], "1"]], variables=list("xy"), mode="embedded",
+                       compute="cpu", replay={"compute": "cpu"})
+
+        def centre(*args, **kwargs):
+            return _native_maximum(variables, (), 2, strict, [], [variables], {}, [], None, ())
+
+        with patch("engine.newton_backend.resolve_newton", side_effect=centre), \
+             patch("engine.origin_backend._resolve", side_effect=centre), \
+             patch("engine.kernel_json.kernel_json", return_value={"maximum": None}) as kernel:
+            for method, settings in (("newton", {"racing": True}), ("newton", {}),
+                                     ("origin", {"racing": True}), ("order", {"racing": True})):
+                with self.subTest(method=method, settings=settings):
+                    self.assertIsNone(exhaustive._run(method, {**payload, **settings})["record"])
+                    kernel.assert_called_once()
+                    self.assertEqual(kernel.call_args.args, ("atlas_centre_maximum", "maximum"))
+                    if method == "newton" and settings:
+                        self.assertIs(kernel.call_args.kwargs["reference_group_split"], True)
+                    else:
+                        self.assertNotIn("reference_group_split", kernel.call_args.kwargs)
+                    self.assertFalse(racing_newton())
+                    kernel.reset_mock()
+
     def test_canonical_head_start_covers_only_certified_newton_failures(self):
         from engine.newton_backend import coordinate_choices, resolve_newton
         from engine.newton_faces import face_search
@@ -313,6 +342,8 @@ root = Path(root)
 args = json.load(sys.stdin, parse_int=integer_from_decimal)
 exponent, = [e[0] for e, coefficient in args['terms']]
 assert args['replay'] == {'compute': 'gpu', 'backend': 'opencl', 'index': 1}
+if method=='newton':
+    assert args['racing'] is True
 if method=='certificates':
     assert args['defer_spare']
 (root / method).write_text(str(os.getpid()))

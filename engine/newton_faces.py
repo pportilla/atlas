@@ -22,6 +22,7 @@ from .polynomial import integer_text, rational_text, sparse_row
 _KERNEL = Path(__file__).resolve().parents[1] / "native" / "build" / "face_gb"
 _WORKER = ContextVar("atlas_bounded_face_worker", default=None)
 _EXHAUSTIVE = ContextVar("atlas_exhaustive_faces", default=False)
+_RACING_NEWTON = ContextVar("atlas_racing_newton", default=False)
 
 
 class _FaceWorker:
@@ -86,21 +87,27 @@ class _FaceWorker:
 
 
 @contextmanager
-def face_search(exhaustive):
+def face_search(exhaustive, *, racing_newton=False):
     """Use the request's face-check policy during resolution and atlas verification."""
     token = _EXHAUSTIVE.set(exhaustive)
+    race_token = _RACING_NEWTON.set(racing_newton)
     worker = _FaceWorker()
     worker_token = _WORKER.set(worker)
     try:
         yield
     finally:
         _WORKER.reset(worker_token)
+        _RACING_NEWTON.reset(race_token)
         _EXHAUSTIVE.reset(token)
         worker.close()
 
 
 def exhaustive_faces():
     return _EXHAUSTIVE.get()
+
+
+def racing_newton():
+    return _RACING_NEWTON.get()
 
 
 def _edge(terms, support, axis):

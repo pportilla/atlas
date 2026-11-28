@@ -284,6 +284,143 @@ struct Descent {
         if(value<1) rows.push_back({{{Powers(width),1}},1-value,common});
         return descend(std::move(rows));
     }
+    // Write f = sum f_j(s,e) t^j with f|E=c t^d. The contact equation
+    // (d-1)!^-1 ∂_t^(d-1)f=0 gives t = f_{d-1} W near every point of E:
+    // the coefficient multiplying t restricts to the nonzero scalar d c.
+    std::optional<Q> pure_contact_order(const Polynomial& f, unsigned d, unsigned t, unsigned s,
+                                        bool point_only) const {
+        const unsigned bound = max_total_degree(f).get_ui(); // read() caps this before allocation.
+        const unsigned absent = bound + 1;
+        std::vector<unsigned> exceptional(bound + 1, absent), total(bound + 1, absent);
+        for (const auto& [e, c] : f) {
+            const unsigned j = e[t].get_ui(), boundary = e[divisor].get_ui();
+            exceptional[j] = std::min(exceptional[j], boundary);
+            total[j] = std::min(total[j], boundary + unsigned(e[s].get_ui()));
+        }
+        const unsigned m = exceptional[0];
+        if (m == absent || (!point_only && m >= d)) return {};
+        // For working sets contained in E, ∂_t^d f is a nonzero constant on
+        // E. If m<d, the order-d locus there satisfies t=0 and
+        // ∂_e^m f|{t=e=0}=m! P(s)=0, where P is the leading coefficient
+        // of f_0 in e. Its roots can include nonrational working points.
+        Polynomial leading;
+        for (const auto& [e, c] : f)
+            if (e[t] == 0 && e[divisor] == m) leading[{e[s]}] = c;
+        const unsigned a = leading.begin()->first.front().get_ui();
+        if (a < d) return {};
+        // On E the order of the normalized C_0 at a point is bounded
+        // above by the multiplicity of that root of P. Its derivatives
+        // through order a-1 must cut out the reduced origin globally.
+        if (leading.size() > 1) {
+            Basis derivatives{leading};
+            for (unsigned i = 1; i < a; ++i) {
+                atlas::check_deadline();
+                derivatives.push_back(derivative(derivatives.back(), 0));
+            }
+            const auto common = atlas::local::polynomial_gcd(derivatives, 1);
+            if (!common || common->size() != 1 || common->begin()->first.front() != 1) return {};
+        }
+        // The mark d-i coefficient C_i on contact is the sum of
+        // binom(j,i) f_j (f_{d-1} W)^(j-i). Bound every term so no C_i
+        // can lower either minimum. For C_0 insist on strict exceptional
+        // inequality in the tail: e^-m C_0|E is then exactly P(s).
+        for (unsigned i = 0; i < d - 1; ++i) {
+            atlas::check_deadline();
+            for (unsigned j = i; j <= bound; ++j) {
+                if (exceptional[j] == absent || (j != i && exceptional[d - 1] == absent)) continue;
+                const unsigned e = exceptional[j] + (j - i) * exceptional[d - 1];
+                const unsigned ord = total[j] + (j - i) * total[d - 1];
+                if ((i == 0 && j > 0 && e <= m) ||
+                    d * e < (d - i) * m || d * ord < (d - i) * (m + a)) return {};
+            }
+        }
+        return Q(a) / d;
+    }
+
+    // The degree-d tangent form on the old (or soon old) divisor E needs
+    // two independent transverse parameters. After one maximal contact,
+    // at least one coefficient on E still has order equal to its mark:
+    // otherwise the binary form would be a pure d-th power. This gives
+    // residual order one and prevents any common exceptional factor.
+    // The two transverse parameters and the mark-one equation of E give
+    // three contacts in all, each subsequent residual order being one.
+    std::optional<V> transverse_origin(const Polynomial& f) const {
+        if (width != 3 || divisor < 0 || working.empty() || f.empty()) return {};
+        atlas::check_deadline();
+        auto unknown = [](const char* site) -> std::optional<V> {
+            atlas::certificate::trace(site, false);
+            return {};
+        };
+        // All working points must be on E and at least one piece must
+        // contain the origin. Pure powers suffice even on a thick fibre.
+        bool origin_present = false, point_only = true;
+        for (const auto& piece : working) {
+            std::vector<bool> fixed(width);
+            bool contains_origin = true;
+            for (const auto& g : piece) {
+                if (g.count(Powers(width))) contains_origin = false;
+                if (g.size() != 1) continue;
+                const auto& e = g.begin()->first;
+                for (unsigned i = 0; i < width; ++i)
+                    if (e[i] > 0 && e[(i + 1) % 3] == 0 && e[(i + 2) % 3] == 0) fixed[i] = true;
+            }
+            if (!fixed[divisor]) return unknown("transverse_working_boundary");
+            origin_present |= contains_origin;
+            point_only &= std::find(fixed.begin(), fixed.end(), false) == fixed.end();
+        }
+        if (!origin_present) return unknown("transverse_working_origin");
+        mpz_class order = atlas::local::total_degree(f.begin()->first);
+        for (const auto& [e, c] : f) order = std::min(order, atlas::local::total_degree(e));
+        if (order < 2 || order > 8) return unknown("transverse_order_range");
+        const unsigned d = order.get_ui(), u = (divisor + 1) % width;
+        std::vector<Q> coefficients(d + 1);
+        for (const auto& [e, c] : f) if (e[divisor] == 0) {
+            // With this condition the order-(d-1) partials on E are
+            // globally linear, not merely linear modulo the maximal ideal.
+            if (atlas::local::total_degree(e) != order) return unknown("transverse_linear_boundary_derivatives");
+            coefficients[e[u].get_ui()] = c;
+        }
+        // Up to a nonzero factorial these are the two coefficients of
+        // each order-(d-1) derivative of the binary boundary form.
+        Q a0, b0;
+        bool spans = false;
+        for (unsigned j = 0; j < d; ++j) {
+            Q a = (j + 1) * coefficients[j + 1], b = (d - j) * coefficients[j];
+            if (a0 * b != b0 * a) { spans = true; break; }
+            if (a != 0 || b != 0) { a0 = a; b0 = b; }
+        }
+        Q residual = 1;
+        if (!spans) {
+            unsigned nonzero = 0, exponent = 0;
+            for (unsigned j = 0; j <= d; ++j)
+                if (coefficients[j] != 0) { ++nonzero; exponent = j; }
+            if (nonzero != 1 || (exponent != 0 && exponent != d)) return unknown("transverse_boundary_rank");
+            const unsigned v = (u + 1) % width;
+            const unsigned t = exponent ? u : v;
+            auto value = pure_contact_order(f, d, t, t == u ? v : u, point_only);
+            if (!value) return unknown("pure_contact_residual");
+            residual = *value;
+        }
+        Descent history;
+        history.birth = birth;
+        history.prefix = {Q(d)};
+        bool first = history.old();
+        history.prefix.push_back(first ? 1 : 0);
+        history.prefix.push_back(residual);
+        if ((!spans && first) || (!first && !history.old())) return unknown("transverse_divisor_history");
+        // For full tangent rank the boundary partials generate both
+        // transverse coordinates. For a pure contact the centre is in
+        // E at level two: there ∂_t^(d-1)f gives t and the derivatives of
+        // the residual through order a-1 generate (s). Its last mark-one
+        // contact with E gives residual order one and the reduced origin.
+        Basis point;
+        for (unsigned i = 0; i < width; ++i) point.push_back(coordinate(width, i));
+        atlas::check_deadline();
+        atlas::certificate::trace(spans ? "transverse_origin" : "pure_contact_origin", true);
+        return result({Q(d), first ? 1 : 0, residual, first ? 0 : 1, 1, 0},
+                      ideal::reduced(point, width, false));
+    }
+
     // At a double point on E in a threefold, a nonsingular quadratic
     // section on T(E) supplies two independent contact directions. An old E
     // supplies the third, with mark one. The coefficient presentation has
@@ -397,16 +534,21 @@ struct Descent {
             check(birth.isNull() || (birth.isArray() && birth.size()<=16));
         }
         if (divisor >= 0 && atlas::certificate::enabled()) {
-            // An optional global closure check must not consume the enclosing
-            // deadline. The normal kernel validates its optimized basis exactly.
-            // A local timeout declines this proposal and restores the caller's
-            // deadline; the ordinary descent then gets its original work budget.
             try {
-                atlas::DeadlineScope trial(std::chrono::steady_clock::now() + std::chrono::milliseconds(12));
-                auto strict = read(input["strict"], 64, 12);
+                auto strict = read(input["strict"], 64, 32);
                 if (strict.size() == 1) {
-                    auto result = transverse_double(strict[0]);
-                    if (result && !trial.expired()) return *result;
+                    // The sparse proof and its univariate gcd are bounded by
+                    // the input caps and use the caller's deadline.
+                    auto point = transverse_origin(strict[0]);
+                    atlas::check_deadline();
+                    if (point) return *point;
+                    if (max_total_degree(strict[0]) <= 12) {
+                        // The general double-point closure uses a global
+                        // Gröbner basis. Limit that optional computation.
+                        atlas::DeadlineScope trial(std::chrono::steady_clock::now() + std::chrono::milliseconds(12));
+                        auto result = transverse_double(strict[0]);
+                        if (result && !trial.expired()) return *result;
+                    }
                 }
             } catch (const Decline&) {
                 // A proposal outside its caps still gets the original descent.

@@ -367,6 +367,7 @@ def search(poly, variables, mode, *, compute=None, integrals=False, verified=Non
         "variables": variables, "mode": mode, "compute": compute,
         "replay": scope.settings() if scope else {"compute": compute},
         "integrals": integrals,
+        "racing": True,
     }
     payload = result_json(request)
     replies = queue.SimpleQueue()
@@ -576,7 +577,8 @@ def _run(method, payload):
 
     terms = {tuple(e): kernel_fraction(c) for e, c in payload["terms"]}
     need_strata = payload.get("integrals", False) and payload["mode"] == "embedded"
-    with replay_scope(**payload["replay"]) as replay, face_search(True):
+    competing_newton = method == "newton" and payload.get("racing", False)
+    with replay_scope(**payload["replay"]) as replay, face_search(True, racing_newton=competing_newton):
         certified = None
         try:
             if method == "newton":

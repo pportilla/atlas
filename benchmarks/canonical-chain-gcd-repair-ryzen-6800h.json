@@ -1,0 +1,42 @@
+{
+  "cpu": 14,
+  "kernel": "7.0.0-43-generic",
+  "clock": "native ABI wall ms",
+  "reference_linear_algebra": "1",
+  "repair": "chain-gcd",
+  "conditions": "One captured Newton repair in each fresh process. Alternating solver order. The 15 s reference deadline is censored.",
+  "trials": {
+    "reference": [
+      {
+        "ms": 15003.303385,
+        "deadline": true
+      },
+      {
+        "ms": 15017.606811,
+        "deadline": true
+      },
+      {
+        "ms": 15007.131927,
+        "deadline": true
+      }
+    ],
+    "candidate": [
+      {
+        "ms": 0.452645,
+        "deadline": false
+      },
+      {
+        "ms": 3.474072,
+        "deadline": false
+      },
+      {
+        "ms": 0.407499,
+        "deadline": false
+      }
+    ]
+  },
+  "median_ms": {
+    "reference": null,
+    "candidate": 0.452645
+  }
+}

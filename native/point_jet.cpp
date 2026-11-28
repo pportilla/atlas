@@ -579,4 +579,41 @@ std::optional<PointJet> taylor_jet(const chart::Variables& vars, const chart::Ex
                                    const GaloisOrbit& orbit, unsigned degree, const CertificateCaps& caps) {
     return frame_jet(vars, {}, {}, f, orbit, degree, caps);
 }
+std::optional<bool> nonzero_on_coordinate_line(const Variables& vars, const Ideal& rows,
+                                               const Coord& parameter, const Expr& f,
+                                               const GaloisOrbit& orbit, const CertificateCaps& caps) {
+    check(caps);
+    if (vars.empty() || vars.size() > 8 || vars.size() != rows.size() + 1) return {};
+    const auto it = std::find(vars.begin(), vars.end(), parameter);
+    if (it == vars.end()) return {};
+    const size_t axis = it - vars.begin();
+    Variables normal = vars;
+    normal.erase(normal.begin() + axis);
+    // This checks the point, its field and the full normal Jacobian.
+    if (!frame_jet(vars, rows, normal, constant(1), orbit, 1, caps)) return {};
+    try {
+        Arithmetic algebra{orbit.mu, caps, caps.max_nonzeros};
+        auto restriction = [&](const Expr& g) {
+            // The degree in the single varying coordinate bounds the full
+            // Taylor expansion along the line, including at a translated point.
+            algebra.spend(g.terms().size());
+            auto poly = spread(g, vars);
+            unsigned degree = 0;
+            for (const auto& [e, coefficient] : poly) {
+                check(caps);
+                height(coefficient);
+                if (e[axis] > std::min(32u, caps.max_degree)) throw Unknown{};
+                degree = std::max(degree, unsigned(e[axis].get_ui()));
+            }
+            return algebra.taylor(poly, orbit, {axis}, degree);
+        };
+        // The smooth one-dimensional germ contains this line, so it equals
+        // the line locally. A nonzero row on the line does not certify that.
+        for (const auto& row : rows)
+            if (!restriction(row).empty()) return {};
+        return !restriction(f).empty();
+    } catch (const Unknown&) {
+        return {};
+    }
+}
 } // namespace atlas::certificate

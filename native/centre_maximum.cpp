@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <functional>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -92,6 +93,7 @@ struct Settings {
     std::map<std::string, std::pair<unsigned, recording::Clock::duration>> timings;
     V dimensions{Json::arrayValue};
     bool packed_present = true;
+    bool reference_group_split = false;
     std::optional<std::chrono::steady_clock::time_point> deadline;
     long long dummies = 0;
 };
@@ -110,9 +112,9 @@ struct MeasuredCall {
     using Counter = std::pair<unsigned, recording::Clock::duration>;
     Counter* counter = nullptr;
     recording::Clock::time_point start;
-    explicit MeasuredCall(const std::string& name) {
+    explicit MeasuredCall(std::string_view name) {
         if (settings->record) {
-            counter = &settings->timings[name.substr(0, name.find(' '))];
+            counter = &settings->timings[std::string(name.substr(0, name.find(' ')))];
             start = recording::Clock::now();
         }
     }
@@ -336,7 +338,8 @@ Ideal saturate(const Variables& variables, const Ideal& ideal, const Expr& by) {
 
 // The reduced grevlex basis of ideal : by^infinity, for decisions that depend
 // only on the ideal and not on its generators.
-Ideal saturate_grevlex(const Variables& variables, const Ideal& ideal, const Expr& by) {
+Ideal saturate_grevlex(const Variables& variables, const Ideal& ideal, const Expr& by, const char* purpose) {
+    MeasuredCall measure(purpose);
     require(variables);
     if (variables.size() + 1 > MAX_VARIABLES) throw Declined{"The saturation exceeds the packed variable range."};
     try {
@@ -928,6 +931,7 @@ public:
         }
         for (const auto& p : Strings(witness_points_))
             if (point_order(f, p)) return vanishing_[k] = false;
+        MeasuredCall measure("frame_vanishes_global");
         const Expr residue = reduced(f);
         bool answer;
         if (residue.zero()) answer = true;
@@ -1543,6 +1547,31 @@ void contact(const State& st, Context& ctx, const std::vector<Choice>& banned,
 
 std::vector<Found> residue(const State& st, Context& ctx);
 
+// A working ideal is passed on unchanged only when all its geometric points
+// remain in the current locus/open and agree on this coefficient. Subsequent
+// contact decisions may consult the working ideal before adding the locus.
+std::optional<bool> coordinate_line_piece(const State& st, const Ideal& piece, const Expr& f) {
+    const Frame& frame = *st.frame;
+    const atlas::certificate::CertificateCaps caps{2, 32, 96, 128, 16384, 8, check_time};
+    const auto points = atlas::certificate::finite_locus(frame.variables, piece, {}, caps);
+    if (!points.certified || points.orbits.empty()) return {};
+    std::optional<bool> common;
+    for (const auto& point : points.orbits) {
+        auto matches = [&](const Ideal& equations, bool zero) {
+            return std::all_of(equations.begin(), equations.end(), [&](const Expr& g) {
+                const auto value = atlas::certificate::taylor_jet(frame.variables, g, point, 0, caps);
+                return value && value->coefficients.empty() == zero;
+            });
+        };
+        if (!matches(st.locus, true) || !matches(frame.units, false)) return {};
+        auto on = atlas::certificate::nonzero_on_coordinate_line(frame.variables, frame.rows,
+                                                                  frame.coords.front(), f, point, caps);
+        if (!on || (common && *on != *common)) return {};
+        common = on;
+    }
+    return common;
+}
+
 // engine/centres.py `_groups`.
 std::vector<std::pair<std::vector<Ideal>, std::vector<Element>>> groups(const State& st) {
     Frame& frame = *st.frame;
@@ -1618,14 +1647,31 @@ std::vector<std::pair<std::vector<Ideal>, std::vector<Element>>> groups(const St
             for (const auto& w : work) if (!frame.empty(joined(st.locus, w))) live.push_back(w);
             return pack(live);
         }
+        // In the automatic race, speeding up the Newton worker's split can
+        // change which resolution is published within its head start.
+        if (!settings->reference_group_split && atlas::certificate::enabled() && frame.coords.size() == 1 &&
+            frame.variables.size() == frame.rows.size() + 1) {
+            V local;
+            local["on"] = V(Json::arrayValue);
+            local["off"] = V(Json::arrayValue);
+            local["overlap"] = false;
+            bool proved = true;
+            for (const auto& i : task["work"]) {
+                const auto on = coordinate_line_piece(st, ideals.at(i.asUInt()), f);
+                if (!on) { proved = false; break; }
+                local[*on ? "on" : "off"].append(i);
+            }
+            if (atlas::certificate::trace("finite_coordinate_line_split", proved)) return local;
+        }
         // Only the zero sets of these pieces matter, so the cheaper grevlex
         // bases serve: a lexicographic basis of a curve can be enormous.
-        const Ideal support = saturate_grevlex(frame.variables, frame.rows, f);
+        const Ideal support = saturate_grevlex(frame.variables, frame.rows, f, "group_support_saturation");
         std::vector<Ideal> on_pieces, off_pieces;
         for (const auto& w : work) on_pieces.push_back(joined(w, support));
         for (const auto& w : work)
             for (const auto& g : support)
-                off_pieces.push_back(saturate_grevlex(frame.variables, joined(joined(frame.rows, st.locus), w), g));
+                off_pieces.push_back(saturate_grevlex(frame.variables, joined(joined(frame.rows, st.locus), w), g,
+                                                      "group_off_saturation"));
         const auto on = distinct_pieces(on_pieces, true), off = distinct_pieces(off_pieces, true);
         V answer;
         answer["on"] = pack(on);
@@ -2643,6 +2689,7 @@ V execute(const V& request) {
         if (local.record && !*local.record) local.record = nullptr;
     }
     local.packed_present = request["packed_present"].asBool();
+    local.reference_group_split = request["reference_group_split"].asBool();
     if (!request["seconds"].isNull())
         local.deadline = std::chrono::steady_clock::now() +
                          std::chrono::duration_cast<std::chrono::steady_clock::duration>(

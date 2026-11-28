@@ -646,6 +646,7 @@ def _native_maximum(variables, ambient, dimension, strict, divisors, working, re
     from .kernel import exprs
     from .kernel_json import kernel_json
     from .native_polynomial import native_ring, row
+    from .newton_faces import racing_newton
     from .polynomial import kernel_fraction
     variables = tuple(variables)
     if not native_ring(variables):
@@ -664,7 +665,8 @@ def _native_maximum(variables, ambient, dimension, strict, divisors, working, re
         records={label: None if record is None else invariant_row(record) for label, record in records.items()},
         seconds=None if deadline is None else deadline - monotonic(),
         packed_present=current_execution() is None and (scope is None or scope.compute == "cpu"),
-        gpu=scope is not None and scope.compute == "gpu")
+        gpu=scope is not None and scope.compute == "gpu",
+        **({"reference_group_split": True} if racing_newton() else {}))
     if "declined" in answer:
         return _DECLINED
     if "raise" in answer:

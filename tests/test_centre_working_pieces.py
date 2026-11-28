@@ -1,5 +1,8 @@
 """Working ideals in the canonical resolution's centre selection."""
 from fractions import Fraction
+import gzip
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -18,6 +21,15 @@ def grouped(frame, working, locus=(), functions=()):
 
 
 class CentreWorkingPieces(unittest.TestCase):
+    def test_native_coordinate_line_splits_match_the_archived_centres(self):
+        from engine.kernel_json import _json_reply
+        corpus = Path(__file__).resolve().parents[1] / "benchmarks/canonical-split-maxima.jsonl.gz"
+        with gzip.open(corpus, "rt") as stream:
+            for line in stream:
+                record = json.loads(line)
+                with self.subTest(names=json.loads(record["request"])["names"]):
+                    self.assertEqual(_json_reply(record["symbol"], record["request"]), record["response"].encode())
+
     def test_partial_smooth_boundary_is_refined_and_replayable(self):
         from engine.resolution_complex import dual_complex
         names = list("xyz")

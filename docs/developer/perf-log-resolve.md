@@ -845,3 +845,67 @@ The embedded and intrinsic modes of s2b-join-e19-z6 each changed producer across
 Both switches reproduced all 6,480 archived native replies byte for byte. Baseline and candidate also reproduced the complete records, saved dual complexes, and saved zeta outputs on the separate historical 24-case corpus. On the timing controls, stripped saved-record replay matched on 23 of 24. The S15 dual complex recomputed, while its stripped zeta computation exceeded 120 seconds on both builds. [Historical cases](../../benchmarks/canonical-record-corpus.csv) · [Exact request archive](../../benchmarks/canonical-requests.jsonl.gz)
 
 The median across per-case fresh wall-minus-compute medians was 60.8 ms. The 30 ms fresh-overhead target remains open.
+
+## Local centre certificates on Newton repair charts
+
+The reference for these measurements is Atlas `10beb05` on a Ryzen 7 6800H. On the captured S15 quartic, the expensive operation was the global vanishing test for a coefficient after the second maximal contact. Its Gröbner basis had two input equations, with 8 and 32 terms. In three reference runs the enclosing test consumed 15.0–16.0 seconds and exhausted the native deadline. The support and off-piece saturations each had zero calls. The profiles now count those two saturations and the global vanishing test separately. Their timers include their child operations.
+
+There are genuine saturation bottlenecks on other charts. On the marked cone over the lemniscate, two support saturations took 1.94 seconds in a reference run, and 90 off-piece saturations took 13 ms. On Steiner, six support saturations took 1.86 seconds, and 138 off-piece saturations took 67 ms. Both had finite working sets. Across the 76 archived maximum requests and the three earlier S15 requests, the native profile measured 56 zero-dimensional working sets and 23 one-dimensional working sets. In 12 of those 23 the maximal-order locus met the working set in dimension zero. These are counts of recorded calls, with repeated inputs included.
+
+A frame with an empty equation list is the entire affine chart and already has a direct grouping rule. On an implicit curve, Atlas can certify that the germ through a working orbit is a coordinate line. The normal Jacobian must have full rank at the point and every frame equation must vanish as a polynomial on the whole line. Atlas then restricts the coefficient to the line over the exact residue field. This distinguishes a zero germ from a coefficient whose first several derivatives vanish. The lemniscate example uses `QQ(i)`. Steiner uses `QQ`.
+
+The original working ideal can be kept when all of its geometric points lie in the current locus and open chart, and all give the same decision for that coefficient. Such pieces go into the corresponding group with their original generators and ordering. This preserves what later point searches, contact restrictions and emptiness tests see. An inconclusive orbit, rank test, size bound or mixed decision within a single piece goes through the original ideal computation. `ATLAS_LINEAR_ALGEBRA=0` selects the reference path. [Two captured requests and their full reference replies](../../benchmarks/canonical-split-maxima.jsonl.gz)
+
+For a smooth affine threefold with one coordinate boundary, Atlas can sometimes certify the entire point centre from the polynomial on that boundary. If the restriction is homogeneous of degree `d` and its order-`d−1` derivatives span both transverse linear coordinates, the order-`d` locus on the boundary is the reduced origin globally. The divisor history must put the boundary into the first or second level of the invariant. The remaining coefficient orders then come from the two transverse parameters and the mark-one boundary. A working piece supported at the origin may contain powers of the coordinates.
+
+In the S15 repair the certified invariant is `(4,0,1,1,1,0,∞)`. An independent check used the original polynomial and the original descent. On the contact chart the two defining equations are a polynomial matrix times the two transverse coordinates. The determinant at the working point is −7776, so the coordinate equations generate exactly the same ideal on that open set. The reference descent on this presentation returned all the same invariant entries, the empty tie-breaking key and the ordered point ideal. The unsimplified reference also exhausted a 500-second native budget. [Captured S15 request](../../benchmarks/canonical-s15-repair.json) · [Three paired trials](../../benchmarks/canonical-s15-repair-ryzen-6800h.json)
+
+A pure power on the boundary needs a different calculation. Write the polynomial as `Σ f_j(s,e) t^j`, with boundary `e=0` and restriction `c t^d`. On maximal contact, the order-`d−1` derivative gives `t=f_(d−1) W` with `W` regular near the entire boundary intersection. Atlas bounds the orders of every term in each coefficient of the presentation. One coefficient must attain both the exceptional and the residual order. Its leading boundary polynomial `P(s)` supplies a global check. If `a` is its multiplicity at zero, the gcd of `P` and its derivatives through order `a−1` must generate `(s)`. An equally multiple conjugate root makes this test decline. Once the history makes the divisor old at the second level, the equations generate the reduced origin on the boundary. This also handles some positive-dimensional working sets contained in the boundary. The residual orders are 2 in the loop repair and 4/3 in the first chain repair. [Loop request](../../benchmarks/canonical-loop-repair.json) · [Chain request](../../benchmarks/canonical-chain-repair.json)
+
+The marked lemniscate supplies a limit on local reconstruction. In a later chart the centre also has components outside the working fibre. The line through the working point only accounts for one of them. Local tests may decide which coefficients to keep while the existing global descent still computes that centre. The accepted shortcuts use direct identities or derivative ideals of bounded degree. They need no choice of an interpolation degree, no local standard basis and no cache shared between solver lanes.
+
+| Captured native maximum call | Reference median | Updated median |
+| --- | ---: | ---: |
+| S15 quartic | 15 s deadline, 3/3 | 0.40 ms |
+| Loop | 15 s deadline, 3/3 | 0.43 ms |
+| Chain, first repair | 15 s deadline, 3/3 | 9.38 ms |
+| Chain, second repair | 15 s deadline, 3/3 | 0.45 ms |
+| Cone over the lemniscate | 1,474.70 ms | 154.47 ms |
+| Steiner surface | 1,532.51 ms | 289.13 ms |
+
+The measurements alternate builds in fresh processes pinned to CPU 14, with the default linear-algebra setting enabled on both. Each split used five trials. The first chain repair took 0.36–9.43 ms. A native deadline is a censored result. The shorter calls can still leave a slower operation later in the same Newton repair. [Loop samples](../../benchmarks/canonical-loop-repair-ryzen-6800h.json) · [First chain samples](../../benchmarks/canonical-chain-repair-ryzen-6800h.json) · [Second chain samples](../../benchmarks/canonical-chain-gcd-repair-ryzen-6800h.json) · [Split samples](../../benchmarks/canonical-split-maxima-ryzen-6800h.json)
+
+In an exhaustive search, the choice between two certified resolutions can depend on which worker finishes in time. Enabling the coordinate-line split everywhere changed the Steiner embedded record from 10 canonical charts to 41 Newton charts. The competing Newton worker therefore uses the original saturation for that split. The canonical workers and direct centre requests use the new split. The boundary certificates are available to all workers. The scheduler retains the original grace period.
+
+All 244 public resolution records matched their archived hashes across the guarded timing trials. Singular independently verified the equations and smoothness or normal crossings on 951 final charts in the embedded canonical trivariate cases. It reached the 120-second limit on five inputs. Among the other 239, Atlas had the shorter compute median in 114 fresh and 122 warm comparisons. Singular had the shorter compute median in 125 fresh and 117 warm comparisons. Fresh wall time including CLI startup favored Atlas on 105 inputs. The archive identifies each slower case and records the raw times and censoring. [Full comparison](../../benchmarks/local-centre-resolution-ryzen-6800h.json.gz)
+
+| Embedded germ | Atlas fresh compute (ms) | Singular fresh compute (ms) |
+| --- | ---: | ---: |
+| S15 | 2,493 | 199 |
+| Cone over the lemniscate | 2,939 | 184 |
+| Steiner surface | 2,279 | 399 |
+| Loop 41-32-3 | 2,274 | 310 |
+| Chain 31334 | 3,335 | 988 |
+
+Each named mode used five fresh processes and five measured calls to a warm interpreter after one warm-up. The other modes used three trials per series. Atlas and Singular each ran on one logical CPU. Multiple physical cores ran independent series concurrently. The two-second Newton head start and subsequent work still dominate the embedded examples above.
+
+We also alternated the frozen and updated Atlas CLIs on each CPU to compare the cost of producing the same record. Across all 244 inputs, the median ratio of updated to frozen compute time was 0.994. Eighteen inputs improved by more than 5%, 15 slowed by more than 5%, and 211 were within 5%. The wall-time ratio was 0.993. Separate runs of the two full builds had suggested a 3.4% increase in fresh compute time. The alternating measurements better control for changes in host load. For the nine targeted modes the median compute ratio was 0.998. The intrinsic chain 31334 improved from 4,883 to 3,422 ms and retained its 31-chart canonical resolution. S15 embedded took 2,384 and 2,397 ms.
+
+The intrinsic loop 32-12-5 took 56% of its previous compute time. The embedded loop 13-32-3 had a reproducible slowdown on dedicated CPU 4, from 2,877 to 3,511 ms in a further five alternating trials. Profiling found that its competing Newton worker reached a third expensive maximum earlier. The canonical worker that returned the record used essentially the same CPU time in isolation, 230 and 234 ms. In three trials on a separate, shared CPU the wall-time difference reversed. The additional five-trial check of the intrinsic mixed cubic cone also reversed its initial slowdown, from 3,214 to 3,009 ms. The timings of competing workers depend on core and load.
+
+The offline catalogue check covered all 748 previously screened Zoo modes. The 220 in the timing suite retained their archived public records. Of the other 528, 523 produced identical complete records on the first completed exhaustive pair, including runs extended beyond the initial 20-second screen. Three more produced the same complete record on cross-build repeats after their first pair differed: the embedded join E19–Z6 and both modes of the hidden E7 with two shears. All 52 modes with additional previously audited hashes reproduced those hashes on both builds.
+
+The embedded W13 cusp and Z11 tacnode exceeded 420 seconds on both builds. With 20-second and 120-second quick-search budgets they returned matching inconclusive records. The historical catalogue lists resolved models with 138 and 78 charts, respectively. Those two resolved models remain unverified in this comparison. Separately, both switch settings reproduced all 6,485 archived native replies byte for byte. The 24 historical reference and updated resolutions and all 24 saved dual-complex and zeta replays matched. The broad catalogue comparison is an offline benchmark. The new split regression test reads just two captured native calls.
+
+In a separate comparison that alternated the frozen and updated Atlas CLIs, the intrinsic chain 31334 improved from 4,883 to 3,422 ms. All five updated trials finished faster than all five reference trials and reproduced the same 31-chart resolution. The other eight named modes ranged from a 4.6% decrease to a 1.1% increase. The median change across the nine named modes was a 0.2% decrease.
+
+To reproduce the native measurements, set `before` to a built checkout of `10beb05` and choose a CPU available on the host. The public comparison uses the equations and modes saved in the earlier timing archive. For an individual result, add `--cases NAME` and use the CPU and trial count in that case's row. The separate 24-case check reopens the reference build's charts to recompute dual complexes and zeta functions.
+
+```sh
+for repair in s15 loop chain chain-gcd; do
+    python3 benchmarks/canonical_maximum.py --cpu 14 --trials 3 --reference "$before" --reference-switch 1 --repair "$repair"
+done
+python3 benchmarks/canonical_maximum.py --cpu 14 --reference "$before" --reference-switch 1 --corpus benchmarks/canonical-split-maxima.jsonl.gz
+python3 benchmarks/fallback_resolution.py --cpu 4 --trials 3 --measured-suite benchmarks/fallback-resolution-ryzen-6800h.json.gz --output comparison.json
+python3 benchmarks/fallback_resolution.py --cpu 4 --record-corpus "$before" --replay --output records.json
+```

@@ -38,6 +38,20 @@ int main() {
            "algebraic affine jet");
     auto zero = frame_jet(vars, rows, {vars[1]}, rows.front(), plus, 4, caps);
     ensure(zero && zero->coefficients.empty() && jet_order(*zero)==5, "zero jet lower bound");
+    // On x=2 with free y, a polynomial that first appears in degree 17
+    // is nonzero on the germ even though all of its first 16 jets vanish.
+    GaloisOrbit translated{{0,1},{{2},{3}}};
+    auto line = [&](const Ideal& equations, const Expr& f, const GaloisOrbit& at) {
+        return nonzero_on_coordinate_line(vars, equations, vars[1], f, at, caps);
+    };
+    ensure(line({x-a}, power(y-constant(3),17), translated) == true, "high-order nonzero line");
+    ensure(line({x-a}, (x-a)*y, translated) == false, "zero on translated line");
+    ensure(!line({power(x-a,2)}, x-a, translated), "singular line incorrectly certified");
+    ensure(!line({x-a-power(y-constant(3),7)}, x-a, translated), "tangent line is not the frame germ");
+    ensure(!line({x-a}, power(y,40), translated), "restriction crossed its degree bound");
+    const GaloisOrbit imaginary{{1,0,1},{{0,1},{}}};
+    ensure(line({x*x+one}, (x*x+one)*y, imaginary) == false, "quadratic orbit line restriction");
+    ensure(line({x*x+one}, x*y, imaginary) == true, "nonzero on both conjugate lines");
     ensure(!frame_jet(vars, {power(rows.front(),2)}, {vars[1]}, y, plus, 4, caps), "singular frame");
     ensure(!frame_jet(vars, {rows.front()+one}, {vars[1]}, y, plus, 4, caps), "point off frame");
     auto malformed = plus;
